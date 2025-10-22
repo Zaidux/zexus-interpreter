@@ -124,22 +124,22 @@ class Lexer:
         return number_str
 
     def lookup_ident(self, ident):
-       keywords = {
-         "let": LET,
-         "print": PRINT,
-         "if": IF,
-         "else": ELSE,
-         "true": TRUE,
-         "false": FALSE,
-         "return": RETURN,
-         "for": FOR,
-         "each": EACH,
-         "in": IN,
-         "action": ACTION,
-         "while": WHILE,
-         "use": USE,  # ✅ ADD THIS
-    }
-    return keywords.get(ident, IDENT)
+        keywords = {
+            "let": LET,
+            "print": PRINT,
+            "if": IF,
+            "else": ELSE,
+            "true": TRUE,
+            "false": FALSE,
+            "return": RETURN,
+            "for": FOR,
+            "each": EACH,
+            "in": IN,
+            "action": ACTION,
+            "while": WHILE,
+            "use": USE,  # ✅ ADD THIS
+        }
+        return keywords.get(ident, IDENT)  # ✅ FIXED INDENTATION
 
     def is_letter(self, char):
         return 'a' <= char <= 'z' or 'A' <= char <= 'Z' or char == '_'
