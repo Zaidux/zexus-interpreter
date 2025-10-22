@@ -1,5 +1,4 @@
-# lexer.py (Updated for Actions)
-
+# lexer.py (COMPLETE FIXED VERSION)
 from zexus_token import *
 
 class Lexer:
@@ -43,6 +42,11 @@ class Lexer:
                 tok = Token(NOT_EQ, literal)
             else:
                 tok = Token(BANG, self.ch)
+        # ✅ ADD THESE CASES FOR < and > OPERATORS
+        elif self.ch == '<':
+            tok = Token(LT, self.ch)
+        elif self.ch == '>':
+            tok = Token(GT, self.ch)
         elif self.ch == '"':
             tok = Token(STRING, self.read_string())
         elif self.ch == '[':
@@ -61,7 +65,7 @@ class Lexer:
             tok = Token(COMMA, self.ch)
         elif self.ch == ';':
             tok = Token(SEMICOLON, self.ch)
-        elif self.ch == ':':  # ADD THIS CASE
+        elif self.ch == ':':
             tok = Token(COLON, self.ch)
         elif self.ch == '+':
             tok = Token(PLUS, self.ch)
@@ -117,9 +121,7 @@ class Lexer:
                 self.read_char()
 
         number_str = self.input[start_position:self.position]
-
-        # FIX: Return the string, NOT a Token object
-        return number_str  # ← This was returning Token(INT, number_str) before!
+        return number_str
 
     def lookup_ident(self, ident):
         keywords = {
