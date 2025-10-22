@@ -139,7 +139,7 @@ class Lexer:
          "while": WHILE,
          "use": USE,  # ✅ ADD THIS
     }
-        return keywords.get(ident, IDENT)
+    return keywords.get(ident, IDENT)
 
     def is_letter(self, char):
         return 'a' <= char <= 'z' or 'A' <= char <= 'Z' or char == '_'
