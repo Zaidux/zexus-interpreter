@@ -197,6 +197,105 @@ class Parser:
             body.statements.append(stmt)
             
         return WhileStatement(condition=condition, body=body)
+   
+    # Add to parser.py - Multi-language embedding methods
+
+def parse_statement(self):
+    if self.cur_token_is(LET):
+        # Check if it's embedded code: let name {language} code {}
+        if self.peek_token_is(LBRACE):
+            return self.parse_embedded_code()
+        return self.parse_let_statement()
+    elif self.cur_token_is(RETURN):
+        return self.parse_return_statement()
+    elif self.cur_token_is(PRINT):
+        return self.parse_print_statement()
+    elif self.cur_token_is(FOR):
+        return self.parse_for_each_statement()
+    elif self.cur_token_is(SCREEN):
+        return self.parse_screen_statement()
+    elif self.cur_token_is(ACTION):
+        return self.parse_action_statement()
+    elif self.cur_token_is(IF):
+        return self.parse_if_statement()
+    elif self.cur_token_is(WHILE):
+        return self.parse_while_statement()
+    elif self.cur_token_is(USE):  # NEW: use statements
+        return self.parse_use_statement()
+    else:
+        return self.parse_expression_statement()
+
+def parse_embedded_code(self):
+    # Format: let name {language} code {}
+    # We're at LET token
+    
+    if not self.expect_peek(IDENT):
+        return None
+        
+    name = Identifier(self.cur_token.literal)
+    
+    if not self.expect_peek(LBRACE):
+        return None
+        
+    # Get the language
+    self.next_token()
+    if not self.cur_token_is(IDENT):
+        self.errors.append("Expected language identifier after '{'")
+        return None
+        
+    language = self.cur_token.literal
+    
+    # Read everything until closing brace
+    code = self.read_until_brace()
+    if code is None:
+        return None
+        
+    return EmbeddedCodeStatement(name, language, code)
+
+   def parse_use_statement(self):
+    # Format: use    embedded_block.function(arg1, arg2)
+    # We're at USE token
+    
+    if not self.expect_peek(IDENT):
+        return None
+        
+    embedded_ref =  Identifier(self.cur_token.literal)
+    
+    if not self.expect_peek(DOT):
+        return None
+        
+    if not self.expect_peek(IDENT):
+        return None
+        
+    method = self.cur_token.literal
+    
+    if not self.expect_peek(LPAREN):
+        return None
+        
+    arguments = self.parse_expression_list(RPAREN)
+    
+    return UseStatement(embedded_ref, method, arguments)
+
+def read_until_brace(self):
+    # Read all tokens until we find the closing brace
+    start_position = self.position
+    brace_count = 1  # We start with one opening brace
+    
+    while brace_count > 0 and not self.cur_token_is(EOF):
+        self.next_token()
+        
+        if self.cur_token_is(LBRACE):
+            brace_count += 1
+        elif self.cur_token_is(RBRACE):
+            brace_count -= 1
+            
+    if self.cur_token_is(EOF):
+        self.errors.append("Unclosed embedded code block")
+        return None
+        
+    # Extract the code between the braces
+    code = self.lexer.input[start_position:self.position]
+    return code.strip()
 
     # === EXISTING METHODS (keep these exactly as they were working) ===
     def parse_action_literal(self):
