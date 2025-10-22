@@ -164,6 +164,24 @@ def eval_node(node, env):
         # We could optionally evaluate the body to find UI components
         # eval_node(node.body, env)
         return NULL
+    elif node_type == EmbeddedCodeStatement:
+    # Store the embedded code in the environment
+    embedded_obj = EmbeddedCode(node.name.value, node.language, node.code)
+    env.set(node.name.value, embedded_obj)
+    print(f"[EMBED] Stored {node.language} code as '{node.name.value}'")
+    return NULL
+
+    elif node_type == UseStatement:
+    # Look up the embedded code block
+    embedded_obj = env.get(node.embedded_ref.value)
+    if not embedded_obj or not isinstance(embedded_obj, EmbeddedCode):
+        print(f"[ERROR] Embedded code '{node.embedded_ref.value}' not found")
+        return NULL
+        
+    # Execute the embedded function
+    args =         eval_expressions(node.arguments, env)
+    result = execute_embedded_function(embedded_obj, node.method, args)
+    return result
 
     # Expressions
     elif node_type == IntegerLiteral:
@@ -291,6 +309,37 @@ def extend_action_env(fn, args): # For Action (user-defined function) calls
             env.set(param.value, args[i])
         # else: handle missing arguments
     return env
+
+def execute_embedded_function(embedded_obj, method, args):
+    """
+    Executes a function from embedded code.
+    For now, we'll simulate this. In a real implementation, you'd use:
+    - exec() for Python
+    - eval() for JavaScript  
+    - etc.
+    """
+    print(f"[EMBED] Executing {embedded_obj.language}.{method} with args {args}")
+    
+    # Simulate execution for different languages
+    if embedded_obj.language == "javascript":
+        if method == "add":
+            if len(args) == 2 and args[0].type() == "INTEGER" and args[1].type() == "INTEGER":
+                return Integer(args[0].value + args[1].value)
+        elif method == "multiply":
+            if len(args) == 2 and args[0].type() == "INTEGER" and args[1].type() == "INTEGER":
+                return Integer(args[0].value * args[1].value)
+                
+    elif embedded_obj.language == "python":
+        if method == "process_data":
+            if len(args) == 1 and args[0].type() == "LIST":
+                # Simulate processing: double each element
+                new_elements = [Integer(el.value * 2) for el in args[0].elements]
+                return List(new_elements)
+                
+    # Default: return first argument (for simulation)
+    if args:
+        return args[0]
+    return NULL
 
 def eval_identifier(node, env): # UPDATED: Now checks for built-ins
     """
