@@ -50,6 +50,7 @@ ACTION = "ACTION"
 SCREEN = "SCREEN"
 MAP = "MAP"
 WHILE = "WHILE"
+USE = "USE"
 
 # The Token class represents a single token, holding its type and value.
 class Token:
