@@ -1,4 +1,4 @@
-# parser.py (COMPLETELY FIXED - CORRECT INDENTATION)
+# parser.py (CLEAN WORKING VERSION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -19,8 +19,8 @@ class Parser:
 
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
-            INT: self.parse_number_literal,
-            FLOAT: self.parse_number_literal,
+            INT: self.parse_integer_literal,
+            FLOAT: self.parse_float_literal,
             STRING: self.parse_string_literal,
             BANG: self.parse_prefix_expression,
             MINUS: self.parse_prefix_expression,
@@ -71,206 +71,138 @@ class Parser:
         elif self.cur_token_is(ACTION):
             return self.parse_action_statement()
         elif self.cur_token_is(IF):
-            return self.parse_if_statement()  # NEW: if statements
+            return self.parse_if_statement()
         elif self.cur_token_is(WHILE):
-            return self.parse_while_statement()  # NEW: while loops
+            return self.parse_while_statement()
         else:
             return self.parse_expression_statement()
 
+    # === ACTION STATEMENTS ===
     def parse_action_statement(self):
-        # print(f"DEBUG: parse_action_statement - starting at {self.cur_token.type} '{self.cur_token.literal}'")
-
-        # We're at ACTION token
-        # Format: action name(params): body
-
-        # Expect function name after 'action'
+        # action name(params): body
         if not self.expect_peek(IDENT):
-            self.errors.append("Expected function name after 'action'")
             return None
-
+            
         name = Identifier(self.cur_token.literal)
-        # print(f"DEBUG: Function name: {name.value}")
 
-        # Expect '(' after function name
         if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after function name")
             return None
 
-        # print(f"DEBUG: Got '(', now parsing parameters")
-
-        # ✅ CRITICAL FIX: We're now at LPAREN, parse parameters from here
         parameters = self.parse_action_parameters()
         if parameters is None:
             return None
 
-        # print(f"DEBUG: Parameters: {[p.value for p in parameters]}")
-
-        # Expect ':' after parameters
         if not self.expect_peek(COLON):
-            self.errors.append(f"Expected ':' after parameters, got '{self.peek_token.literal}'")
             return None
 
-        # print(f"DEBUG: Got ':', now parsing body")
-
-        # Parse function body
         body = BlockStatement()
         self.next_token()  # Move past ':'
-
-        # Parse the body statement
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
-            # print(f"DEBUG: Added to body: {type(stmt).__name__}")
 
         return ActionStatement(name=name, parameters=parameters, body=body)
 
     def parse_action_parameters(self):
-        """Parse parameters inside parentheses: (param1, param2)"""
-        # print(f"DEBUG: parse_action_parameters - starting at {self.cur_token.type} '{self.cur_token.literal}'")
-
-        # We're at LPAREN '('
         params = []
-
-        # Check for empty parameters: ()
+        
         if self.peek_token_is(RPAREN):
-            self.next_token()  # consume RPAREN
-            # print(f"DEBUG: Empty parameters")
+            self.next_token()
             return params
-
-        # Move to first parameter
+            
         self.next_token()
-        # print(f"DEBUG: Moved to first parameter: {self.cur_token.type} '{self.cur_token.literal}'")
-
-        # Parse first parameter
+        
         if not self.cur_token_is(IDENT):
-            self.errors.append(f"Expected parameter name, got {self.cur_token.type}")
             return None
-
+            
         params.append(Identifier(self.cur_token.literal))
-        # print(f"DEBUG: Added parameter: {self.cur_token.literal}")
-
-        # Parse additional parameters
+        
         while self.peek_token_is(COMMA):
-            self.next_token()  # consume COMMA
-            self.next_token()  # move to next parameter
-
+            self.next_token()
+            self.next_token()
+            
             if not self.cur_token_is(IDENT):
-                self.errors.append(f"Expected parameter name after comma, got {self.cur_token.type}")
                 return None
-
+                
             params.append(Identifier(self.cur_token.literal))
-            # print(f"DEBUG: Added parameter: {self.cur_token.literal}")
-
-        # Expect closing parenthesis
+                
         if not self.expect_peek(RPAREN):
-            self.errors.append(f"Expected ')', got {self.peek_token.type}")
             return None
-
-        # print(f"DEBUG: Parameters completed: {[p.value for p in params]}")
+            
         return params
 
-    # NEW: If statement parsing (Zexus syntax: if (condition): consequence else: alternative)
+    # === IF STATEMENTS ===
     def parse_if_statement(self):
-        # print(f"DEBUG: parse_if_statement - starting at {self.cur_token.type}")
-
-        # We're at IF token
-        # Zexus syntax: if (condition): consequence else: alternative
-
-        # Parse condition
+        # if (condition): consequence else: alternative
         if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after 'if'")
             return None
-
-        self.next_token()  # Move past '('
+            
+        self.next_token()
         condition = self.parse_expression(LOWEST)
         if condition is None:
-            self.errors.append("Failed to parse if condition")
             return None
-
+            
         if not self.expect_peek(RPAREN):
-            self.errors.append("Expected ')' after if condition")
             return None
-
-        # ✅ FIX: Expect ':' after condition (Zexus syntax)
+            
         if not self.expect_peek(COLON):
-            self.errors.append("Expected ':' after if condition")
             return None
-
-        # Parse consequence
+            
         consequence = BlockStatement()
-        self.next_token()  # Move past ':'
-
+        self.next_token()
         stmt = self.parse_statement()
         if stmt:
             consequence.statements.append(stmt)
-
-        # Parse else clause (optional)
+            
         alternative = None
         if self.peek_token_is(ELSE):
-            self.next_token()  # consume 'else'
-
-            # Check for 'else if'
+            self.next_token()
+            
             if self.peek_token_is(IF):
-                self.next_token()  # consume 'if'
+                self.next_token()
                 alternative = self.parse_if_statement()
             else:
-                # Regular else - expect ':' (Zexus syntax)
                 if not self.expect_peek(COLON):
-                    self.errors.append("Expected ':' after 'else'")
                     return None
-
+                    
                 alternative = BlockStatement()
-                self.next_token()  # Move past ':'
-
+                self.next_token()
                 stmt = self.parse_statement()
                 if stmt:
                     alternative.statements.append(stmt)
-
+                    
         return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
-    # NEW: While loop parsing (Zexus syntax: while (condition): body)
+    # === WHILE LOOPS ===
     def parse_while_statement(self):
-        # print(f"DEBUG: parse_while_statement - starting at {self.cur_token.type}")
-
-        # We're at WHILE token
-        # Zexus syntax: while (condition): body
-
-        # Parse condition
+        # while (condition): body
         if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after 'while'")
             return None
-
-        self.next_token()  # Move past '('
+            
+        self.next_token()
         condition = self.parse_expression(LOWEST)
         if condition is None:
-            self.errors.append("Failed to parse while condition")
             return None
-
+            
         if not self.expect_peek(RPAREN):
-            self.errors.append("Expected ')' after while condition")
             return None
-
-        # ✅ FIX: Expect ':' after condition (Zexus syntax)
+            
         if not self.expect_peek(COLON):
-            self.errors.append("Expected ':' after while condition")
             return None
-
-        # Parse body
+            
         body = BlockStatement()
-        self.next_token()  # Move past ':'
-
+        self.next_token()
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
-
+            
         return WhileStatement(condition=condition, body=body)
 
+    # === EXISTING METHODS (keep these exactly as they were working) ===
     def parse_action_literal(self):
-        # print(f"DEBUG: parse_action_literal at {self.cur_token.type}")
-
         if not self.expect_peek(LPAREN):
             return None
-
+            
         parameters = self.parse_action_parameters()
         if parameters is None:
             return None
@@ -279,12 +211,11 @@ class Parser:
             return None
 
         body = BlockStatement()
-        self.next_token()  # Move past ':'
-
+        self.next_token()
         stmt = self.parse_statement()
         if stmt:
             body.statements.append(stmt)
-
+            
         return ActionLiteral(parameters=parameters, body=body)
 
     def parse_screen_statement(self):
@@ -362,16 +293,18 @@ class Parser:
     def parse_identifier(self):
         return Identifier(value=self.cur_token.literal)
 
-    def parse_number_literal(self):
+    def parse_integer_literal(self):
         try:
-            literal_value = self.cur_token.literal
-            value = float(literal_value)
-            if value.is_integer():
-                return IntegerLiteral(value=int(value))
-            else:
-                return FloatLiteral(value=value)
-        except (ValueError, TypeError) as e:
-            self.errors.append(f"Could not parse '{self.cur_token.literal}' as number: {e}")
+            return IntegerLiteral(value=int(self.cur_token.literal))
+        except ValueError:
+            self.errors.append(f"Could not parse {self.cur_token.literal} as integer")
+            return None
+
+    def parse_float_literal(self):
+        try:
+            return FloatLiteral(value=float(self.cur_token.literal))
+        except ValueError:
+            self.errors.append(f"Could not parse {self.cur_token.literal} as float")
             return None
 
     def parse_string_literal(self):
