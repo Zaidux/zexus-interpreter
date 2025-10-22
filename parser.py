@@ -171,7 +171,7 @@ class Parser:
 
     # NEW: If statement parsing (Zexus syntax: if condition: consequence else: alternative)
 
-    # In parser.py - REPLACE the parse_if_statement and parse_while_statement methods:
+   # In parser.py - REPLACE the parse_if_statement and parse_while_statement methods:
 
 def parse_if_statement(self):
     # print(f"DEBUG: parse_if_statement - starting at {self.cur_token.type}")
