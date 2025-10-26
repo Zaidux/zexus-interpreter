@@ -25,6 +25,8 @@ EQ = "=="
 NOT_EQ = "!="
 MOD = "%"      # Modulo operator
 DOT = "."      # Dot operator for method calls
+LTE = "<="      # Less than or equal
+GTE = ">="      # Greater than or equal
 
 # Delimiters
 COMMA = ","
