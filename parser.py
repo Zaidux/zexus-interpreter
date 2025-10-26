@@ -1,4 +1,4 @@
-# parser.py (COMPLETELY FIXED VERSION)
+# parser.py (COMPLETELY FIXED - NO DUPLICATES)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -17,7 +17,6 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
-        # ✅ FIXED: Add prefix_parse_fns that was missing
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
             INT: self.parse_integer_literal,
@@ -32,10 +31,9 @@ class Parser:
             LBRACKET: self.parse_list_literal,
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
-            EMBEDDED: self.parse_embedded_literal,  # ✅ ADDED
+            EMBEDDED: self.parse_embedded_literal,
         }
 
-        # ✅ FIXED: Remove duplicate definition
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
             MINUS: self.parse_infix_expression,
@@ -46,7 +44,7 @@ class Parser:
             LT: self.parse_infix_expression,
             GT: self.parse_infix_expression,
             LPAREN: self.parse_call_expression,
-            DOT: self.parse_method_call_expression,  # ✅ ADDED
+            DOT: self.parse_method_call_expression,
         }
 
         self.next_token()
@@ -109,7 +107,6 @@ class Parser:
 
     def recover_to_next_statement(self):
         """Skip tokens until we find a statement boundary"""
-        # ✅ FIXED: Remove NEWLINE reference since we don't have that token
         while not self.cur_token_is(EOF):
             if self.cur_token_is(SEMICOLON):
                 return
@@ -117,25 +114,6 @@ class Parser:
                 return
             self.next_token()
 
-    def peek_n(self, n):
-        """Look ahead n tokens without consuming them"""
-        saved_position = self.lexer.position
-        saved_read_position = self.lexer.read_position
-        saved_ch = self.lexer.ch
-
-        tokens = []
-        for _ in range(n):
-            token = self.lexer.next_token()
-            tokens.append(token)
-
-        # Restore lexer state
-        self.lexer.position = saved_position
-        self.lexer.read_position = saved_read_position
-        self.lexer.ch = saved_ch
-
-        return tokens[-1] if tokens else None
-
-    # === EMBEDDED CODE HANDLING ===
     def parse_embedded_literal(self):
         """Parse: embedded {language code} """
         if not self.expect_peek(LBRACE):
@@ -177,14 +155,13 @@ class Parser:
         if self.cur_token_is(EOF):
             self.errors.append("Unclosed embedded code block")
             return None
-        
+
         # Extract the content (excluding the outer braces)
         end_position = self.lexer.position - len(self.cur_token.literal)
         content = self.lexer.input[start_position:end_position].strip()
 
         return content
 
-    # === EXACTLY STATEMENT ===
     def parse_exactly_statement(self):
         """Parse: exactly block_name { ... } """
         if not self.expect_peek(IDENT):
@@ -195,7 +172,6 @@ class Parser:
         body = self.parse_block_statement()
         return ExactlyStatement(name=name, body=body)
 
-    # === FOR EACH LOOPS ===
     def parse_for_each_statement(self):
         stmt = ForEachStatement(item=None, iterable=None, body=None)
 
@@ -229,7 +205,6 @@ class Parser:
 
         return stmt
 
-    # === ACTION STATEMENTS ===
     def parse_action_statement(self):
         if not self.expect_peek(IDENT):
             self.errors.append("Expected function name after 'action'")
@@ -273,7 +248,6 @@ class Parser:
             return None
         return params
 
-    # === ACTION LITERAL ===
     def parse_action_literal(self):
         if not self.expect_peek(LPAREN):
             return None
@@ -289,7 +263,6 @@ class Parser:
             body.statements.append(stmt)
         return ActionLiteral(parameters=parameters, body=body)
 
-    # === OTHER STATEMENTS ===
     def parse_if_statement(self):
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'if'")
@@ -408,27 +381,24 @@ class Parser:
             self.next_token()
         return stmt
 
-    # === EXPRESSIONS ===
-    # parser.py (FIX METHOD CALL PARSING)
-# In the parse_expression method, update the while loop:
-
-def parse_expression(self, precedence):
-    if self.cur_token.type not in self.prefix_parse_fns:
-        self.errors.append(f"No prefix parse function for {self.cur_token.type}")
-        return None
-    prefix = self.prefix_parse_fns[self.cur_token.type]
-    left_exp = prefix()
-    
-    # ✅ FIXED: Check for semicolon OR newline as statement end
-    while (not self.peek_token_is(SEMICOLON) and 
-           not (self.peek_token.type == EOF) and
-           precedence < self.peek_precedence()):
-        if self.peek_token.type not in self.infix_parse_fns:
-            return left_exp
-        infix = self.infix_parse_fns[self.peek_token.type]
-        self.next_token()
-        left_exp = infix(left_exp)
-    return left_exp
+    # === EXPRESSIONS - SINGLE VERSION ===
+    def parse_expression(self, precedence):
+        if self.cur_token.type not in self.prefix_parse_fns:
+            self.errors.append(f"No prefix parse function for {self.cur_token.type}")
+            return None
+        prefix = self.prefix_parse_fns[self.cur_token.type]
+        left_exp = prefix()
+        
+        # ✅ FIXED: Better condition for stopping expression parsing
+        while (not self.peek_token_is(SEMICOLON) and 
+               not self.peek_token_is(EOF) and
+               precedence < self.peek_precedence()):
+            if self.peek_token.type not in self.infix_parse_fns:
+                return left_exp
+            infix = self.infix_parse_fns[self.peek_token.type]
+            self.next_token()
+            left_exp = infix(left_exp)
+        return left_exp
 
     def parse_identifier(self):
         return Identifier(value=self.cur_token.literal)
