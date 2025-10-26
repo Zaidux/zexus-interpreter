@@ -1,10 +1,10 @@
-# evaluator.py (COMPLETE WITH MISSING FUNCTIONS)
+# evaluator.py (COMPLETE FIXED VERSION WITH COMPARISON OPERATORS)
 from zexus_ast import *
 from object import *
 
 NULL, TRUE, FALSE = Null(), Boolean(True), Boolean(False)
 
-# === MISSING HELPER FUNCTIONS ===
+# === HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
     result = NULL
@@ -81,12 +81,16 @@ def eval_infix_expression(operator, left, right):
         return TRUE if left.value == right.value else FALSE
     elif operator == "!=":
         return TRUE if left.value != right.value else FALSE
+    elif operator == "<=":  # ✅ ADD <= operator
+        return TRUE if left.value <= right.value else FALSE
+    elif operator == ">=":  # ✅ ADD >= operator
+        return TRUE if left.value >= right.value else FALSE
     return NULL
 
 def eval_integer_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
-    
+
     if operator == "+":
         return Integer(left_val + right_val)
     elif operator == "-":
@@ -99,6 +103,10 @@ def eval_integer_infix_expression(operator, left, right):
         return TRUE if left_val < right_val else FALSE
     elif operator == ">":
         return TRUE if left_val > right_val else FALSE
+    elif operator == "<=":  # ✅ ADD <= operator
+        return TRUE if left_val <= right_val else FALSE
+    elif operator == ">=":  # ✅ ADD >= operator
+        return TRUE if left_val >= right_val else FALSE
     elif operator == "==":
         return TRUE if left_val == right_val else FALSE
     elif operator == "!=":
@@ -108,7 +116,7 @@ def eval_integer_infix_expression(operator, left, right):
 def eval_float_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
-    
+
     if operator == "+":
         return Float(left_val + right_val)
     elif operator == "-":
@@ -121,6 +129,10 @@ def eval_float_infix_expression(operator, left, right):
         return TRUE if left_val < right_val else FALSE
     elif operator == ">":
         return TRUE if left_val > right_val else FALSE
+    elif operator == "<=":  # ✅ ADD <= operator
+        return TRUE if left_val <= right_val else FALSE
+    elif operator == ">=":  # ✅ ADD >= operator
+        return TRUE if left_val >= right_val else FALSE
     elif operator == "==":
         return TRUE if left_val == right_val else FALSE
     elif operator == "!=":
@@ -171,7 +183,7 @@ def execute_embedded_function(embedded_obj, method, args):
     # For now, return a dummy value
     return Integer(42)
 
-# === BUILTIN FUNCTIONS (your existing code) ===
+# === BUILTIN FUNCTIONS ===
 def builtin_len(*args):
     if len(args) != 1:
         return NULL
@@ -264,11 +276,11 @@ builtins = {
     "map_keys": Builtin(builtin_map_keys),
 }
 
-# === MAIN EVAL_NODE FUNCTION (your existing code) ===
+# === MAIN EVAL_NODE FUNCTION ===
 def eval_node(node, env):
     if node is None:
         return NULL
-        
+
     node_type = type(node)
 
     # Statements
@@ -280,42 +292,6 @@ def eval_node(node, env):
 
     elif node_type == BlockStatement:
         return eval_block_statement(node, env)
-
-    # evaluator.py (ADD ForEachStatement handling)
-# Add this to your eval_node function:
-
-    elif node_type == ForEachStatement:
-        # Evaluate the iterable
-        iterable = eval_node(node.iterable, env)
-        if not isinstance(iterable, List):
-            print(f"Error: for-each loop expected list, got {iterable.type()}")
-            return NULL
-        
-        result = NULL
-        # For each element in the iterable
-        for element in iterable.elements:
-            # Set the loop variable
-            env.set(node.item.value, element)
-            # Execute the loop body
-            result = eval_node(node.body, env)
-            
-        return result
-
-    # evaluator.py (ADD method call handling)
-# Add to eval_node function:
-
-    elif node_type == MethodCallExpression:
-        obj = eval_node(node.object, env)
-        method_name = node.method.value
-        
-        # Handle embedded code method calls
-        if isinstance(obj, EmbeddedCode):
-            args = eval_expressions(node.arguments, env)
-            return execute_embedded_function(obj, method_name, args)
-        
-        # Handle regular method calls (you can extend this)
-        print(f"Method call on {obj.type()}.{method_name} not implemented yet")
-        return NULL
 
     elif node_type == ReturnStatement:
         val = eval_node(node.return_value, env)
@@ -347,6 +323,41 @@ def eval_node(node, env):
                 break
             result = eval_node(node.body, env)
         return result
+
+    elif node_type == ForEachStatement:
+        # Evaluate the iterable
+        iterable = eval_node(node.iterable, env)
+        if not isinstance(iterable, List):
+            print(f"Error: for-each loop expected list, got {iterable.type()}")
+            return NULL
+
+        result = NULL
+        # For each element in the iterable
+        for element in iterable.elements:
+            # Set the loop variable
+            env.set(node.item.value, element)
+            # Execute the loop body
+            result = eval_node(node.body, env)
+
+        return result
+
+    elif node_type == MethodCallExpression:
+        obj = eval_node(node.object, env)
+        method_name = node.method.value
+
+        # Handle embedded code method calls
+        if isinstance(obj, EmbeddedCode):
+            if method_name == "code":
+                return String(obj.code)
+            elif method_name == "language":
+                return String(obj.language)
+            else:
+                args = eval_expressions(node.arguments, env)
+                return execute_embedded_function(obj, method_name, args)
+
+        # Handle regular method calls
+        print(f"Method call on {obj.type()}.{method_name} not implemented yet")
+        return NULL
 
     elif node_type == EmbeddedLiteral:
         embedded_obj = EmbeddedCode("embedded_block", node.language, node.code)
