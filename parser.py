@@ -3,7 +3,9 @@ from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7
+# ✅ ADD LOGICAL precedence constant
+LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8
+
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS, 
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
