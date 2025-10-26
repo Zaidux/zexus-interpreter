@@ -409,19 +409,26 @@ class Parser:
         return stmt
 
     # === EXPRESSIONS ===
-    def parse_expression(self, precedence):
-        if self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"No prefix parse function for {self.cur_token.type}")
-            return None
-        prefix = self.prefix_parse_fns[self.cur_token.type]
-        left_exp = prefix()
-        while not self.peek_token_is(SEMICOLON) and precedence < self.peek_precedence():
-            if self.peek_token.type not in self.infix_parse_fns:
-                return left_exp
-            infix = self.infix_parse_fns[self.peek_token.type]
-            self.next_token()
-            left_exp = infix(left_exp)
-        return left_exp
+    # parser.py (FIX METHOD CALL PARSING)
+# In the parse_expression method, update the while loop:
+
+def parse_expression(self, precedence):
+    if self.cur_token.type not in self.prefix_parse_fns:
+        self.errors.append(f"No prefix parse function for {self.cur_token.type}")
+        return None
+    prefix = self.prefix_parse_fns[self.cur_token.type]
+    left_exp = prefix()
+    
+    # ✅ FIXED: Check for semicolon OR newline as statement end
+    while (not self.peek_token_is(SEMICOLON) and 
+           not (self.peek_token.type == EOF) and
+           precedence < self.peek_precedence()):
+        if self.peek_token.type not in self.infix_parse_fns:
+            return left_exp
+        infix = self.infix_parse_fns[self.peek_token.type]
+        self.next_token()
+        left_exp = infix(left_exp)
+    return left_exp
 
     def parse_identifier(self):
         return Identifier(value=self.cur_token.literal)
