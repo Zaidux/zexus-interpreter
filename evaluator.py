@@ -151,6 +151,11 @@ def eval_node(node, env):
                 break
             result = eval_node(node.body, env)
         return result
+   
+    # Add to evaluator.py in eval_node function
+    elif node_type == EmbeddedLiteral:
+        embedded_obj = EmbeddedCode("embedded_block", node.language, node.code)
+        return embedded_obj
 
     elif node_type == PrintStatement:
         val = eval_node(node.value, env)
