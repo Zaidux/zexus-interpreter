@@ -1,4 +1,4 @@
-# lexer.py (COMPLETE FIXED VERSION)
+# lexer.py (UPDATED VERSION)
 from zexus_token import *
 
 class Lexer:
@@ -25,7 +25,14 @@ class Lexer:
 
     def next_token(self):
         self.skip_whitespace()
+        
+        # Skip single line comments
+        if self.ch == '#' and self.peek_char() != '{':
+            self.skip_comment()
+            return self.next_token()
+            
         tok = None
+        
         if self.ch == '=':
             if self.peek_char() == '=':
                 ch = self.ch
@@ -82,12 +89,25 @@ class Lexer:
                 token_type = self.lookup_ident(literal)
                 return Token(token_type, literal)
             elif self.is_digit(self.ch):
-                return Token(INT, self.read_number())
+                num_literal = self.read_number()
+                if '.' in num_literal:
+                    return Token(FLOAT, num_literal)
+                else:
+                    return Token(INT, num_literal)
             else:
+                # Instead of ILLEGAL, try to read as string or skip
+                if self.ch in ['\n', '\r']:
+                    self.read_char()
+                    return self.next_token()
                 tok = Token(ILLEGAL, self.ch)
 
         self.read_char()
         return tok
+
+    def skip_comment(self):
+        while self.ch != '\n' and self.ch != "":
+            self.read_char()
+        self.skip_whitespace()
 
     def read_string(self):
         start_position = self.position + 1
@@ -99,7 +119,7 @@ class Lexer:
 
     def read_identifier(self):
         start_position = self.position
-        while self.is_letter(self.ch):
+        while self.is_letter(self.ch) or self.is_digit(self.ch):
             self.read_char()
         return self.input[start_position:self.position]
 
@@ -137,7 +157,8 @@ class Lexer:
             "action": ACTION,
             "while": WHILE,
             "use": USE,
-            "exactly": EXACTLY,  # ✅ ADDED
+            "exactly": EXACTLY,
+            "embedded": EMBEDDED,  # ADD THIS
         }
         return keywords.get(ident, IDENT)
 
