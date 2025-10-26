@@ -428,9 +428,6 @@ def eval_node(node, env):
     elif node_type == StringLiteral:
         return String(node.value)
 
-    elif node_type == Boolean:
-        return TRUE if node.value else FALSE
-
     elif node_type == ListLiteral:
         elements = eval_expressions(node.elements, env)
         return List(elements)
