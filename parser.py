@@ -6,9 +6,10 @@ from zexus_ast import *
 LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS, 
-    LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,  # ✅ ADD LTE/GTE
+    LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
     PLUS: SUM, MINUS: SUM, 
     SLASH: PRODUCT, STAR: PRODUCT,
+    AND: LOGICAL, OR: LOGICAL,  # ✅ ADD logical operators
     LPAREN: CALL,
 }
 
@@ -41,12 +42,14 @@ class Parser:
             MINUS: self.parse_infix_expression,
             SLASH: self.parse_infix_expression,
             STAR: self.parse_infix_expression,
-            EQ: self.parse_infix_expression,
+            EQ: self.parse_infix_expression,  # ✅ This handles assignment expressions
             NOT_EQ: self.parse_infix_expression,
             LT: self.parse_infix_expression,
             GT: self.parse_infix_expression,
-            LTE: self.parse_infix_expression,  # ✅ ADD
-            GTE: self.parse_infix_expression,  # ✅ ADD
+            LTE: self.parse_infix_expression,
+            GTE: self.parse_infix_expression,
+            AND: self.parse_infix_expression,  # ✅ ADD logical AND
+            OR: self.parse_infix_expression,   # ✅ ADD logical OR
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
