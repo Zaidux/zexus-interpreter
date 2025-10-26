@@ -1,4 +1,4 @@
-# parser.py (COMPLETE FIXED VERSION WITH ALL METHODS)
+# parser.py (FIXED - Add EMBEDDED to prefix_parse_fns)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
@@ -31,6 +31,7 @@ class Parser:
             LBRACKET: self.parse_list_literal,
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
+            EMBEDDED: self.parse_embedded_literal,  # ✅ ADD THIS LINE
         }
 
         self.infix_parse_fns = {
@@ -47,6 +48,8 @@ class Parser:
 
         self.next_token()
         self.next_token()
+
+    # ... rest of your parser code remains the same ...
 
     def parse_program(self):
         program = Program()
