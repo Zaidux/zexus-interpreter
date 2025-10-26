@@ -42,7 +42,6 @@ class Lexer:
                 tok = Token(NOT_EQ, literal)
             else:
                 tok = Token(BANG, self.ch)
-        # ✅ ADD THESE CASES FOR < and > OPERATORS
         elif self.ch == '<':
             tok = Token(LT, self.ch)
         elif self.ch == '>':
@@ -137,9 +136,10 @@ class Lexer:
             "in": IN,
             "action": ACTION,
             "while": WHILE,
-            "use": USE,  # ✅ ADD THIS
+            "use": USE,
+            "exactly": EXACTLY,  # ✅ ADDED
         }
-        return keywords.get(ident, IDENT)  # ✅ FIXED INDENTATION
+        return keywords.get(ident, IDENT)
 
     def is_letter(self, char):
         return 'a' <= char <= 'z' or 'A' <= char <= 'Z' or char == '_'
