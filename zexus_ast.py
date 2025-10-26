@@ -13,6 +13,16 @@ class Program(Node):
 class LetStatement(Statement):
     def __init__(self, name, value): self.name = name; self.value = value
 
+# zexus_ast.py (ADD MethodCallExpression)
+class MethodCallExpression(Expression):
+    def __init__(self, object, method, arguments):
+        self.object = object
+        self.method = method
+        self.arguments = arguments
+        
+    def __repr__(self):
+        return f"MethodCallExpression(object={self.object}, method={self.method}, arguments={self.arguments})"
+
 class ReturnStatement(Statement): # NEW
     def __init__(self, return_value):
         self.return_value = return_value
