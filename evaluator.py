@@ -1,5 +1,9 @@
-# evaluator.py - FIXED IMPORT
-from zexus_ast import *  # This imports Boolean AST node
+# evaluator.py - FIX THE IMPORTS AT THE TOP
+
+# Import zexus_ast module to access AST node classes
+import zexus_ast
+
+# Import object classes with alias to avoid name conflict
 from object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
 
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
