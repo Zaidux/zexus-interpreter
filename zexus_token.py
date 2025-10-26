@@ -52,6 +52,7 @@ MAP = "MAP"
 WHILE = "WHILE"
 USE = "USE"
 EXACTLY = "EXACTLY"  # ✅ ADDED
+EMBEDDED = "EMBEDDED"  # ADD THIS LINE
 
 # The Token class represents a single token, holding its type and value.
 class Token:
