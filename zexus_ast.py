@@ -111,6 +111,15 @@ class CallExpression(Expression): # NEW
         self.function = function # Identifier or ActionLiteral
         self.arguments = arguments
 
+# Add to zexus_ast.py
+class EmbeddedLiteral:
+    def __init__(self, language, code):
+        self.language = language
+        self.code = code
+        
+    def __repr__(self):
+        return f"EmbeddedLiteral(language={self.language}, code={self.code})"
+
 class PrefixExpression(Expression):
     def __init__(self, operator, right): self.operator = operator; self.right = right
 
