@@ -23,6 +23,8 @@ LT = "<"      # ✅ ADDED
 GT = ">"      # ✅ ADDED
 EQ = "=="
 NOT_EQ = "!="
+MOD = "%"      # Modulo operator
+DOT = "."      # Dot operator for method calls
 
 # Delimiters
 COMMA = ","
