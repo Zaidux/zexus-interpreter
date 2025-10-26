@@ -363,7 +363,7 @@ def eval_node(node, env):
 
         return result
    
-    elif node_type == Boolean:
+    elif node_type == zexus_ast.Boolean:
       return TRUE if node.value else FALSE
 
     elif node_type == MethodCallExpression:
