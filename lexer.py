@@ -1,4 +1,4 @@
-# lexer.py (IMPROVED EMBEDDED CODE HANDLING)
+# lexer.py (COMPLETE FIXED VERSION WITH COMPARISON OPERATORS)
 from zexus_token import *
 
 class Lexer:
@@ -51,9 +51,21 @@ class Lexer:
             else:
                 tok = Token(BANG, self.ch)
         elif self.ch == '<':
-            tok = Token(LT, self.ch)
+            if self.peek_char() == '=':  # ✅ ADD <= operator
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(LTE, literal)
+            else:
+                tok = Token(LT, self.ch)
         elif self.ch == '>':
-            tok = Token(GT, self.ch)
+            if self.peek_char() == '=':  # ✅ ADD >= operator
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(GTE, literal)
+            else:
+                tok = Token(GT, self.ch)
         elif self.ch == '"':
             tok = Token(STRING, self.read_string())
         elif self.ch == '[':
@@ -97,13 +109,13 @@ class Lexer:
         else:
             if self.is_letter(self.ch):
                 literal = self.read_identifier()
-                
+
                 # ✅ FIX: In embedded blocks, treat all keywords as IDENT
                 if self.in_embedded_block:
                     token_type = IDENT
                 else:
                     token_type = self.lookup_ident(literal)
-                    
+
                 return Token(token_type, literal)
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
