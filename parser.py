@@ -1,9 +1,9 @@
-# parser.py (COMPLETELY FIXED - WITH ASSIGNMENT HANDLING)
+# parser.py (COMPLETE FIXED VERSION)
 from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# ✅ ENHANCED precedence constants with ASSIGNMENT
+# Precedence constants
 LOWEST, ASSIGN, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
@@ -39,7 +39,7 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
-            ASSIGN: self.parse_assignment_prefix,  # ✅ CRITICAL FIX
+            # REMOVE ASSIGN from prefix - it should never be a prefix
         }
 
         self.infix_parse_fns = {
@@ -56,7 +56,7 @@ class Parser:
             GTE: self.parse_infix_expression,
             AND: self.parse_infix_expression,
             OR: self.parse_infix_expression,
-            ASSIGN: self.parse_assignment_expression,  # ✅ Assignment as infix
+            ASSIGN: self.parse_assignment_expression,  # Special handling for assignment
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
@@ -64,21 +64,20 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    def parse_assignment_prefix(self):
-        """Handle assignment as a prefix when it shouldn't be there"""
-        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Invalid use of assignment operator '='")
-        return None
-
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
+        # Only allow assignment to identifiers
         if not isinstance(left, Identifier):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
             return None
             
         expression = AssignmentExpression(name=left, value=None)
         precedence = self.cur_precedence()
-        self.next_token()
+        self.next_token()  # Move past the =
+        
+        # Parse the right-hand side
         expression.value = self.parse_expression(precedence)
+        
         return expression
 
     def parse_method_call_expression(self, left):
@@ -86,20 +85,17 @@ class Parser:
         if not self.cur_token_is(DOT):
             return None
 
-        # Get method name
         if not self.expect_peek(IDENT):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected method name after '.'")
             return None
 
         method = Identifier(self.cur_token.literal)
 
-        # Check for parentheses
         if self.peek_token_is(LPAREN):
-            self.next_token()  # Move to LPAREN
+            self.next_token()
             arguments = self.parse_expression_list(RPAREN)
             return MethodCallExpression(object=left, method=method, arguments=arguments)
         else:
-            # Property access without call
             return PropertyAccessExpression(object=left, property=method)
 
     def parse_program(self):
@@ -156,12 +152,10 @@ class Parser:
 
         self.next_token()  # Move to token after {
 
-        # Read everything until matching }
         code_content = self.read_embedded_code_content()
         if code_content is None:
             return None
 
-        # Extract language from first line
         lines = code_content.strip().split('\n')
         if not lines:
             self.errors.append("Empty embedded code block")
@@ -170,7 +164,6 @@ class Parser:
         language_line = lines[0].strip()
         language = language_line if language_line else "unknown"
 
-        # The actual code is everything after the first line
         code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
 
         return EmbeddedLiteral(language=language, code=code)
@@ -178,7 +171,7 @@ class Parser:
     def read_embedded_code_content(self):
         """Read content between { and } including nested braces"""
         start_position = self.lexer.position
-        brace_count = 1  # We already saw the opening {
+        brace_count = 1
 
         while brace_count > 0 and not self.cur_token_is(EOF):
             self.next_token()
@@ -191,7 +184,6 @@ class Parser:
             self.errors.append("Unclosed embedded code block")
             return None
 
-        # Extract the content (excluding the outer braces)
         end_position = self.lexer.position - len(self.cur_token.literal)
         content = self.lexer.input[start_position:end_position].strip()
 
@@ -417,21 +409,32 @@ class Parser:
         return stmt
 
     def parse_expression(self, precedence):
+        # Check if current token has a prefix parse function
         if self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type}")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - No prefix parse function for {self.cur_token.type} found")
             return None
+        
         prefix = self.prefix_parse_fns[self.cur_token.type]
         left_exp = prefix()
+        
+        if left_exp is None:
+            return None
 
-        # ✅ FIXED: Better condition for stopping expression parsing
+        # Continue parsing while we have higher precedence infix operators
         while (not self.peek_token_is(SEMICOLON) and 
-               not self.peek_token_is(EOF) and
                precedence < self.peek_precedence()):
+            
+            # Check if the next token has an infix parse function
             if self.peek_token.type not in self.infix_parse_fns:
                 return left_exp
+                
             infix = self.infix_parse_fns[self.peek_token.type]
             self.next_token()
             left_exp = infix(left_exp)
+            
+            if left_exp is None:
+                return None
+                
         return left_exp
 
     def parse_identifier(self):
