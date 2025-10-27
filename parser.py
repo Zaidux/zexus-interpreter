@@ -39,6 +39,7 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
+            ASSIGN: self.parse_assignment_prefix,  # ✅ ADD THIS LINE
         }
 
         self.infix_parse_fns = {
