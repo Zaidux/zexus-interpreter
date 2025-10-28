@@ -3,7 +3,7 @@ from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# Precedence constants - FIXED: Increased ASSIGN precedence
+# Precedence constants
 LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL, ASSIGN = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    ASSIGN: ASSIGN,  # Now ASSIGN has higher precedence than LOWEST
+    ASSIGN: ASSIGN,  # Make sure this matches the token type exactly
 }
 
 class Parser:
@@ -24,13 +24,12 @@ class Parser:
         self.cur_token = None
         self.peek_token = None
 
-        # Add this to your parser temporarily to debug
-    def debug_precedences(self):
-        print("=== PRECEDENCES DEBUG ===")
-        print(f"ASSIGN token type: {ASSIGN}")
-        print(f"precedences mapping: {precedences}")
+        # Debug: Check if ASSIGN is correctly mapped
+        print(f"=== PRECEDENCE DEBUG ===")
+        print(f"ASSIGN token type: '{ASSIGN}'")
         print(f"ASSIGN in precedences: {ASSIGN in precedences}")
-        print(f"Value for ASSIGN: {precedences.get(ASSIGN, 'NOT FOUND')}")
+        print(f"Value: {precedences.get(ASSIGN, 'NOT FOUND')}")
+        print("========================")
 
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
@@ -481,10 +480,9 @@ class Parser:
             return None
 
         # Continue parsing while we have higher precedence infix operators
-        # FIXED: Changed from < to <= for right-associative operators like assignment
         while (not self.peek_token_is(SEMICOLON) and 
                not self.peek_token_is(EOF) and 
-               precedence <= self.peek_precedence()):  # CHANGED: <= instead of <
+               precedence <= self.peek_precedence()):
 
             print(f"DEBUG: Inside while loop - peek_token={self.peek_token}, peek_precedence={self.peek_precedence()}")
 
