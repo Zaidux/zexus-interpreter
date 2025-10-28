@@ -3,8 +3,8 @@ from zexus_token import *
 from lexer import Lexer
 from zexus_ast import *
 
-# Precedence constants
-LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL, ASSIGN_PREC = 1, 2, 3, 4, 5, 6, 7, 8, 9
+# Precedence constants - FIXED: Assignment has LOW precedence (2)
+LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 precedences = {
     EQ: EQUALS, NOT_EQ: EQUALS,
@@ -14,7 +14,7 @@ precedences = {
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     DOT: CALL,
-    "=": ASSIGN_PREC,  # Use the actual token string "=" with correct precedence
+    "=": ASSIGN_PREC,  # Assignment has LOW precedence (2)
 }
 
 class Parser:
@@ -83,9 +83,9 @@ class Parser:
 
         self.next_token()  # Move past the =
 
-        # Parse the right-hand side
+        # Parse the right-hand side with LOWEST precedence to allow full expressions
         print(f"DEBUG: parsing right-hand side of assignment")
-        expression.value = self.parse_expression(precedence)
+        expression.value = self.parse_expression(LOWEST)
         print(f"DEBUG: assignment result: {expression}")
         return expression
 
