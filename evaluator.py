@@ -106,31 +106,58 @@ def eval_minus_prefix_operator_expression(right):
     return NULL
 
 def eval_infix_expression(operator, left, right):
+    print(f"DEBUG: eval_infix_expression: {left.inspect()} {operator} {right.inspect()}")
+    
     # ✅ ADD logical operators first
     if operator == "&&":
-        return TRUE if is_truthy(left) and is_truthy(right) else FALSE
+        result = TRUE if is_truthy(left) and is_truthy(right) else FALSE
+        print(f"DEBUG: logical AND result: {result.inspect()}")
+        return result
     elif operator == "||":
-        return TRUE if is_truthy(left) or is_truthy(right) else FALSE
+        result = TRUE if is_truthy(left) or is_truthy(right) else FALSE
+        print(f"DEBUG: logical OR result: {result.inspect()}")
+        return result
 
-    if isinstance(left, Integer) and isinstance(right, Integer):
-        return eval_integer_infix_expression(operator, left, right)
-    elif isinstance(left, Float) and isinstance(right, Float):
-        return eval_float_infix_expression(operator, left, right)
-    elif isinstance(left, String) and isinstance(right, String):
-        return eval_string_infix_expression(operator, left, right)
-    elif operator == "==":
-        return TRUE if left.value == right.value else FALSE
+    # Handle comparison operators for all types
+    if operator == "==":
+        result = TRUE if left.value == right.value else FALSE
+        print(f"DEBUG: equality result: {result.inspect()}")
+        return result
     elif operator == "!=":
-        return TRUE if left.value != right.value else FALSE
+        result = TRUE if left.value != right.value else FALSE
+        print(f"DEBUG: inequality result: {result.inspect()}")
+        return result
     elif operator == "<=":
-        return TRUE if left.value <= right.value else FALSE
+        result = TRUE if left.value <= right.value else FALSE
+        print(f"DEBUG: less-equal result: {result.inspect()}")
+        return result
     elif operator == ">=":
-        return TRUE if left.value >= right.value else FALSE
+        result = TRUE if left.value >= right.value else FALSE
+        print(f"DEBUG: greater-equal result: {result.inspect()}")
+        return result
+
+    # Type-specific operations
+    if isinstance(left, Integer) and isinstance(right, Integer):
+        result = eval_integer_infix_expression(operator, left, right)
+        print(f"DEBUG: integer operation result: {result.inspect()}")
+        return result
+    elif isinstance(left, Float) and isinstance(right, Float):
+        result = eval_float_infix_expression(operator, left, right)
+        print(f"DEBUG: float operation result: {result.inspect()}")
+        return result
+    elif isinstance(left, String) and isinstance(right, String):
+        result = eval_string_infix_expression(operator, left, right)
+        print(f"DEBUG: string operation result: {result.inspect()}")
+        return result
+    
+    print(f"DEBUG: unsupported operation: {left.type()} {operator} {right.type()}")
     return NULL
 
 def eval_integer_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
+
+    print(f"DEBUG: integer operation: {left_val} {operator} {right_val}")
 
     if operator == "+":
         return Integer(left_val + right_val)
@@ -163,6 +190,8 @@ def eval_float_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
 
+    print(f"DEBUG: float operation: {left_val} {operator} {right_val}")
+
     if operator == "+":
         return Float(left_val + right_val)
     elif operator == "-":
@@ -191,6 +220,8 @@ def eval_float_infix_expression(operator, left, right):
     return NULL
 
 def eval_string_infix_expression(operator, left, right):
+    print(f"DEBUG: string operation: '{left.value}' {operator} '{right.value}'")
+    
     if operator == "+":
         return String(left.value + right.value)
     elif operator == "==":
