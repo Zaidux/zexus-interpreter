@@ -57,6 +57,8 @@ WHILE = "WHILE"
 USE = "USE"
 EXACTLY = "EXACTLY"
 EMBEDDED = "EMBEDDED"
+EXPORT = "EXPORT"  # NEW: Added export token
+LAMBDA = "LAMBDA"  # NEW: Added lambda token
 
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):
