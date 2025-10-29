@@ -1,4 +1,4 @@
-# parser.py (PRODUCTION READY)
+# parser.py (PRODUCTION READY WITH PHASE 1 UPDATE)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
@@ -39,7 +39,10 @@ class Parser:
             LBRACE: self.parse_map_literal,
             ACTION: self.parse_action_literal,
             EMBEDDED: self.parse_embedded_literal,
-            LAMBDA: self.parse_lambda_expression,  # NEW: Lambda support
+            LAMBDA: self.parse_lambda_expression,
+            DEBUG: self.parse_debug_statement,  # NEW: Debug support
+            TRY: self.parse_try_catch_statement,  # NEW: Try-catch support
+            EXTERNAL: self.parse_external_declaration,  # NEW: External functions
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -62,18 +65,166 @@ class Parser:
         self.next_token()
         self.next_token()
 
+    # NEW: Debug statement parsing
+    def parse_debug_statement(self):
+        """Parse debug statements: debug expression or debug "message" """
+        token = self.cur_token
+        
+        self.next_token()  # consume 'debug'
+        
+        # Parse the debug expression/message
+        value = self.parse_expression(LOWEST)
+        if not value:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
+            return None
+            
+        return DebugStatement(value=value)
+
+    # NEW: Try-catch statement parsing
+    def parse_try_catch_statement(self):
+        """Parse try-catch statements: try { code } catch error { handle } """
+        try_token = self.cur_token
+        
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {try_token.line}:{try_token.column} - Expected '{{' after 'try'")
+            return None
+            
+        # Parse try block
+        try_block = self.parse_block_statement()
+        if not try_block:
+            return None
+            
+        # Expect catch
+        if not self.expect_peek(CATCH):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
+            return None
+            
+        # Parse catch parameter
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected error variable name after 'catch'")
+            return None
+            
+        error_var = Identifier(self.cur_token.literal)
+        
+        # Parse catch block
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' after catch variable")
+            return None
+            
+        catch_block = self.parse_block_statement()
+        if not catch_block:
+            return None
+            
+        return TryCatchStatement(
+            try_block=try_block,
+            error_variable=error_var,
+            catch_block=catch_block
+        )
+
+    # NEW: External function declaration
+    def parse_external_declaration(self):
+        """Parse external function declarations: external action name() from "module" """
+        token = self.cur_token
+        
+        if not self.expect_peek(ACTION):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected 'action' after 'external'")
+            return None
+            
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected function name after 'external action'")
+            return None
+            
+        name = Identifier(self.cur_token.literal)
+        
+        # Parse parameters
+        if not self.expect_peek(LPAREN):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '(' after external function name")
+            return None
+            
+        parameters = self.parse_action_parameters()
+        if parameters is None:
+            return None
+            
+        # Expect FROM keyword
+        if not self.expect_peek(FROM):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'from' after external function parameters")
+            return None
+            
+        # Expect module string
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected module path string after 'from'")
+            return None
+            
+        module_path = self.cur_token.literal
+        
+        return ExternalDeclaration(
+            name=name,
+            parameters=parameters,
+            module_path=module_path
+        )
+
+    # NEW: Enhanced statement parser to include new statement types
+    def parse_statement(self):
+        try:
+            if self.cur_token_is(LET):
+                return self.parse_let_statement()
+            elif self.cur_token_is(RETURN):
+                return self.parse_return_statement()
+            elif self.cur_token_is(PRINT):
+                return self.parse_print_statement()
+            elif self.cur_token_is(FOR):
+                return self.parse_for_each_statement()
+            elif self.cur_token_is(SCREEN):
+                return self.parse_screen_statement()
+            elif self.cur_token_is(ACTION):
+                return self.parse_action_statement()
+            elif self.cur_token_is(IF):
+                return self.parse_if_statement()
+            elif self.cur_token_is(WHILE):
+                return self.parse_while_statement()
+            elif self.cur_token_is(USE):
+                return self.parse_use_statement()
+            elif self.cur_token_is(EXACTLY):
+                return self.parse_exactly_statement()
+            elif self.cur_token_is(EXPORT):
+                return self.parse_export_statement()
+            elif self.cur_token_is(DEBUG):  # NEW: Debug statements
+                return self.parse_debug_statement()
+            elif self.cur_token_is(TRY):    # NEW: Try-catch statements
+                return self.parse_try_catch_statement()
+            elif self.cur_token_is(EXTERNAL):  # NEW: External declarations
+                return self.parse_external_declaration()
+            else:
+                return self.parse_expression_statement()
+        except Exception as e:
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}")
+            self.recover_to_next_statement()
+            return None
+
+    # Enhanced recovery to handle new keywords
+    def recover_to_next_statement(self):
+        """Skip tokens until we find a statement boundary"""
+        while not self.cur_token_is(EOF):
+            if self.cur_token_is(SEMICOLON):
+                return
+            # Add new keywords to recovery detection
+            next_keywords = [LET, RETURN, PRINT, FOR, ACTION, IF, WHILE, USE, EXPORT, DEBUG, TRY, EXTERNAL]
+            if any(self.peek_token_is(kw) for kw in next_keywords):
+                return
+            self.next_token()
+
     # NEW: Ultra-robust lambda expression parsing
     def parse_lambda_expression(self):
         """Parse lambda expressions in ALL common formats"""
         token = self.cur_token
         parameters = []
-        
+
         # Store starting position for error reporting
         start_line = self.cur_token.line
         start_column = self.cur_token.column
-        
+
         self.next_token()  # consume 'lambda'
-        
+
         try:
             # Case 1: No parameters - lambda: or lambda():
             if self.cur_token_is(COLON):
@@ -95,18 +246,18 @@ class Parser:
             else:
                 self.errors.append(f"Line {start_line}:{start_column} - Invalid lambda syntax after 'lambda'")
                 return None
-            
+
             # Expect colon
             if not self.cur_token_is(COLON):
                 if not self.expect_peek(COLON):
                     self.errors.append(f"Line {start_line}:{start_column} - Expected ':' in lambda expression")
                     return None
-            
+
             self.next_token()  # consume ':'
             body = self.parse_expression(LOWEST)
-            
+
             return LambdaExpression(parameters=parameters, body=body)
-            
+
         except Exception as e:
             self.errors.append(f"Line {start_line}:{start_column} - Error parsing lambda: {str(e)}")
             return None
@@ -114,12 +265,12 @@ class Parser:
     def _parse_parameter_list(self):
         """Helper to parse parameter lists for lambdas and functions"""
         parameters = []
-        
+
         if not self.cur_token_is(IDENT):
             return parameters
-            
+
         parameters.append(Identifier(self.cur_token.literal))
-        
+
         while self.peek_token_is(COMMA):
             self.next_token()  # consume identifier
             self.next_token()  # consume ','
@@ -128,7 +279,7 @@ class Parser:
             else:
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
                 return parameters
-        
+
         return parameters
 
     def parse_assignment_expression(self, left):
@@ -168,37 +319,6 @@ class Parser:
                 program.statements.append(stmt)
             self.next_token()
         return program
-
-    def parse_statement(self):
-        try:
-            if self.cur_token_is(LET):
-                return self.parse_let_statement()
-            elif self.cur_token_is(RETURN):
-                return self.parse_return_statement()
-            elif self.cur_token_is(PRINT):
-                return self.parse_print_statement()
-            elif self.cur_token_is(FOR):
-                return self.parse_for_each_statement()
-            elif self.cur_token_is(SCREEN):
-                return self.parse_screen_statement()
-            elif self.cur_token_is(ACTION):
-                return self.parse_action_statement()
-            elif self.cur_token_is(IF):
-                return self.parse_if_statement()
-            elif self.cur_token_is(WHILE):
-                return self.parse_while_statement()
-            elif self.cur_token_is(USE):
-                return self.parse_use_statement()
-            elif self.cur_token_is(EXACTLY):
-                return self.parse_exactly_statement()
-            elif self.cur_token_is(EXPORT):  # NEW: Export statement
-                return self.parse_export_statement()
-            else:
-                return self.parse_expression_statement()
-        except Exception as e:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}")
-            self.recover_to_next_statement()
-            return None
 
     # NEW: Export statement parsing
     def parse_export_statement(self):
@@ -244,15 +364,6 @@ class Parser:
                 return None
 
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
-
-    def recover_to_next_statement(self):
-        """Skip tokens until we find a statement boundary"""
-        while not self.cur_token_is(EOF):
-            if self.cur_token_is(SEMICOLON):
-                return
-            if self.peek_token_is(LET) or self.peek_token_is(RETURN) or self.peek_token_is(PRINT):
-                return
-            self.next_token()
 
     def parse_embedded_literal(self):
         """Parse: embedded {language code} """
@@ -498,7 +609,6 @@ class Parser:
 
     def parse_screen_statement(self):
         stmt = ScreenStatement(name=None, body=None)
-
         if not self.expect_peek(IDENT):
             self.errors.append("Expected screen name after 'screen'")
             return None
