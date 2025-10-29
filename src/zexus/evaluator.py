@@ -1,6 +1,6 @@
 # evaluator.py (COMPLETE FIXED VERSION)
-import zexus_ast
-from zexus_ast import (
+from . import zexus_ast
+from .zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
     ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
     EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
@@ -9,7 +9,7 @@ from zexus_ast import (
     Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression
 )
 
-from object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
+from .object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue
 
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
 

@@ -1,0 +1,31 @@
+# test_simple_features.zx - Simplified test
+print("=== SIMPLE ZEXUS FEATURES TEST ===")
+
+# Use let statements instead of assignment for now
+let x = 10
+print("x = " + string(x))
+
+let y = x + 5  
+print("y = x + 5 = " + string(y))
+
+# Modulo with let
+let a = 17 % 5
+print("17 % 5 = " + string(a))
+
+# Lists and functions
+let my_list = [1, 2, 3, 4, 5]
+print("List length: " + string(len(my_list)))
+
+# Control flow
+let counter = 0
+while counter < 3:
+    let counter = counter + 1
+    print("Counter: " + string(counter))
+
+# For-each loop
+let total = 0
+for each item in [10, 20, 30]:
+    let total = total + item
+    print("Running total: " + string(total))
+
+print("=== TESTS COMPLETED ===")

@@ -1,5 +1,5 @@
 # lexer.py (ENHANCED WITH LINE/COLUMN TRACKING)
-from zexus_token import *
+from .zexus_token import *
 
 class Lexer:
     def __init__(self, source_code):

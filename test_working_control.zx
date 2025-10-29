@@ -1,0 +1,34 @@
+print "=== WORKING CONTROL FLOW TEST ==="
+
+# Test basic if/else - this should work
+action check_age(age):
+    if (age >= 18):
+        return "Adult"
+    else:
+        return "Minor"
+
+print check_age(25)
+print check_age(15)
+
+# Test while loops with assignment - this should work
+action countdown(n):
+    let count = n
+    while (count > 0):
+        print "Count: " + string(count)
+        count = count - 1
+    return "Blastoff!"
+
+print countdown(3)
+
+# Test factorial without complex conditions
+action simple_factorial(n):
+    let result = 1
+    let i = n
+    while (i > 1):
+        result = result * i
+        i = i - 1
+    return result
+
+print "5! = " + string(simple_factorial(5))
+
+print "Working control flow tests passed! 🎉"

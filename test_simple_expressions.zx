@@ -1,0 +1,17 @@
+print "=== SIMPLE EXPRESSIONS TEST ==="
+
+# Test basic expressions without 'and'
+action test_basic():
+    let a = 10
+    let b = 20
+    let sum = a + b
+    
+    if (a < b):
+        print "a < b works"
+    
+    if (sum == 30):
+        print "sum == 30 works"
+    
+    return "Basic expressions work"
+
+print test_basic()

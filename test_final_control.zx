@@ -1,0 +1,29 @@
+print "=== FINAL CONTROL FLOW TEST ==="
+
+# Test complex boolean logic
+action can_vote(age, is_citizen):
+    return age >= 18 && is_citizen
+
+print "18-year-old citizen: " + string(can_vote(18, true))
+print "17-year-old citizen: " + string(can_vote(17, true)) 
+print "18-year-old non-citizen: " + string(can_vote(18, false))
+
+# Test while loops with boolean conditions
+action fibonacci(n):
+    let a = 0
+    let b = 1
+    let count = 0
+    let result = []
+    
+    while (count < n):
+        result = push(result, a)
+        let next = a + b
+        a = b
+        b = next
+        count = count + 1
+    
+    return result
+
+print "First 6 Fibonacci: " + string(fibonacci(6))
+
+print "🎉 ALL CONTROL FLOW FEATURES WORKING!"

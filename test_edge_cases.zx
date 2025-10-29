@@ -1,0 +1,22 @@
+print "=== EDGE CASE TESTS ==="
+
+# Test nested boolean expressions
+let complex_condition = (true && false) || (true && true)
+print "Complex condition: " + string(complex_condition)
+
+# Test boolean in function returns
+action always_true():
+    return true
+
+action always_false(): 
+    return false
+
+print "Always true: " + string(always_true())
+print "Always false: " + string(always_false())
+
+# Test boolean comparisons
+print "true == true: " + string(true == true)
+print "true == false: " + string(true == false) 
+print "true != false: " + string(true != false)
+
+print "Edge cases passed! ✅"

@@ -1,0 +1,7 @@
+print "=== SIMPLE IF TEST ==="
+
+action test_if():
+    if (5 > 3):
+        return "Condition works"
+
+print test_if()

@@ -1,7 +1,7 @@
 # parser.py (COMPLETE FIXED VERSION)
-from zexus_token import *
-from lexer import Lexer
-from zexus_ast import *
+from .zexus_token import *
+from .lexer import Lexer
+from .zexus_ast import *
 
 # Precedence constants - FIXED: Assignment has LOW precedence (2)
 LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9

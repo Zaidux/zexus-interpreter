@@ -1,0 +1,23 @@
+print "=== SIMPLE CONTROL FLOW TEST ==="
+
+# Test basic if/else
+action simple_check(x):
+    if (x > 5):
+        return "Greater than 5"
+    else:
+        return "5 or less"
+
+print simple_check(10)
+print simple_check(3)
+
+# Test while loop without assignment
+action simple_countdown(n):
+    let count = n
+    while (count > 0):
+        print "Count: " + string(count)
+        count = count - 1
+    return "Done!"
+
+print simple_countdown(3)
+
+print "Simple control flow tests passed! ✅"

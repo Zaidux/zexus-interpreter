@@ -1,0 +1,25 @@
+print "=== ALL COMPARISON OPERATORS TEST ==="
+
+action test_gt(): return 5 > 3
+action test_lt(): return 2 < 8  
+action test_eq(): return 4 == 4
+action test_neq(): return 5 != 3
+
+print "5 > 3: " + string(test_gt())
+print "2 < 8: " + string(test_lt())
+print "4 == 4: " + string(test_eq())
+print "5 != 3: " + string(test_neq())
+
+# Test in if statements
+action check_comparisons():
+    if (5 > 3):
+        print "Greater than works"
+    if (2 < 8):
+        print "Less than works"
+    if (4 == 4):
+        print "Equals works"
+    if (5 != 3):
+        print "Not equals works"
+    return "All comparisons passed!"
+
+print check_comparisons()

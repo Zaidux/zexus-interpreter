@@ -1,0 +1,11 @@
+let message = "🚀 Zexus is globally installed!"
+print message
+
+action test_global():
+    print "✅ Global installation working!"
+    let numbers = [1, 2, 3, 4, 5]
+    let sum = numbers.reduce(0, logic: accumulator + item)
+    print "Sum of numbers: " + string(sum)
+    return true
+
+test_global()

@@ -1,0 +1,10 @@
+print "=== SIMPLE WHILE TEST ==="
+
+action test_while():
+    let count = 3
+    while (count > 0):
+        print count
+        count = count - 1
+    return "Done"
+
+print test_while()

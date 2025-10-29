@@ -1,0 +1,24 @@
+print "=== BETTER CONTROL FLOW TEST ==="
+
+# Test if/else with boolean conditions
+action check_adult(age):
+    let is_adult = age >= 18
+    if (is_adult):
+        return "Adult"
+    else:
+        return "Minor"
+
+print "Age 25: " + check_adult(25)
+print "Age 15: " + check_adult(15)
+
+# Test while loop with boolean condition
+action count_to_three():
+    let count = 1
+    while (count <= 3):
+        print "Count: " + string(count)
+        count = count + 1
+    return "Done counting"
+
+print count_to_three()
+
+print "Control flow working! ✅"

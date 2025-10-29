@@ -1,0 +1,45 @@
+print "=== ALL COMPARISON OPERATORS TEST ==="
+
+action test_gt(): return 5 > 3
+action test_lt(): return 2 < 8
+action test_eq(): return 4 == 4
+action test_neq(): return 5 != 3
+
+# Use let statements to store results first
+let gt_result = test_gt()
+let lt_result = test_lt() 
+let eq_result = test_eq()
+let neq_result = test_neq()
+
+print "5 > 3: " + string(gt_result)
+print "2 < 8: " + string(lt_result)
+print "4 == 4: " + string(eq_result)
+print "5 != 3: " + string(neq_result)
+
+# Test in if statements
+action check_comparisons():
+    if (5 > 3):
+        print "Greater than works"
+    if (2 < 8):
+        print "Less than works"
+    if (4 == 4):
+        print "Equals works"
+    if (5 != 3):
+        print "Not equals works"
+    return "All comparisons passed!"
+
+print check_comparisons()
+
+# Test more complex conditions
+action complex_conditions():
+    let a = 10
+    let b = 20
+    let c = 15
+    
+    if (a < b and b > c):
+        print "Complex condition 1 works"
+    if (a + b > c and c * 2 == 30):
+        print "Complex condition 2 works"
+    return "Complex conditions passed!"
+
+print complex_conditions()

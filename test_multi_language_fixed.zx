@@ -1,0 +1,34 @@
+print "=== MULTI-LANGUAGE EMBEDDING TEST ==="
+
+# Embedded JavaScript - Use string format for now
+let js_code = embedded {
+javascript
+// JavaScript code will be stored as string
+function add(a, b) { return a + b; }
+function multiply(a, b) { return a * b; }
+}
+
+# Embedded Python - Use string format  
+let py_code = embedded {
+python  
+# Python code will be stored as string
+def process_data(data): return [x * 2 for x in data]
+def filter_evens(numbers): return [x for x in numbers if x % 2 == 0]
+}
+
+# Test the embedded code storage
+print "JavaScript code stored: " + string(len(js_code.code))
+print "Python code stored: " + string(len(py_code.code))
+
+# Test for each loops
+let items = [1, 2, 3]
+for each item in items:
+    print "Item: " + string(item)
+
+# Test action functions
+action greet(name):
+    print "Hello, " + name
+
+greet("Zexus")
+
+print "Multi-language embedding working! 🎉"

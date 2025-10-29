@@ -1,0 +1,19 @@
+print "=== BOOLEAN TEST ==="
+
+# Test direct boolean values
+let my_true = true
+let my_false = false
+
+print "true value: " + string(my_true)
+print "false value: " + string(my_false)
+
+# Test boolean in if condition
+if (true):
+    print "Direct true works"
+
+if (false):
+    print "This won't print"
+else:
+    print "Direct false with else works"
+
+print "Boolean test completed"

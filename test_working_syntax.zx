@@ -1,0 +1,40 @@
+print "=== WORKING SYNTAX TEST ==="
+
+# Test basic comparisons without string conversion
+action test_comparisons():
+    if (5 > 3):
+        print "5 > 3 works"
+    if (2 < 8):
+        print "2 < 8 works" 
+    if (4 == 4):
+        print "4 == 4 works"
+    if (5 != 3):
+        print "5 != 3 works"
+    return "Basic comparisons work!"
+
+print test_comparisons()
+
+# Test variables and arithmetic
+action test_variables():
+    let a = 10
+    let b = 20
+    let sum = a + b
+    print "Sum: " + string(sum)
+    
+    if (sum > 25):
+        print "Sum is greater than 25"
+    else:
+        print "Sum is not greater than 25"
+    return "Variables work!"
+
+print test_variables()
+
+# Test while loops
+action test_loops():
+    let count = 3
+    while (count > 0):
+        print "Count: " + string(count)
+        count = count - 1
+    return "Loops work!"
+
+print test_loops()

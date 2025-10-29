@@ -1,0 +1,14 @@
+print "=== TESTING FIXES ==="
+
+# Test assignment
+let x = 5
+print "x = " + string(x)
+
+# Test logical operators
+if (true && true):
+    print "AND operator works"
+
+if (false || true):
+    print "OR operator works"
+
+print "Fixes working! ✅"

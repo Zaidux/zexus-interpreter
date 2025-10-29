@@ -1,0 +1,13 @@
+print "=== SIMPLE TEST ==="
+
+let x = 5
+print "x = " + string(x)
+
+let items = [1, 2, 3]
+for each item in items:
+    print "Item: " + string(item)
+
+action greet(name):
+    print "Hello, " + name
+
+greet("World")

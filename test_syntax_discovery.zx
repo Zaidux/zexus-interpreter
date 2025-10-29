@@ -1,0 +1,20 @@
+print "=== SYNTAX DISCOVERY ==="
+
+# Test 1: Basic assignment
+let x = 5
+print "x = " + string(x)
+
+# Test 2: Assignment in expression
+let y = x + 1
+print "y = " + string(y)
+
+# Test 3: Multiple conditions
+if (x > 3 && x < 10):
+    print "x between 3 and 10"
+
+# Test 4: Nested if
+if (x > 0):
+    if (x < 10):
+        print "x between 0 and 10"
+
+print "Syntax discovery complete"

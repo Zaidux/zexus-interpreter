@@ -1,0 +1,24 @@
+print "=== BOOLEAN TEST ==="
+
+# Test boolean literals
+let t = true
+let f = false
+
+print "true: " + string(t)
+print "false: " + string(f)
+
+# Test in if statements
+if (true):
+    print "True works!"
+else:
+    print "True failed!"
+
+if (false):
+    print "False failed!"
+else:
+    print "False works!"
+
+action test_bool_func():
+    return true
+
+print "Function returning true: " + string(test_bool_func())

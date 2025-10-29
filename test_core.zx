@@ -1,0 +1,19 @@
+print "=== CORE LANGUAGE TEST ==="
+
+# Test 1: Basic values
+print "String: Hello"
+print "Number: " + string(42)
+print "Boolean: " + string(true)
+
+# Test 2: Simple function
+action hello():
+    return "World"
+
+print "Function: " + hello()
+
+# Test 3: Variables
+let x = 10
+let y = 20
+print "Variables: " + string(x + y)
+
+print "Core language working!"
