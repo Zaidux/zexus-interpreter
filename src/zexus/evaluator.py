@@ -1,4 +1,6 @@
-# evaluator.py (PRODUCTION READY)
+# evaluator.py (PRODUCTION READY WITH PHASE 1 UPDATE)
+import sys
+import traceback
 from . import zexus_ast
 from .zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
@@ -7,27 +9,37 @@ from .zexus_ast import (
     ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
     ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
     Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression,
-    ExportStatement, LambdaExpression  # NEW: Added exports and lambda
+    ExportStatement, LambdaExpression
 )
 
-from .object import Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, Builtin, Action, EmbeddedCode, ReturnValue, LambdaFunction
+from .object import (
+    Environment, Integer, Float, String, List, Map, Null, Boolean as BooleanObj, 
+    Builtin, Action, EmbeddedCode, ReturnValue, LambdaFunction, DateTime, Math, File, Debug
+)
 
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
 
 class EvaluationError(Exception):
-    """Custom exception for evaluation errors with location info"""
-    def __init__(self, message, line=None, column=None):
+    """Enhanced exception for evaluation errors with location info and stack traces"""
+    def __init__(self, message, line=None, column=None, stack_trace=None):
         super().__init__(message)
         self.line = line
         self.column = column
         self.message = message
-    
+        self.stack_trace = stack_trace or []
+
     def __str__(self):
         if self.line and self.column:
-            return f"Line {self.line}:{self.column} - {self.message}"
-        return self.message
+            location = f"Line {self.line}:{self.column}"
+        else:
+            location = "Unknown location"
+        
+        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+        trace_section = f"\n   Stack:\n{trace}" if trace else ""
+        
+        return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
 
-# === HELPER FUNCTIONS ===
+# === ENHANCED HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
     result = NULL
@@ -53,7 +65,7 @@ def eval_block_statement(block, env):
     result = NULL
     for stmt in block.statements:
         result = eval_node(stmt, env)
-        if isinstance(result, ReturnValue) or isinstance(result, EvaluationError):
+        if isinstance(result, (ReturnValue, EvaluationError)):
             return result
     return result
 
@@ -74,7 +86,7 @@ def eval_identifier(node, env):
     builtin = builtins.get(node.value)
     if builtin:
         return builtin
-    
+
     return EvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
@@ -85,7 +97,7 @@ def is_truthy(obj):
 def eval_prefix_expression(operator, right):
     if isinstance(right, EvaluationError):
         return right
-        
+
     if operator == "!":
         return eval_bang_operator_expression(right)
     elif operator == "-":
@@ -218,7 +230,7 @@ def eval_if_expression(ie, env):
     condition = eval_node(ie.condition, env)
     if isinstance(condition, EvaluationError):
         return condition
-        
+
     if is_truthy(condition):
         return eval_node(ie.consequence, env)
     elif ie.alternative:
@@ -257,47 +269,47 @@ def array_reduce(array_obj, lambda_fn, initial_value=None, env=None):
     """Implement array.reduce(lambda, initial_value)"""
     if not isinstance(array_obj, List):
         return EvaluationError("reduce() called on non-array object")
-    
+
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("reduce() requires a lambda function as first argument")
-    
+
     accumulator = initial_value if initial_value is not None else array_obj.elements[0] if array_obj.elements else NULL
     start_index = 0 if initial_value is not None else 1
-    
+
     for i in range(start_index, len(array_obj.elements)):
         element = array_obj.elements[i]
         result = apply_function(lambda_fn, [accumulator, element])
         if isinstance(result, EvaluationError):
             return result
         accumulator = result
-    
+
     return accumulator
 
 def array_map(array_obj, lambda_fn, env=None):
     """Implement array.map(lambda)"""
     if not isinstance(array_obj, List):
         return EvaluationError("map() called on non-array object")
-    
+
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("map() requires a lambda function")
-    
+
     mapped_elements = []
     for element in array_obj.elements:
         result = apply_function(lambda_fn, [element])
         if isinstance(result, EvaluationError):
             return result
         mapped_elements.append(result)
-    
+
     return List(mapped_elements)
 
 def array_filter(array_obj, lambda_fn, env=None):
     """Implement array.filter(lambda)"""
     if not isinstance(array_obj, List):
         return EvaluationError("filter() called on non-array object")
-    
+
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("filter() requires a lambda function")
-    
+
     filtered_elements = []
     for element in array_obj.elements:
         result = apply_function(lambda_fn, [element])
@@ -305,7 +317,7 @@ def array_filter(array_obj, lambda_fn, env=None):
             return result
         if is_truthy(result):
             filtered_elements.append(element)
-    
+
     return List(filtered_elements)
 
 # NEW: Export system
@@ -315,7 +327,7 @@ def eval_export_statement(node, env):
     value = env.get(node.name.value)
     if not value:
         return EvaluationError(f"Cannot export undefined identifier: {node.name.value}")
-    
+
     # Export with security restrictions
     env.export(node.name.value, value, node.allowed_files, node.permission)
     return NULL
@@ -328,7 +340,108 @@ def check_import_permission(exported_value, importer_file, env):
         return EvaluationError(f"File '{importer_file}' not authorized to import this function")
     return True
 
-# === BUILTIN FUNCTIONS ===
+# === NEW BUILTIN FUNCTIONS FOR PHASE 1 ===
+
+def builtin_datetime_now(*args):
+    return DateTime.now()
+
+def builtin_timestamp(*args):
+    if len(args) == 0:
+        return DateTime.now().to_timestamp()
+    elif len(args) == 1 and isinstance(args[0], DateTime):
+        return args[0].to_timestamp()
+    return EvaluationError("timestamp() takes 0 or 1 DateTime argument")
+
+def builtin_math_random(*args):
+    if len(args) == 0:
+        return Math.random_int(0, 100)
+    elif len(args) == 1 and isinstance(args[0], Integer):
+        return Math.random_int(0, args[0].value)
+    elif len(args) == 2 and all(isinstance(a, Integer) for a in args):
+        return Math.random_int(args[0].value, args[1].value)
+    return EvaluationError("random() takes 0, 1, or 2 integer arguments")
+
+def builtin_to_hex(*args):
+    if len(args) != 1:
+        return EvaluationError("to_hex() takes exactly 1 argument")
+    return Math.to_hex_string(args[0])
+
+def builtin_from_hex(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("from_hex() takes exactly 1 string argument")
+    return Math.hex_to_int(args[0])
+
+def builtin_sqrt(*args):
+    if len(args) != 1:
+        return EvaluationError("sqrt() takes exactly 1 argument")
+    return Math.sqrt(args[0])
+
+# File I/O builtins
+def builtin_file_read_text(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("file_read_text() takes exactly 1 string argument")
+    return File.read_text(args[0])
+
+def builtin_file_write_text(*args):
+    if len(args) != 2 or not all(isinstance(a, String) for a in args):
+        return EvaluationError("file_write_text() takes exactly 2 string arguments")
+    return File.write_text(args[0], args[1])
+
+def builtin_file_exists(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("file_exists() takes exactly 1 string argument")
+    return File.exists(args[0])
+
+def builtin_file_read_json(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("file_read_json() takes exactly 1 string argument")
+    return File.read_json(args[0])
+
+def builtin_file_write_json(*args):
+    if len(args) != 2 or not isinstance(args[0], String):
+        return EvaluationError("file_write_json() takes path string and data")
+    return File.write_json(args[0], args[1])
+
+def builtin_file_append(*args):
+    if len(args) != 2 or not all(isinstance(a, String) for a in args):
+        return EvaluationError("file_append() takes exactly 2 string arguments")
+    return File.append_text(args[0], args[1])
+
+def builtin_file_list_dir(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("file_list_dir() takes exactly 1 string argument")
+    return File.list_directory(args[0])
+
+# Debug builtins
+def builtin_debug_log(*args):
+    if len(args) == 0:
+        return EvaluationError("debug_log() requires at least a message")
+    message = args[0]
+    value = args[1] if len(args) > 1 else None
+    return Debug.log(message, value)
+
+def builtin_debug_trace(*args):
+    if len(args) != 1 or not isinstance(args[0], String):
+        return EvaluationError("debug_trace() takes exactly 1 string argument")
+    return Debug.trace(args[0])
+
+def builtin_try_catch(*args):
+    """Try-catch exception handling"""
+    if len(args) < 2:
+        return EvaluationError("try_catch() requires try-block and catch-block")
+    
+    try_block = args[0]
+    catch_block = args[1]
+    
+    try:
+        return eval_node(try_block, env)
+    except Exception as e:
+        # Create error context for catch block
+        error_env = Environment(outer=env)
+        error_env.set("error", String(str(e)))
+        return eval_node(catch_block, error_env)
+
+# Existing builtin functions
 def builtin_len(*args):
     if len(args) != 1:
         return EvaluationError(f"len() takes exactly 1 argument ({len(args)} given)")
@@ -384,43 +497,74 @@ def builtin_reduce(*args):
     """Built-in reduce function for arrays"""
     if len(args) < 2 or len(args) > 3:
         return EvaluationError("reduce() takes 2 or 3 arguments (array, lambda[, initial])")
-    
+
     array_obj, lambda_fn = args[0], args[1]
     initial = args[2] if len(args) == 3 else None
-    
+
     return array_reduce(array_obj, lambda_fn, initial)
 
 def builtin_map(*args):
     """Built-in map function for arrays"""
     if len(args) != 2:
         return EvaluationError("map() takes 2 arguments (array, lambda)")
-    
+
     return array_map(args[0], args[1])
 
 def builtin_filter(*args):
     """Built-in filter function for arrays"""
     if len(args) != 2:
         return EvaluationError("filter() takes 2 arguments (array, lambda)")
-    
+
     return array_filter(args[0], args[1])
 
+# Enhanced builtins dictionary with new Phase 1 functions
 builtins = {
+    # Existing builtins
     "len": Builtin(builtin_len, "len"),
     "first": Builtin(builtin_first, "first"),
     "rest": Builtin(builtin_rest, "rest"),
     "push": Builtin(builtin_push, "push"),
     "string": Builtin(builtin_string, "string"),
-    "reduce": Builtin(builtin_reduce, "reduce"),  # NEW
-    "map": Builtin(builtin_map, "map"),          # NEW
-    "filter": Builtin(builtin_filter, "filter"), # NEW
+    "reduce": Builtin(builtin_reduce, "reduce"),
+    "map": Builtin(builtin_map, "map"),
+    "filter": Builtin(builtin_filter, "filter"),
+    
+    # NEW: Phase 1 builtins
+    "datetime_now": Builtin(builtin_datetime_now, "datetime_now"),
+    "timestamp": Builtin(builtin_timestamp, "timestamp"),
+    "random": Builtin(builtin_math_random, "random"),
+    "to_hex": Builtin(builtin_to_hex, "to_hex"),
+    "from_hex": Builtin(builtin_from_hex, "from_hex"),
+    "sqrt": Builtin(builtin_sqrt, "sqrt"),
+    
+    # File I/O builtins
+    "file_read_text": Builtin(builtin_file_read_text, "file_read_text"),
+    "file_write_text": Builtin(builtin_file_write_text, "file_write_text"),
+    "file_exists": Builtin(builtin_file_exists, "file_exists"),
+    "file_read_json": Builtin(builtin_file_read_json, "file_read_json"),
+    "file_write_json": Builtin(builtin_file_write_json, "file_write_json"),
+    "file_append": Builtin(builtin_file_append, "file_append"),
+    "file_list_dir": Builtin(builtin_file_list_dir, "file_list_dir"),
+    
+    # Debug builtins
+    "debug_log": Builtin(builtin_debug_log, "debug_log"),
+    "debug_trace": Builtin(builtin_debug_trace, "debug_trace"),
+    "try_catch": Builtin(builtin_try_catch, "try_catch"),
 }
 
-# === MAIN EVAL_NODE FUNCTION ===
-def eval_node(node, env):
+# === ENHANCED MAIN EVAL_NODE FUNCTION WITH STACK TRACES ===
+def eval_node(node, env, stack_trace=None):
     if node is None:
         return NULL
 
     node_type = type(node)
+    stack_trace = stack_trace or []
+    
+    # Add to stack trace for better error reporting
+    current_frame = f"  at {node_type.__name__}"
+    if hasattr(node, 'token') and node.token:
+        current_frame += f" (line {node.token.line})"
+    stack_trace.append(current_frame)
 
     try:
         # Statements
@@ -428,19 +572,19 @@ def eval_node(node, env):
             return eval_program(node.statements, env)
 
         elif node_type == ExpressionStatement:
-            return eval_node(node.expression, env)
+            return eval_node(node.expression, env, stack_trace)
 
         elif node_type == BlockStatement:
             return eval_block_statement(node, env)
 
         elif node_type == ReturnStatement:
-            val = eval_node(node.return_value, env)
+            val = eval_node(node.return_value, env, stack_trace)
             if isinstance(val, EvaluationError):
                 return val
             return ReturnValue(val)
 
         elif node_type == LetStatement:
-            val = eval_node(node.value, env)
+            val = eval_node(node.value, env, stack_trace)
             if isinstance(val, EvaluationError):
                 return val
             env.set(node.name.value, val)
@@ -456,30 +600,30 @@ def eval_node(node, env):
             return eval_export_statement(node, env)
 
         elif node_type == IfStatement:
-            condition = eval_node(node.condition, env)
+            condition = eval_node(node.condition, env, stack_trace)
             if isinstance(condition, EvaluationError):
                 return condition
             if is_truthy(condition):
-                return eval_node(node.consequence, env)
+                return eval_node(node.consequence, env, stack_trace)
             elif node.alternative is not None:
-                return eval_node(node.alternative, env)
+                return eval_node(node.alternative, env, stack_trace)
             return NULL
 
         elif node_type == WhileStatement:
             result = NULL
             while True:
-                condition = eval_node(node.condition, env)
+                condition = eval_node(node.condition, env, stack_trace)
                 if isinstance(condition, EvaluationError):
                     return condition
                 if not is_truthy(condition):
                     break
-                result = eval_node(node.body, env)
+                result = eval_node(node.body, env, stack_trace)
                 if isinstance(result, (ReturnValue, EvaluationError)):
                     break
             return result
 
         elif node_type == ForEachStatement:
-            iterable = eval_node(node.iterable, env)
+            iterable = eval_node(node.iterable, env, stack_trace)
             if isinstance(iterable, EvaluationError):
                 return iterable
             if not isinstance(iterable, List):
@@ -488,7 +632,7 @@ def eval_node(node, env):
             result = NULL
             for element in iterable.elements:
                 env.set(node.item.value, element)
-                result = eval_node(node.body, env)
+                result = eval_node(node.body, env, stack_trace)
                 if isinstance(result, (ReturnValue, EvaluationError)):
                     break
 
@@ -498,7 +642,7 @@ def eval_node(node, env):
             return eval_assignment_expression(node, env)
 
         elif node_type == PropertyAccessExpression:
-            obj = eval_node(node.object, env)
+            obj = eval_node(node.object, env, stack_trace)
             if isinstance(obj, EvaluationError):
                 return obj
             property_name = node.property.value
@@ -508,7 +652,6 @@ def eval_node(node, env):
                     return String(obj.code)
                 elif property_name == "language":
                     return String(obj.language)
-
             return NULL
 
         elif node_type == AST_Boolean:
@@ -519,7 +662,7 @@ def eval_node(node, env):
             return eval_lambda_expression(node, env)
 
         elif node_type == MethodCallExpression:
-            obj = eval_node(node.object, env)
+            obj = eval_node(node.object, env, stack_trace)
             if isinstance(obj, EvaluationError):
                 return obj
             method_name = node.method.value
@@ -560,7 +703,7 @@ def eval_node(node, env):
             return EmbeddedCode("embedded_block", node.language, node.code)
 
         elif node_type == PrintStatement:
-            val = eval_node(node.value, env)
+            val = eval_node(node.value, env, stack_trace)
             if isinstance(val, EvaluationError):
                 # Print errors to stderr but don't stop execution
                 print(f"❌ Error: {val}", file=sys.stderr)
@@ -591,7 +734,7 @@ def eval_node(node, env):
             return NULL
 
         elif node_type == ExactlyStatement:
-            return eval_node(node.body, env)
+            return eval_node(node.body, env, stack_trace)
 
         # Expressions
         elif node_type == IntegerLiteral:
@@ -609,10 +752,10 @@ def eval_node(node, env):
         elif node_type == MapLiteral:
             pairs = {}
             for key_expr, value_expr in node.pairs:
-                key = eval_node(key_expr, env)
+                key = eval_node(key_expr, env, stack_trace)
                 if isinstance(key, EvaluationError):
                     return key
-                value = eval_node(value_expr, env)
+                value = eval_node(value_expr, env, stack_trace)
                 if isinstance(value, EvaluationError):
                     return value
                 key_str = key.inspect()
@@ -626,7 +769,7 @@ def eval_node(node, env):
             return Action(node.parameters, node.body, env)
 
         elif node_type == CallExpression:
-            function = eval_node(node.function, env)
+            function = eval_node(node.function, env, stack_trace)
             if isinstance(function, EvaluationError):
                 return function
             args = eval_expressions(node.arguments, env)
@@ -635,16 +778,16 @@ def eval_node(node, env):
             return apply_function(function, args)
 
         elif node_type == PrefixExpression:
-            right = eval_node(node.right, env)
+            right = eval_node(node.right, env, stack_trace)
             if isinstance(right, EvaluationError):
                 return right
             return eval_prefix_expression(node.operator, right)
 
         elif node_type == InfixExpression:
-            left = eval_node(node.left, env)
+            left = eval_node(node.left, env, stack_trace)
             if isinstance(left, EvaluationError):
                 return left
-            right = eval_node(node.right, env)
+            right = eval_node(node.right, env, stack_trace)
             if isinstance(right, EvaluationError):
                 return right
             return eval_infix_expression(node.operator, left, right)
@@ -652,23 +795,26 @@ def eval_node(node, env):
         elif node_type == IfExpression:
             return eval_if_expression(node, env)
 
-        return EvaluationError(f"Unknown node type: {node_type}")
+        return EvaluationError(f"Unknown node type: {node_type}", stack_trace=stack_trace)
 
     except Exception as e:
-        # Catch any unexpected errors and wrap them
-        return EvaluationError(f"Internal error: {str(e)}")
+        # Enhanced error with stack trace
+        error_msg = f"Internal error: {str(e)}"
+        return EvaluationError(error_msg, stack_trace=stack_trace[-5:])  # Last 5 frames
 
-# Production evaluation entry point
-def evaluate(program, env):
-    """Production evaluation with proper error handling"""
+# Production evaluation with enhanced debugging
+def evaluate(program, env, debug_mode=False):
+    """Production evaluation with enhanced error handling and debugging"""
+    if debug_mode:
+        env.enable_debug()
+        print("🔧 Debug mode enabled")
+    
     result = eval_node(program, env)
     
+    if debug_mode:
+        env.disable_debug()
+
     if isinstance(result, EvaluationError):
-        # Format error for production
-        error_msg = f"❌ Runtime Error"
-        if result.line and result.column:
-            error_msg += f" at line {result.line}:{result.column}"
-        error_msg += f"\n   {result.message}"
-        return error_msg
+        return str(result)
     
     return result
