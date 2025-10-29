@@ -62,78 +62,74 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    # NEW: Robust lambda expression parsing
+    # NEW: Ultra-robust lambda expression parsing
     def parse_lambda_expression(self):
-        """Parse lambda expressions in   all common formats"""
+        """Parse lambda expressions in ALL common formats"""
         token = self.cur_token
         parameters = []
-    
+        
+        # Store starting position for error reporting
+        start_line = self.cur_token.line
+        start_column = self.cur_token.column
+        
         self.next_token()  # consume 'lambda'
-    
-    # Check if we have parentheses or if next token is colon (no parameters)
-    if self.cur_token_is(LPAREN):
-        # Format with parentheses:   lambda(), lambda(x), lambda(x, y)
-        self.next_token()  # consume '('
         
-        # Check for empty parentheses: lambda()
-        if self.cur_token_is(RPAREN):
-            # No parameters
-            pass
-        else:
-            # Parse parameters inside parentheses
-            if not self.cur_token_is(IDENT):
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
-                return None
-                
-            parameters.append(Identifier(self.cur_token.literal))
-            
-            # Parse additional parameters
-            while self.peek_token_is(COMMA):
-                self.next_token()  # consume identifier
-                self.next_token()  # consume ','
-                if self.cur_token_is(IDENT):
-                    parameters.append(Identifier(self.cur_token.literal))
-                else:
-                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name after comma")
+        try:
+            # Case 1: No parameters - lambda: or lambda():
+            if self.cur_token_is(COLON):
+                # lambda: expression
+                pass
+            elif self.cur_token_is(LPAREN) and self.peek_token_is(RPAREN):
+                # lambda(): expression  
+                self.next_token()  # consume '('
+                self.next_token()  # consume ')'
+            elif self.cur_token_is(LPAREN):
+                # Parameters with parentheses: lambda(x), lambda(x, y)
+                self.next_token()  # consume '('
+                parameters = self._parse_parameter_list()
+                if not self.expect_peek(RPAREN):
                     return None
-        
-        # Expect closing parenthesis
-        if not self.expect_peek(RPAREN):
-            return None
+            elif self.cur_token_is(IDENT):
+                # Parameters without parentheses: lambda x, lambda x y
+                parameters = self._parse_parameter_list()
+            else:
+                self.errors.append(f"Line {start_line}:{start_column} - Invalid lambda syntax after 'lambda'")
+                return None
             
-    elif self.cur_token_is(COLON):
-        # Format: lambda: expression (no parameters, no parentheses)
-        # We're already at the colon, so just proceed to body
-        pass
+            # Expect colon
+            if not self.cur_token_is(COLON):
+                if not self.expect_peek(COLON):
+                    self.errors.append(f"Line {start_line}:{start_column} - Expected ':' in lambda expression")
+                    return None
+            
+            self.next_token()  # consume ':'
+            body = self.parse_expression(LOWEST)
+            
+            return LambdaExpression(parameters=parameters, body=body)
+            
+        except Exception as e:
+            self.errors.append(f"Line {start_line}:{start_column} - Error parsing lambda: {str(e)}")
+            return None
+
+    def _parse_parameter_list(self):
+        """Helper to parse parameter lists for lambdas and functions"""
+        parameters = []
         
-    elif self.cur_token_is(IDENT):
-        # Format without parentheses: lambda x, lambda x y
+        if not self.cur_token_is(IDENT):
+            return parameters
+            
         parameters.append(Identifier(self.cur_token.literal))
         
-        # Check for additional parameters without parentheses
         while self.peek_token_is(COMMA):
             self.next_token()  # consume identifier
             self.next_token()  # consume ','
             if self.cur_token_is(IDENT):
                 parameters.append(Identifier(self.cur_token.literal))
             else:
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name after comma")
-                return None
-    else:
-        # Unexpected token after lambda
-        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameters or ':' after 'lambda'")
-        return None
-    
-    # Now expect the colon (unless we're already on it from lambda: format)
-    if not self.cur_token_is(COLON):
-        if not self.expect_peek(COLON):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ':' in lambda expression")
-            return None
-    
-    self.next_token()  # consume ':'
-    body = self.parse_expression(LOWEST)
-    
-    return LambdaExpression(parameters=parameters, body=body)
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
+                return parameters
+        
+        return parameters
 
     def parse_assignment_expression(self, left):
         """Parse assignment expressions: identifier = value"""
@@ -208,45 +204,45 @@ class Parser:
     def parse_export_statement(self):
         """Parse export statements: export function_name [to file1, file2] [with permission]"""
         token = self.cur_token
-        
+
         if not self.expect_peek(IDENT):
             self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'export'")
             return None
-        
+
         name = Identifier(self.cur_token.literal)
-        
+
         # Parse optional 'to' clause for file restrictions
         allowed_files = []
         if self.peek_token_is(IDENT) and self.peek_token.literal == "to":
             self.next_token()  # consume identifier
             self.next_token()  # consume 'to'
-            
+
             # Parse file list
             if not self.peek_token_is(STRING):
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected file path after 'to'")
                 return None
-            
+
             while self.peek_token_is(STRING):
                 self.next_token()
                 allowed_files.append(self.cur_token.literal)
-                
+
                 if self.peek_token_is(COMMA):
                     self.next_token()
                 else:
                     break
-        
+
         # Parse optional 'with' clause for permissions
         permission = "read_only"  # default
         if self.peek_token_is(IDENT) and self.peek_token.literal == "with":
             self.next_token()  # consume identifier
             self.next_token()  # consume 'with'
-            
+
             if self.cur_token_is(STRING):
                 permission = self.cur_token.literal
             else:
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected permission string after 'with'")
                 return None
-        
+
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
     def recover_to_next_statement(self):
