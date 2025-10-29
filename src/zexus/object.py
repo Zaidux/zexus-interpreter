@@ -41,9 +41,9 @@ class List(Object):
 class Map(Object):
     def __init__(self, pairs):
         self.pairs = pairs  # dict of key -> value
-    
+
     def type(self): return "MAP"
-    
+
     def inspect(self):
         pairs = []
         for key, value in self.pairs.items():
@@ -60,10 +60,10 @@ class EmbeddedCode(Object):
         self.name = name
         self.language = language
         self.code = code
-        
+
     def inspect(self):
         return f"<embedded {self.language} code: {self.name}>"
-        
+
     def type(self):
         return "EMBEDDED_CODE"
 
@@ -80,14 +80,29 @@ class Action(Object):
         return f"action({params}) {{\n  ...\n}}"
     def type(self): return "ACTION"
 
-# NEW: The object to represent a built-in function
-class Builtin(Object):
-    def __init__(self, fn):
-        self.fn = fn # Stores the native Python function
+# NEW: Lambda function object
+class LambdaFunction(Object):
+    def __init__(self, parameters, body, env):
+        self.parameters = parameters
+        self.body = body
+        self.env = env
 
     def inspect(self):
-        return "<built-in function>"
-    
+        params = ", ".join([p.value for p in self.parameters])
+        return f"lambda({params})"
+
+    def type(self):
+        return "LAMBDA_FUNCTION"
+
+# NEW: The object to represent a built-in function
+class Builtin(Object):
+    def __init__(self, fn, name=""):
+        self.fn = fn  # Stores the native Python function
+        self.name = name
+
+    def inspect(self):
+        return f"<built-in function: {self.name}>"
+
     def type(self):
         return "BUILTIN"
 
@@ -95,6 +110,7 @@ class Environment:
     def __init__(self, outer=None):
         self.store = {}
         self.outer = outer
+        self.exports = {}  # NEW: Track exported functions
 
     def get(self, name):
         val = self.store.get(name)
@@ -105,3 +121,13 @@ class Environment:
     def set(self, name, val):
         self.store[name] = val
         return val
+
+    # NEW: Export management
+    def export(self, name, value):
+        """Export a value for module use"""
+        self.exports[name] = value
+        return value
+
+    def get_exports(self):
+        """Get all exported values"""
+        return self.exports
