@@ -89,24 +89,13 @@ class Parser:
 
         return DebugStatement(value=value)
 
-    # ULTRA-FLEXIBLE: Try-catch statement parsing
+    # ULTRA-FLEXIBLE: Try-catch statement parsing - NOW FLEXIBLE WITH : AND {}
     def parse_try_catch_statement(self):
-        """Parse try-catch statements: try { code } catch error { handle } """
+        """Parse try-catch statements: try { code } catch error { handle } OR try: code catch error: handle"""
         try_token = self.cur_token
 
-        # Flexible: try block can be { } or single statement
-        if self.peek_token_is(LBRACE):
-            if not self.expect_peek(LBRACE):
-                return None
-            try_block = self.parse_block_statement()
-        else:
-            # Single statement try block
-            try_block = BlockStatement()
-            self.next_token()
-            stmt = self.parse_statement()
-            if stmt:
-                try_block.statements.append(stmt)
-
+        # ULTRA FLEXIBLE: try block can be { } or : or single statement
+        try_block = self._parse_flexible_block("try")
         if not try_block:
             return None
 
@@ -134,19 +123,8 @@ class Parser:
             error_var = Identifier("error")
             # Don't consume any token - we're already at the catch block
 
-        # Parse catch block (ULTRA FLEXIBLE: { } or single statement)
-        if self.peek_token_is(LBRACE):
-            if not self.expect_peek(LBRACE):
-                return None
-            catch_block = self.parse_block_statement()
-        else:
-            # Single statement catch block
-            catch_block = BlockStatement()
-            self.next_token()
-            stmt = self.parse_statement()
-            if stmt:
-                catch_block.statements.append(stmt)
-
+        # Parse catch block (ULTRA FLEXIBLE: { } or : or single statement)
+        catch_block = self._parse_flexible_block("catch")
         if not catch_block:
             return None
 
@@ -155,6 +133,33 @@ class Parser:
             error_variable=error_var,
             catch_block=catch_block
         )
+
+    # NEW: Unified flexible block parser for all control structures
+    def _parse_flexible_block(self, block_type):
+        """Parse blocks that can use either : or { } syntax"""
+        # Check for { } block
+        if self.peek_token_is(LBRACE):
+            if not self.expect_peek(LBRACE):
+                return None
+            return self.parse_block_statement()
+        # Check for : (single statement block)
+        elif self.peek_token_is(COLON):
+            if not self.expect_peek(COLON):
+                return None
+            block = BlockStatement()
+            self.next_token()
+            stmt = self.parse_statement()
+            if stmt:
+                block.statements.append(stmt)
+            return block
+        else:
+            # Single statement without colon or brace
+            block = BlockStatement()
+            self.next_token()
+            stmt = self.parse_statement()
+            if stmt:
+                block.statements.append(stmt)
+            return block
 
     # ULTRA-FLEXIBLE: External function declaration
     def parse_external_declaration(self):
@@ -416,7 +421,7 @@ class Parser:
 
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
-    # ULTRA-FLEXIBLE: If statement parsing - FIXED VERSION
+    # ULTRA-FLEXIBLE: If statement parsing - NOW FLEXIBLE WITH : AND {}
     def parse_if_statement(self):
         # Handle if with or without parentheses
         if self.peek_token_is(LPAREN):
@@ -433,29 +438,10 @@ class Parser:
         if not condition:
             return None
 
-        # ULTRA FLEXIBLE: Check if we already have a colon
-        if self.cur_token_is(COLON):
-            # We're already at the colon - just consume it
-            self.next_token()
-        elif self.peek_token_is(COLON):
-            # Colon is next - consume it
-            if not self.expect_peek(COLON):
-                return None
-        elif self.peek_token_is(LBRACE):
-            # Brace is next - just proceed
-            pass
-        else:
-            # No colon or brace - assume single statement follows
-            pass
-
-        # Parse consequence (ULTRA FLEXIBLE: block or single statement)
-        if self.cur_token_is(LBRACE):
-            consequence = self.parse_block_statement()
-        else:
-            consequence = BlockStatement()
-            stmt = self.parse_statement()
-            if stmt:
-                consequence.statements.append(stmt)
+        # Parse consequence (ULTRA FLEXIBLE: { } or : or single statement)
+        consequence = self._parse_flexible_block("if consequence")
+        if not consequence:
+            return None
 
         alternative = None
         if self.peek_token_is(ELSE):
@@ -464,24 +450,10 @@ class Parser:
                 self.next_token()
                 alternative = self.parse_if_statement()
             else:
-                # Handle else with or without colon/brace
-                if self.cur_token_is(COLON):
-                    # Already at colon
-                    self.next_token()
-                elif self.peek_token_is(COLON):
-                    if not self.expect_peek(COLON):
-                        return None
-                elif self.peek_token_is(LBRACE):
-                    # Direct brace without colon
-                    pass
-
-                if self.cur_token_is(LBRACE):
-                    alternative = self.parse_block_statement()
-                else:
-                    alternative = BlockStatement()
-                    stmt = self.parse_statement()
-                    if stmt:
-                        alternative.statements.append(stmt)
+                # Parse alternative (ULTRA FLEXIBLE: { } or : or single statement)
+                alternative = self._parse_flexible_block("else")
+                if not alternative:
+                    return None
 
         return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
@@ -537,6 +509,7 @@ class Parser:
         body = self.parse_block_statement()
         return ExactlyStatement(name=name, body=body)
 
+    # ULTRA-FLEXIBLE: For-each statement - NOW FLEXIBLE WITH : AND {}
     def parse_for_each_statement(self):
         stmt = ForEachStatement(item=None, iterable=None, body=None)
 
@@ -557,19 +530,15 @@ class Parser:
         self.next_token()
         stmt.iterable = self.parse_expression(LOWEST)
 
-        if not self.expect_peek(COLON):
-            self.errors.append("Expected ':' after iterable in for-each loop")
+        # Parse body (ULTRA FLEXIBLE: { } or : or single statement)
+        body = self._parse_flexible_block("for-each")
+        if not body:
             return None
-
-        body = BlockStatement()
-        self.next_token()
-        stmt_body = self.parse_statement()
-        if stmt_body:
-            body.statements.append(stmt_body)
 
         stmt.body = body
         return stmt
 
+    # ULTRA-FLEXIBLE: Action statement - NOW FLEXIBLE WITH : AND {}
     def parse_action_statement(self):
         if not self.expect_peek(IDENT):
             self.errors.append("Expected function name after 'action'")
@@ -585,15 +554,10 @@ class Parser:
         if parameters is None:
             return None
 
-        if not self.expect_peek(COLON):
-            self.errors.append("Expected ':' after function parameters")
+        # Parse body (ULTRA FLEXIBLE: { } or : or single statement)
+        body = self._parse_flexible_block("action")
+        if not body:
             return None
-
-        body = BlockStatement()
-        self.next_token()
-        stmt = self.parse_statement()
-        if stmt:
-            body.statements.append(stmt)
 
         return ActionStatement(name=name, parameters=parameters, body=body)
 
@@ -643,6 +607,7 @@ class Parser:
 
         return ActionLiteral(parameters=parameters, body=body)
 
+    # ULTRA-FLEXIBLE: While statement - NOW FLEXIBLE WITH : AND {}
     def parse_while_statement(self):
         if not self.expect_peek(LPAREN):
             self.errors.append("Expected '(' after 'while'")
@@ -655,15 +620,10 @@ class Parser:
             self.errors.append("Expected ')' after while condition")
             return None
 
-        if not self.expect_peek(COLON):
-            self.errors.append("Expected ':' after while condition")
+        # Parse body (ULTRA FLEXIBLE: { } or : or single statement)
+        body = self._parse_flexible_block("while")
+        if not body:
             return None
-
-        body = BlockStatement()
-        self.next_token()
-        stmt = self.parse_statement()
-        if stmt:
-            body.statements.append(stmt)
 
         return WhileStatement(condition=condition, body=body)
 
