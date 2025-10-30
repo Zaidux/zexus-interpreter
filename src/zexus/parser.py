@@ -416,16 +416,16 @@ class Parser:
 
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
-    # ULTRA-FLEXIBLE: If statement parsing
+    # ULTRA-FLEXIBLE: If statement parsing - FIXED VERSION
     def parse_if_statement(self):
-        # Handle if with or without parentheses
+    # Handle if with or without parentheses
         if self.peek_token_is(LPAREN):
             if not self.expect_peek(LPAREN):
                 return None
             self.next_token()
             condition = self.parse_expression(LOWEST)
             if not self.expect_peek(RPAREN):
-                return None
+            return None
         else:
             self.next_token()
             condition = self.parse_expression(LOWEST)
@@ -433,18 +433,22 @@ class Parser:
         if not condition:
             return None
 
-        # ULTRA FLEXIBLE: allow colon, brace, or direct statement
-        if self.peek_token_is(COLON):
-            if not self.expect_peek(COLON):
-                return None
+    # ULTRA FLEXIBLE: Check if we already have a colon
+        if self.cur_token_is(COLON):
+        # We're already at the colon - just consume it
+           self.next_token()
+        elif self.peek_token_is(COLON):
+        # Colon is next - consume it
+        if not self.expect_peek(COLON):
+            return None
         elif self.peek_token_is(LBRACE):
-            # Direct brace without colon - just proceed to block
+        # Brace is next - just proceed
             pass
         else:
-            # No colon or brace - assume single statement follows
+        # No colon or brace - assume single statement follows
             pass
 
-        # Parse consequence (ULTRA FLEXIBLE: block or single statement)
+    # Parse consequence (ULTRA FLEXIBLE: block or single statement)
         if self.cur_token_is(LBRACE):
             consequence = self.parse_block_statement()
         else:
@@ -456,27 +460,30 @@ class Parser:
         alternative = None
         if self.peek_token_is(ELSE):
             self.next_token()
-            if self.peek_token_is(IF):
+        if self.peek_token_is(IF):
+            self.next_token()
+            alternative = self.parse_if_statement()
+        else:
+            # Handle else with or without colon/brace
+            if self.cur_token_is(COLON):
+                # Already at colon
                 self.next_token()
-                alternative = self.parse_if_statement()
+            elif self.peek_token_is(COLON):
+                if not self.expect_peek(COLON):
+                    return None
+            elif self.peek_token_is(LBRACE):
+                # Direct brace without colon
+                pass
+
+            if self.cur_token_is(LBRACE):
+                alternative = self.parse_block_statement()
             else:
-                # Handle else with or without colon/brace
-                if self.peek_token_is(COLON):
-                    if not self.expect_peek(COLON):
-                        return None
-                elif self.peek_token_is(LBRACE):
-                    # Direct brace without colon
-                    pass
+                alternative = BlockStatement()
+                stmt = self.parse_statement()
+                if stmt:
+                    alternative.statements.append(stmt)
 
-                if self.cur_token_is(LBRACE):
-                    alternative = self.parse_block_statement()
-                else:
-                    alternative = BlockStatement()
-                    stmt = self.parse_statement()
-                    if stmt:
-                        alternative.statements.append(stmt)
-
-        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+    return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
 
     def parse_embedded_literal(self):
         """Parse: embedded {language code} """
