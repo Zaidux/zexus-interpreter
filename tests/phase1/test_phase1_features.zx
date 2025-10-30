@@ -92,7 +92,7 @@ try {
 
 # === 7. EXTERNAL FUNCTION DECLARATION (Syntax Test) ===
 print "🔗 Testing External Function Syntax:"
-# FIXED: Use proper external declaration syntax
+# FIXED: Use proper external declaration syntax without colons
 external action sphincs_plus_keygen from "crypto_native"
 external action sha256_hash from "crypto_native"
 
@@ -101,7 +101,7 @@ print "  ✅ External function declarations parsed successfully"
 # === 8. COMBINED BLOCKCHAIN-RELATED TEST ===
 print "⛓️ Testing Blockchain-Related Features:"
 # Simulate block creation with timestamps
-action create_test_block():
+action create_test_block() {
     let block_data = {
         "index": 1,
         "timestamp": timestamp(),
@@ -112,6 +112,7 @@ action create_test_block():
 
     debug_log("Block created", block_data)
     return block_data
+}
 
 let test_block = create_test_block()
 print "  Test block: " + string(test_block)
@@ -128,10 +129,11 @@ print "  ✅ Advanced file operations ready for blockchain state management"
 
 # === 10. COMPREHENSIVE ERROR HANDLING ===
 print "🎯 Testing Comprehensive Error Handling:"
-action safe_file_operation(path):
+action safe_file_operation(path) {
     try {
-        if not file_exists(path):
+        if not file_exists(path) {
             throw "File not found: " + path
+        }
 
         let content = file_read_text(path)
         debug_log("File read successfully", content)
@@ -140,6 +142,7 @@ action safe_file_operation(path):
         debug_log("File operation failed", error)
         return "Error: " + string(error)
     }
+}
 
 let safe_result = safe_file_operation("test_basic.txt")
 print "  Safe file operation: " + string(safe_result)
