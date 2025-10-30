@@ -6,28 +6,33 @@ debug_log("Starting debug test")
 let test_var = "Test value"
 debug_log("Test variable", test_var)
 
-# Error handling with try-catch
-try:
+# Error handling with try-catch - USING BRACES
+try {
     let result = 10 / 0
     print "This won't print: " + string(result)
-catch error:
+} catch error {
     print "✅ Caught division error: " + string(error)
+}
 
-# Successful operation
-try:
+# Successful operation - USING BRACES
+try {
     let result = 10 / 2
     print "✅ Successful operation: " + string(result)
-catch error:
+} catch error {
     print "This won't print: " + string(error)
+}
 
-# Nested error handling
-action risky_operation():
-    try:
-        if not file_exists("fake_file.txt"):
+# Nested error handling - USING BRACES
+action risky_operation() {
+    try {
+        if not file_exists("fake_file.txt") {
             throw "File not found"
+        }
         return "Success"
-    catch error:
+    } catch error {
         return "Caught: " + string(error)
+    }
+}
 
 let result = risky_operation()
 print "Risky operation result: " + string(result)
