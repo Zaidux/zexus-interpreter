@@ -1,0 +1,16 @@
+# test_datetime_math.zx - DateTime and Math Tests
+print "📅 Testing DateTime and Math Functions..."
+
+# DateTime tests
+let now = datetime_now()
+print "Current datetime: " + string(now)
+print "Timestamp: " + string(timestamp())
+
+# Math tests
+print "Random number (0-100): " + string(random())
+print "Random number (1-50): " + string(random(1, 50))
+print "Hex of 255: " + string(to_hex(255))
+print "From hex 'ff': " + string(from_hex("ff"))
+print "Square root of 25: " + string(sqrt(25))
+
+print "✅ DateTime and Math tests completed!"

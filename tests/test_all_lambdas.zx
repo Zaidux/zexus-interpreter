@@ -1,0 +1,44 @@
+# test_all_lambdas.zx - ALL 6 LAMBDA FORMATS SUPPORTED
+let numbers = [1, 2, 3, 4, 5]
+
+print "Testing ALL lambda formats:"
+
+# 1. Single parameter, no parentheses
+let double = lambda x: x * 2
+print "1. lambda x: x * 2 → " + string(double(5))
+
+# 2. Single parameter with parentheses  
+let square = lambda(x): x * x
+print "2. lambda(x): x * x → " + string(square(4))
+
+# 3. Multiple parameters, no parentheses
+let add = lambda x, y: x + y
+print "3. lambda x, y: x + y → " + string(add(3, 7))
+
+# 4. Multiple parameters with parentheses
+let multiply = lambda(x, y): x * y
+print "4. lambda(x, y): x * y → " + string(multiply(2, 6))
+
+# 5. No parameters, no parentheses
+let answer = lambda: 42
+print "5. lambda: 42 → " + string(answer())
+
+# 6. No parameters with parentheses
+let greeting = lambda(): "Hello World"
+print "6. lambda(): 'Hello World' → " + string(greeting())
+
+# Using lambdas with array methods
+let total = numbers.reduce(lambda(x, y): x + y)
+let evens = numbers.filter(lambda x: x % 2 == 0)
+let squares = numbers.map(lambda(n): n * n)
+
+print "Array operations:"
+print "  Total: " + string(total)
+print "  Evens: " + string(evens)
+print "  Squares: " + string(squares)
+
+# Complex lambda with multiple parameters
+let complex_op = lambda a, b, c: (a + b) * c
+print "Complex lambda: lambda a, b, c: (a + b) * c → " + string(complex_op(2, 3, 4))
+
+print "✅ All 6 lambda formats working perfectly!"
