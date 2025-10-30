@@ -425,18 +425,18 @@ class Parser:
             self.next_token()
             condition = self.parse_expression(LOWEST)
             if not self.expect_peek(RPAREN):
-            return None
+                return None
         else:
             self.next_token()
             condition = self.parse_expression(LOWEST)
 
         if not condition:
-            return None
+                return None
 
     # ULTRA FLEXIBLE: Check if we already have a colon
         if self.cur_token_is(COLON):
         # We're already at the colon - just consume it
-           self.next_token()
+            self.next_token()
         elif self.peek_token_is(COLON):
         # Colon is next - consume it
         if not self.expect_peek(COLON):
