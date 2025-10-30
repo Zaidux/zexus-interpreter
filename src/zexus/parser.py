@@ -1,4 +1,4 @@
-# parser.py (COMPLETE FIX FOR ALL SYNTAX PATTERNS)
+# parser.py (ULTRA-FLEXIBLE COMPLETE VERSION)
 from .zexus_token import *
 from .lexer import Lexer
 from .zexus_ast import *
@@ -65,7 +65,7 @@ class Parser:
         self.next_token()
         self.next_token()
 
-    # COMPREHENSIVE: Debug statement parsing
+    # ULTRA-FLEXIBLE: Debug statement parsing
     def parse_debug_statement(self):
         """Parse debug statements: debug expression, debug("message"), debug "message" """
         token = self.cur_token
@@ -89,7 +89,7 @@ class Parser:
 
         return DebugStatement(value=value)
 
-    # COMPREHENSIVE: Try-catch statement parsing
+    # ULTRA-FLEXIBLE: Try-catch statement parsing
     def parse_try_catch_statement(self):
         """Parse try-catch statements: try { code } catch error { handle } """
         try_token = self.cur_token
@@ -115,7 +115,7 @@ class Parser:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'catch' after try block")
             return None
 
-        # Parse catch parameter (flexible: with or without parentheses)
+        # Parse catch parameter (ULTRA FLEXIBLE: with or without parentheses, or no parameter)
         error_var = None
         if self.peek_token_is(LPAREN):
             self.next_token()  # consume 'catch'
@@ -130,10 +130,11 @@ class Parser:
             self.next_token()  # consume 'catch'
             error_var = Identifier(self.cur_token.literal)
         else:
-            # Allow catch without specific error variable
+            # Allow catch without specific error variable - create a default one
             error_var = Identifier("error")
+            # Don't consume any token - we're already at the catch block
 
-        # Parse catch block (flexible: { } or single statement)
+        # Parse catch block (ULTRA FLEXIBLE: { } or single statement)
         if self.peek_token_is(LBRACE):
             if not self.expect_peek(LBRACE):
                 return None
@@ -155,7 +156,7 @@ class Parser:
             catch_block=catch_block
         )
 
-    # COMPREHENSIVE: External function declaration
+    # ULTRA-FLEXIBLE: External function declaration
     def parse_external_declaration(self):
         """Parse external function declarations: external action name() from "module" """
         token = self.cur_token
@@ -261,7 +262,7 @@ class Parser:
                 return
             self.next_token()
 
-    # COMPREHENSIVE: Lambda expression parsing
+    # ULTRA-FLEXIBLE: Lambda expression parsing
     def parse_lambda_expression(self):
         """Parse lambda expressions in ALL common formats"""
         token = self.cur_token
@@ -415,7 +416,7 @@ class Parser:
 
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
-    # COMPREHENSIVE: If statement parsing
+    # ULTRA-FLEXIBLE: If statement parsing
     def parse_if_statement(self):
         # Handle if with or without parentheses
         if self.peek_token_is(LPAREN):
@@ -432,18 +433,18 @@ class Parser:
         if not condition:
             return None
 
-        # Flexible: allow colon or brace
+        # ULTRA FLEXIBLE: allow colon, brace, or direct statement
         if self.peek_token_is(COLON):
             if not self.expect_peek(COLON):
                 return None
         elif self.peek_token_is(LBRACE):
-            # Direct brace without colon
+            # Direct brace without colon - just proceed to block
             pass
         else:
-            self.errors.append("Expected ':' or '{' after if condition")
-            return None
+            # No colon or brace - assume single statement follows
+            pass
 
-        # Parse consequence (flexible: block or single statement)
+        # Parse consequence (ULTRA FLEXIBLE: block or single statement)
         if self.cur_token_is(LBRACE):
             consequence = self.parse_block_statement()
         else:
@@ -459,13 +460,14 @@ class Parser:
                 self.next_token()
                 alternative = self.parse_if_statement()
             else:
+                # Handle else with or without colon/brace
                 if self.peek_token_is(COLON):
                     if not self.expect_peek(COLON):
                         return None
                 elif self.peek_token_is(LBRACE):
                     # Direct brace without colon
                     pass
-                
+
                 if self.cur_token_is(LBRACE):
                     alternative = self.parse_block_statement()
                 else:
@@ -475,9 +477,6 @@ class Parser:
                         alternative.statements.append(stmt)
 
         return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
-
-    # ... (keep all the other existing methods exactly as they are) ...
-    # The rest of your existing methods remain unchanged
 
     def parse_embedded_literal(self):
         """Parse: embedded {language code} """
