@@ -1,40 +1,40 @@
-# test_debug_error.zx - Debug and Error Handling Tests
-print "🐛 Testing Debug and Error Handling..."
+# test_debug_error.zx - Debug and Error Handling Tests (FIXED SYNTAX)
+print("🐛 Testing Debug and Error Handling...")
 
 # Debug functions
 debug_log("Starting debug test")
 let test_var = "Test value"
 debug_log("Test variable", test_var)
 
-# Error handling with try-catch - USING BRACES
+# Error handling with try-catch - USING PARENTHESES AND BRACES
 try {
     let result = 10 / 0
-    print "This won't print: " + string(result)
-} catch error {
-    print "✅ Caught division error: " + string(error)
+    print("This won't print: " + string(result))
+} catch (error) {
+    print("✅ Caught division error: " + string(error))
 }
 
-# Successful operation - USING BRACES
+# Successful operation - USING PARENTHESES AND BRACES
 try {
     let result = 10 / 2
-    print "✅ Successful operation: " + string(result)
-} catch error {
-    print "This won't print: " + string(error)
+    print("✅ Successful operation: " + string(result))
+} catch (error) {
+    print("This won't print: " + string(error))
 }
 
-# Nested error handling - USING BRACES
+# Nested error handling - USING PARENTHESES AND BRACES
 action risky_operation() {
     try {
-        if not file_exists("fake_file.txt") {
+        if (not file_exists("fake_file.txt")) {
             throw "File not found"
         }
         return "Success"
-    } catch error {
+    } catch (error) {
         return "Caught: " + string(error)
     }
 }
 
 let result = risky_operation()
-print "Risky operation result: " + string(result)
+print("Risky operation result: " + string(result))
 
-print "✅ Debug and Error Handling tests completed!"
+print("✅ Debug and Error Handling tests completed!")
