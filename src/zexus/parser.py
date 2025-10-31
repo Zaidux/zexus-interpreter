@@ -133,32 +133,38 @@ class UltimateParser:
         
         return tokens
 
+    # In parser.py, update the _parse_with_advanced_strategies method:
     def _parse_with_advanced_strategies(self, all_tokens):
-        """Parse using advanced multi-strategy approach"""
-        program = Program()
-        
-        # Parse top-level blocks using structural awareness
-        for block_id, block_info in self.block_map.items():
-            try:
-                if block_info.get('parent'):
-                    continue  # Skip nested blocks, they'll be handled by parents
-                    
-                statement = self.context_parser.parse_block(block_info, all_tokens)
-                if statement:
-                    program.statements.append(statement)
-                    
-            except Exception as e:
-                error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
-                self.errors.append(error_msg)
+    """Parse using advanced multi-strategy approach - SIMPLIFIED"""
+    program = Program()
+    parsed_count = 0
+    error_count = 0
+    
+    # Only parse significant blocks to avoid noise
+    significant_blocks = [
+        block_id for block_id, block_info in self.block_map.items()
+        if (block_info.get('subtype') in ['function', 'try_catch', 'conditional', 'screen'] 
+            or block_info['type'] == 'brace_block')
+        and not block_info.get('parent')  # Only top-level blocks
+    ]
+    
+    print(f"🎯 Parsing {len(significant_blocks)} significant blocks out of {len(self.block_map)} total")
+    
+    for block_id in significant_blocks:
+        block_info = self.block_map[block_id]
+        try:
+            statement = self.context_parser.parse_block(block_info, all_tokens)
+            if statement:
+                program.statements.append(statement)
+                parsed_count += 1
                 
-                # Attempt recovery
-                recovery_plan = self.error_recovery.create_recovery_plan(
-                    e, block_info, all_tokens, 0
-                )
-                if recovery_plan['can_recover']:
-                    program.statements.append(recovery_plan['recovered_statement'])
-        
-        return program
+        except Exception as e:
+            error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
+            self.errors.append(error_msg)
+            error_count += 1
+    
+    print(f"✅ Successfully parsed {parsed_count} statements with {error_count} errors")
+    return program
 
     def _parse_traditional(self):
         """Traditional recursive descent parsing (fallback)"""
