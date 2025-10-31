@@ -28,7 +28,7 @@ class UltimateParser:
         self.errors = []
         self.cur_token = None
         self.peek_token = None
-        
+
         # Multi-strategy architecture
         if enable_advanced_strategies:
             print("🚀 Initializing Ultimate Parser with Multi-Strategy Architecture...")
@@ -39,7 +39,7 @@ class UltimateParser:
             self.use_advanced_parsing = True
         else:
             self.use_advanced_parsing = False
-            
+
         # Traditional parser setup (fallback)
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
@@ -86,21 +86,21 @@ class UltimateParser:
         """The ultimate parsing pipeline with multi-strategy support"""
         if not self.use_advanced_parsing:
             return self._parse_traditional()
-            
+
         try:
             print("🎯 Starting Ultimate Parsing Pipeline...")
-            
+
             # Phase 1: Structural Analysis
             all_tokens = self._collect_all_tokens()
             self.block_map = self.structural_analyzer.analyze(all_tokens)
             self.structural_analyzer.print_structure()
-            
+
             # Phase 2: Smart Parsing with Context Awareness
             program = self._parse_with_advanced_strategies(all_tokens)
-            
+
             print(f"✅ Ultimate Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors")
             return program
-            
+
         except Exception as e:
             print(f"⚠️ Advanced parsing failed, falling back to traditional: {e}")
             self.use_advanced_parsing = False
@@ -112,59 +112,58 @@ class UltimateParser:
         original_position = self.lexer.position
         original_cur = self.cur_token
         original_peek = self.peek_token
-        
+
         # Reset lexer to beginning
         self.lexer.position = 0
         self.lexer.read_position = 0
         self.lexer.ch = ''
         self.lexer.read_char()
-        
+
         # Collect all tokens
         while True:
             token = self.lexer.next_token()
             tokens.append(token)
             if token.type == EOF:
                 break
-        
+
         # Restore parser state
         self.lexer.position = original_position
         self.cur_token = original_cur
         self.peek_token = original_peek
-        
+
         return tokens
 
-    # In parser.py, update the _parse_with_advanced_strategies method:
     def _parse_with_advanced_strategies(self, all_tokens):
-    """Parse using advanced multi-strategy approach - SIMPLIFIED"""
-    program = Program()
-    parsed_count = 0
-    error_count = 0
-    
-    # Only parse significant blocks to avoid noise
-    significant_blocks = [
-        block_id for block_id, block_info in self.block_map.items()
-        if (block_info.get('subtype') in ['function', 'try_catch', 'conditional', 'screen'] 
-            or block_info['type'] == 'brace_block')
-        and not block_info.get('parent')  # Only top-level blocks
-    ]
-    
-    print(f"🎯 Parsing {len(significant_blocks)} significant blocks out of {len(self.block_map)} total")
-    
-    for block_id in significant_blocks:
-        block_info = self.block_map[block_id]
-        try:
-            statement = self.context_parser.parse_block(block_info, all_tokens)
-            if statement:
-                program.statements.append(statement)
-                parsed_count += 1
-                
-        except Exception as e:
-            error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
-            self.errors.append(error_msg)
-            error_count += 1
-    
-    print(f"✅ Successfully parsed {parsed_count} statements with {error_count} errors")
-    return program
+        """Parse using advanced multi-strategy approach - SIMPLIFIED"""
+        program = Program()
+        parsed_count = 0
+        error_count = 0
+
+        # Only parse significant blocks to avoid noise
+        significant_blocks = [
+            block_id for block_id, block_info in self.block_map.items()
+            if (block_info.get('subtype') in ['function', 'try_catch', 'conditional', 'screen'] 
+                or block_info['type'] == 'brace_block')
+            and not block_info.get('parent')  # Only top-level blocks
+        ]
+
+        print(f"🎯 Parsing {len(significant_blocks)} significant blocks out of {len(self.block_map)} total")
+
+        for block_id in significant_blocks:
+            block_info = self.block_map[block_id]
+            try:
+                statement = self.context_parser.parse_block(block_info, all_tokens)
+                if statement:
+                    program.statements.append(statement)
+                    parsed_count += 1
+
+            except Exception as e:
+                error_msg = f"Line {block_info['start_token'].line}: Error parsing {block_info.get('subtype', 'block')}: {str(e)}"
+                self.errors.append(error_msg)
+                error_count += 1
+
+        print(f"✅ Successfully parsed {parsed_count} statements with {error_count} errors")
+        return program
 
     def _parse_traditional(self):
         """Traditional recursive descent parsing (fallback)"""
@@ -177,7 +176,7 @@ class UltimateParser:
         return program
 
     # === TRADITIONAL PARSER METHODS (for compatibility) ===
-    
+
     def parse_statement(self):
         """Parse statement with error recovery"""
         try:
@@ -214,7 +213,7 @@ class UltimateParser:
         except Exception as e:
             error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}"
             self.errors.append(error_msg)
-            
+
             # Use error recovery if available
             if self.use_advanced_parsing:
                 recovery_plan = self.error_recovery.create_recovery_plan(
@@ -222,7 +221,7 @@ class UltimateParser:
                 )
                 if recovery_plan['can_recover']:
                     return recovery_plan['recovered_statement']
-            
+
             self.recover_to_next_statement()
             return None
 
@@ -231,7 +230,7 @@ class UltimateParser:
         if self.use_advanced_parsing:
             # Let structural analyzer handle this if possible
             pass
-            
+
         # Traditional implementation
         try_token = self.cur_token
         try_block = self.parse_block("try")
@@ -310,7 +309,7 @@ class UltimateParser:
         return block
 
     # === REST OF TRADITIONAL PARSER METHODS ===
-    
+
     def parse_debug_statement(self):
         token = self.cur_token
         self.next_token()
@@ -499,7 +498,6 @@ class UltimateParser:
             else:
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected permission string after 'with'")
                 return None
-
         return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
 
     def parse_if_statement(self):
