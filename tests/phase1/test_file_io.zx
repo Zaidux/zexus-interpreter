@@ -1,10 +1,10 @@
-# test_file_io.zx - File I/O Tests
-print "📁 Testing File I/O Functions..."
+# test_file_io.zx - File I/O Tests (FIXED SYNTAX)
+print("📁 Testing File I/O Functions...")
 
 # Basic file operations
 file_write_text("test_file.txt", "Hello Zexus File I/O!")
 let content = file_read_text("test_file.txt")
-print "File content: " + string(content)
+print("File content: " + string(content))
 
 # JSON operations
 let data = {
@@ -14,14 +14,14 @@ let data = {
 }
 file_write_json("test_data.json", data)
 let loaded = file_read_json("test_data.json")
-print "JSON data: " + string(loaded)
+print("JSON data: " + string(loaded))
 
 # File existence
-print "File exists: " + string(file_exists("test_file.txt"))
-print "Non-existent file: " + string(file_exists("nonexistent.txt"))
+print("File exists: " + string(file_exists("test_file.txt")))
+print("Non-existent file: " + string(file_exists("nonexistent.txt")))
 
 # Directory listing
 let files = file_list_dir(".")
-print "Directory files: " + string(files)
+print("Directory files: " + string(files))
 
-print "✅ File I/O tests completed!"
+print("✅ File I/O tests completed!")
