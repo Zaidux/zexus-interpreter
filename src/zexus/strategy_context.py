@@ -1,4 +1,4 @@
-# strategy_context.py (ENHANCED EXPRESSION PARSING VERSION)
+# strategy_context.py (COMPLETE FIXED VERSION)
 from .zexus_token import *
 from .zexus_ast import *
 
@@ -13,7 +13,7 @@ class ContextStackParser:
             'loop': self._parse_loop_context,
             'screen': self._parse_screen_context,
             'brace_block': self._parse_brace_block_context,
-            'paren_block': self._parse_paren_block_context
+            'paren_block': self._parse_paren_block_context  # This should exist!
         }
 
     def push_context(self, context_type, context_name=None):
@@ -35,7 +35,7 @@ class ContextStackParser:
         return self.current_context[-1] if self.current_context else 'global'
 
     def parse_block(self, block_info, all_tokens):
-        """Parse a block with context awareness - FIXED to return proper statements"""
+        """Parse a block with context awareness"""
         block_type = block_info.get('subtype', block_info['type'])
 
         # Update context based on block type
@@ -87,6 +87,31 @@ class ContextStackParser:
         return node
 
     # === ENHANCED EXPRESSION PARSING METHODS ===
+
+    def _parse_paren_block_context(self, block_info, all_tokens):
+        """Parse parentheses block - FIXED to return proper statements"""
+        print("🔧 [Context] Parsing parentheses block")
+
+        # For parentheses blocks, we need to determine what this represents
+        tokens = block_info['tokens']
+        if len(tokens) < 3:  # Need at least ( content )
+            return None
+
+        # Look at context to determine what this paren block represents
+        context = self.get_current_context()
+        start_idx = block_info['start_index']
+
+        # Check if this is likely a print statement
+        if start_idx > 0 and all_tokens[start_idx - 1].type == PRINT:
+            return self._parse_print_statement(block_info, all_tokens)
+        
+        # Check if this is likely a function call
+        elif start_idx > 0 and all_tokens[start_idx - 1].type == IDENT:
+            return self._parse_function_call(block_info, all_tokens)
+        
+        # Otherwise, parse as generic parenthesized expression
+        else:
+            return self._parse_generic_paren_expression(block_info, all_tokens)
 
     def _parse_print_statement(self, block_info, all_tokens):
         """Parse print statement with sophisticated expression parsing"""
@@ -251,7 +276,7 @@ class ContextStackParser:
         # Use the full expression parser for parenthesized expressions
         return self._parse_expression(inner_tokens)
 
-    # === REST OF THE METHODS (unchanged) ===
+    # === REST OF THE CONTEXT METHODS ===
 
     def _parse_loop_context(self, block_info, all_tokens):
         """Parse loop blocks (for/while) with context awareness"""
