@@ -6,6 +6,7 @@ class ContextStackParser:
     def __init__(self, structural_analyzer):
         self.structural_analyzer = structural_analyzer
         self.current_context = ['global']
+        # In strategy_context.py, update the context_rules in __init__:
         self.context_rules = {
             'function': self._parse_function_context,
             'try_catch': self._parse_try_catch_context,
@@ -14,7 +15,8 @@ class ContextStackParser:
             'screen': self._parse_screen_context,
             'brace_block': self._parse_brace_block_context,
             'paren_block': self._parse_paren_block_context,
-            'statement_block': self._parse_statement_block_context  # ✅ NEWLY ADDED
+            'statement_block': self._parse_statement_block_context,  # ADD THIS LINE
+            'bracket_block': self._parse_brace_block_context  # Use brace parser for brackets
         }
 
     def push_context(self, context_type, context_name=None):
