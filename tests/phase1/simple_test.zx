@@ -1,0 +1,4 @@
+print("Simple test started")
+let x = 5 + 3
+print("5 + 3 = " + string(x))
+print("Simple test completed")
