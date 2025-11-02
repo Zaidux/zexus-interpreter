@@ -1,24 +1,29 @@
-# strategy_structural.py
+# strategy_structural.py (FIXED VERSION)
 from .zexus_token import *
 
 class StructuralAnalyzer:
     def __init__(self):
         self.blocks = {}
         self.block_counter = 0
-        
+
     def analyze(self, tokens):
-        """First pass: understand the complete structure of the code"""
+        """First pass: understand the complete structure of the code - FIXED"""
         print("🔍 [Structural Analysis] Mapping code structure...")
-        
+
         self.blocks = {}
         self.block_counter = 0
         stack = []
-        
-        for i, token in enumerate(tokens):
+        current_statement = None
+
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+
             # Skip EOF for structural analysis
             if token.type == EOF:
+                i += 1
                 continue
-                
+
             # Track block starts
             if token.type in [LBRACE, LPAREN, LBRACKET]:
                 block_info = {
@@ -33,33 +38,220 @@ class StructuralAnalyzer:
                 }
                 stack.append(block_info)
                 self.block_counter += 1
-                
-            # Track content for current block
-            elif stack:
-                stack[-1]['tokens'].append(token)
-            
+                i += 1
+                continue
+
             # Track block ends  
             if token.type in [RBRACE, RPAREN, RBRACKET] and stack:
                 block = stack.pop()
                 block['end_index'] = i
                 block['end_token'] = token
-                
+                block['tokens'].append(token)
+
                 # Identify block specifics (function, try-catch, etc.)
                 block = self._identify_block_details(block, tokens)
-                
+
                 if stack:
                     # Nested block - add to parent
                     stack[-1]['nested_blocks'].append(block)
                 else:
                     # Top-level block
                     self.blocks[block['id']] = block
-        
+                
+                i += 1
+                continue
+
+            # Track content for current block
+            if stack:
+                stack[-1]['tokens'].append(token)
+                i += 1
+                continue
+
+            # === CRITICAL FIX: Handle standalone statements like 'let x = 42' ===
+            if self._is_statement_start(token):
+                # Start a new statement block
+                statement_info = self._create_statement_block(tokens, i)
+                if statement_info:
+                    self.blocks[statement_info['id']] = statement_info
+                    i = statement_info['end_index'] + 1  # Skip to after this statement
+                    continue
+
+            i += 1
+
         # Handle any unclosed blocks (error recovery)
         self._handle_unclosed_blocks(stack, tokens)
-        
+
         print(f"✅ Found {len(self.blocks)} top-level blocks with {sum(len(b['nested_blocks']) for b in self.blocks.values())} nested blocks")
         return self.blocks
-    
+
+    def _is_statement_start(self, token):
+        """Check if this token starts a statement - FIXED to include let statements"""
+        statement_starters = [LET, PRINT, RETURN, IF, WHILE, FOR, ACTION, SCREEN, 
+                            USE, EXPORT, DEBUG, TRY, EXTERNAL, IDENT]
+        return token.type in statement_starters
+
+    def _create_statement_block(self, tokens, start_index):
+        """Create a block for a standalone statement - FIXED"""
+        token = tokens[start_index]
+        
+        # Determine statement type
+        if token.type == LET:
+            return self._parse_let_statement(tokens, start_index)
+        elif token.type == PRINT:
+            return self._parse_print_statement(tokens, start_index)
+        elif token.type == IDENT:
+            # Could be assignment or function call
+            return self._parse_expression_statement(tokens, start_index)
+        else:
+            # Generic statement
+            return self._parse_generic_statement(tokens, start_index)
+
+    def _parse_let_statement(self, tokens, start_index):
+        """Parse a let statement into a block - CRITICAL FIX"""
+        statement_tokens = []
+        i = start_index
+        
+        # Collect tokens until end of statement (semicolon or significant token boundary)
+        while i < len(tokens):
+            current_token = tokens[i]
+            statement_tokens.append(current_token)
+            
+            # End conditions for let statement
+            if (current_token.type == SEMICOLON or 
+                (i > start_index and self._is_statement_start(current_token)) or
+                current_token.type in [LBRACE, RBRACE, EOF]):
+                break
+                
+            i += 1
+
+        # Create the statement block
+        block_id = f"block_{self.block_counter}"
+        self.block_counter += 1
+        
+        block_info = {
+            'id': block_id,
+            'type': 'statement_block',
+            'subtype': 'let_statement',
+            'start_index': start_index,
+            'end_index': i,
+            'start_token': tokens[start_index],
+            'end_token': tokens[i] if i < len(tokens) else tokens[-1],
+            'tokens': statement_tokens,
+            'nested_blocks': [],
+            'parent': None
+        }
+        
+        # Extract variable name for better identification
+        if len(statement_tokens) > 1 and statement_tokens[1].type == IDENT:
+            block_info['name'] = statement_tokens[1].literal
+            block_info['variable_name'] = statement_tokens[1].literal
+            
+        return block_info
+
+    def _parse_print_statement(self, tokens, start_index):
+        """Parse a print statement into a block"""
+        statement_tokens = []
+        i = start_index
+        
+        while i < len(tokens):
+            current_token = tokens[i]
+            statement_tokens.append(current_token)
+            
+            if (current_token.type == SEMICOLON or 
+                (i > start_index and self._is_statement_start(current_token)) or
+                current_token.type in [LBRACE, RBRACE, EOF]):
+                break
+                
+            i += 1
+
+        block_id = f"block_{self.block_counter}"
+        self.block_counter += 1
+        
+        return {
+            'id': block_id,
+            'type': 'statement_block',
+            'subtype': 'print_statement',
+            'start_index': start_index,
+            'end_index': i,
+            'start_token': tokens[start_index],
+            'end_token': tokens[i] if i < len(tokens) else tokens[-1],
+            'tokens': statement_tokens,
+            'nested_blocks': [],
+            'parent': None
+        }
+
+    def _parse_expression_statement(self, tokens, start_index):
+        """Parse an expression statement (function call, assignment, etc.)"""
+        statement_tokens = []
+        i = start_index
+        
+        while i < len(tokens):
+            current_token = tokens[i]
+            statement_tokens.append(current_token)
+            
+            if (current_token.type == SEMICOLON or 
+                (i > start_index and self._is_statement_start(current_token)) or
+                current_token.type in [LBRACE, RBRACE, EOF]):
+                break
+                
+            i += 1
+
+        block_id = f"block_{self.block_counter}"
+        self.block_counter += 1
+        
+        # Determine what kind of expression this is
+        subtype = 'expression_statement'
+        if len(statement_tokens) > 1 and statement_tokens[1].type == ASSIGN:
+            subtype = 'assignment_statement'
+        elif (len(statement_tokens) > 1 and statement_tokens[1].type == LPAREN and
+              statement_tokens[0].type == IDENT):
+            subtype = 'function_call_statement'
+            
+        return {
+            'id': block_id,
+            'type': 'statement_block',
+            'subtype': subtype,
+            'start_index': start_index,
+            'end_index': i,
+            'start_token': tokens[start_index],
+            'end_token': tokens[i] if i < len(tokens) else tokens[-1],
+            'tokens': statement_tokens,
+            'nested_blocks': [],
+            'parent': None
+        }
+
+    def _parse_generic_statement(self, tokens, start_index):
+        """Parse any other kind of statement"""
+        statement_tokens = []
+        i = start_index
+        
+        while i < len(tokens):
+            current_token = tokens[i]
+            statement_tokens.append(current_token)
+            
+            if (current_token.type == SEMICOLON or 
+                (i > start_index and self._is_statement_start(current_token)) or
+                current_token.type in [LBRACE, RBRACE, EOF]):
+                break
+                
+            i += 1
+
+        block_id = f"block_{self.block_counter}"
+        self.block_counter += 1
+        
+        return {
+            'id': block_id,
+            'type': 'statement_block',
+            'subtype': 'generic_statement',
+            'start_index': start_index,
+            'end_index': i,
+            'start_token': tokens[start_index],
+            'end_token': tokens[i] if i < len(tokens) else tokens[-1],
+            'tokens': statement_tokens,
+            'nested_blocks': [],
+            'parent': None
+        }
+
     def _get_block_type(self, token_type):
         """Map token type to block type"""
         if token_type == LBRACE:
@@ -69,11 +261,11 @@ class StructuralAnalyzer:
         elif token_type == LBRACKET:
             return 'bracket_block'
         return 'unknown'
-    
+
     def _identify_block_details(self, block, all_tokens):
         """Identify what kind of block this is based on content"""
         tokens = block['tokens']
-        
+
         # Look at tokens before this block for context
         start_idx = block['start_index']
         context_tokens = []
@@ -81,12 +273,12 @@ class StructuralAnalyzer:
             # Look back up to 5 tokens for context
             context_start = max(0, start_idx - 5)
             context_tokens = all_tokens[context_start:start_idx]
-        
+
         # Function detection: action name(...) { ... }
         if (any(t.type == ACTION for t in context_tokens) and
             any(t.type == IDENT for t in context_tokens) and
             any(t.type == LPAREN for t in context_tokens)):
-            
+
             # Find the action name
             for i, token in enumerate(context_tokens):
                 if token.type == ACTION and i + 1 < len(context_tokens):
@@ -95,28 +287,28 @@ class StructuralAnalyzer:
                         block['name'] = context_tokens[i + 1].literal
                         block['action_token'] = token
                         break
-        
+
         # Try-catch detection
         elif any(t.type == TRY for t in tokens) and any(t.type == CATCH for t in tokens):
             block['subtype'] = 'try_catch'
-            
+
             # Extract try and catch sections
             try_section = self._extract_try_section(tokens)
             catch_section = self._extract_catch_section(tokens)
-            
+
             if try_section:
                 block['try_section'] = try_section
             if catch_section:
                 block['catch_section'] = catch_section
-        
+
         # Conditional detection (if/else)
         elif any(t.type == IF for t in tokens) or any(t.type == ELSE for t in tokens):
             block['subtype'] = 'conditional'
-            
+
         # Loop detection (for/while)
         elif any(t.type == FOR for t in tokens) or any(t.type == WHILE for t in tokens):
             block['subtype'] = 'loop'
-            
+
         # Screen detection
         elif any(t.type == SCREEN for t in context_tokens):
             block['subtype'] = 'screen'
@@ -125,22 +317,22 @@ class StructuralAnalyzer:
                     if context_tokens[i + 1].type == IDENT:
                         block['name'] = context_tokens[i + 1].literal
                         break
-        
+
         # Debug statement detection
         elif any(t.type == DEBUG for t in tokens):
             block['subtype'] = 'debug'
-            
+
         # External declaration detection
         elif any(t.type == EXTERNAL for t in context_tokens):
             block['subtype'] = 'external'
-            
+
         return block
-    
+
     def _extract_try_section(self, tokens):
         """Extract the try block section from tokens"""
         try_start = None
         try_end = None
-        
+
         for i, token in enumerate(tokens):
             if token.type == TRY:
                 try_start = i
@@ -150,7 +342,7 @@ class StructuralAnalyzer:
                         try_start = j
                         break
                 break
-                
+
         if try_start is not None:
             # Find matching closing brace for try block
             brace_count = 0
@@ -162,20 +354,20 @@ class StructuralAnalyzer:
                     if brace_count == 0:
                         try_end = i
                         break
-                        
+
             if try_end is not None:
                 return {
                     'start': try_start,
                     'end': try_end,
                     'tokens': tokens[try_start:try_end + 1]
                 }
-        
+
         return None
-    
+
     def _extract_catch_section(self, tokens):
         """Extract the catch block section from tokens"""
         catch_start = None
-        
+
         for i, token in enumerate(tokens):
             if token.type == CATCH:
                 catch_start = i
@@ -185,7 +377,7 @@ class StructuralAnalyzer:
                         catch_start = j
                         break
                 break
-                
+
         if catch_start is not None:
             # Find matching closing brace for catch block
             brace_count = 0
@@ -201,9 +393,9 @@ class StructuralAnalyzer:
                             'end': catch_end,
                             'tokens': tokens[catch_start:catch_end + 1]
                         }
-        
+
         return None
-    
+
     def _handle_unclosed_blocks(self, stack, tokens):
         """Handle any blocks that weren't properly closed"""
         for block in stack:
@@ -212,7 +404,7 @@ class StructuralAnalyzer:
             block['unclosed'] = True
             self.blocks[block['id']] = block
             print(f"⚠️  Unclosed {block['type']} block starting at line {block['start_token'].line}")
-    
+
     def get_block_hierarchy(self):
         """Return the block structure as a hierarchical tree"""
         hierarchy = []
@@ -220,7 +412,7 @@ class StructuralAnalyzer:
             if not block.get('parent'):
                 hierarchy.append(self._build_block_tree(block))
         return hierarchy
-    
+
     def _build_block_tree(self, block):
         """Build a tree structure for a block and its nested blocks"""
         node = {
@@ -232,22 +424,22 @@ class StructuralAnalyzer:
             'end_line': block['end_token'].line if block['end_token'] else 0,
             'children': []
         }
-        
+
         for nested in block.get('nested_blocks', []):
             node['children'].append(self._build_block_tree(nested))
-            
+
         return node
-    
+
     def print_structure(self):
         """Print the discovered structure for debugging"""
         print("\n📊 CODE STRUCTURE ANALYSIS:")
         print("=" * 50)
-        
+
         for block_id, block in self.blocks.items():
             self._print_block(block)
-            
+
         print("=" * 50)
-    
+
     def _print_block(self, block, indent=0):
         """Recursively print block information"""
         indent_str = "  " * indent
@@ -255,8 +447,8 @@ class StructuralAnalyzer:
         name = block.get('name', 'anonymous')
         start_line = block['start_token'].line if block['start_token'] else '?'
         end_line = block['end_token'].line if block['end_token'] else '?'
-        
+
         print(f"{indent_str}└── {block_type}: {name} (lines {start_line}-{end_line})")
-        
+
         for nested in block.get('nested_blocks', []):
             self._print_block(nested, indent + 1)
