@@ -1,4 +1,4 @@
-# evaluator.py (FIXED VERSION)
+# evaluator.py (DEBUG VERSION)
 import sys
 import traceback
 from . import zexus_ast
@@ -40,70 +40,105 @@ class EvaluationError(Exception):
 
         return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
 
+# === DEBUG FLAGS ===
+DEBUG_EVAL = True  # Set to True to enable debug output
+
+def debug_log(message, data=None):
+    if DEBUG_EVAL:
+        if data is not None:
+            print(f"🔍 [EVAL DEBUG] {message}: {data}")
+        else:
+            print(f"🔍 [EVAL DEBUG] {message}")
+
 # === ENHANCED HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
+    debug_log("eval_program", f"Processing {len(statements)} statements")
     result = NULL
-    for stmt in statements:
+    for i, stmt in enumerate(statements):
+        debug_log(f"  Statement {i+1}", type(stmt).__name__)
         result = eval_node(stmt, env)
         if isinstance(result, ReturnValue):
+            debug_log("  ReturnValue encountered", result.value)
             return result.value
         if isinstance(result, (EvaluationError, ObjectEvaluationError)):
+            debug_log("  Error encountered", result)
             return result
+    debug_log("eval_program completed", result)
     return result
 
 def eval_assignment_expression(node, env):
     """Handle assignment expressions like: x = 5"""
+    debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
     value = eval_node(node.value, env)
     if isinstance(value, (EvaluationError, ObjectEvaluationError)):
+        debug_log("  Assignment error", value)
         return value
 
     # Set the variable in the environment
     env.set(node.name.value, value)
+    debug_log("  Assignment successful", f"{node.name.value} = {value}")
     return value
 
 def eval_block_statement(block, env):
+    debug_log("eval_block_statement", f"Processing {len(block.statements)} statements in block")
     result = NULL
     for stmt in block.statements:
         result = eval_node(stmt, env)
         if isinstance(result, (ReturnValue, EvaluationError, ObjectEvaluationError)):
+            debug_log("  Block interrupted", result)
             return result
+    debug_log("  Block completed", result)
     return result
 
 def eval_expressions(expressions, env):
+    debug_log("eval_expressions", f"Evaluating {len(expressions)} expressions")
     results = []
-    for expr in expressions:
+    for i, expr in enumerate(expressions):
+        debug_log(f"  Expression {i+1}", type(expr).__name__)
         result = eval_node(expr, env)
         if isinstance(result, (ReturnValue, EvaluationError, ObjectEvaluationError)):
+            debug_log("  Expression evaluation interrupted", result)
             return result
         results.append(result)
+        debug_log(f"  Expression {i+1} result", result)
+    debug_log("  All expressions evaluated", results)
     return results
 
 def eval_identifier(node, env):
+    debug_log("eval_identifier", f"Looking up: {node.value}")
     val = env.get(node.value)
     if val:
+        debug_log("  Found in environment", f"{node.value} = {val}")
         return val
     # Check builtins
     builtin = builtins.get(node.value)
     if builtin:
+        debug_log("  Found builtin", f"{node.value} = {builtin}")
         return builtin
 
+    debug_log("  Identifier not found", node.value)
     return EvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
-    if obj == NULL or obj == FALSE or isinstance(obj, (EvaluationError, ObjectEvaluationError)):
-        return False
-    return True
+    result = not (obj == NULL or obj == FALSE or isinstance(obj, (EvaluationError, ObjectEvaluationError)))
+    debug_log("is_truthy", f"{obj} -> {result}")
+    return result
 
 def eval_prefix_expression(operator, right):
+    debug_log("eval_prefix_expression", f"{operator} {right}")
     if isinstance(right, (EvaluationError, ObjectEvaluationError)):
         return right
 
     if operator == "!":
-        return eval_bang_operator_expression(right)
+        result = eval_bang_operator_expression(right)
     elif operator == "-":
-        return eval_minus_prefix_operator_expression(right)
-    return EvaluationError(f"Unknown operator: {operator}{right.type()}")
+        result = eval_minus_prefix_operator_expression(right)
+    else:
+        result = EvaluationError(f"Unknown operator: {operator}{right.type()}")
+    
+    debug_log("  Prefix result", result)
+    return result
 
 def eval_bang_operator_expression(right):
     if right == TRUE:
@@ -122,6 +157,7 @@ def eval_minus_prefix_operator_expression(right):
     return EvaluationError(f"Unknown operator: -{right.type()}")
 
 def eval_infix_expression(operator, left, right):
+    debug_log("eval_infix_expression", f"{left} {operator} {right}")
     # Handle errors first
     if isinstance(left, (EvaluationError, ObjectEvaluationError)):
         return left
@@ -130,138 +166,127 @@ def eval_infix_expression(operator, left, right):
 
     # Logical operators
     if operator == "&&":
-        return TRUE if is_truthy(left) and is_truthy(right) else FALSE
+        result = TRUE if is_truthy(left) and is_truthy(right) else FALSE
     elif operator == "||":
-        return TRUE if is_truthy(left) or is_truthy(right) else FALSE
-
-    # Comparison operators
-    if operator == "==":
-        return TRUE if left.value == right.value else FALSE
+        result = TRUE if is_truthy(left) or is_truthy(right) else FALSE
+    elif operator == "==":
+        result = TRUE if left.value == right.value else FALSE
     elif operator == "!=":
-        return TRUE if left.value != right.value else FALSE
+        result = TRUE if left.value != right.value else FALSE
     elif operator == "<=":
-        return TRUE if left.value <= right.value else FALSE
+        result = TRUE if left.value <= right.value else FALSE
     elif operator == ">=":
-        return TRUE if left.value >= right.value else FALSE
-
+        result = TRUE if left.value >= right.value else FALSE
     # Type-specific operations
-    if isinstance(left, Integer) and isinstance(right, Integer):
-        return eval_integer_infix_expression(operator, left, right)
+    elif isinstance(left, Integer) and isinstance(right, Integer):
+        result = eval_integer_infix_expression(operator, left, right)
     elif isinstance(left, Float) and isinstance(right, Float):
-        return eval_float_infix_expression(operator, left, right)
+        result = eval_float_infix_expression(operator, left, right)
     elif isinstance(left, String) and isinstance(right, String):
-        return eval_string_infix_expression(operator, left, right)
-
+        result = eval_string_infix_expression(operator, left, right)
     # NEW: Handle string concatenation with different types
     elif operator == "+":
         if isinstance(left, String):
             # Convert right to string and concatenate
             right_str = right.inspect() if not isinstance(right, String) else right.value
-            return String(left.value + str(right_str))
+            result = String(left.value + str(right_str))
         elif isinstance(right, String):
             # Convert left to string and concatenate
             left_str = left.inspect() if not isinstance(left, String) else left.value
-            return String(str(left_str) + right.value)
+            result = String(str(left_str) + right.value)
+        else:
+            result = EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
+    else:
+        result = EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
 
-    return EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
+    debug_log("  Infix result", result)
+    return result
 
 def eval_integer_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
 
-    if operator == "+":
-        return Integer(left_val + right_val)
-    elif operator == "-":
-        return Integer(left_val - right_val)
-    elif operator == "*":
-        return Integer(left_val * right_val)
-    elif operator == "/":
-        if right_val == 0:
-            return EvaluationError("Division by zero")
+    if operator == "+": return Integer(left_val + right_val)
+    elif operator == "-": return Integer(left_val - right_val)
+    elif operator == "*": return Integer(left_val * right_val)
+    elif operator == "/": 
+        if right_val == 0: return EvaluationError("Division by zero")
         return Integer(left_val // right_val)
-    elif operator == "%":
-        if right_val == 0:
-            return EvaluationError("Modulo by zero")
+    elif operator == "%": 
+        if right_val == 0: return EvaluationError("Modulo by zero")
         return Integer(left_val % right_val)
-    elif operator == "<":
-        return TRUE if left_val < right_val else FALSE
-    elif operator == ">":
-        return TRUE if left_val > right_val else FALSE
-    elif operator == "<=":
-        return TRUE if left_val <= right_val else FALSE
-    elif operator == ">=":
-        return TRUE if left_val >= right_val else FALSE
-    elif operator == "==":
-        return TRUE if left_val == right_val else FALSE
-    elif operator == "!=":
-        return TRUE if left_val != right_val else FALSE
+    elif operator == "<": return TRUE if left_val < right_val else FALSE
+    elif operator == ">": return TRUE if left_val > right_val else FALSE
+    elif operator == "<=": return TRUE if left_val <= right_val else FALSE
+    elif operator == ">=": return TRUE if left_val >= right_val else FALSE
+    elif operator == "==": return TRUE if left_val == right_val else FALSE
+    elif operator == "!=": return TRUE if left_val != right_val else FALSE
     return EvaluationError(f"Unknown integer operator: {operator}")
 
 def eval_float_infix_expression(operator, left, right):
     left_val = left.value
     right_val = right.value
 
-    if operator == "+":
-        return Float(left_val + right_val)
-    elif operator == "-":
-        return Float(left_val - right_val)
-    elif operator == "*":
-        return Float(left_val * right_val)
-    elif operator == "/":
-        if right_val == 0:
-            return EvaluationError("Division by zero")
+    if operator == "+": return Float(left_val + right_val)
+    elif operator == "-": return Float(left_val - right_val)
+    elif operator == "*": return Float(left_val * right_val)
+    elif operator == "/": 
+        if right_val == 0: return EvaluationError("Division by zero")
         return Float(left_val / right_val)
-    elif operator == "%":
-        if right_val == 0:
-            return EvaluationError("Modulo by zero")
+    elif operator == "%": 
+        if right_val == 0: return EvaluationError("Modulo by zero")
         return Float(left_val % right_val)
-    elif operator == "<":
-        return TRUE if left_val < right_val else FALSE
-    elif operator == ">":
-        return TRUE if left_val > right_val else FALSE
-    elif operator == "<=":
-        return TRUE if left_val <= right_val else FALSE
-    elif operator == ">=":
-        return TRUE if left_val >= right_val else FALSE
-    elif operator == "==":
-        return TRUE if left_val == right_val else FALSE
-    elif operator == "!=":
-        return TRUE if left_val != right_val else FALSE
+    elif operator == "<": return TRUE if left_val < right_val else FALSE
+    elif operator == ">": return TRUE if left_val > right_val else FALSE
+    elif operator == "<=": return TRUE if left_val <= right_val else FALSE
+    elif operator == ">=": return TRUE if left_val >= right_val else FALSE
+    elif operator == "==": return TRUE if left_val == right_val else FALSE
+    elif operator == "!=": return TRUE if left_val != right_val else FALSE
     return EvaluationError(f"Unknown float operator: {operator}")
 
 def eval_string_infix_expression(operator, left, right):
-    if operator == "+":
-        return String(left.value + right.value)
-    elif operator == "==":
-        return TRUE if left.value == right.value else FALSE
-    elif operator == "!=":
-        return TRUE if left.value != right.value else FALSE
+    if operator == "+": return String(left.value + right.value)
+    elif operator == "==": return TRUE if left.value == right.value else FALSE
+    elif operator == "!=": return TRUE if left.value != right.value else FALSE
     return EvaluationError(f"Unknown string operator: {operator}")
 
 def eval_if_expression(ie, env):
+    debug_log("eval_if_expression", "Evaluating condition")
     condition = eval_node(ie.condition, env)
     if isinstance(condition, (EvaluationError, ObjectEvaluationError)):
         return condition
 
     if is_truthy(condition):
+        debug_log("  Condition true, evaluating consequence")
         return eval_node(ie.consequence, env)
     elif ie.alternative:
+        debug_log("  Condition false, evaluating alternative")
         return eval_node(ie.alternative, env)
+    debug_log("  Condition false, no alternative")
     return NULL
 
 def apply_function(fn, args, call_site=None):
+    debug_log("apply_function", f"Calling {fn} with {len(args)} arguments: {args}")
+    
     if isinstance(fn, (Action, LambdaFunction)):
+        debug_log("  Calling user-defined function")
         extended_env = extend_function_env(fn, args)
         evaluated = eval_node(fn.body, extended_env)
         return unwrap_return_value(evaluated)
     elif isinstance(fn, Builtin):
+        debug_log("  Calling builtin function", f"{fn.name} with args: {args}")
         try:
             # FIX: Builtin functions need to be called directly
             result = fn.fn(*args)
+            debug_log("  Builtin result", result)
             return result
         except Exception as e:
-            return EvaluationError(f"Builtin function error: {str(e)}")
-    return EvaluationError(f"Not a function: {fn.type()}")
+            error = EvaluationError(f"Builtin function error: {str(e)}")
+            debug_log("  Builtin error", error)
+            return error
+    error = EvaluationError(f"Not a function: {fn.type()}")
+    debug_log("  Not a function error", error)
+    return error
 
 def extend_function_env(fn, args):
     env = Environment(outer=fn.env)
@@ -276,6 +301,7 @@ def unwrap_return_value(obj):
 
 # NEW: Lambda function evaluation
 def eval_lambda_expression(node, env):
+    debug_log("eval_lambda_expression", f"Creating lambda with {len(node.parameters)} parameters")
     return LambdaFunction(node.parameters, node.body, env)
 
 # NEW: Array method implementations
@@ -283,7 +309,6 @@ def array_reduce(array_obj, lambda_fn, initial_value=None, env=None):
     """Implement array.reduce(lambda, initial_value)"""
     if not isinstance(array_obj, List):
         return EvaluationError("reduce() called on non-array object")
-
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("reduce() requires a lambda function as first argument")
 
@@ -303,7 +328,6 @@ def array_map(array_obj, lambda_fn, env=None):
     """Implement array.map(lambda)"""
     if not isinstance(array_obj, List):
         return EvaluationError("map() called on non-array object")
-
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("map() requires a lambda function")
 
@@ -320,7 +344,6 @@ def array_filter(array_obj, lambda_fn, env=None):
     """Implement array.filter(lambda)"""
     if not isinstance(array_obj, List):
         return EvaluationError("filter() called on non-array object")
-
     if not isinstance(lambda_fn, (LambdaFunction, Action)):
         return EvaluationError("filter() requires a lambda function")
 
@@ -357,9 +380,11 @@ def check_import_permission(exported_value, importer_file, env):
 # === NEW BUILTIN FUNCTIONS FOR PHASE 1 ===
 
 def builtin_datetime_now(*args):
+    debug_log("builtin_datetime_now", "called")
     return DateTime.now()
 
 def builtin_timestamp(*args):
+    debug_log("builtin_timestamp", f"called with {len(args)} args")
     if len(args) == 0:
         return DateTime.now().to_timestamp()
     elif len(args) == 1 and isinstance(args[0], DateTime):
@@ -367,6 +392,7 @@ def builtin_timestamp(*args):
     return EvaluationError("timestamp() takes 0 or 1 DateTime argument")
 
 def builtin_math_random(*args):
+    debug_log("builtin_math_random", f"called with {len(args)} args")
     if len(args) == 0:
         return Math.random_int(0, 100)
     elif len(args) == 1 and isinstance(args[0], Integer):
@@ -376,58 +402,69 @@ def builtin_math_random(*args):
     return EvaluationError("random() takes 0, 1, or 2 integer arguments")
 
 def builtin_to_hex(*args):
+    debug_log("builtin_to_hex", f"called with {args}")
     if len(args) != 1:
         return EvaluationError("to_hex() takes exactly 1 argument")
     return Math.to_hex_string(args[0])
 
 def builtin_from_hex(*args):
+    debug_log("builtin_from_hex", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("from_hex() takes exactly 1 string argument")
     return Math.hex_to_int(args[0])
 
 def builtin_sqrt(*args):
+    debug_log("builtin_sqrt", f"called with {args}")
     if len(args) != 1:
         return EvaluationError("sqrt() takes exactly 1 argument")
     return Math.sqrt(args[0])
 
 # File I/O builtins
 def builtin_file_read_text(*args):
+    debug_log("builtin_file_read_text", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("file_read_text() takes exactly 1 string argument")
     return File.read_text(args[0])
 
 def builtin_file_write_text(*args):
+    debug_log("builtin_file_write_text", f"called with {args}")
     if len(args) != 2 or not all(isinstance(a, String) for a in args):
         return EvaluationError("file_write_text() takes exactly 2 string arguments")
     return File.write_text(args[0], args[1])
 
 def builtin_file_exists(*args):
+    debug_log("builtin_file_exists", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("file_exists() takes exactly 1 string argument")
     return File.exists(args[0])
 
 def builtin_file_read_json(*args):
+    debug_log("builtin_file_read_json", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("file_read_json() takes exactly 1 string argument")
     return File.read_json(args[0])
 
 def builtin_file_write_json(*args):
+    debug_log("builtin_file_write_json", f"called with {args}")
     if len(args) != 2 or not isinstance(args[0], String):
         return EvaluationError("file_write_json() takes path string and data")
     return File.write_json(args[0], args[1])
 
 def builtin_file_append(*args):
+    debug_log("builtin_file_append", f"called with {args}")
     if len(args) != 2 or not all(isinstance(a, String) for a in args):
         return EvaluationError("file_append() takes exactly 2 string arguments")
     return File.append_text(args[0], args[1])
 
 def builtin_file_list_dir(*args):
+    debug_log("builtin_file_list_dir", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("file_list_dir() takes exactly 1 string argument")
     return File.list_directory(args[0])
 
 # Debug builtins
 def builtin_debug_log(*args):
+    debug_log("builtin_debug_log", f"called with {len(args)} args")
     if len(args) == 0:
         return EvaluationError("debug_log() requires at least a message")
     message = args[0]
@@ -435,12 +472,14 @@ def builtin_debug_log(*args):
     return Debug.log(message, value)
 
 def builtin_debug_trace(*args):
+    debug_log("builtin_debug_trace", f"called with {args}")
     if len(args) != 1 or not isinstance(args[0], String):
         return EvaluationError("debug_trace() takes exactly 1 string argument")
     return Debug.trace(args[0])
 
 # Existing builtin functions
 def builtin_len(*args):
+    debug_log("builtin_len", f"called with {args}")
     if len(args) != 1:
         return EvaluationError(f"len() takes exactly 1 argument ({len(args)} given)")
     arg = args[0]
@@ -451,6 +490,7 @@ def builtin_len(*args):
     return EvaluationError(f"len() not supported for type {arg.type()}")
 
 def builtin_first(*args):
+    debug_log("builtin_first", f"called with {args}")
     if len(args) != 1:
         return EvaluationError(f"first() takes exactly 1 argument ({len(args)} given)")
     if not isinstance(args[0], List):
@@ -459,24 +499,30 @@ def builtin_first(*args):
     return list_obj.elements[0] if list_obj.elements else NULL
 
 def builtin_string(*args):
+    debug_log("builtin_string", f"called with {args}")
     if len(args) != 1:
         return EvaluationError(f"string() takes exactly 1 argument ({len(args)} given)")
     arg = args[0]
     if isinstance(arg, Integer):
-        return String(str(arg.value))
+        result = String(str(arg.value))
     elif isinstance(arg, Float):
-        return String(str(arg.value))
+        result = String(str(arg.value))
     elif isinstance(arg, String):
-        return arg
+        result = arg
     elif isinstance(arg, BooleanObj):
-        return String("true" if arg.value else "false")
+        result = String("true" if arg.value else "false")
     elif isinstance(arg, (List, Map)):
-        return String(arg.inspect())
+        result = String(arg.inspect())
     elif isinstance(arg, Builtin):
-        return String(f"<built-in function: {arg.name}>")
-    return String("unknown")
+        result = String(f"<built-in function: {arg.name}>")
+    else:
+        result = String("unknown")
+    
+    debug_log("  builtin_string result", result)
+    return result
 
 def builtin_rest(*args):
+    debug_log("builtin_rest", f"called with {args}")
     if len(args) != 1:
         return EvaluationError(f"rest() takes exactly 1 argument ({len(args)} given)")
     if not isinstance(args[0], List):
@@ -485,6 +531,7 @@ def builtin_rest(*args):
     return List(list_obj.elements[1:]) if len(list_obj.elements) > 0 else List([])
 
 def builtin_push(*args):
+    debug_log("builtin_push", f"called with {args}")
     if len(args) != 2:
         return EvaluationError(f"push() takes exactly 2 arguments ({len(args)} given)")
     if not isinstance(args[0], List):
@@ -495,24 +542,25 @@ def builtin_push(*args):
 
 def builtin_reduce(*args):
     """Built-in reduce function for arrays"""
+    debug_log("builtin_reduce", f"called with {args}")
     if len(args) < 2 or len(args) > 3:
         return EvaluationError("reduce() takes 2 or 3 arguments (array, lambda[, initial])")
     array_obj, lambda_fn = args[0], args[1]
     initial = args[2] if len(args) == 3 else None
-
     return array_reduce(array_obj, lambda_fn, initial)
 
 def builtin_map(*args):
     """Built-in map function for arrays"""
+    debug_log("builtin_map", f"called with {args}")
     if len(args) != 2:
         return EvaluationError("map() takes 2 arguments (array, lambda)")
     return array_map(args[0], args[1])
 
 def builtin_filter(*args):
     """Built-in filter function for arrays"""
+    debug_log("builtin_filter", f"called with {args}")
     if len(args) != 2:
         return EvaluationError("filter() takes 2 arguments (array, lambda)")
-
     return array_filter(args[0], args[1])
 
 # Enhanced builtins dictionary with new Phase 1 functions
@@ -552,6 +600,7 @@ builtins = {
 # === ENHANCED MAIN EVAL_NODE FUNCTION WITH STACK TRACES ===
 def eval_node(node, env, stack_trace=None):
     if node is None:
+        debug_log("eval_node", "Node is None, returning NULL")
         return NULL
 
     node_type = type(node)
@@ -563,24 +612,31 @@ def eval_node(node, env, stack_trace=None):
         current_frame += f" (line {node.token.line})"
     stack_trace.append(current_frame)
 
+    debug_log("eval_node", f"Processing {node_type.__name__}")
+
     try:
         # Statements
         if node_type == Program:
+            debug_log("  Program node", f"{len(node.statements)} statements")
             return eval_program(node.statements, env)
 
         elif node_type == ExpressionStatement:
+            debug_log("  ExpressionStatement node")
             return eval_node(node.expression, env, stack_trace)
 
         elif node_type == BlockStatement:
+            debug_log("  BlockStatement node", f"{len(node.statements)} statements")
             return eval_block_statement(node, env)
 
         elif node_type == ReturnStatement:
+            debug_log("  ReturnStatement node")
             val = eval_node(node.return_value, env, stack_trace)
             if isinstance(val, (EvaluationError, ObjectEvaluationError)):
                 return val
             return ReturnValue(val)
 
         elif node_type == LetStatement:
+            debug_log("  LetStatement node", f"let {node.name.value}")
             val = eval_node(node.value, env, stack_trace)
             if isinstance(val, (EvaluationError, ObjectEvaluationError)):
                 return val
@@ -588,25 +644,32 @@ def eval_node(node, env, stack_trace=None):
             return NULL
 
         elif node_type == ActionStatement:
+            debug_log("  ActionStatement node", f"action {node.name.value}")
             action_obj = Action(node.parameters, node.body, env)
             env.set(node.name.value, action_obj)
             return NULL
 
         # NEW: Export statement
         elif node_type == ExportStatement:
+            debug_log("  ExportStatement node", f"export {node.name.value}")
             return eval_export_statement(node, env)
 
         elif node_type == IfStatement:
+            debug_log("  IfStatement node")
             condition = eval_node(node.condition, env, stack_trace)
             if isinstance(condition, (EvaluationError, ObjectEvaluationError)):
                 return condition
             if is_truthy(condition):
+                debug_log("    If condition true")
                 return eval_node(node.consequence, env, stack_trace)
             elif node.alternative is not None:
+                debug_log("    If condition false, has alternative")
                 return eval_node(node.alternative, env, stack_trace)
+            debug_log("    If condition false, no alternative")
             return NULL
 
         elif node_type == WhileStatement:
+            debug_log("  WhileStatement node")
             result = NULL
             while True:
                 condition = eval_node(node.condition, env, stack_trace)
@@ -620,6 +683,7 @@ def eval_node(node, env, stack_trace=None):
             return result
 
         elif node_type == ForEachStatement:
+            debug_log("  ForEachStatement node", f"for each {node.item.value}")
             iterable = eval_node(node.iterable, env, stack_trace)
             if isinstance(iterable, (EvaluationError, ObjectEvaluationError)):
                 return iterable
@@ -636,9 +700,11 @@ def eval_node(node, env, stack_trace=None):
             return result
 
         elif node_type == AssignmentExpression:
+            debug_log("  AssignmentExpression node")
             return eval_assignment_expression(node, env)
 
         elif node_type == PropertyAccessExpression:
+            debug_log("  PropertyAccessExpression node", f"{node.object}.{node.property}")
             obj = eval_node(node.object, env, stack_trace)
             if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
                 return obj
@@ -652,13 +718,16 @@ def eval_node(node, env, stack_trace=None):
             return NULL
 
         elif node_type == AST_Boolean:
+            debug_log("  Boolean node", f"value: {node.value}")
             return TRUE if node.value else FALSE
 
         # NEW: Lambda expression
         elif node_type == LambdaExpression:
+            debug_log("  LambdaExpression node")
             return eval_lambda_expression(node, env)
 
         elif node_type == MethodCallExpression:
+            debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
             obj = eval_node(node.object, env, stack_trace)
             if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
                 return obj
@@ -697,27 +766,33 @@ def eval_node(node, env, stack_trace=None):
             return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
 
         elif node_type == EmbeddedLiteral:
+            debug_log("  EmbeddedLiteral node")
             return EmbeddedCode("embedded_block", node.language, node.code)
 
         elif node_type == PrintStatement:
+            debug_log("  PrintStatement node")
             val = eval_node(node.value, env, stack_trace)
             if isinstance(val, (EvaluationError, ObjectEvaluationError)):
                 # Print errors to stderr but don't stop execution
                 print(f"❌ Error: {val}", file=sys.stderr)
                 return NULL
+            debug_log("    Printing value", val)
             print(val.inspect())
             return NULL
 
         elif node_type == ScreenStatement:
+            debug_log("  ScreenStatement node", node.name.value)
             print(f"[RENDER] Screen: {node.name.value}")
             return NULL
 
         elif node_type == EmbeddedCodeStatement:
+            debug_log("  EmbeddedCodeStatement node", node.name.value)
             embedded_obj = EmbeddedCode(node.name.value, node.language, node.code)
             env.set(node.name.value, embedded_obj)
             return NULL
 
         elif node_type == UseStatement:
+            debug_log("  UseStatement node", node.file_path)
             # Simplified module import
             print(f"[IMPORT] Loading module: {node.file_path}")
             # For now, return a dummy module environment
@@ -731,22 +806,27 @@ def eval_node(node, env, stack_trace=None):
             return NULL
 
         elif node_type == ExactlyStatement:
+            debug_log("  ExactlyStatement node")
             return eval_node(node.body, env, stack_trace)
 
         # Expressions
         elif node_type == IntegerLiteral:
+            debug_log("  IntegerLiteral node", node.value)
             return Integer(node.value)
 
         elif node_type == StringLiteral:
+            debug_log("  StringLiteral node", node.value)
             return String(node.value)
 
         elif node_type == ListLiteral:
+            debug_log("  ListLiteral node", f"{len(node.elements)} elements")
             elements = eval_expressions(node.elements, env)
             if isinstance(elements, (ReturnValue, EvaluationError, ObjectEvaluationError)):
                 return elements
             return List(elements)
 
         elif node_type == MapLiteral:
+            debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
             pairs = {}
             for key_expr, value_expr in node.pairs:
                 key = eval_node(key_expr, env, stack_trace)
@@ -760,30 +840,45 @@ def eval_node(node, env, stack_trace=None):
             return Map(pairs)
 
         elif node_type == Identifier:
+            debug_log("  Identifier node", node.value)
             return eval_identifier(node, env)
 
         elif node_type == ActionLiteral:
+            debug_log("  ActionLiteral node")
             return Action(node.parameters, node.body, env)
 
         # FIXED: CallExpression - Properly handle builtin function calls
         elif node_type == CallExpression:
+            debug_log("🚀 CallExpression node", f"Calling {node.function}")
             function = eval_node(node.function, env, stack_trace)
-            if isinstance(function, (EvaluationError, ObjectEvaluationError)):
-                return function
-            args = eval_expressions(node.arguments, env)
-            if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-                return args
+            debug_log("  Function resolved", f"{function} (type: {type(function).__name__})")
             
+            if isinstance(function, (EvaluationError, ObjectEvaluationError)):
+                debug_log("  Function evaluation error", function)
+                return function
+            
+            args = eval_expressions(node.arguments, env)
+            debug_log("  Arguments evaluated", f"{args} (count: {len(args)})")
+            
+            if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
+                debug_log("  Arguments evaluation error", args)
+                return args
+
             # CRITICAL FIX: Ensure builtin functions are called properly
-            return apply_function(function, args)
+            debug_log("  Calling apply_function", f"function: {function}, args: {args}")
+            result = apply_function(function, args)
+            debug_log("  CallExpression result", result)
+            return result
 
         elif node_type == PrefixExpression:
+            debug_log("  PrefixExpression node", f"{node.operator} {node.right}")
             right = eval_node(node.right, env, stack_trace)
             if isinstance(right, (EvaluationError, ObjectEvaluationError)):
                 return right
             return eval_prefix_expression(node.operator, right)
 
         elif node_type == InfixExpression:
+            debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
             left = eval_node(node.left, env, stack_trace)
             if isinstance(left, (EvaluationError, ObjectEvaluationError)):
                 return left
@@ -793,13 +888,16 @@ def eval_node(node, env, stack_trace=None):
             return eval_infix_expression(node.operator, left, right)
 
         elif node_type == IfExpression:
+            debug_log("  IfExpression node")
             return eval_if_expression(node, env)
 
+        debug_log("  Unknown node type", node_type)
         return EvaluationError(f"Unknown node type: {node_type}", stack_trace=stack_trace)
 
     except Exception as e:
         # Enhanced error with stack trace
         error_msg = f"Internal error: {str(e)}"
+        debug_log("  Exception in eval_node", error_msg)
         return EvaluationError(error_msg, stack_trace=stack_trace[-5:])  # Last 5 frames
 
 # Production evaluation with enhanced debugging
