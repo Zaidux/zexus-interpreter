@@ -1,4 +1,4 @@
-# strategy_structural.py (FIXED VERSION)
+# strategy_structural.py (FIXED VERSION - with better token collection)
 from .zexus_token import *
 
 class StructuralAnalyzer:
@@ -13,7 +13,6 @@ class StructuralAnalyzer:
         self.blocks = {}
         self.block_counter = 0
         stack = []
-        current_statement = None
 
         i = 0
         while i < len(tokens):
@@ -57,7 +56,7 @@ class StructuralAnalyzer:
                 else:
                     # Top-level block
                     self.blocks[block['id']] = block
-                
+
                 i += 1
                 continue
 
@@ -93,7 +92,7 @@ class StructuralAnalyzer:
     def _create_statement_block(self, tokens, start_index):
         """Create a block for a standalone statement - FIXED"""
         token = tokens[start_index]
-        
+
         # Determine statement type
         if token.type == LET:
             return self._parse_let_statement(tokens, start_index)
@@ -108,26 +107,47 @@ class StructuralAnalyzer:
 
     def _parse_let_statement(self, tokens, start_index):
         """Parse a let statement into a block - CRITICAL FIX"""
+        print(f"🔍 [Structural] Parsing let statement at index {start_index}")
         statement_tokens = []
         i = start_index
-        
-        # Collect tokens until end of statement (semicolon or significant token boundary)
+
+        # Collect tokens until end of statement
         while i < len(tokens):
             current_token = tokens[i]
             statement_tokens.append(current_token)
             
+            print(f"  📝 Token {i}: {current_token.type} = '{current_token.literal}'")
+
             # End conditions for let statement
             if (current_token.type == SEMICOLON or 
-                (i > start_index and self._is_statement_start(current_token)) or
+                (i > start_index and self._is_statement_start(current_token) and current_token.type != IDENT) or
                 current_token.type in [LBRACE, RBRACE, EOF]):
+                print(f"  🛑 Ending let statement at token {i}: {current_token.type}")
                 break
-                
+
             i += 1
+
+        # CRITICAL: Make sure we have enough tokens for "let x = value"
+        if len(statement_tokens) < 4:
+            print(f"  ❌ Let statement too short: only {len(statement_tokens)} tokens")
+            print(f"  📋 Tokens: {[t.literal for t in statement_tokens]}")
+            # Try to collect more tokens if we stopped too early
+            if i < len(tokens) - 1:
+                print("  🔄 Trying to collect more tokens...")
+                while i < len(tokens) and len(statement_tokens) < 6:  # Collect up to 6 tokens
+                    current_token = tokens[i]
+                    statement_tokens.append(current_token)
+                    print(f"  📝 Additional token {i}: {current_token.type} = '{current_token.literal}'")
+                    
+                    if (current_token.type == SEMICOLON or 
+                        current_token.type in [LBRACE, RBRACE, EOF]):
+                        break
+                    i += 1
 
         # Create the statement block
         block_id = f"block_{self.block_counter}"
         self.block_counter += 1
-        
+
         block_info = {
             'id': block_id,
             'type': 'statement_block',
@@ -140,33 +160,42 @@ class StructuralAnalyzer:
             'nested_blocks': [],
             'parent': None
         }
-        
+
         # Extract variable name for better identification
         if len(statement_tokens) > 1 and statement_tokens[1].type == IDENT:
             block_info['name'] = statement_tokens[1].literal
             block_info['variable_name'] = statement_tokens[1].literal
-            
+            print(f"  ✅ Let statement for variable: {statement_tokens[1].literal}")
+        else:
+            print(f"  ⚠️ Could not extract variable name from tokens: {[t.literal for t in statement_tokens]}")
+
+        print(f"  📦 Final let statement tokens: {[t.literal for t in statement_tokens]}")
         return block_info
 
     def _parse_print_statement(self, tokens, start_index):
         """Parse a print statement into a block"""
+        print(f"🔍 [Structural] Parsing print statement at index {start_index}")
         statement_tokens = []
         i = start_index
-        
+
         while i < len(tokens):
             current_token = tokens[i]
             statement_tokens.append(current_token)
             
+            print(f"  📝 Token {i}: {current_token.type} = '{current_token.literal}'")
+
             if (current_token.type == SEMICOLON or 
                 (i > start_index and self._is_statement_start(current_token)) or
                 current_token.type in [LBRACE, RBRACE, EOF]):
+                print(f"  🛑 Ending print statement at token {i}: {current_token.type}")
                 break
-                
+
             i += 1
 
         block_id = f"block_{self.block_counter}"
         self.block_counter += 1
-        
+
+        print(f"  📦 Final print statement tokens: {[t.literal for t in statement_tokens]}")
         return {
             'id': block_id,
             'type': 'statement_block',
@@ -184,21 +213,21 @@ class StructuralAnalyzer:
         """Parse an expression statement (function call, assignment, etc.)"""
         statement_tokens = []
         i = start_index
-        
+
         while i < len(tokens):
             current_token = tokens[i]
             statement_tokens.append(current_token)
-            
+
             if (current_token.type == SEMICOLON or 
                 (i > start_index and self._is_statement_start(current_token)) or
                 current_token.type in [LBRACE, RBRACE, EOF]):
                 break
-                
+
             i += 1
 
         block_id = f"block_{self.block_counter}"
         self.block_counter += 1
-        
+
         # Determine what kind of expression this is
         subtype = 'expression_statement'
         if len(statement_tokens) > 1 and statement_tokens[1].type == ASSIGN:
@@ -206,7 +235,7 @@ class StructuralAnalyzer:
         elif (len(statement_tokens) > 1 and statement_tokens[1].type == LPAREN and
               statement_tokens[0].type == IDENT):
             subtype = 'function_call_statement'
-            
+
         return {
             'id': block_id,
             'type': 'statement_block',
@@ -224,21 +253,21 @@ class StructuralAnalyzer:
         """Parse any other kind of statement"""
         statement_tokens = []
         i = start_index
-        
+
         while i < len(tokens):
             current_token = tokens[i]
             statement_tokens.append(current_token)
-            
+
             if (current_token.type == SEMICOLON or 
                 (i > start_index and self._is_statement_start(current_token)) or
                 current_token.type in [LBRACE, RBRACE, EOF]):
                 break
-                
+
             i += 1
 
         block_id = f"block_{self.block_counter}"
         self.block_counter += 1
-        
+
         return {
             'id': block_id,
             'type': 'statement_block',
@@ -262,6 +291,7 @@ class StructuralAnalyzer:
             return 'bracket_block'
         return 'unknown'
 
+    # [Rest of the methods remain the same...]
     def _identify_block_details(self, block, all_tokens):
         """Identify what kind of block this is based on content"""
         tokens = block['tokens']
