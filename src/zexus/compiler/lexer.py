@@ -1,5 +1,8 @@
-# lexer.py (ENHANCED WITH PHASE 1 KEYWORDS)
-from .zexus_token import *
+"""
+Enhanced Lexer for Zexus Compiler Phase
+"""
+
+from ..zexus_token import *
 
 class Lexer:
     def __init__(self, source_code):
@@ -7,7 +10,6 @@ class Lexer:
         self.position = 0
         self.read_position = 0
         self.ch = ""
-        self.in_embedded_block = False
         self.line = 1
         self.column = 1
         self.read_char()
@@ -51,193 +53,102 @@ class Lexer:
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(EQ, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(EQ, literal, current_line, current_column)
             else:
-                tok = Token(ASSIGN, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(ASSIGN, self.ch, current_line, current_column)
         elif self.ch == '!':
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(NOT_EQ, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(NOT_EQ, literal, current_line, current_column)
             else:
-                tok = Token(BANG, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(BANG, self.ch, current_line, current_column)
         elif self.ch == '&':
             if self.peek_char() == '&':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(AND, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(AND, literal, current_line, current_column)
             else:
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(ILLEGAL, self.ch, current_line, current_column)
         elif self.ch == '|':
             if self.peek_char() == '|':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(OR, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(OR, literal, current_line, current_column)
             else:
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(ILLEGAL, self.ch, current_line, current_column)
         elif self.ch == '<':
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(LTE, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(LTE, literal, current_line, current_column)
             else:
-                tok = Token(LT, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(LT, self.ch, current_line, current_column)
         elif self.ch == '>':
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
-                tok = Token(GTE, literal)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(GTE, literal, current_line, current_column)
             else:
-                tok = Token(GT, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(GT, self.ch, current_line, current_column)
         elif self.ch == '"':
             string_literal = self.read_string()
-            tok = Token(STRING, string_literal)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(STRING, string_literal, current_line, current_column)
         elif self.ch == '[':
-            tok = Token(LBRACKET, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(LBRACKET, self.ch, current_line, current_column)
         elif self.ch == ']':
-            tok = Token(RBRACKET, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(RBRACKET, self.ch, current_line, current_column)
         elif self.ch == '(':
-            tok = Token(LPAREN, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(LPAREN, self.ch, current_line, current_column)
         elif self.ch == ')':
-            tok = Token(RPAREN, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(RPAREN, self.ch, current_line, current_column)
         elif self.ch == '{':
-            # Check if this might be start of embedded block
-            lookback = self.input[max(0, self.position-10):self.position]
-            if 'embedded' in lookback:
-                self.in_embedded_block = True
-            tok = Token(LBRACE, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(LBRACE, self.ch, current_line, current_column)
         elif self.ch == '}':
-            if self.in_embedded_block:
-                self.in_embedded_block = False
-            tok = Token(RBRACE, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(RBRACE, self.ch, current_line, current_column)
         elif self.ch == ',':
-            tok = Token(COMMA, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(COMMA, self.ch, current_line, current_column)
         elif self.ch == ';':
-            tok = Token(SEMICOLON, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(SEMICOLON, self.ch, current_line, current_column)
         elif self.ch == ':':
-            tok = Token(COLON, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(COLON, self.ch, current_line, current_column)
         elif self.ch == '+':
-            tok = Token(PLUS, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(PLUS, self.ch, current_line, current_column)
         elif self.ch == '-':
-            tok = Token(MINUS, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(MINUS, self.ch, current_line, current_column)
         elif self.ch == '*':
-            tok = Token(STAR, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(STAR, self.ch, current_line, current_column)
         elif self.ch == '/':
-            tok = Token(SLASH, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(SLASH, self.ch, current_line, current_column)
         elif self.ch == '%':
-            tok = Token(MOD, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(MOD, self.ch, current_line, current_column)
         elif self.ch == '.':
-            tok = Token(DOT, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(DOT, self.ch, current_line, current_column)
         elif self.ch == "":
-            tok = Token(EOF, "")
-            tok.line = current_line
-            tok.column = current_column
+            tok = Token(EOF, "", current_line, current_column)
         else:
             if self.is_letter(self.ch):
                 literal = self.read_identifier()
-
-                if self.in_embedded_block:
-                    token_type = IDENT
-                else:
-                    token_type = self.lookup_ident(literal)
-
-                tok = Token(token_type, literal)
-                tok.line = current_line
-                tok.column = current_column
+                token_type = self.lookup_ident(literal)
+                tok = Token(token_type, literal, current_line, current_column)
                 return tok
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
                 if '.' in num_literal:
-                    tok = Token(FLOAT, num_literal)
+                    tok = Token(FLOAT, num_literal, current_line, current_column)
                 else:
-                    tok = Token(INT, num_literal)
-                tok.line = current_line
-                tok.column = current_column
+                    tok = Token(INT, num_literal, current_line, current_column)
                 return tok
             else:
-                if self.ch in ['\n', '\r']:
-                    self.read_char()
-                    return self.next_token()
-                # For embedded code, treat unknown printable chars as IDENT
-                if self.ch.isprintable():
-                    literal = self.read_embedded_char()
-                    tok = Token(IDENT, literal)
-                    tok.line = current_line
-                    tok.column = current_column
-                    return tok
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                tok = Token(ILLEGAL, self.ch, current_line, current_column)
 
         self.read_char()
         return tok
-
-    def read_embedded_char(self):
-        """Read a single character as identifier for embedded code compatibility"""
-        char = self.ch
-        self.read_char()
-        return char
 
     def skip_comment(self):
         while self.ch != '\n' and self.ch != "":
@@ -296,11 +207,11 @@ class Lexer:
             "embedded": EMBEDDED,
             "export": EXPORT,
             "lambda": LAMBDA,
-            "debug": DEBUG,      # NEW: Debug keyword
-            "try": TRY,          # NEW: Try keyword  
-            "catch": CATCH,      # NEW: Catch keyword
-            "external": EXTERNAL, # NEW: External keyword
-            "from": FROM,        # NEW: From keyword
+            "debug": DEBUG,
+            "try": TRY,
+            "catch": CATCH,
+            "external": EXTERNAL,
+            "from": FROM,
         }
         return keywords.get(ident, IDENT)
 
