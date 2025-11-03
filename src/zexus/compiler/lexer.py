@@ -1,3 +1,5 @@
+# src/zexus/compiler/lexer.py
+
 """
 Enhanced Lexer for Zexus Compiler Phase
 """
