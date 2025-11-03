@@ -382,51 +382,75 @@ def check_import_permission(exported_value, importer_file, env):
 # === FIXED: JSON CONVERSION FUNCTIONS ===
 def _zexus_to_python(value):
     """Convert Zexus objects to Python native types for JSON serialization"""
+    debug_log("_zexus_to_python", f"Converting {type(value).__name__}: {value}")
+    
     if isinstance(value, Map):
         python_dict = {}
         for key, val in value.pairs.items():
             python_key = key.inspect() if hasattr(key, 'inspect') else str(key)
             python_dict[python_key] = _zexus_to_python(val)
+        debug_log("  Converted Map to dict", python_dict)
         return python_dict
     elif isinstance(value, List):
-        return [_zexus_to_python(item) for item in value.elements]
+        python_list = [_zexus_to_python(item) for item in value.elements]
+        debug_log("  Converted List to list", python_list)
+        return python_list
     elif isinstance(value, String):
+        debug_log("  Converted String to str", value.value)
         return value.value
     elif isinstance(value, Integer):
+        debug_log("  Converted Integer to int", value.value)
         return value.value
     elif isinstance(value, Float):
+        debug_log("  Converted Float to float", value.value)
         return value.value
     elif isinstance(value, BooleanObj):
+        debug_log("  Converted Boolean to bool", value.value)
         return value.value
     elif value == NULL:
+        debug_log("  Converted NULL to None")
         return None
     elif isinstance(value, Builtin):
+        debug_log("  Converted Builtin to string")
         return f"<builtin: {value.name}>"
     elif isinstance(value, DateTime):
+        debug_log("  Converted DateTime to float", value.timestamp)
         return value.timestamp
     else:
+        debug_log("  Converted unknown to string", str(value))
         return str(value)
 
 def _python_to_zexus(value):
     """Convert Python native types to Zexus objects"""
+    debug_log("_python_to_zexus", f"Converting Python type: {type(value)}: {value}")
+    
     if isinstance(value, dict):
         pairs = {}
         for k, v in value.items():
             pairs[k] = _python_to_zexus(v)
+        debug_log("  Converted dict to Map", pairs)
         return Map(pairs)
     elif isinstance(value, list):
-        return List([_python_to_zexus(item) for item in value])
+        zexus_list = List([_python_to_zexus(item) for item in value])
+        debug_log("  Converted list to List", zexus_list)
+        return zexus_list
     elif isinstance(value, str):
+        debug_log("  Converted str to String", value)
         return String(value)
     elif isinstance(value, int):
+        debug_log("  Converted int to Integer", value)
         return Integer(value)
     elif isinstance(value, float):
+        debug_log("  Converted float to Float", value)
         return Float(value)
     elif isinstance(value, bool):
+        debug_log("  Converted bool to Boolean", value)
         return BooleanObj(value)
     elif value is None:
+        debug_log("  Converted None to NULL")
         return NULL
     else:
+        debug_log("  Converted unknown to String", str(value))
         return String(str(value))
 
 # === FIXED BUILTIN FUNCTIONS FOR PHASE 1 ===
@@ -496,25 +520,22 @@ def builtin_file_read_json(*args):
         return EvaluationError("file_read_json() takes exactly 1 string argument")
     return File.read_json(args[0])
 
-# FIXED: JSON write function
+# FIXED: JSON write function - CRITICAL FIX
 def builtin_file_write_json(*args):
     debug_log("builtin_file_write_json", f"called with {args}")
     if len(args) != 2 or not isinstance(args[0], String):
         return EvaluationError("file_write_json() takes path string and data")
-    
-    # FIX: Properly convert Zexus objects to Python for JSON serialization
-    path = args[0].value if isinstance(args[0], String) else str(args[0])
+
+    path = args[0]
     data = args[1]
-    
+
+    debug_log("  JSON write - path", path.value if isinstance(path, String) else path)
+    debug_log("  JSON write - data type", type(data).__name__)
+    debug_log("  JSON write - data value", data)
+
     try:
-        # Convert Zexus data to Python native types for JSON
-        python_data = _zexus_to_python(data)
-        json_str = json.dumps(python_data, indent=2)
-        
-        # Write to file
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(json_str)
-        return BooleanObj(True)
+        # FIX: Use the File.write_json method which properly handles conversion
+        return File.write_json(path, data)
     except Exception as e:
         return EvaluationError(f"JSON write error: {str(e)}")
 
@@ -551,7 +572,7 @@ def builtin_string(*args):
     if len(args) != 1:
         return EvaluationError(f"string() takes exactly 1 argument ({len(args)} given)")
     arg = args[0]
-    
+
     if isinstance(arg, Integer):
         result = String(str(arg.value))
     elif isinstance(arg, Float):
