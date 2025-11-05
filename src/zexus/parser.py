@@ -128,57 +128,57 @@ class UltimateParser:
             return self._parse_traditional()
 
     def parse_map_literal(self):
-    """FIXED: Proper map literal parsing"""
-    token = self.cur_token  # Current token is LBRACE
-    pairs = []
+        """FIXED: Proper map literal parsing"""
+        token = self.cur_token  # Current token is LBRACE
+        pairs = []
     
-    self._log(f"🔧 Parsing map literal at line {token.line}", "verbose")
+        self._log(f"🔧 Parsing map literal at line {token.line}", "verbose")
     
     # Skip the opening brace (current token)
-    self.next_token()
+        self.next_token()
 
     # Handle empty map
-    if self.cur_token_is(RBRACE):
-        self.next_token()  # Skip }
-        return MapLiteral(token=token, pairs=pairs)
+        if self.cur_token_is(RBRACE):
+            self.next_token()  # Skip }
+            return MapLiteral(token=token, pairs=pairs)
 
     # Parse key-value pairs
-    while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
         # Parse key
-        if self.cur_token_is(STRING):
-            key = StringLiteral(self.cur_token.literal)
-        elif self.cur_token_is(IDENT):
-            key = Identifier(self.cur_token.literal)
-        else:
-            self.errors.append(f"Line {self.cur_token.line}: Object key must be string or identifier, got {self.cur_token.type}")
-            return None
+            if self.cur_token_is(STRING):
+                key = StringLiteral(self.cur_token.literal)
+            elif self.cur_token_is(IDENT):
+                key = Identifier(self.cur_token.literal)
+            else:
+                self.errors.append(f"Line {self.cur_token.line}: Object key must be string or identifier, got {self.cur_token.type}")
+                return None
 
         # Expect colon
-        if not self.expect_peek(COLON):
-            return None
+            if not self.expect_peek(COLON):
+                return None
 
         # Parse value
-        self.next_token()  # Skip colon
-        value = self.parse_expression(LOWEST)
-        if not value:
-            return None
+            self.next_token()  # Skip colon
+            value = self.parse_expression(LOWEST)
+            if not value:
+                return None
 
-        pairs.append((key, value))
+            pairs.append((key, value))
 
         # Check for comma or end
-        if self.peek_token_is(COMMA):
-            self.next_token()  # Skip comma
+            if self.peek_token_is(COMMA):
+                self.next_token()  # Skip comma
         
-        self.next_token()  # Move to next token
+            self.next_token()  # Move to next token
 
-    if not self.cur_token_is(RBRACE):
+     if not self.cur_token_is(RBRACE):
         self.errors.append(f"Line {self.cur_token.line}: Expected '}}'")
         return None
 
-    self.next_token()  # Skip closing brace
+     self.next_token()  # Skip closing brace
     
-    self._log(f"✅ Successfully parsed map literal with {len(pairs)} pairs", "verbose")
-    return MapLiteral(token=token, pairs=pairs)
+     self._log(f"✅ Successfully parsed map literal with {len(pairs)} pairs", "verbose")
+     return MapLiteral(token=token, pairs=pairs)
 
     def _collect_all_tokens(self):
         """Collect all tokens for structural analysis"""
