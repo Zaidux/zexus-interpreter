@@ -1,0 +1,12 @@
+print("=== Debug Try-Catch ===")
+
+# Test 1: Simple division by zero
+print("Test 1: Division by zero")
+try {
+    let x = 10 / 0
+    print("No error occurred")
+} catch((err)) {
+    print("Caught error: " + string(err))
+}
+
+print("=== Test Complete ===")

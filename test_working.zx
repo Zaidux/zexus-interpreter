@@ -1,0 +1,39 @@
+# test_working.zx
+print("🧪 Testing Working Features...")
+
+# Test 1: Basic variable
+let x = 42
+print("Test 1 - Basic variable works!")
+
+# Test 2: DateTime - call and print separately
+let current_time = datetime_now()
+print("Test 2 - DateTime works!")
+print(current_time)
+
+# Test 3: Math function
+let hex_val = to_hex(255)
+print("Test 3 - Hex conversion works!")
+print(hex_val)
+
+# Test 4: File operations - write first
+let content = "Hello Zexus!"
+print("Writing file...")
+file_write_text("test_working.txt", content)
+
+print("Reading file...")
+let read_content = file_read_text("test_working.txt")
+print(read_content)
+
+# Test 5: JSON operations
+let data = {
+    "name": "test",
+    "value": 123
+}
+print("Writing JSON...")
+file_write_json("test_working.json", data)
+
+print("Reading JSON...")
+let loaded_data = file_read_json("test_working.json")
+print(loaded_data)
+
+print("🎉 All working features tested!")

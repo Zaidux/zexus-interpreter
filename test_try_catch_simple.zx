@@ -1,0 +1,10 @@
+print("Testing basic try-catch...")
+
+try {
+    let result = 10 / 0
+    print("This should not print")
+} catch((error)) {
+    print("✅ Caught error: " + string(error))
+}
+
+print("Test completed!")

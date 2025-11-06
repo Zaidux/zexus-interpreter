@@ -1,0 +1,35 @@
+# test_simple_fixes.zx
+print("🧪 Testing Core Fixes...")
+
+# Test 1: Basic variable and string function
+let x = 42
+print("Test 1 - Basic variable: " + string(x))
+
+# Test 2: DateTime - call string() separately
+let current_time = datetime_now()
+let time_str = string(current_time)
+print("Test 2 - DateTime: " + time_str)
+
+# Test 3: Math function
+let hex_val = to_hex(255)
+let hex_str = string(hex_val)
+print("Test 3 - Hex: " + hex_str)
+
+# Test 4: File write then read
+let content = "Hello Zexus!"
+file_write_text("test_simple.txt", content)
+let read_content = file_read_text("test_simple.txt")
+let read_str = string(read_content)
+print("Test 4 - File I/O: " + read_str)
+
+# Test 5: JSON (the main fix)
+let data = {
+    "name": "test",
+    "value": 123
+}
+file_write_json("test_data.json", data)
+let loaded_data = file_read_json("test_data.json")
+let data_str = string(loaded_data)
+print("Test 5 - JSON: " + data_str)
+
+print("🎉 Core features test completed!")

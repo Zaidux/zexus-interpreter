@@ -1,0 +1,11 @@
+#!syntax=traditional
+print("Testing try-catch with traditional parser")
+
+try {
+    print("In try block")
+    let x = undefined_var
+} catch((error)) {
+    print("In catch block: " + string(error))
+}
+
+print("Done")

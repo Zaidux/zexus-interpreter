@@ -1,0 +1,11 @@
+print("Testing try-catch syntax")
+
+# Test with proper syntax
+try {
+    print("In try block")
+    let x = undefined_var
+} catch((error)) {
+    print("In catch block: " + string(error))
+}
+
+print("Done")

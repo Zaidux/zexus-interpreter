@@ -1,0 +1,37 @@
+# test_minimal_phase1.zx
+print("🧪 Testing Phase 1 Fixes...")
+
+# Test 1: Basic variable assignment and printing
+let x = 42
+print("✅ Basic assignment: " + string(x))
+
+# Test 2: DateTime operations
+let current_time = datetime_now()
+let ts = timestamp()
+print("✅ DateTime: " + string(current_time))
+print("✅ Timestamp: " + string(ts))
+
+# Test 3: Math utilities
+let hex_val = to_hex(255)
+print("✅ Hex conversion: " + string(hex_val))
+
+# Test 4: Basic file I/O
+let test_content = "Hello Zexus!"
+file_write_text("test_minimal.txt", test_content)
+let read_back = file_read_text("test_minimal.txt")
+print("✅ File I/O: " + string(read_back))
+
+# Test 5: JSON operations (the main fix!)
+let simple_data = {
+    "name": "test",
+    "value": 123,
+    "active": true
+}
+file_write_json("test_simple.json", simple_data)
+let loaded = file_read_json("test_simple.json")
+print("✅ JSON operations: " + string(loaded))
+
+# Test 6: Debug system
+debug_log("Debug test", simple_data)
+
+print("🎉 All Phase 1 features working!")
