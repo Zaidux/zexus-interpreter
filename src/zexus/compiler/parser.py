@@ -100,6 +100,10 @@ class ProductionParser:
                 return self.parse_use_statement()
             elif self.cur_token_is(EXPORT):
                 return self.parse_export_statement()
+            elif self.cur_token_is(TRY):
+                return self.parse_try_catch_statement()             # <-- new
+            elif self.cur_token_is(EXTERNAL):
+                return self.parse_external_declaration()            # <-- new
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -124,19 +128,23 @@ class ProductionParser:
 
     def parse_map_literal(self):
         """FIXED: Proper map literal parsing - this was the core issue!"""
-        token = self.cur_token
         pairs = []
-        
-        # Expect opening brace
-        if not self.expect_peek(LBRACE):
+
+        # Must be called when current token is LBRACE
+        if not self.cur_token_is(LBRACE):
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: parse_map_literal called on non-brace token")
             return None
-            
-        self.next_token()  # Skip {
-        
+
+        # Move inside the braces
+        self.next_token()  # advance to token after '{'
+
         # Handle empty object case: {}
         if self.cur_token_is(RBRACE):
+            # consume closing brace
+            # keep parser at RBRACE consumed state to follow callers' expectations
+            # i.e., do not extra next_token here; callers often expect the map literal to consume the closing brace
             return MapLiteral(pairs)
-        
+
         # Parse key-value pairs
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             # Parse key (can be string or identifier)
@@ -145,34 +153,41 @@ class ProductionParser:
             elif self.cur_token_is(IDENT):
                 key = Identifier(self.cur_token.literal)
             else:
-                self.errors.append(f"Line {self.cur_token.line}: Object key must be string or identifier")
+                self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Object key must be string or identifier")
                 return None
-                
-            # Expect colon
+
+            # Expect colon (current peek should be COLON)
             if not self.expect_peek(COLON):
                 return None
-                
-            # Parse value
+
+            # Move to value token and parse it
             self.next_token()
             value = self.parse_expression(LOWEST)
-            if not value:
+            if value is None:
                 return None
-                
+
             pairs.append((key, value))
-            
-            # Check for comma or end
+
+            # If comma present, consume it and advance to next key (we leave cur_token at comma for next loop handling)
             if self.peek_token_is(COMMA):
-                self.next_token()  # Skip comma
-            elif not self.peek_token_is(RBRACE):
-                self.errors.append(f"Line {self.cur_token.line}: Expected ',' or '}}' after object property")
-                return None
-                
+                self.next_token()  # move to comma
+                self.next_token()  # advance past comma to next key (or closing brace)
+                continue
+
+            # If closing brace is the next token, consume it and finish
+            if self.peek_token_is(RBRACE):
+                self.next_token()  # advance to RBRACE
+                break
+
+            # Otherwise, try to advance; tolerant parsing
             self.next_token()
-            
+
+        # Final check: should be at a RBRACE token
         if not self.cur_token_is(RBRACE):
-            self.errors.append(f"Line {self.cur_token.line}: Expected '}}' to close object literal")
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected '}}' to close object literal")
             return None
-            
+
+        # Note: we keep the closing brace consumed (caller behavior consistent)
         return MapLiteral(pairs)
 
     # Rest of parser methods (simplified for production)
@@ -506,6 +521,61 @@ class ProductionParser:
     def parse_embedded_literal(self):
         # Simplified embedded literal parsing
         return EmbeddedLiteral(language="unknown", code="")
+
+    # New: try-catch parsing
+    def parse_try_catch_statement(self):
+        """Basic try-catch parsing for production parser"""
+        # current token is TRY
+        self.next_token()  # advance to what should be LBRACE or block indicator
+        # parse try block (brace block preferred)
+        try_block = self.parse_block()
+        # Expect a CATCH
+        if not self.cur_token_is(CATCH) and not self.peek_token_is(CATCH):
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected 'catch' after try block")
+            return None
+        # ensure we're at CATCH
+        if not self.cur_token_is(CATCH):
+            self.next_token()
+        # extract optional catch variable
+        error_var = Identifier("error")
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # move to LPAREN
+            self.next_token()  # inside (
+            if self.cur_token_is(IDENT):
+                error_var = Identifier(self.cur_token.literal)
+            if not self.expect_peek(RPAREN):
+                return None
+        elif self.peek_token_is(IDENT):
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                error_var = Identifier(self.cur_token.literal)
+        # parse catch block
+        self.next_token()
+        catch_block = self.parse_block()
+        return TryCatchStatement(try_block=try_block, error_variable=error_var, catch_block=catch_block)
+
+    # New: external declaration parsing
+    def parse_external_declaration(self):
+        """Parse: external action <name> from \"module\""""
+        # current token is EXTERNAL
+        if not self.expect_peek(ACTION):
+            return None
+        if not self.expect_peek(IDENT):
+            return None
+        name = Identifier(self.cur_token.literal)
+        # optional parameter list like external action foo(param1, ...)
+        parameters = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            parameters = self.parse_parameter_list() or []
+        if not self.expect_peek(FROM):
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected 'from' in external declaration")
+            return None
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected module string in external declaration")
+            return None
+        module_path = self.cur_token.literal
+        return ExternalDeclaration(name=name, parameters=parameters, module_path=module_path)
 
     # Token utilities
     def next_token(self):
