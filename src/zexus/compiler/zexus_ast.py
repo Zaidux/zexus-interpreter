@@ -152,6 +152,32 @@ class ExportStatement(Statement):
     def __repr__(self):
         return f"ExportStatement({self.name})"
 
+# NEW: TryCatchStatement for compiler AST (matches interpreter node)
+class TryCatchStatement(Statement):
+    def __init__(self, try_block, error_variable, catch_block):
+        self.try_block = try_block
+        self.error_variable = error_variable
+        self.catch_block = catch_block
+
+    def token_literal(self):
+        return "try"
+
+    def __repr__(self):
+        return f"TryCatchStatement(error_var={self.error_variable})"
+
+# NEW: ExternalDeclaration for compiler AST (matches interpreter node)
+class ExternalDeclaration(Statement):
+    def __init__(self, name, parameters, module_path):
+        self.name = name
+        self.parameters = parameters or []
+        self.module_path = module_path
+
+    def token_literal(self):
+        return "external"
+
+    def __repr__(self):
+        return f"ExternalDeclaration(name={self.name}, module={self.module_path})"
+
 # Expression Nodes
 class Identifier(Expression):
     def __init__(self, value):
