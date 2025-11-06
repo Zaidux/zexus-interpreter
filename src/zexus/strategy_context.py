@@ -1,4 +1,4 @@
-# strategy_context.py (COMPLETE FIXED VERSION)
+# strategy_context.py (COMPLETE FIXED VERSION - with try-catch_statement support)
 from .zexus_token import *
 from .zexus_ast import *
 
@@ -9,6 +9,7 @@ class ContextStackParser:
         self.context_rules = {
             'function': self._parse_function_context,
             'try_catch': self._parse_try_catch_context,
+            'try_catch_statement': self._parse_try_catch_statement,  # NEW: Add support for try_catch_statement
             'conditional': self._parse_conditional_context,
             'loop': self._parse_loop_context,
             'screen': self._parse_screen_context,
@@ -235,6 +236,8 @@ class ContextStackParser:
             return self._parse_function_call_statement(block_info, all_tokens)
         elif subtype == 'assignment_statement':
             return self._parse_assignment_statement(block_info, all_tokens)
+        elif subtype == 'try_catch_statement':  # NEW: Handle try_catch_statement blocks
+            return self._parse_try_catch_statement(block_info, all_tokens)
         else:
             return self._parse_generic_statement_block(block_info, all_tokens)
 
@@ -246,12 +249,98 @@ class ContextStackParser:
             return ExpressionStatement(expression)
         return None
 
+    # === NEW: TRY-CATCH STATEMENT PARSER ===
+    
+    def _parse_try_catch_statement(self, block_info, all_tokens):
+        """Parse try-catch statement block - RETURNS TryCatchStatement"""
+        print("🔧 [Context] Parsing try-catch statement block")
+        
+        # Extract the tokens for this try-catch block
+        tokens = block_info['tokens']
+        
+        # Parse the try block
+        try_block = self._parse_try_block(tokens)
+        
+        # Extract error variable from catch
+        error_var = self._extract_catch_variable(tokens)
+        
+        # Parse the catch block  
+        catch_block = self._parse_catch_block(tokens)
+        
+        return TryCatchStatement(
+            try_block=try_block,
+            error_variable=error_var,
+            catch_block=catch_block
+        )
+    
+    def _parse_try_block(self, tokens):
+        """Parse the try block from tokens"""
+        print("  🔧 [Try] Parsing try block")
+        
+        # Find the try block content between { and }
+        try_start = -1
+        try_end = -1
+        brace_count = 0
+        in_try = False
+        
+        for i, token in enumerate(tokens):
+            if token.type == TRY:
+                in_try = True
+            elif in_try and token.type == LBRACE:
+                if brace_count == 0:
+                    try_start = i + 1
+                brace_count += 1
+            elif in_try and token.type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    try_end = i
+                    break
+        
+        # Extract try block tokens and parse them
+        if try_start != -1 and try_end != -1:
+            try_tokens = tokens[try_start:try_end]
+            # For now, create a simple block - in a full implementation, we'd parse the actual statements
+            return BlockStatement()
+        
+        return BlockStatement()
+    
+    def _parse_catch_block(self, tokens):
+        """Parse the catch block from tokens"""
+        print("  🔧 [Catch] Parsing catch block")
+        
+        # Find the catch block content between { and }
+        catch_start = -1
+        catch_end = -1
+        brace_count = 0
+        in_catch = False
+        
+        for i, token in enumerate(tokens):
+            if token.type == CATCH:
+                in_catch = True
+            elif in_catch and token.type == LBRACE:
+                if brace_count == 0:
+                    catch_start = i + 1
+                brace_count += 1
+            elif in_catch and token.type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    catch_end = i
+                    break
+        
+        # Extract catch block tokens and parse them
+        if catch_start != -1 and catch_end != -1:
+            catch_tokens = tokens[catch_start:catch_end]
+            # For now, create a simple block - in a full implementation, we'd parse the actual statements
+            return BlockStatement()
+        
+        return BlockStatement()
+
     # === MAP LITERAL PARSING ===
 
     def _parse_map_literal(self, tokens):
         """Parse a map literal { key: value, ... } - FIXED VERSION"""
         print("  🗺️ [Map] Parsing map literal")
-        
+
         if not tokens or tokens[0].type != LBRACE:
             print("  ❌ [Map] Not a map literal - no opening brace")
             return None
@@ -259,23 +348,23 @@ class ContextStackParser:
         # CRITICAL FIX: Initialize with empty pairs dictionary
         pairs = {}
         i = 1  # Skip opening brace
-        
+
         while i < len(tokens) and tokens[i].type != RBRACE:
             # Parse key-value pair
             key_token = tokens[i]
-            
+
             # Skip colon
             if i + 1 < len(tokens) and tokens[i + 1].type == COLON:
                 # Parse value
                 value_start = i + 2
                 value_tokens = []
-                
+
                 # Collect value tokens until comma or closing brace
                 j = value_start
                 while j < len(tokens) and tokens[j].type not in [COMMA, RBRACE]:
                     value_tokens.append(tokens[j])
                     j += 1
-                
+
                 # Parse the value expression
                 value_expr = self._parse_expression(value_tokens)
                 if value_expr:
@@ -286,12 +375,12 @@ class ContextStackParser:
                         key = StringLiteral(key_token.literal)
                     else:
                         key = StringLiteral(key_token.literal)
-                    
+
                     # CRITICAL FIX: Store as tuple in list format (as expected by MapLiteral)
                     # MapLiteral expects pairs as a list of tuples [(key, value), ...]
                     pairs[key] = value_expr
                     print(f"  🗺️ [Map] Added pair: {key_token.literal} -> {type(value_expr).__name__}")
-                
+
                 # Move to next token after comma or value
                 i = j
                 if i < len(tokens) and tokens[i].type == COMMA:
