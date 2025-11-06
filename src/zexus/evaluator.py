@@ -44,69 +44,68 @@ class EvaluationError(Exception):
 
 # NEW: FixedEvaluationError to avoid secondary failures (like len() on errors)
 class FixedEvaluationError:
-	"""Fixed error class that doesn't cause secondary errors"""
-	def __init__(self, message, stack_trace=None):
-		self.message = message
-		self.stack_trace = stack_trace or []
+    """Fixed error class that doesn't cause secondary errors"""
+    def __init__(self, message, stack_trace=None):
+        self.message = message
+        self.stack_trace = stack_trace or []
 
-	def __str__(self):
-		trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
-		trace_section = f"\nStack:\n{trace}" if trace else ""
-		return f"❌ Runtime Error: {self.message}{trace_section}"
+    def __str__(self):
+        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+        trace_section = f"\nStack:\n{trace}" if trace else ""
+        return f"❌ Runtime Error: {self.message}{trace_section}"
 
-	def type(self):
-		return "ERROR"
+    def type(self):
+        return "ERROR"
 
-	def inspect(self):
-		return str(self)
+    def inspect(self):
+        return str(self)
 
-	# CRITICAL: Add len method to prevent the secondary error
-	def __len__(self):
-		return len(self.message)
+    # CRITICAL: Add len method to prevent the secondary error
+    def __len__(self):
+        return len(self.message)
 
 # Helper to centralize error checks (includes the new FixedEvaluationError)
 def is_error(obj):
-	return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
+    return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
 
 # === DEBUG FLAGS ===
 DEBUG_EVAL = True  # Set to True to enable debug output
 
 def debug_log(message, data=None):
-	if DEBUG_EVAL:
-		if data is not None:
-			print(f"🔍 [EVAL DEBUG] {message}: {data}")
-		else:
-			print(f"🔍 [EVAL DEBUG] {message}")
+    if DEBUG_EVAL:
+        if data is not None:
+            print(f"🔍 [EVAL DEBUG] {message}: {data}")
+        else:
+            print(f"🔍 [EVAL DEBUG] {message}")
 
 # === FIXED HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
-	debug_log("eval_program", f"Processing {len(statements)} statements")
-	result = NULL
-	for i, stmt in enumerate(statements):
-		debug_log(f"  Statement {i+1}", type(stmt).__name__)
-		result = eval_node(stmt, env)
-		# Use helper to check for any error type
-		if isinstance(result, ReturnValue):
-			debug_log("  ReturnValue encountered", result.value)
-			return result.value
-		if is_error(result):
-			debug_log("  Error encountered", result)
-			return result
-	debug_log("eval_program completed", result)
-	return result
+    debug_log("eval_program", f"Processing {len(statements)} statements")
+    result = NULL
+    for i, stmt in enumerate(statements):
+        debug_log(f"  Statement {i+1}", type(stmt).__name__)
+        result = eval_node(stmt, env)
+        if isinstance(result, ReturnValue):
+            debug_log("  ReturnValue encountered", result.value)
+            return result.value
+        if is_error(result):
+            debug_log("  Error encountered", result)
+            return result
+    debug_log("eval_program completed", result)
+    return result
 
 def eval_assignment_expression(node, env):
-	"""Handle assignment expressions like: x = 5"""
-	debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
-	value = eval_node(node.value, env)
-	# Check using helper
-	if is_error(value):
-		debug_log("  Assignment error", value)
-		return value
-	env.set(node.name.value, value)
-	debug_log("  Assignment successful", f"{node.name.value} = {value}")
-	return value
+    """Handle assignment expressions like: x = 5"""
+    debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
+    value = eval_node(node.value, env)
+    # Check using helper
+    if is_error(value):
+        debug_log("  Assignment error", value)
+        return value
+    env.set(node.name.value, value)
+    debug_log("  Assignment successful", f"{node.name.value} = {value}")
+    return value
 
 def eval_block_statement(block, env):
     debug_log("eval_block_statement", f"Processing {len(block.statements)} statements in block")
@@ -120,43 +119,42 @@ def eval_block_statement(block, env):
     return result
 
 def eval_expressions(expressions, env):
-	debug_log("eval_expressions", f"Evaluating {len(expressions)} expressions")
-	results = []
-	for i, expr in enumerate(expressions):
-		debug_log(f"  Expression {i+1}", type(expr).__name__)
-		result = eval_node(expr, env)
-		# Use helper
-		if is_error(result):
-			debug_log("  Expression evaluation interrupted", result)
-			return result
-		results.append(result)
-		debug_log(f"  Expression {i+1} result", result)
-	debug_log("  All expressions evaluated", results)
-	return results
+    debug_log("eval_expressions", f"Evaluating {len(expressions)} expressions")
+    results = []
+    for i, expr in enumerate(expressions):
+        debug_log(f"  Expression {i+1}", type(expr).__name__)
+        result = eval_node(expr, env)
+        if is_error(result):
+            debug_log("  Expression evaluation interrupted", result)
+            return result
+        results.append(result)
+        debug_log(f"  Expression {i+1} result", result)
+    debug_log("  All expressions evaluated", results)
+    return results
 
 def eval_identifier(node, env):
-	debug_log("eval_identifier", f"Looking up: {node.value}")
-	val = env.get(node.value)
-	if val:
-		debug_log("  Found in environment", f"{node.value} = {val}")
-		return val
-	# Check builtins
-	builtin = builtins.get(node.value)
-	if builtin:
-		debug_log("  Found builtin", f"{node.value} = {builtin}")
-		return builtin
+    debug_log("eval_identifier", f"Looking up: {node.value}")
+    val = env.get(node.value)
+    if val:
+        debug_log("  Found in environment", f"{node.value} = {val}")
+        return val
+    # Check builtins
+    builtin = builtins.get(node.value)
+    if builtin:
+        debug_log("  Found builtin", f"{node.value} = {builtin}")
+        return builtin
 
-	debug_log("  Identifier not found", node.value)
-	# FIXED: Return the new FixedEvaluationError so downstream code won't crash if len() is used
-	return FixedEvaluationError(f"Identifier '{node.value}' not found")
+    debug_log("  Identifier not found", node.value)
+    # FIXED: Return the new FixedEvaluationError so downstream code won't crash if len() is used
+    return FixedEvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
-	# FIXED: Handle all error types
-	if is_error(obj):
-		return False
-	result = not (obj == NULL or obj == FALSE)
-	debug_log("is_truthy", f"{obj} -> {result}")
-	return result
+    # FIXED: Handle all error types
+    if is_error(obj):
+        return False
+    result = not (obj == NULL or obj == FALSE)
+    debug_log("is_truthy", f"{obj} -> {result}")
+    return result
 
 def eval_prefix_expression(operator, right):
     debug_log("eval_prefix_expression", f"{operator} {right}")
@@ -325,7 +323,9 @@ def eval_if_expression(ie, env):
     return NULL
 
 def apply_function(fn, args, call_site=None):
-    debug_log("apply_function", f"Calling {fn} with {len(args)} arguments: {args}")
+    # SAFE debug: avoid len() on errors
+    arg_count = len(args) if isinstance(args, (list, tuple)) else ("err" if is_error(args) else "unknown")
+    debug_log("apply_function", f"Calling {fn} with {arg_count} arguments: {args}")
 
     if isinstance(fn, (Action, LambdaFunction)):
         debug_log("  Calling user-defined function")
@@ -335,7 +335,9 @@ def apply_function(fn, args, call_site=None):
     elif isinstance(fn, Builtin):
         debug_log("  Calling builtin function", f"{fn.name} with args: {args}")
         try:
-            # FIX: Builtin functions need to be called directly
+            # Builtin functions expect Zexus objects as args; ensure args is a list
+            if not isinstance(args, (list, tuple)):
+                return EvaluationError("Invalid arguments to builtin")
             result = fn.fn(*args)
             debug_log("  Builtin result", result)
             return result
@@ -769,32 +771,32 @@ def eval_let_statement_fixed(node, env, stack_trace):
 
 # === CRITICAL FIX: Enhanced Try-Catch Evaluation ===
 def eval_try_catch_statement_fixed(node, env, stack_trace):
-	"""FIXED: Evaluate try-catch statement with proper error handling"""
-	debug_log("eval_try_catch_statement", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
-	try:
-		debug_log("    Executing try block")
-		result = eval_node(node.try_block, env, stack_trace)
-		if is_error(result):
-			debug_log("    Try block returned error", result)
-			catch_env = Environment(outer=env)
-			error_var_name = node.error_variable.value if node.error_variable else "error"
-			error_value = String(str(result))
-			catch_env.set(error_var_name, error_value)
-			debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
-			debug_log("    Executing catch block")
-			return eval_node(node.catch_block, catch_env, stack_trace)
-		else:
-			debug_log("    Try block completed successfully")
-			return result
-	except Exception as e:
-		debug_log(f"    Exception caught in try block: {e}")
-		catch_env = Environment(outer=env)
-		error_var_name = node.error_variable.value if node.error_variable else "error"
-		error_value = String(str(e))
-		catch_env.set(error_var_name, error_value)
-		debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
-		debug_log("    Executing catch block")
-		return eval_node(node.catch_block, catch_env, stack_trace)
+    """FIXED: Evaluate try-catch statement with proper error handling"""
+    debug_log("eval_try_catch_statement", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
+    try:
+        debug_log("    Executing try block")
+        result = eval_node(node.try_block, env, stack_trace)
+        if is_error(result):
+            debug_log("    Try block returned error", result)
+            catch_env = Environment(outer=env)
+            error_var_name = node.error_variable.value if node.error_variable else "error"
+            error_value = String(str(result))
+            catch_env.set(error_var_name, error_value)
+            debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+            debug_log("    Executing catch block")
+            return eval_node(node.catch_block, catch_env, stack_trace)
+        else:
+            debug_log("    Try block completed successfully")
+            return result
+    except Exception as e:
+        debug_log(f"    Exception caught in try block: {e}")
+        catch_env = Environment(outer=env)
+        error_var_name = node.error_variable.value if node.error_variable else "error"
+        error_value = String(str(e))
+        catch_env.set(error_var_name, error_value)
+        debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+        debug_log("    Executing catch block")
+        return eval_node(node.catch_block, catch_env, stack_trace)
 
 # === ENHANCED MAIN EVAL_NODE FUNCTION WITH CRITICAL FIXES ===
 def eval_node(node, env, stack_trace=None):
@@ -936,34 +938,34 @@ def eval_node(node, env, stack_trace=None):
             if isinstance(obj, List):
                 args = eval_expressions(node.arguments, env)
                 # FIXED: treat any error (including FixedEvaluationError) as error
-				if is_error(args):
-					return args
+                if is_error(args):
+                    return args
 
-				if method_name == "reduce":
-					if len(args) < 1:
-						return EvaluationError("reduce() requires at least a lambda function")
-					lambda_fn = args[0]
-					initial = args[1] if len(args) > 1 else None
-					return array_reduce(obj, lambda_fn, initial, env)
-				elif method_name == "map":
-					if len(args) != 1:
-						return EvaluationError("map() requires exactly one lambda function")
-					return array_map(obj, args[0], env)
-				elif method_name == "filter":
-					if len(args) != 1:
-						return EvaluationError("filter() requires exactly one lambda function")
-					return array_filter(obj, args[0], env)
+                if method_name == "reduce":
+                    if len(args) < 1:
+                        return EvaluationError("reduce() requires at least a lambda function")
+                    lambda_fn = args[0]
+                    initial = args[1] if len(args) > 1 else None
+                    return array_reduce(obj, lambda_fn, initial, env)
+                elif method_name == "map":
+                    if len(args) != 1:
+                        return EvaluationError("map() requires exactly one lambda function")
+                    return array_map(obj, args[0], env)
+                elif method_name == "filter":
+                    if len(args) != 1:
+                        return EvaluationError("filter() requires exactly one lambda function")
+                    return array_filter(obj, args[0], env)
 
             # Handle embedded code method calls
             if isinstance(obj, EmbeddedCode):
-				args = eval_expressions(node.arguments, env)
-				if is_error(args):
-					return args
-				# Simplified embedded execution
-				print(f"[EMBED] Executing {obj.language}.{method_name}")
-				return Integer(42)
+                args = eval_expressions(node.arguments, env)
+                if is_error(args):
+                    return args
+                # Simplified embedded execution
+                print(f"[EMBED] Executing {obj.language}.{method_name}")
+                return Integer(42)
 
-			return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
+            return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
 
         elif node_type == EmbeddedLiteral:
             debug_log("  EmbeddedLiteral node")
@@ -1022,9 +1024,9 @@ def eval_node(node, env, stack_trace=None):
             debug_log("  ListLiteral node", f"{len(node.elements)} elements")
             elements = eval_expressions(node.elements, env)
             # FIXED: use is_error helper
-			if is_error(elements):
-				return elements
-			return List(elements)
+            if is_error(elements):
+                return elements
+            return List(elements)
 
         elif node_type == MapLiteral:
             debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
@@ -1032,11 +1034,11 @@ def eval_node(node, env, stack_trace=None):
             for key_expr, value_expr in node.pairs:
                 key = eval_node(key_expr, env, stack_trace)
                 # FIXED: use is_error helper
-				if is_error(key):
-					return key
+                if is_error(key):
+                    return key
                 value = eval_node(value_expr, env, stack_trace)
                 if is_error(value):
-					return value
+                    return value
                 key_str = key.inspect()
                 pairs[key_str] = value
             return Map(pairs)
@@ -1054,14 +1056,14 @@ def eval_node(node, env, stack_trace=None):
             debug_log("🚀 CallExpression node", f"Calling {node.function}")
             function = eval_node(node.function, env, stack_trace)
             if is_error(function):
-				debug_log("  Function evaluation error", function)
-				return function
+                debug_log("  Function evaluation error", function)
+                return function
 
             args = eval_expressions(node.arguments, env)
             # FIXED: detect error results using is_error() BEFORE attempting to len()/unpack
             if is_error(args):
-				debug_log("  Arguments evaluation error", args)
-				return args
+                debug_log("  Arguments evaluation error", args)
+                return args
 
             arg_count = len(args) if isinstance(args, (list, tuple)) else "unknown"
             debug_log("  Arguments evaluated", f"{args} (count: {arg_count})")
