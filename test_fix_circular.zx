@@ -1,0 +1,23 @@
+print("Testing circular dependency fix...")
+
+# Test 1: Simple case that should work
+let x = 10
+print("x = " + string(x))
+
+# Test 2: The problematic case from the main test
+try {
+    let result = 10 + 5  # Simple case first
+    print("Simple result: " + string(result))
+} catch((error)) {
+    print("Error: " + string(error))
+}
+
+# Test 3: The actual problematic case  
+try {
+    let result = 10 / 0  # This should cause division by zero
+    print("This should not print: " + string(result))
+} catch((error)) {
+    print("✅ Caught error: " + string(error))
+}
+
+print("Test completed!")
