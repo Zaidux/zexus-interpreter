@@ -1,0 +1,15 @@
+print("Testing simple case...")
+
+# Test 1: Simple assignment (should work)
+let x = 10
+print("x = " + string(x))
+
+# Test 2: Simple expression (should work)  
+let y = 10 + 5
+print("y = " + string(y))
+
+# Test 3: The problematic case - reference variable after assignment
+let z = 15
+print("z = " + string(z))
+
+print("All tests passed!")
