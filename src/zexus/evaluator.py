@@ -8,7 +8,7 @@ from .zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
     ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
     EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
-    ExactlyStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
+    ExactlyStatement, TryCatchStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
     ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
     Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression,
     ExportStatement, LambdaExpression
@@ -795,6 +795,27 @@ def eval_node(node, env, stack_trace=None):
                     break
 
             return result
+
+        # NEW: Try-catch statement
+        elif node_type == TryCatchStatement:
+            debug_log("  TryCatchStatement node", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
+            try:
+                debug_log("    Executing try block")
+                result = eval_node(node.try_block, env, stack_trace)
+                debug_log("    Try block completed successfully")
+                return result
+            except Exception as e:
+                debug_log(f"    Exception caught in try block: {e}")
+                # Create a new environment for the catch block
+                catch_env = Environment(outer=env)
+                # Set the error variable in the catch environment
+                error_var_name = node.error_variable.value if node.error_variable else "error"
+                error_value = String(str(e))  # Convert exception to Zexus String
+                catch_env.set(error_var_name, error_value)
+                debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+                # Execute the catch block with the error variable set
+                debug_log("    Executing catch block")
+                return eval_node(node.catch_block, catch_env, stack_trace)
 
         elif node_type == AssignmentExpression:
             debug_log("  AssignmentExpression node")
