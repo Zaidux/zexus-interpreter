@@ -42,45 +42,71 @@ class EvaluationError(Exception):
 
         return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
 
+# NEW: FixedEvaluationError to avoid secondary failures (like len() on errors)
+class FixedEvaluationError:
+	"""Fixed error class that doesn't cause secondary errors"""
+	def __init__(self, message, stack_trace=None):
+		self.message = message
+		self.stack_trace = stack_trace or []
+
+	def __str__(self):
+		trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+		trace_section = f"\nStack:\n{trace}" if trace else ""
+		return f"❌ Runtime Error: {self.message}{trace_section}"
+
+	def type(self):
+		return "ERROR"
+
+	def inspect(self):
+		return str(self)
+
+	# CRITICAL: Add len method to prevent the secondary error
+	def __len__(self):
+		return len(self.message)
+
+# Helper to centralize error checks (includes the new FixedEvaluationError)
+def is_error(obj):
+	return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
+
 # === DEBUG FLAGS ===
 DEBUG_EVAL = True  # Set to True to enable debug output
 
 def debug_log(message, data=None):
-    if DEBUG_EVAL:
-        if data is not None:
-            print(f"🔍 [EVAL DEBUG] {message}: {data}")
-        else:
-            print(f"🔍 [EVAL DEBUG] {message}")
+	if DEBUG_EVAL:
+		if data is not None:
+			print(f"🔍 [EVAL DEBUG] {message}: {data}")
+		else:
+			print(f"🔍 [EVAL DEBUG] {message}")
 
 # === FIXED HELPER FUNCTIONS ===
 
 def eval_program(statements, env):
-    debug_log("eval_program", f"Processing {len(statements)} statements")
-    result = NULL
-    for i, stmt in enumerate(statements):
-        debug_log(f"  Statement {i+1}", type(stmt).__name__)
-        result = eval_node(stmt, env)
-        if isinstance(result, ReturnValue):
-            debug_log("  ReturnValue encountered", result.value)
-            return result.value
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
-            debug_log("  Error encountered", result)
-            return result
-    debug_log("eval_program completed", result)
-    return result
+	debug_log("eval_program", f"Processing {len(statements)} statements")
+	result = NULL
+	for i, stmt in enumerate(statements):
+		debug_log(f"  Statement {i+1}", type(stmt).__name__)
+		result = eval_node(stmt, env)
+		# Use helper to check for any error type
+		if isinstance(result, ReturnValue):
+			debug_log("  ReturnValue encountered", result.value)
+			return result.value
+		if is_error(result):
+			debug_log("  Error encountered", result)
+			return result
+	debug_log("eval_program completed", result)
+	return result
 
 def eval_assignment_expression(node, env):
-    """Handle assignment expressions like: x = 5"""
-    debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
-    value = eval_node(node.value, env)
-    if isinstance(value, (EvaluationError, ObjectEvaluationError)):
-        debug_log("  Assignment error", value)
-        return value
-
-    # Set the variable in the environment
-    env.set(node.name.value, value)
-    debug_log("  Assignment successful", f"{node.name.value} = {value}")
-    return value
+	"""Handle assignment expressions like: x = 5"""
+	debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
+	value = eval_node(node.value, env)
+	# Check using helper
+	if is_error(value):
+		debug_log("  Assignment error", value)
+		return value
+	env.set(node.name.value, value)
+	debug_log("  Assignment successful", f"{node.name.value} = {value}")
+	return value
 
 def eval_block_statement(block, env):
     debug_log("eval_block_statement", f"Processing {len(block.statements)} statements in block")
@@ -94,40 +120,43 @@ def eval_block_statement(block, env):
     return result
 
 def eval_expressions(expressions, env):
-    debug_log("eval_expressions", f"Evaluating {len(expressions)} expressions")
-    results = []
-    for i, expr in enumerate(expressions):
-        debug_log(f"  Expression {i+1}", type(expr).__name__)
-        result = eval_node(expr, env)
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
-            debug_log("  Expression evaluation interrupted", result)
-            return result
-        results.append(result)
-        debug_log(f"  Expression {i+1} result", result)
-    debug_log("  All expressions evaluated", results)
-    return results
+	debug_log("eval_expressions", f"Evaluating {len(expressions)} expressions")
+	results = []
+	for i, expr in enumerate(expressions):
+		debug_log(f"  Expression {i+1}", type(expr).__name__)
+		result = eval_node(expr, env)
+		# Use helper
+		if is_error(result):
+			debug_log("  Expression evaluation interrupted", result)
+			return result
+		results.append(result)
+		debug_log(f"  Expression {i+1} result", result)
+	debug_log("  All expressions evaluated", results)
+	return results
 
 def eval_identifier(node, env):
-    debug_log("eval_identifier", f"Looking up: {node.value}")
-    val = env.get(node.value)
-    if val:
-        debug_log("  Found in environment", f"{node.value} = {val}")
-        return val
-    # Check builtins
-    builtin = builtins.get(node.value)
-    if builtin:
-        debug_log("  Found builtin", f"{node.value} = {builtin}")
-        return builtin
+	debug_log("eval_identifier", f"Looking up: {node.value}")
+	val = env.get(node.value)
+	if val:
+		debug_log("  Found in environment", f"{node.value} = {val}")
+		return val
+	# Check builtins
+	builtin = builtins.get(node.value)
+	if builtin:
+		debug_log("  Found builtin", f"{node.value} = {builtin}")
+		return builtin
 
-    debug_log("  Identifier not found", node.value)
-    return EvaluationError(f"Identifier '{node.value}' not found")
+	debug_log("  Identifier not found", node.value)
+	# FIXED: Return the new FixedEvaluationError so downstream code won't crash if len() is used
+	return FixedEvaluationError(f"Identifier '{node.value}' not found")
 
 def is_truthy(obj):
-    if isinstance(obj, (EvaluationError, ObjectEvaluationError)):
-        return False
-    result = not (obj == NULL or obj == FALSE)
-    debug_log("is_truthy", f"{obj} -> {result}")
-    return result
+	# FIXED: Handle all error types
+	if is_error(obj):
+		return False
+	result = not (obj == NULL or obj == FALSE)
+	debug_log("is_truthy", f"{obj} -> {result}")
+	return result
 
 def eval_prefix_expression(operator, right):
     debug_log("eval_prefix_expression", f"{operator} {right}")
@@ -740,40 +769,32 @@ def eval_let_statement_fixed(node, env, stack_trace):
 
 # === CRITICAL FIX: Enhanced Try-Catch Evaluation ===
 def eval_try_catch_statement_fixed(node, env, stack_trace):
-    """FIXED: Evaluate try-catch statement with proper error handling"""
-    debug_log("eval_try_catch_statement", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
-    
-    # Execute try block
-    debug_log("    Executing try block")
-    try:
-        result = eval_node(node.try_block, env, stack_trace)
-        
-        # Check if result is an error object
-        if isinstance(result, (EvaluationError, ObjectEvaluationError)):
-            debug_log("    Try block returned error", result)
-            # Error occurred in try block - execute catch block
-            catch_env = Environment(outer=env)
-            error_var_name = node.error_variable.value if node.error_variable else "error"
-            # Convert error to string for catch block
-            error_value = String(str(result))
-            catch_env.set(error_var_name, error_value)
-            debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
-            debug_log("    Executing catch block")
-            return eval_node(node.catch_block, catch_env, stack_trace)
-        else:
-            debug_log("    Try block completed successfully")
-            return result
-            
-    except Exception as e:
-        debug_log(f"    Exception caught in try block: {e}")
-        # Handle unexpected evaluation errors
-        catch_env = Environment(outer=env)
-        error_var_name = node.error_variable.value if node.error_variable else "error"
-        error_value = String(str(e))
-        catch_env.set(error_var_name, error_value)
-        debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
-        debug_log("    Executing catch block")
-        return eval_node(node.catch_block, catch_env, stack_trace)
+	"""FIXED: Evaluate try-catch statement with proper error handling"""
+	debug_log("eval_try_catch_statement", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
+	try:
+		debug_log("    Executing try block")
+		result = eval_node(node.try_block, env, stack_trace)
+		if is_error(result):
+			debug_log("    Try block returned error", result)
+			catch_env = Environment(outer=env)
+			error_var_name = node.error_variable.value if node.error_variable else "error"
+			error_value = String(str(result))
+			catch_env.set(error_var_name, error_value)
+			debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+			debug_log("    Executing catch block")
+			return eval_node(node.catch_block, catch_env, stack_trace)
+		else:
+			debug_log("    Try block completed successfully")
+			return result
+	except Exception as e:
+		debug_log(f"    Exception caught in try block: {e}")
+		catch_env = Environment(outer=env)
+		error_var_name = node.error_variable.value if node.error_variable else "error"
+		error_value = String(str(e))
+		catch_env.set(error_var_name, error_value)
+		debug_log(f"    Set error variable '{error_var_name}' to: {error_value}")
+		debug_log("    Executing catch block")
+		return eval_node(node.catch_block, catch_env, stack_trace)
 
 # === ENHANCED MAIN EVAL_NODE FUNCTION WITH CRITICAL FIXES ===
 def eval_node(node, env, stack_trace=None):
@@ -1036,7 +1057,8 @@ def eval_node(node, env, stack_trace=None):
                 return function
 
             args = eval_expressions(node.arguments, env)
-            debug_log("  Arguments evaluated", f"{args} (count: {len(args)})")
+            arg_count = len(args) if isinstance(args, (list, tuple)) else ("err" if is_error(args) else "unknown")
+            debug_log("  Arguments evaluated", f"{args} (count: {arg_count})")
 
             if isinstance(args, (ReturnValue, EvaluationError, ObjectEvaluationError)):
                 debug_log("  Arguments evaluation error", args)
