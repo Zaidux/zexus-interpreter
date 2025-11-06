@@ -1,4 +1,4 @@
-# strategy_structural.py (FIXED VERSION - with try-catch parsing)
+# strategy_structural.py (FIXED VERSION - with improved try-catch parsing)
 from .zexus_token import *
 
 class StructuralAnalyzer:
@@ -96,7 +96,7 @@ class StructuralAnalyzer:
         # CRITICAL FIX: Check for try-catch first before breaking into statements
         if token.type == TRY:
             return self._parse_try_catch_statement(tokens, start_index)
-        
+
         # Determine statement type for other statements
         if token.type == LET:
             return self._parse_let_statement(tokens, start_index)
@@ -110,7 +110,7 @@ class StructuralAnalyzer:
             return self._parse_generic_statement(tokens, start_index)
 
     def _parse_try_catch_statement(self, tokens, start_index):
-        """Parse a try-catch statement as a single block - CRITICAL FIX"""
+        """Parse a try-catch statement as a single block - IMPROVED FIX"""
         print(f"🔍 [Structural] Parsing try-catch statement at index {start_index}")
         
         statement_tokens = []
@@ -118,6 +118,7 @@ class StructuralAnalyzer:
         brace_count = 0
         in_try_block = False
         in_catch_block = False
+        catch_found = False
         
         while i < len(tokens):
             current_token = tokens[i]
@@ -134,24 +135,56 @@ class StructuralAnalyzer:
             # Check if we're starting try block
             if current_token.type == TRY and not in_try_block:
                 in_try_block = True
+                print("  🔧 [Try] Found try keyword")
                 
             # Check if we're starting catch block  
-            if current_token.type == CATCH and not in_catch_block:
-                in_catch_block = True
+            if current_token.type == CATCH and not catch_found:
+                catch_found = True
+                print("  🔧 [Catch] Found catch keyword")
                 
-            # End when we've completed both try and catch blocks and braces are balanced
-            if (in_try_block and in_catch_block and brace_count == 0 and 
-                current_token.type == RBRACE and i > start_index):
-                print(f"  🛑 Ending try-catch statement at token {i}: {current_token.type}")
+            # Mark when we enter catch block (after catch keyword and opening brace)
+            if catch_found and not in_catch_block and brace_count > 0:
+                in_catch_block = True
+                print("  🔧 [Catch] Entered catch block")
+                
+            # CRITICAL FIX: Don't stop for statement starters inside try-catch blocks
+            # Only stop when we've completed the entire try-catch structure
+            if (in_try_block and catch_found and in_catch_block and 
+                brace_count == 0 and current_token.type == RBRACE):
+                print(f"  ✅ Ending try-catch statement at token {i}: complete structure captured")
                 break
                 
-            # Also stop if we hit another statement start (error case)
-            if (i > start_index and self._is_statement_start(current_token) and 
-                current_token.type not in [TRY, CATCH]):
-                print(f"  ⚠️ Ending try-catch early at token {i}: {current_token.type}")
+            # Also stop if we hit EOF
+            if current_token.type == EOF:
+                print(f"  ⚠️ Ending try-catch at token {i}: EOF")
                 break
                 
             i += 1
+            
+        # CRITICAL FIX: If we didn't capture enough tokens, try to capture more
+        # This handles cases where the try-catch structure is complex
+        if len(statement_tokens) < 10 and i < len(tokens) - 1:
+            print("  🔄 Try-catch too short, capturing more tokens...")
+            max_tokens = min(50, len(tokens) - i)  # Don't go beyond available tokens
+            for j in range(max_tokens):
+                if i + j >= len(tokens):
+                    break
+                    
+                current_token = tokens[i + j]
+                statement_tokens.append(current_token)
+                print(f"  📝 Additional token {i + j}: {current_token.type} = '{current_token.literal}'")
+                
+                if current_token.type == LBRACE:
+                    brace_count += 1
+                elif current_token.type == RBRACE:
+                    brace_count -= 1
+                    
+                # Stop if we complete the structure
+                if (in_try_block and catch_found and in_catch_block and 
+                    brace_count == 0 and current_token.type == RBRACE):
+                    print(f"  ✅ Completed try-catch structure at token {i + j}")
+                    i = i + j  # Update position
+                    break
 
         block_id = f"block_{self.block_counter}"
         self.block_counter += 1
@@ -161,9 +194,9 @@ class StructuralAnalyzer:
             'type': 'statement_block',
             'subtype': 'try_catch_statement',
             'start_index': start_index,
-            'end_index': i - 1,
+            'end_index': i,
             'start_token': tokens[start_index],
-            'end_token': tokens[i - 1] if i > 0 else tokens[-1],
+            'end_token': tokens[i] if i < len(tokens) else tokens[-1],
             'tokens': statement_tokens,
             'nested_blocks': [],
             'parent': None
