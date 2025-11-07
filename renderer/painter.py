@@ -1,100 +1,210 @@
 # renderer/painter.py
 """
-Advanced terminal painter with colors and styling
+Modern terminal painter with gradients, shadows, and advanced styling
 """
 
-class ColorPalette:
-    """Terminal color definitions"""
-    
-    COLORS = {
-        'black': '\033[30m',
-        'red': '\033[31m',
-        'green': '\033[32m',
-        'yellow': '\033[33m',
-        'blue': '\033[34m',
-        'magenta': '\033[35m',
-        'cyan': '\033[36m',
-        'white': '\033[37m',
-        'bright_black': '\033[90m',
-        'bright_red': '\033[91m',
-        'bright_green': '\033[92m',
-        'bright_yellow': '\033[93m',
-        'bright_blue': '\033[94m',
-        'bright_magenta': '\033[95m',
-        'bright_cyan': '\033[96m',
-        'bright_white': '\033[97m',
-        'reset': '\033[0m'
-    }
-    
-    BACKGROUNDS = {
-        'black': '\033[40m',
-        'red': '\033[41m',
-        'green': '\033[42m',
-        'yellow': '\033[43m',
-        'blue': '\033[44m',
-        'magenta': '\033[45m',
-        'cyan': '\033[46m',
-        'white': '\033[47m',
-    }
-    
-    STYLES = {
-        'bold': '\033[1m',
-        'dim': '\033[2m',
-        'italic': '\033[3m',
-        'underline': '\033[4m',
-    }
+from .color_system import ColorPalette, RGBColor, Theme
 
-class AdvancedPainter:
-    """Advanced terminal graphics painter"""
+class ModernPainter:
+    """Modern terminal graphics with advanced features"""
     
     def __init__(self):
-        self.colors = ColorPalette()
+        self.palette = ColorPalette()
+        self.current_theme = None
         self.buffer = []
         self.width = 0
         self.height = 0
+        
+        # Define some beautiful default themes
+        self._setup_default_themes()
+    
+    def _setup_default_themes(self):
+        """Setup beautiful default themes"""
+        
+        # Modern Dark Theme
+        dark_theme = Theme("dark", self.palette)
+        dark_theme.set_primary("blue")
+        dark_theme.set_accent("mint")
+        dark_theme.set_background("black")
+        dark_theme.set_text("white")
+        self.themes = {'dark': dark_theme}
+        
+        # Light Theme
+        light_theme = Theme("light", self.palette)
+        light_theme.set_primary("indigo")
+        light_theme.set_accent("pink")
+        light_theme.set_background("gray6")
+        light_theme.set_text("black")
+        self.themes['light'] = light_theme
+        
+        # Set default theme
+        self.current_theme = dark_theme
     
     def init_screen(self, width: int, height: int):
         """Initialize screen buffer"""
         self.width = width
         self.height = height
         self.buffer = [[' ' for _ in range(width)] for _ in range(height)]
+        self.color_buffer = [[None for _ in range(width)] for _ in range(height)]
+        self.bg_buffer = [[None for _ in range(width)] for _ in range(height)]
     
-    def apply_color(self, text: str, color: str, background: str = None, style: str = None) -> str:
-        """Apply colors and styles to text"""
-        result = ""
-        
-        if color in self.colors.COLORS:
-            result += self.colors.COLORS[color]
-        
-        if background in self.colors.BACKGROUNDS:
-            result += self.colors.BACKGROUNDS[background]
-        
-        if style in self.colors.STYLES:
-            result += self.colors.STYLES[style]
-        
-        result += text + self.colors.COLORS['reset']
-        return result
+    def set_theme(self, theme_name: str):
+        """Set current theme"""
+        if theme_name in self.themes:
+            self.current_theme = self.themes[theme_name]
+        else:
+            raise ValueError(f"Unknown theme: {theme_name}")
     
-    def draw_component(self, component, x: int, y: int):
-        """Draw a screen component at position"""
-        rendered = component.render(self.width, self.height)
-        color = component.get_property('color', 'white')
+    def create_theme(self, name: str, primary: str, accent: str, background: str, text: str):
+        """Create a new theme"""
+        theme = Theme(name, self.palette)
+        theme.set_primary(primary)
+        theme.set_accent(accent)
+        theme.set_background(background)
+        theme.set_text(text)
+        self.themes[name] = theme
+        return theme
+    
+    def mix_colors(self, color1: str, color2: str, ratio: float = 0.5) -> RGBColor:
+        """Mix two colors by name"""
+        return self.palette.mix(color1, color2, ratio)
+    
+    def define_color(self, name: str, r: int, g: int, b: int):
+        """Define a custom color"""
+        self.palette.define_color(name, r, g, b)
+    
+    def create_gradient(self, start_color: str, end_color: str, steps: int, name: str):
+        """Create a color gradient"""
+        return self.palette.create_gradient(start_color, end_color, steps, name)
+    
+    def apply_style(self, text: str, color: str = None, background: str = None, 
+                   style: str = None, use_theme: bool = True) -> str:
+        """Apply advanced styling with theme support"""
         
-        for dy, line in enumerate(rendered):
-            for dx, char in enumerate(line):
-                if char.strip():  # Only draw non-space characters
-                    pos_x, pos_y = x + dx, y + dy
-                    if 0 <= pos_x < self.width and 0 <= pos_y < self.height:
-                        colored_char = self.apply_color(char, color)
-                        self.buffer[pos_y][pos_x] = colored_char
+        # Use theme colors if requested
+        if use_theme and self.current_theme:
+            if color and color.startswith('theme.'):
+                theme_color = color[6:]  # Remove 'theme.' prefix
+                color_obj = self.current_theme.get(theme_color)
+            else:
+                color_obj = self.palette.get_color(color) if color else None
+            
+            if background and background.startswith('theme.'):
+                theme_bg = background[6:]
+                bg_obj = self.current_theme.get(theme_bg)
+            else:
+                bg_obj = self.palette.get_color(background) if background else None
+        else:
+            color_obj = self.palette.get_color(color) if color else None
+            bg_obj = self.palette.get_color(background) if background else None
+        
+        # Build style string
+        style_parts = []
+        
+        if color_obj:
+            style_parts.append(color_obj.to_ansi())
+        
+        if bg_obj:
+            style_parts.append(bg_obj.to_ansi(background=True))
+        
+        if style:
+            style_map = {
+                'bold': '\033[1m',
+                'dim': '\033[2m',
+                'italic': '\033[3m',
+                'underline': '\033[4m',
+                'blink': '\033[5m',
+                'reverse': '\033[7m',
+            }
+            if style in style_map:
+                style_parts.append(style_map[style])
+        
+        if style_parts:
+            return ''.join(style_parts) + text + '\033[0m'
+        else:
+            return text
+    
+    def draw_rounded_rect(self, x: int, y: int, width: int, height: int, 
+                         color: str = None, background: str = None):
+        """Draw a rounded rectangle"""
+        rounded_chars = {
+            'top_left': '╭', 'top_right': '╮',
+            'bottom_left': '╰', 'bottom_right': '╯',
+            'horizontal': '─', 'vertical': '│'
+        }
+        
+        # Draw corners
+        self._set_char(x, y, rounded_chars['top_left'], color, background)
+        self._set_char(x + width - 1, y, rounded_chars['top_right'], color, background)
+        self._set_char(x, y + height - 1, rounded_chars['bottom_left'], color, background)
+        self._set_char(x + width - 1, y + height - 1, rounded_chars['bottom_right'], color, background)
+        
+        # Draw horizontal borders
+        for dx in range(1, width - 1):
+            self._set_char(x + dx, y, rounded_chars['horizontal'], color, background)
+            self._set_char(x + dx, y + height - 1, rounded_chars['horizontal'], color, background)
+        
+        # Draw vertical borders
+        for dy in range(1, height - 1):
+            self._set_char(x, y + dy, rounded_chars['vertical'], color, background)
+            self._set_char(x + width - 1, y + dy, rounded_chars['vertical'], color, background)
+        
+        # Fill interior
+        for dy in range(1, height - 1):
+            for dx in range(1, width - 1):
+                self._set_char(x + dx, y + dy, ' ', color, background)
+    
+    def draw_gradient_background(self, start_color: str, end_color: str, direction: str = 'vertical'):
+        """Draw a gradient background"""
+        if direction == 'vertical':
+            gradient = self.palette.create_gradient(start_color, end_color, self.height, 'temp_gradient')
+            for y in range(self.height):
+                color = gradient[y]
+                for x in range(self.width):
+                    self.bg_buffer[y][x] = color
+        else:  # horizontal
+            gradient = self.palette.create_gradient(start_color, end_color, self.width, 'temp_gradient')
+            for x in range(self.width):
+                color = gradient[x]
+                for y in range(self.height):
+                    self.bg_buffer[y][x] = color
+    
+    def _set_char(self, x: int, y: int, char: str, color: str = None, background: str = None):
+        """Set character with color at position"""
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.buffer[y][x] = char
+            if color:
+                self.color_buffer[y][x] = self.palette.get_color(color)
+            if background:
+                self.bg_buffer[y][x] = self.palette.get_color(background)
     
     def render(self) -> str:
-        """Render final screen output"""
+        """Render final screen with colors"""
         screen_output = []
-        for row in self.buffer:
-            screen_output.append(''.join(row))
+        for y in range(self.height):
+            line = []
+            for x in range(self.width):
+                char = self.buffer[y][x]
+                fg_color = self.color_buffer[y][x]
+                bg_color = self.bg_buffer[y][x]
+                
+                if fg_color or bg_color:
+                    styled_char = ""
+                    if fg_color:
+                        styled_char += fg_color.to_ansi()
+                    if bg_color:
+                        styled_char += bg_color.to_ansi(background=True)
+                    styled_char += char + '\033[0m'
+                    line.append(styled_char)
+                else:
+                    line.append(char)
+            
+            screen_output.append(''.join(line))
+        
         return '\n'.join(screen_output)
     
     def clear(self):
-        """Clear the screen buffer"""
+        """Clear the screen buffers"""
         self.buffer = [[' ' for _ in range(self.width)] for _ in range(self.height)]
+        self.color_buffer = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.bg_buffer = [[None for _ in range(self.width)] for _ in range(self.height)]
