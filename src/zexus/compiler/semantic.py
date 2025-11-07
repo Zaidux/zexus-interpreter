@@ -6,11 +6,13 @@ Provides:
  - `register_builtins(builtins)` to accept interpreter builtins
  - `analyze(ast)` returning a list of semantic errors (empty = ok)
 
-This implementation is intentionally permissive so the compiler pipeline can run
+ This implementation is intentionally permissive so the compiler pipeline can run
 while you incrementally implement full semantic checks (name resolution, types).
 """
 
 from typing import List, Dict, Any
+# Import compiler AST node classes we need to inspect
+from .zexus_ast import Program, ActionStatement, AwaitExpression, ProtocolDeclaration, EventDeclaration, MapLiteral, BlockStatement
 
 class SemanticAnalyzer:
 	def __init__(self):
@@ -52,10 +54,54 @@ class SemanticAnalyzer:
 				errors.append("Invalid AST: missing 'statements' list")
 				return errors
 
-			# Placeholder for additional semantic checks:
-			# - verify top-level declarations
-			# - detect duplicate symbols
-			# - simple builtin usage checks (optional)
+			# Run new checks: await usage and protocol/event validation
+			# Walk AST with context
+			def walk(node, in_async=False):
+				# Quick type checks for relevant nodes
+				if isinstance(node, AwaitExpression):
+					if not in_async:
+						errors.append("Semantic error: 'await' used outside an async function")
+				# ActionStatement may have is_async flag
+				if isinstance(node, ActionStatement):
+					body = getattr(node, "body", None)
+					async_flag = getattr(node, "is_async", False)
+					if body:
+						# walk body with in_async = async_flag
+						for s in getattr(body, "statements", []):
+							walk(s, in_async=async_flag)
+					return
+				if isinstance(node, ProtocolDeclaration):
+					spec = getattr(node, "spec", {})
+					methods = spec.get("methods") if isinstance(spec, dict) else None
+					if not isinstance(methods, list):
+						errors.append(f"Protocol '{node.name.value}' spec invalid: 'methods' list missing")
+					else:
+						for m in methods:
+							if not isinstance(m, str):
+								errors.append(f"Protocol '{node.name.value}' has non-string method name: {m}")
+					return
+				if isinstance(node, EventDeclaration):
+					props = getattr(node, "properties", None)
+					if not isinstance(props, (MapLiteral, BlockStatement)):
+						errors.append(f"Event '{node.name.value}' properties should be a map or block")
+					# further checks can be added
+					return
+
+				# Generic traversal
+				for attr in dir(node):
+					if attr.startswith("_") or attr in ("token_literal", "__repr__"):
+						continue
+					val = getattr(node, attr)
+					if isinstance(val, list):
+						for item in val:
+							if hasattr(item, "__class__"):
+								walk(item, in_async=in_async)
+					elif hasattr(val, "__class__"):
+						walk(val, in_async=in_async)
+
+			# Walk top-level statements
+			for s in stmts:
+				walk(s, in_async=False)
 
 		except Exception as e:
 			errors.append(f"Semantic analyzer internal error: {e}")

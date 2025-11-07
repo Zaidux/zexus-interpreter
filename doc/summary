@@ -146,4 +146,19 @@ Limitations & next steps
 - SemanticAnalyzer should enforce async usage rules and validate protocol/event signatures.
 - More comprehensive unit tests should be added to assert parity between interpreter and compiled VM execution for functions/async/events.
 
+## Closure semantics improved (mutable captured variables)
+
+- Closure capture now uses Cell objects (name -> Cell(value)) attached to function descriptors at STORE_FUNC time.
+- When a function is called, its VM gets the captured cells so reads/writes to closed-over variables update the same Cell object — mutable closed-over variables behave as expected across closures.
+- Implementation details:
+  - STORE_FUNC wraps current lexical env into Cell objects and stores them on the func descriptor as `"closure"`.
+  - VM LOAD/STORE obey lexical semantics: local bindings shadow closure cells; if no local binding, assignment updates the closure cell when present.
+- Caveat: current approach snapshots all current env entries as closure cells (simple and correct for many cases). Future improvement: capture only free variables and support cell rebinding semantics.
+
+## Semantic checks added
+
+- Await usage: `await` is now reported as a semantic error if used outside an `async` action (`ActionStatement.is_async == True`).
+- Protocol declarations: validated to contain a `methods` list of strings.
+- Event declarations: validated to use a MapLiteral or BlockStatement for properties.
+
 --- end of additions to summary ---

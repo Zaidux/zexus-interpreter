@@ -25,6 +25,13 @@ except Exception:
 	_BACKEND_AVAILABLE = False
 	_BACKEND = None
 
+# NEW: mutable cell used for proper closure capture semantics
+class Cell:
+	def __init__(self, value):
+		self.value = value
+	def __repr__(self):
+		return f"<Cell {self.value!r}>"
+
 class VM:
 	def __init__(self, builtins: Dict[str, Any] = None, env: Dict[str, Any] = None, parent_env: Dict[str, Any] = None):
 		# builtins: mapping name -> Builtin wrapper or callable
@@ -38,6 +45,8 @@ class VM:
 		# spawned tasks tracking
 		self._tasks: Dict[str, asyncio.Task] = {}
 		self._task_counter = 0
+		# closure cell mapping (name -> Cell) for this VM frame (used when VM itself is used as closure store)
+		self._closure_cells: Dict[str, Cell] = {}
 
 	# Public entry: accept either high-level ops list or low-level Bytecode object
 	def execute(self, code: Union[List[Tuple], Any], debug: bool = False):
@@ -171,19 +180,71 @@ class VM:
 		# helper to resolve constant operand (index)
 		def const(idx): return consts[idx] if 0 <= idx < len(consts) else None
 
-		# Helper for lexical name resolution (check env then parent chain)
-		def resolve_name_in_env(name, env_dict, parent_chain):
-			# search current env dict
-			if name in env_dict:
-				return env_dict[name]
-			# walk parent chain if available
-			p = parent_chain
+		# Helper for lexical name resolution (check local env, closure cells, parent chain)
+		def _resolve(name):
+			# local env
+			if name in self.env:
+				val = self.env[name]
+				# if value is a Cell, return its content
+				if isinstance(val, Cell):
+					return val.value
+				return val
+			# closure cells attached to this VM
+			if name in self._closure_cells:
+				return self._closure_cells[name].value
+			# parent env chain (if parent_env is VM instance or plain dict)
+			p = self._parent_env
 			while p is not None:
-				if name in p:
-					return p[name]
-				# if parent has its own parent (we stored it on VM instance)
-				p = getattr(p, "_parent_env", None) if isinstance(p, VM) else None
+				# if parent is another VM, check its env and its closure
+				if isinstance(p, VM):
+					if name in p.env:
+						val = p.env[name]
+						if isinstance(val, Cell):
+							return val.value
+						return val
+					if name in p._closure_cells:
+						return p._closure_cells[name].value
+					p = p._parent_env
+				else:
+					# plain dict
+					if name in p:
+						return p[name]
+					# cannot walk further
+					p = None
 			return None
+
+		# Helper to store into appropriate place (local -> closure -> parent)
+		def _store(name, value):
+			# If name exists in local env and is a Cell -> update cell
+			if name in self.env and isinstance(self.env[name], Cell):
+				self.env[name].value = value
+				return
+			# If name exists in local env (non-cell) -> assign local
+			if name in self.env:
+				self.env[name] = value
+				return
+			# If name exists as closure cell -> update there
+			if name in self._closure_cells:
+				self._closure_cells[name].value = value
+				return
+			# Walk parent chain: if a closure cell exists in ancestor, update it
+			p = self._parent_env
+			while p is not None:
+				if isinstance(p, VM):
+					if name in p._closure_cells:
+						p._closure_cells[name].value = value
+						return
+					if name in p.env:
+						p.env[name] = value
+						return
+					p = p._parent_env
+				else:
+					if name in p:
+						p[name] = value
+						return
+					p = None
+			# otherwise create local binding
+			self.env[name] = value
 
 		while ip < len(instrs):
 			op, operand = instrs[ip]
@@ -210,21 +271,22 @@ class VM:
 			elif op == "STORE_NAME":
 				name = const(operand)
 				val = stack.pop() if stack else None
-				# Prefer storing into current env (local)
-				self.env[name] = val
+				# Respect closure cells and lexical semantics
+				_store(name, val)
 			elif op == "STORE_FUNC":
 				# operand: (name_idx, func_const_idx)
 				name_idx, func_idx = operand
 				name = const(name_idx)
 				func_desc = const(func_idx)
-				# attach closure snapshot (shallow copy of current env)
-				try:
-					func_desc_copy = dict(func_desc)
-				except Exception:
-					func_desc_copy = {"bytecode": func_desc.get("bytecode"), "params": func_desc.get("params", []), "is_async": func_desc.get("is_async", False)} if isinstance(func_desc, dict) else {"bytecode": func_desc}
-				# Capture current lexical environment as closure (shallow copy)
-				func_desc_copy["closure"] = dict(self.env)
-				# store function descriptor (with closure) into env
+				# Prepare descriptor copy
+				func_desc_copy = dict(func_desc) if isinstance(func_desc, dict) else {"bytecode": func_desc}
+				# Build closure cells for CURRENT lexical env: wrap current env entries in Cell so they are mutable
+				closure_cells = {}
+				for k, v in list(self.env.items()):
+					closure_cells[k] = Cell(v)
+				# Attach closure cells
+				func_desc_copy["closure"] = closure_cells
+				# store function descriptor with closure reference into environment
 				self.env[name] = func_desc_copy
 			elif op == "CALL_NAME":
 				# operand: (name_const_idx, arg_count)
@@ -232,8 +294,10 @@ class VM:
 				func_name = const(name_idx)
 				# pop args
 				args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
-				# resolve function: first env then builtins
-				fn = self.env.get(func_name) if func_name in self.env else self.builtins.get(func_name)
+				# resolve function by checking local env (_resolve) then builtins
+				fn = _resolve(func_name)
+				if fn is None:
+					fn = self.builtins.get(func_name)
 				res = await self._invoke_callable_or_funcdesc(fn, args)
 				stack.append(res)
 			elif op == "CALL_FUNC_CONST":
@@ -353,16 +417,18 @@ class VM:
 			func_bc = fn["bytecode"]
 			params = fn.get("params", [])
 			is_async = fn.get("is_async", False)
-			# Use captured closure as function env (lexical scope)
-			closure_env = fn.get("closure", {}) if isinstance(fn.get("closure", {}), dict) else {}
-			# Bind parameters into a fresh local env based on closure
-			local_env = dict(closure_env)
+			# Closure cells were stored as fn["closure"] earlier
+			closure_cells = fn.get("closure", {}) if isinstance(fn.get("closure", {}), dict) else {}
+			# Build local env that delegates to closure cells: local env gets parameter bindings,
+			# but closure cells are kept accessible for reads/writes.
+			local_env = {}
 			for name, val in zip(params, args):
 				local_env[name] = val
-			# execute function bytecode in a fresh VM context that shares builtins but has its parent env set to caller env
+			# Create inner VM with closure cells as its _closure_cells and parent env set to this VM's env
 			inner_vm = VM(builtins=self.builtins, env=local_env, parent_env=self.env)
+			inner_vm._closure_cells = closure_cells.copy()  # use the captured cells (shared objects)
+			# Execute
 			if is_async:
-				# return coroutine result (run now and return its result)
 				return await inner_vm._run_stack_bytecode(func_bc, debug=False)
 			else:
 				return await inner_vm._run_stack_bytecode(func_bc, debug=False)
