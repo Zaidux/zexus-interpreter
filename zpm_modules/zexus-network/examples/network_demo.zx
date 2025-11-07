@@ -1,0 +1,80 @@
+use "zexus-network" as net
+
+action async http_demo() {
+    let client = net.http_client("https://api.example.com")
+    
+    // GET request
+    let response = await client.get("/users")
+    print("Status: " + string(response.status))
+    print("Body: " + response.body)
+    
+    // POST request with JSON
+    let json_client = net.json_http_client("https://api.example.com")
+    let user_data = {name: "John", email: "john@example.com"}
+    let create_response = await json_client.post_json("/users", user_data)
+    print("Created user: " + string(create_response.id))
+}
+
+action async websocket_demo() {
+    let ws = net.websocket_client("wss://echo.websocket.org")
+    
+    ws.on_message(action(message) {
+        print("Received: " + string(message.data))
+    })
+    
+    if await ws.connect() {
+        print("WebSocket connected!")
+        
+        await ws.send("Hello WebSocket!")
+        await ws.send_json({type: "ping", data: "test"})
+        
+        await net.sleep(2.0)
+        await ws.close()
+    }
+}
+
+action async tcp_server_demo() {
+    let server = net.tcp_server()
+    
+    server.on_connection(action async (client) {
+        print("Client connected: " + client.get_address().toString())
+        
+        // Echo server
+        while client.is_connected() {
+            let data = await client.receive(1024)
+            if len(data) > 0 {
+                await client.send(data)  // Echo back
+            }
+        }
+        
+        print("Client disconnected")
+    })
+    
+    if await server.start(8080) {
+        print("TCP server running on port 8080")
+        await net.sleep(30.0)  // Run for 30 seconds
+        await server.stop()
+        print("Server stopped")
+    }
+}
+
+action async network_utils_demo() {
+    // DNS resolution
+    let addresses = await net.resolve_hostname("google.com")
+    print("Google.com addresses: " + string(addresses))
+    
+    // Ping test
+    let ping_result = await net.ping("google.com")
+    print("Ping success: " + string(ping_result.success))
+    print("Latency: " + string(ping_result.latency) + "ms")
+    
+    // IP validation
+    print("Valid IPv4: " + string(net.is_valid_ipv4("192.168.1.1")))
+    print("Valid IPv6: " + string(net.is_valid_ipv6("2001:db8::1")))
+}
+
+// Run all demos
+spawn http_demo()
+spawn websocket_demo() 
+spawn tcp_server_demo()
+spawn network_utils_demo()

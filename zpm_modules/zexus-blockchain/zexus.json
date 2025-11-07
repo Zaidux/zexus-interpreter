@@ -1,0 +1,27 @@
+{
+  "name": "zexus-blockchain",
+  "version": "3.0.0", 
+  "description": "Revolutionary blockchain library with AI and quantum features",
+  "author": "Zexus Team",
+  "license": "MIT",
+  "dependencies": {
+    "zexus-math": "workspace:*",
+    "zexus-network": "workspace:*"
+  },
+  "exports": {
+    ".": "./index.zx",
+    "./core": "./blockchain/core.zx",
+    "./transactions": "./blockchain/transactions.zx",
+    "./contract": "./blockchain/contract.zx",
+    "./consensus": "./blockchain/consensus.zx"
+  },
+  "keywords": [
+    "blockchain",
+    "ai",
+    "quantum",
+    "defi", 
+    "cross-chain",
+    "privacy",
+    "smart-contracts"
+  ]
+}

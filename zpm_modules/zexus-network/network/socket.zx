@@ -1,0 +1,190 @@
+// Socket events
+event SocketConnected {
+    address: NetworkAddress,
+    timestamp: integer
+}
+
+event SocketData {
+    data: list,  // bytes
+    address: NetworkAddress,
+    timestamp: integer
+}
+
+event SocketError {
+    error: string,
+    address: NetworkAddress,
+    timestamp: integer
+}
+
+protocol Socket {
+    action async connect(address: NetworkAddress) -> boolean
+    action async send(data: list) -> integer  // returns bytes sent
+    action async receive(size: integer) -> list  // returns bytes received
+    action async close()
+    action get_address() -> NetworkAddress
+    action is_connected() -> boolean
+}
+
+contract TCPSocket implements Socket {
+    persistent storage address: NetworkAddress
+    persistent storage connected: boolean = false
+    persistent storage buffer_size: integer = 4096
+    
+    action async connect(address: NetworkAddress) -> boolean {
+        try {
+            this.address = address
+            await this.internal_connect(address)
+            this.connected = true
+            
+            emit SocketConnected {
+                address: address,
+                timestamp: time_now()
+            }
+            
+            return true
+        } catch(error) {
+            emit SocketError {
+                error: "TCP connection failed: " + string(error),
+                address: address,
+                timestamp: time_now()
+            }
+            return false
+        }
+    }
+    
+    action async send(data: list) -> integer {
+        if not this.connected {
+            throw "Socket not connected"
+        }
+        
+        try {
+            let bytes_sent = await this.internal_send(data)
+            return bytes_sent
+        } catch(error) {
+            this.connected = false
+            emit SocketError {
+                error: "TCP send failed: " + string(error),
+                address: this.address,
+                timestamp: time_now()
+            }
+            throw error
+        }
+    }
+    
+    action async receive(size: integer = 4096) -> list {
+        if not this.connected {
+            throw "Socket not connected"
+        }
+        
+        try {
+            let data = await this.internal_receive(size)
+            
+            emit SocketData {
+                data: data,
+                address: this.address,
+                timestamp: time_now()
+            }
+            
+            return data
+        } catch(error) {
+            this.connected = false
+            emit SocketError {
+                error: "TCP receive failed: " + string(error),
+                address: this.address,
+                timestamp: time_now()
+            }
+            throw error
+        }
+    }
+    
+    action async close() {
+        if this.connected {
+            await this.internal_close()
+            this.connected = false
+        }
+    }
+    
+    action get_address() -> NetworkAddress { return this.address }
+    action is_connected() -> boolean { return this.connected }
+    
+    // External implementations
+    external action async internal_connect(address: NetworkAddress) from "tcp_backend"
+    external action async internal_send(data: list) -> integer from "tcp_backend"
+    external action async internal_receive(size: integer) -> list from "tcp_backend"
+    external action async internal_close() from "tcp_backend"
+}
+
+contract UDPSocket implements Socket {
+    persistent storage address: NetworkAddress
+    persistent storage connected: boolean = false
+    
+    action async connect(address: NetworkAddress) -> boolean {
+        this.address = address
+        this.connected = true
+        return true  // UDP is connectionless
+    }
+    
+    action async send(data: list) -> integer {
+        if not this.connected {
+            throw "Socket not connected"
+        }
+        
+        try {
+            let bytes_sent = await this.internal_send_to(data, this.address)
+            return bytes_sent
+        } catch(error) {
+            emit SocketError {
+                error: "UDP send failed: " + string(error),
+                address: this.address,
+                timestamp: time_now()
+            }
+            throw error
+        }
+    }
+    
+    action async send_to(data: list, address: NetworkAddress) -> integer {
+        try {
+            let bytes_sent = await this.internal_send_to(data, address)
+            return bytes_sent
+        } catch(error) {
+            emit SocketError {
+                error: "UDP send failed: " + string(error),
+                address: address,
+                timestamp: time_now()
+            }
+            throw error
+        }
+    }
+    
+    action async receive(size: integer = 4096) -> (list, NetworkAddress) {
+        try {
+            let (data, address) = await this.internal_receive_from(size)
+            
+            emit SocketData {
+                data: data,
+                address: address,
+                timestamp: time_now()
+            }
+            
+            return (data, address)
+        } catch(error) {
+            emit SocketError {
+                error: "UDP receive failed: " + string(error),
+                address: this.address,
+                timestamp: time_now()
+            }
+            throw error
+        }
+    }
+    
+    action async close() {
+        this.connected = false
+    }
+    
+    action get_address() -> NetworkAddress { return this.address }
+    action is_connected() -> boolean { return this.connected }
+    
+    // External implementations
+    external action async internal_send_to(data: list, address: NetworkAddress) -> integer from "udp_backend"
+    external action async internal_receive_from(size: integer) -> (list, NetworkAddress) from "udp_backend"
+}

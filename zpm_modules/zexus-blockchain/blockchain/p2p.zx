@@ -1,0 +1,335 @@
+// Advanced P2P networking with multi-chain support
+contract MultiChainP2PNetwork {
+    persistent storage peers: Map<ChainType, list> = {}
+    persistent storage node_id: string
+    persistent storage connection_pool: Map<string, PeerConnection> = {}
+    persistent storage gossip_protocol: GossipManager
+    persistent storage chain_sync: Map<ChainType, SyncState> = {}
+    
+    action init() {
+        this.node_id = this.generate_node_id()
+        this.gossip_protocol = GossipManager{node_id: this.node_id}
+    }
+    
+    action async start_network() {
+        // Start listening on multiple chains
+        let chains = [ChainType.ZIVER, ChainType.ETHEREUM, ChainType.TON, ChainType.BSC]
+        
+        for each chain in chains {
+            spawn this.start_chain_network(chain)
+        }
+        
+        // Start peer discovery
+        spawn this.discover_peers()
+        
+        // Start chain synchronization
+        spawn this.sync_all_chains()
+        
+        emit NetworkStarted {
+            node_id: this.node_id,
+            supported_chains: chains,
+            timestamp: time_now()
+        }
+    }
+    
+    action async start_chain_network(chain: ChainType) {
+        let port = this.get_chain_port(chain)
+        
+        // Start server for this chain
+        let server = net.tcp_server()
+        
+        server.on_connection(action async (client) {
+            let peer_conn = PeerConnection{
+                socket: client,
+                chain: chain,
+                node_id: this.node_id
+            }
+            
+            this.connection_pool[peer_conn.get_id()] = peer_conn
+            await this.handle_peer_connection(peer_conn)
+        })
+        
+        if await server.start(port) {
+            print("P2P server started for " + string(chain) + " on port " + string(port))
+        }
+    }
+    
+    action async discover_peers() {
+        while true {
+            // Use multiple discovery methods
+            let bootnodes = this.get_chain_bootnodes()
+            
+            for each chain in bootnodes {
+                for each bootnode in bootnodes[chain] {
+                    spawn this.connect_to_peer(bootnode, chain)
+                }
+            }
+            
+            // Use DNS-based discovery
+            let dns_peers = await this.discover_via_dns()
+            for each peer in dns_peers {
+                spawn this.connect_to_peer(peer.address, peer.chain)
+            }
+            
+            // Wait before next discovery round
+            await sleep(300)  // 5 minutes
+        }
+    }
+    
+    action async connect_to_peer(address: string, chain: ChainType) {
+        try {
+            let socket = net.tcp_socket()
+            let peer_addr = net.ip_address(address, this.get_chain_port(chain), net.Protocol.TCP)
+            
+            if await socket.connect(peer_addr) {
+                let peer_conn = PeerConnection{
+                    socket: socket,
+                    chain: chain,
+                    node_id: this.node_id,
+                    is_outbound: true
+                }
+                
+                // Perform handshake
+                if await peer_conn.perform_handshake() {
+                    this.connection_pool[peer_conn.get_id()] = peer_conn
+                    this.peers[chain] = this.peers.get(chain, []).push(peer_conn)
+                    
+                    emit PeerConnected {
+                        peer_id: peer_conn.remote_node_id,
+                        chain: chain,
+                        address: address,
+                        connection_type: "outbound",
+                        timestamp: time_now()
+                    }
+                    
+                    await this.handle_peer_connection(peer_conn)
+                } else {
+                    await socket.close()
+                }
+            }
+        } catch(error) {
+            print("Failed to connect to peer " + address + ": " + string(error))
+        }
+    }
+    
+    action async handle_peer_connection(peer: PeerConnection) {
+        while peer.is_connected() {
+            try {
+                let message = await peer.receive_message()
+                
+                if message != null {
+                    await this.process_message(message, peer)
+                }
+                
+            } catch(error) {
+                print("Error handling peer connection: " + string(error))
+                break
+            }
+        }
+        
+        // Clean up disconnected peer
+        this.connection_pool.remove(peer.get_id())
+        this.remove_peer_from_chain(peer.chain, peer)
+        
+        emit PeerDisconnected {
+            peer_id: peer.remote_node_id,
+            chain: peer.chain,
+            timestamp: time_now()
+        }
+    }
+    
+    action async process_message(message: map, peer: PeerConnection) {
+        let msg_type = message.type
+        
+        if msg_type == "block_announcement" {
+            await this.handle_block_announcement(message.data, peer)
+        } else if msg_type == "transaction" {
+            await this.handle_transaction_broadcast(message.data, peer)
+        } else if msg_type == "sync_request" {
+            await this.handle_sync_request(message.data, peer)
+        } else if msg_type == "peer_list" {
+            await this.handle_peer_list(message.data, peer)
+        } else if msg_type == "chain_state" {
+            await this.handle_chain_state(message.data, peer)
+        }
+    }
+    
+    action async handle_block_announcement(block_data: map, peer: PeerConnection) {
+        let block = Block.deserialize(block_data)
+        
+        // Validate block
+        if await this.validate_block(block, peer.chain) {
+            // Add to local chain
+            this.add_block_to_chain(block, peer.chain)
+            
+            // Gossip to other peers
+            await this.gossip_protocol.broadcast_block(block, peer.chain, peer.get_id())
+            
+            emit BlockReceived {
+                block_hash: block.hash(),
+                block_number: block.number,
+                chain: peer.chain,
+                peer: peer.remote_node_id,
+                timestamp: time_now()
+            }
+        }
+    }
+    
+    action async sync_all_chains() {
+        while true {
+            for each chain in this.peers {
+                if this.chain_sync.get(chain, {}).needs_sync {
+                    spawn this.sync_chain(chain)
+                }
+            }
+            await sleep(60)  // Sync every minute
+        }
+    }
+    
+    action async sync_chain(chain: ChainType) {
+        let local_height = this.get_local_chain_height(chain)
+        let peers = this.peers.get(chain, [])
+        
+        if len(peers) == 0 {
+            return
+        }
+        
+        // Find peer with highest block
+        let best_peer = null
+        let best_height = local_height
+        
+        for each peer in peers {
+            let peer_height = await peer.get_block_height()
+            if peer_height > best_height {
+                best_height = peer_height
+                best_peer = peer
+            }
+        }
+        
+        if best_peer != null and best_height > local_height {
+            await this.sync_with_peer(best_peer, local_height, best_height)
+        }
+    }
+}
+
+// Gossip protocol for efficient message propagation
+contract GossipManager {
+    persistent storage node_id: string
+    persistent storage seen_messages: Map<string, integer> = {}
+    persistent storage message_peers: Map<string, list> = {}
+    
+    action async broadcast_block(block: Block, chain: ChainType, exclude_peer: string = "") {
+        let block_hash = block.hash()
+        let message_id = this.generate_message_id("block", block_hash)
+        
+        if this.has_seen_message(message_id) {
+            return
+        }
+        
+        this.mark_message_seen(message_id)
+        
+        let peers = this.get_peers_for_chain(chain)
+        let message = {
+            type: "block_announcement",
+            data: block.serialize(),
+            chain: chain,
+            hops: 0
+        }
+        
+        // Send to random subset of peers (gossip protocol)
+        let target_peers = this.select_gossip_peers(peers, exclude_peer)
+        
+        for each peer in target_peers {
+            spawn peer.send_message(message)
+        }
+        
+        emit MessageBroadcasted {
+            type: "block",
+            message_id: message_id,
+            chain: chain,
+            peer_count: len(target_peers),
+            timestamp: time_now()
+        }
+    }
+    
+    action select_gossip_peers(peers: list, exclude: string) -> list {
+        // Select square root of total peers for gossip
+        let target_count = max(integer(sqrt(len(peers))), 1)
+        let filtered_peers = list_filter(peers, action(p) { return p.get_id() != exclude })
+        
+        return this.random_select(filtered_peers, target_count)
+    }
+    
+    action has_seen_message(message_id: string) -> boolean {
+        let seen_time = this.seen_messages.get(message_id, 0)
+        let current_time = time_now()
+        
+        // Messages expire after 1 hour
+        if current_time - seen_time > 3600000 {
+            this.seen_messages.remove(message_id)
+            return false
+        }
+        
+        return seen_time > 0
+    }
+}
+
+// Peer connection management
+contract PeerConnection {
+    persistent storage socket: net.Socket
+    persistent storage chain: ChainType
+    persistent storage node_id: string
+    persistent storage remote_node_id: string = ""
+    persistent storage is_outbound: boolean = false
+    persistent storage capabilities: list = []
+    
+    action async perform_handshake() -> boolean {
+        let handshake = {
+            version: "1.0.0",
+            node_id: this.node_id,
+            chain: this.chain,
+            capabilities: ["blocks", "transactions", "state_sync"],
+            timestamp: time_now()
+        }
+        
+        await this.send_message({
+            type: "handshake",
+            data: handshake
+        })
+        
+        let response = await this.receive_message(10000)  // 10 second timeout
+        
+        if response != null and response.type == "handshake_response" {
+            this.remote_node_id = response.data.node_id
+            this.capabilities = response.data.capabilities
+            return true
+        }
+        
+        return false
+    }
+    
+    action async send_message(message: map) -> boolean {
+        let serialized = this.serialize_message(message)
+        let bytes_sent = await this.socket.send(serialized)
+        return bytes_sent > 0
+    }
+    
+    action async receive_message(timeout: integer = 0) -> map {
+        try {
+            let data = await this.socket.receive(4096)  // 4KB buffer
+            if len(data) > 0 {
+                return this.deserialize_message(data)
+            }
+        } catch(error) {
+            if timeout > 0 {
+                // Implement timeout logic
+                await sleep(timeout / 1000.0)
+            }
+        }
+        return null
+    }
+    
+    action get_id() -> string {
+        return this.remote_node_id + "_" + string(this.chain)
+    }
+}

@@ -1,0 +1,53 @@
+// Network protocols and constants
+export enum Protocol {
+    TCP, UDP, HTTP, HTTPS, WS, WSS, FTP, SSH
+}
+
+export enum HttpMethod {
+    GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+}
+
+export enum HttpStatus {
+    OK = 200,
+    CREATED = 201,
+    BAD_REQUEST = 400,
+    UNAUTHORIZED = 401,
+    FORBIDDEN = 403,
+    NOT_FOUND = 404,
+    INTERNAL_ERROR = 500
+}
+
+// Network address types
+protocol NetworkAddress {
+    action toString() -> string
+    action getProtocol() -> Protocol
+}
+
+contract IPAddress implements NetworkAddress {
+    persistent storage address: string
+    persistent storage port: integer
+    persistent storage protocol: Protocol
+    
+    action init(addr: string, port_num: integer, proto: Protocol) {
+        this.address = addr
+        this.port = port_num
+        this.protocol = proto
+    }
+    
+    action toString() -> string {
+        return this.address + ":" + string(this.port)
+    }
+    
+    action getProtocol() -> Protocol {
+        return this.protocol
+    }
+}
+
+// Network configuration
+persistent storage NETWORK_CONFIG: map = {
+    timeout: 30,
+    max_retries: 3,
+    user_agent: "ZexusNetwork/2.0.0",
+    enable_compression: true,
+    default_encoding: "utf-8"
+}

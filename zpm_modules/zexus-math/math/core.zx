@@ -1,0 +1,30 @@
+// Advanced numeric types using protocols
+protocol ComplexNumber {
+    action real() -> float
+    action imag() -> float
+    action magnitude() -> float
+    action phase() -> float
+    action conjugate() -> ComplexNumber
+    action add(other: ComplexNumber) -> ComplexNumber
+    action multiply(other: ComplexNumber) -> ComplexNumber
+}
+
+protocol Matrix {
+    action rows() -> integer
+    action cols() -> integer
+    action get(row: integer, col: integer) -> float
+    action determinant() -> float
+    action inverse() -> Matrix
+    action multiply(other: Matrix) -> Matrix
+}
+
+// Constants with precision
+export let PI: float = 3.14159265358979323846
+export let E: float = 2.71828182845904523536
+export let PHI: float = 1.61803398874989484820
+export let INFINITY: float = 1.0 / 0.0
+export let NAN: float = 0.0 / 0.0
+
+// Precision configuration
+persistent storage MATH_PRECISION: integer = 15
+persistent storage ANGLE_MODE: string = "radians"  // "radians" or "degrees"

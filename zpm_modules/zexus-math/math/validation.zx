@@ -1,0 +1,64 @@
+// Comprehensive test suite
+export action run_math_validation() -> map {
+    let results = {}
+    
+    // Test complex numbers
+    results.complex = test_complex_arithmetic()
+    
+    // Test linear algebra  
+    results.linalg = test_linear_algebra()
+    
+    // Test calculus
+    results.calculus = test_calculus_operations()
+    
+    // Test numerical stability
+    results.numerical = test_numerical_stability()
+    
+    // Test performance
+    results.performance = test_performance()
+    
+    return results
+}
+
+action test_complex_arithmetic() -> map {
+    let z1 = complex(3, 4)
+    let z2 = complex(1, -2)
+    
+    let sum = z1.add(z2)
+    let expected_sum = complex(4, 2)
+    
+    return {
+        addition: vectors_equal([sum.real(), sum.imag()], 
+                               [expected_sum.real(), expected_sum.imag()]),
+        multiplication: test_complex_multiplication(),
+        magnitude: math_abs(z1.magnitude() - 5.0) < 1e-12
+    }
+}
+
+// Error bounds and precision validation
+export action validate_precision(operation: action, expected: any, 
+                               tolerance: float = 1e-12) -> boolean {
+    let result = operation()
+    let error = compute_error(result, expected)
+    
+    if error > tolerance {
+        emit PrecisionWarning {
+            operation: operation.toString(),
+            expected: expected,
+            actual: result,
+            error: error,
+            tolerance: tolerance
+        }
+        return false
+    }
+    
+    return true
+}
+
+// Automatic differentiation verification
+export action verify_derivative(f: MathFunction, x: float, 
+                              analytical: float, 
+                              tolerance: float = 1e-8) -> boolean {
+    let numerical = derivative(f, x)
+    return math_abs(analytical - numerical) < tolerance
+}

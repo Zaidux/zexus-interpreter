@@ -1,0 +1,91 @@
+use "math/optimization" as opt
+use "math/signal" as signal
+use "math/diffeq" as diffeq
+use "math/ml" as ml
+use "math/crypto" as crypto
+use "math/geometric" as ga
+
+action advanced_calculator_demo() {
+    print("🚀 ADVANCED ZEXUS CALCULATOR DEMO")
+    print("=" * 50)
+    
+    // 1. Optimization - Find minimum of quadratic function
+    let f = QuadraticFunction{
+        Q: matrix(2, 2, [2, 0, 0, 2]),  // x² + y²
+        c: [-2, -2],                    // -2x - 2y  
+        constant: 2
+    }
+    
+    let minimum = opt.gradient_descent(f, [5, 5])
+    print("1. Quadratic minimum at: " + string(minimum)) // [1, 1]
+    
+    // 2. Signal Processing - FFT analysis
+    let signal_data = list_map(range(0, 64), action(t) { 
+        return sin(2 * PI * 5 * t/64) + 0.5 * sin(2 * PI * 12 * t/64) 
+    })
+    
+    let spectrum = signal.fft(signal_data)
+    let magnitudes = list_map(spectrum, action(c) { return c.magnitude() })
+    print("2. FFT magnitudes (peaks at 5Hz and 12Hz): " + string(magnitudes[0:10]))
+    
+    // 3. Solve differential equations
+    let lorenz = LorenzSystem{}
+    let initial_conditions = [1.0, 1.0, 1.0]
+    let solution = diffeq.runge_kutta_4(lorenz, initial_conditions, 0, 10, 1000)
+    print("3. Lorenz system solved for " + string(len(solution)) + " time steps")
+    
+    // 4. Machine Learning - Simple clustering
+    let data_points = [
+        [1, 2], [1, 4], [1, 0], [10, 2], [10, 4], [10, 0]
+    ]
+    let clustering = ml.kmeans(data_points, 2)
+    print("4. K-means found " + string(len(clustering.clusters)) + " clusters")
+    
+    // 5. Cryptography - RSA example
+    let keys = crypto.generate_rsa_keys(32)  // Small for demo
+    let message = 42
+    let encrypted = crypto.mod_exp(message, keys.public_key.e, keys.public_key.n)
+    let decrypted = crypto.mod_exp(encrypted, keys.private_key.d, keys.private_key.n)
+    print("5. RSA encryption/decryption: " + string(message) + " → " + 
+          string(encrypted) + " → " + string(decrypted))
+    
+    // 6. Geometric Algebra - 3D rotations
+    let algebra = ga.GeometricAlgebra{3, [1, 1, 1]}
+    let vector = [0, 1, 0, 0, 0, 0, 0, 0]  // Basis vector in y-direction
+    let rotor = algebra.rotor(PI/2, [0, 0, 0, 1, 0, 0, 0, 0])  // Rotate in xy-plane
+    
+    let rotated = algebra.geometric_product(
+        algebra.geometric_product(rotor, vector), 
+        algebra.reverse(rotor)
+    )
+    print("6. 90° rotation of y-axis gives: " + string(rotated[0:4]))
+}
+
+action async real_time_analysis() {
+    // Real-time signal processing with async
+    let sample_rate = 1000.0
+    let signal_buffer = []
+    
+    while true {
+        // Simulate data acquisition
+        let new_sample = sin(2 * PI * 50 * time_now() / 1000.0) + math_random() * 0.1
+        signal_buffer.push(new_sample)
+        
+        if len(signal_buffer) > 1024 {
+            signal_buffer = rest(signal_buffer)  // Keep buffer size manageable
+        }
+        
+        // Real-time FFT every 100 samples
+        if len(signal_buffer) % 100 == 0 {
+            let spectrum = signal.fft(signal_buffer)
+            let dominant_freq = find_dominant_frequency(spectrum, sample_rate)
+            print("Dominant frequency: " + string(dominant_freq) + " Hz")
+        }
+        
+        await sleep(0.001)  // 1ms sampling
+    }
+}
+
+// Run the advanced calculator
+advanced_calculator_demo()
+spawn real_time_analysis()

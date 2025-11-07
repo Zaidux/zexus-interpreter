@@ -1,0 +1,97 @@
+// Modular arithmetic for cryptography
+export action mod_exp(base: integer, exponent: integer, modulus: integer) -> integer {
+    // Fast modular exponentiation
+    if modulus == 1 { return 0 }
+    
+    let result = 1
+    let base = base % modulus
+    
+    while exponent > 0 {
+        if exponent % 2 == 1 {
+            result = (result * base) % modulus
+        }
+        exponent = exponent >> 1
+        base = (base * base) % modulus
+    }
+    
+    return result
+}
+
+// Extended Euclidean Algorithm
+export action extended_gcd(a: integer, b: integer) -> map {
+    if b == 0 {
+        return {gcd: a, x: 1, y: 0}
+    }
+    
+    let result = extended_gcd(b, a % b)
+    return {
+        gcd: result.gcd,
+        x: result.y,
+        y: result.x - (a // b) * result.y
+    }
+}
+
+// RSA key generation
+export action generate_rsa_keys(bit_length: integer) -> map {
+    // Generate large primes (simplified)
+    let p = generate_large_prime(bit_length // 2)
+    let q = generate_large_prime(bit_length // 2)
+    
+    let n = p * q
+    let phi = (p - 1) * (q - 1)
+    
+    // Choose public exponent
+    let e = 65537
+    
+    // Calculate private exponent
+    let gcd_result = extended_gcd(e, phi)
+    let d = gcd_result.x % phi
+    if d < 0 { d = d + phi }
+    
+    return {
+        public_key: {n: n, e: e},
+        private_key: {n: n, d: d}
+    }
+}
+
+// Elliptic curve cryptography primitives
+contract EllipticCurve {
+    persistent storage a: integer
+    persistent storage b: integer
+    persistent storage p: integer  // prime field
+    
+    action point_add(P: map, Q: map) -> map {
+        if P == "infinity" { return Q }
+        if Q == "infinity" { return P }
+        if P.x == Q.x and P.y != Q.y { return "infinity" }
+        
+        let lambda
+        if P.x == Q.x and P.y == Q.y {
+            // Point doubling
+            lambda = (3 * P.x * P.x + this.a) * mod_inverse(2 * P.y, this.p) % this.p
+        } else {
+            // Point addition
+            lambda = (Q.y - P.y) * mod_inverse(Q.x - P.x, this.p) % this.p
+        }
+        
+        let x_r = (lambda * lambda - P.x - Q.x) % this.p
+        let y_r = (lambda * (P.x - x_r) - P.y) % this.p
+        
+        return {x: x_r, y: y_r}
+    }
+    
+    action scalar_multiply(k: integer, P: map) -> map {
+        let result = "infinity"
+        let addend = P
+        
+        while k > 0 {
+            if k % 2 == 1 {
+                result = this.point_add(result, addend)
+            }
+            addend = this.point_add(addend, addend)
+            k = k // 2
+        }
+        
+        return result
+    }
+}

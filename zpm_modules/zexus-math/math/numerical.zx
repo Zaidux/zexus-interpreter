@@ -1,0 +1,44 @@
+// Numerical stability and error analysis
+export action condition_number(A: Matrix) -> float {
+    // Measure how sensitive solutions are to input changes
+    let norm_A = matrix_norm(A)
+    let norm_A_inv = matrix_norm(A.inverse())
+    return norm_A * norm_A_inv
+}
+
+export action is_ill_conditioned(A: Matrix, threshold: float = 1e12) -> boolean {
+    return condition_number(A) > threshold
+}
+
+// Stable matrix inversion for ill-conditioned matrices
+export action pseudo_inverse(A: Matrix, tolerance: float = 1e-12) -> Matrix {
+    // SVD-based pseudo-inverse for numerical stability
+    let (U, S, Vt) = svd(A)
+    let S_plus = []
+    
+    for each i in range(0, len(S)) {
+        if math_abs(S[i]) > tolerance {
+            S_plus.push(1.0 / S[i])
+        } else {
+            S_plus.push(0.0)
+        }
+    }
+    
+    return Vt.transpose().multiply(diagonal(S_plus)).multiply(U.transpose())
+}
+
+// Numerical differentiation with error control
+export action adaptive_derivative(f: MathFunction, x: float, target_error: float = 1e-8) -> float {
+    let h = 1e-8
+    let error = INFINITY
+    
+    while error > target_error and h > 1e-15 {
+        let df_forward = (f.evaluate(x + h) - f.evaluate(x)) / h
+        let df_central = (f.evaluate(x + h) - f.evaluate(x - h)) / (2 * h)
+        
+        error = math_abs(df_forward - df_central)
+        h = h * 0.5
+    }
+    
+    return (f.evaluate(x + h) - f.evaluate(x - h)) / (2 * h)
+}

@@ -1,0 +1,115 @@
+// Zexus Blockchain Library - Complete Enterprise Suite
+export use "./blockchain/core" as core
+export use "./blockchain/transactions" as transactions
+export use "./blockchain/contract" as contract
+export use "./blockchain/consensus" as consensus
+export use "./blockchain/evolution" as evolution
+export use "./blockchain/explainable" as explainable
+export use "./blockchain/patching" as patching
+export use "./blockchain/seb_defi" as seb_defi
+export use "./blockchain/p2p" as p2p
+export use "./blockchain/bridge" as bridge
+export use "./blockchain/oracle" as oracle
+export use "./blockchain/zksnarks" as zksnarks
+
+// Re-export all major components
+export enum ChainType = core.ChainType
+export enum TransactionStatus = core.TransactionStatus
+export enum ConsensusAlgorithm = core.ConsensusAlgorithm
+
+export contract Address = core.Address
+export contract KeyPair = core.KeyPair
+export contract QuantumResistantKeyPair = core.QuantumResistantKeyPair
+export contract AIConsensus = core.AIConsensus
+
+export contract BasicTransaction = transactions.BasicTransaction
+export contract BounceBackTransaction = transactions.BounceBackTransaction
+export contract ExplainableTransaction = explainable.ExplainableTransaction
+
+export contract ZexusVM = contract.ZexusVM
+export contract ERC20Token = contract.ERC20Token
+export contract SmartContract = contract.SmartContract
+
+export contract ProofOfWork = consensus.ProofOfWork
+export contract ProofOfStake = consensus.ProofOfStake
+
+export contract SelfEvolvingBlockchain = evolution.SelfEvolvingBlockchain
+export contract HotPatchSystem = patching.HotPatchSystem
+
+export contract SEBDeFiProtocol = seb_defi.SEBDeFiProtocol
+export contract SocialCapitalScore = seb_defi.SocialCapitalScore
+export contract ZAIE = seb_defi.ZAIE
+
+export contract MultiChainP2PNetwork = p2p.MultiChainP2PNetwork
+export contract CrossChainBridge = bridge.CrossChainBridge
+export contract AIEnhancedOracle = oracle.AIEnhancedOracle
+export contract ZKSNARKSystem = zksnarks.ZKSNARKSystem
+
+// Factory methods for easy creation
+export action create_address(addr: string, chain: ChainType) -> Address {
+    return Address{address: addr, chain: chain}
+}
+
+export action generate_keypair(chain: ChainType) -> KeyPair {
+    let kp = KeyPair{}
+    kp.generate(chain)
+    return kp
+}
+
+export action generate_quantum_keypair(chain: ChainType) -> QuantumResistantKeyPair {
+    let kp = QuantumResistantKeyPair{}
+    kp.generate_quantum_resistant(chain)
+    return kp
+}
+
+export action create_transaction(from: Address, to: Address, amount: integer, chain: ChainType) -> BasicTransaction {
+    return BasicTransaction{from_addr: from, to_addr: to, amount: amount, chain: chain}
+}
+
+export action create_bounceback_transaction(from: Address, to: Address, amount: integer, chain: ChainType) -> BounceBackTransaction {
+    return BounceBackTransaction{from_addr: from, to_addr: to, amount: amount, chain: chain}
+}
+
+export action create_erc20_token(name: string, symbol: string, initial_supply: integer) -> ERC20Token {
+    return ERC20Token{token_name: name, token_symbol: symbol, initial_supply: initial_supply}
+}
+
+export action create_seb_defi_protocol() -> SEBDeFiProtocol {
+    return SEBDeFiProtocol{}
+}
+
+export action create_p2p_network() -> MultiChainP2PNetwork {
+    return MultiChainP2PNetwork{}
+}
+
+export action create_cross_chain_bridge() -> CrossChainBridge {
+    return CrossChainBridge{}
+}
+
+// Version and initialization
+export let VERSION: string = "3.0.0"
+export let FEATURES: list = [
+    "AI-Enhanced Consensus",
+    "Bounce-Back Transactions", 
+    "Quantum-Resistant Cryptography",
+    "Self-Evolving Architecture",
+    "Explainable AI Transactions",
+    "Hot-Patch System",
+    "SEB-DeFi Social Capital Protocol",
+    "Multi-Chain P2P Networking",
+    "Cross-Chain Bridge",
+    "AI-Powered Oracles",
+    "ZK-SNARKs Privacy"
+]
+
+action init() {
+    print("🚀 Zexus Blockchain Library v" + VERSION + " initialized!")
+    print("📦 Features available:")
+    for each feature in FEATURES {
+        print("   ✅ " + feature)
+    }
+    print("🌐 Supported chains: ZIVER, ETHEREUM, TON, BSC, POLYGON, ARBITRUM")
+    print("🔧 Ready for enterprise blockchain development!")
+}
+
+init()

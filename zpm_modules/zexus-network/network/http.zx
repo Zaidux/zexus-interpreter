@@ -1,0 +1,116 @@
+// HTTP request/response models
+event HttpRequest {
+    method: HttpMethod,
+    url: string,
+    headers: map,
+    body: any,
+    timestamp: integer
+}
+
+event HttpResponse {
+    status: HttpStatus,
+    headers: map,
+    body: string,
+    request: HttpRequest,
+    duration: float
+}
+
+contract HttpClient {
+    persistent storage base_url: string
+    persistent storage default_headers: map
+    persistent storage timeout: integer
+    
+    action async request(method: HttpMethod, path: string, data: any = null, headers: map = {}) -> HttpResponse {
+        let url = this.base_url + path
+        let all_headers = this.merge_headers(headers)
+        
+        let request_event = HttpRequest {
+            method: method,
+            url: url,
+            headers: all_headers,
+            body: data,
+            timestamp: time_now()
+        }
+        
+        emit HttpRequestStarted { request: request_event }
+        
+        try {
+            let start_time = time_now()
+            let response = await this.execute_request(method, url, data, all_headers)
+            let duration = (time_now() - start_time) / 1000.0
+            
+            let response_event = HttpResponse {
+                status: response.status,
+                headers: response.headers,
+                body: response.body,
+                request: request_event,
+                duration: duration
+            }
+            
+            emit HttpResponseReceived { response: response_event }
+            return response_event
+            
+        } catch(error) {
+            emit HttpRequestFailed { 
+                request: request_event, 
+                error: string(error) 
+            }
+            throw error
+        }
+    }
+    
+    action async get(path: string, headers: map = {}) -> HttpResponse {
+        return await this.request(HttpMethod.GET, path, null, headers)
+    }
+    
+    action async post(path: string, data: any, headers: map = {}) -> HttpResponse {
+        return await this.request(HttpMethod.POST, path, data, headers)
+    }
+    
+    action async put(path: string, data: any, headers: map = {}) -> HttpResponse {
+        return await this.request(HttpMethod.PUT, path, data, headers)
+    }
+    
+    action async delete(path: string, headers: map = {}) -> HttpResponse {
+        return await this.request(HttpMethod.DELETE, path, null, headers)
+    }
+    
+    action merge_headers(custom_headers: map) -> map {
+        let merged = {}
+        
+        // Add default headers
+        for each key in this.default_headers {
+            merged[key] = this.default_headers[key]
+        }
+        
+        // Override with custom headers
+        for each key in custom_headers {
+            merged[key] = custom_headers[key]
+        }
+        
+        return merged
+    }
+    
+    // External implementation for actual HTTP requests
+    external action async execute_request(method: HttpMethod, url: string, data: any, headers: map) -> map from "network_backend"
+}
+
+// JSON-specific HTTP client
+contract JsonHttpClient extends HttpClient {
+    action async get_json(path: string, headers: map = {}) -> map {
+        let response = await this.get(path, headers)
+        return parse_json(response.body)
+    }
+    
+    action async post_json(path: string, data: map, headers: map = {}) -> map {
+        let json_headers = headers.merge({"Content-Type": "application/json"})
+        let response = await this.post(path, stringify_json(data), json_headers)
+        return parse_json(response.body)
+    }
+    
+    action async put_json(path: string, data: map, headers: map = {}) -> map {
+        let json_headers = headers.merge({"Content-Type": "application/json"})
+        let response = await this.put(path, stringify_json(data), json_headers)
+        return parse_json(response.body)
+    }
+}

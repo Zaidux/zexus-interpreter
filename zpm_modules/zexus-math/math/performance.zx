@@ -1,0 +1,51 @@
+// GPU-accelerated operations (conceptual)
+external action gpu_matrix_multiply(A: list, B: list) -> list from "gpu_backend"
+external action gpu_fft(signal: list) -> list from "gpu_backend"
+
+// Cache-aware algorithms
+export action cache_optimized_matmul(A: Matrix, B: Matrix, block_size: integer = 32) -> Matrix {
+    // Block matrix multiplication for cache efficiency
+    let m = A.rows(), n = A.cols(), p = B.cols()
+    let C = zeros(m, p)
+    
+    for each i in range(0, m, block_size) {
+        for each j in range(0, p, block_size) {
+            for each k in range(0, n, block_size) {
+                // Multiply blocks
+                let i_end = min(i + block_size, m)
+                let j_end = min(j + block_size, p) 
+                let k_end = min(k + block_size, n)
+                
+                for each ii in range(i, i_end) {
+                    for each jj in range(j, j_end) {
+                        let sum = 0.0
+                        for each kk in range(k, k_end) {
+                            sum = sum + A.get(ii, kk) * B.get(kk, jj)
+                        }
+                        C.set(ii, jj, C.get(ii, jj) + sum)
+                    }
+                }
+            }
+        }
+    }
+    
+    return C
+}
+
+// Memory-mapped large matrix support
+contract LargeMatrix implements Matrix {
+    persistent storage file_path: string
+    persistent storage rows: integer
+    persistent storage cols: integer
+    persistent storage element_size: integer
+    
+    action get(row: integer, col: integer) -> float {
+        let offset = (row * this.cols + col) * this.element_size
+        return read_float_from_file(this.file_path, offset)
+    }
+    
+    action set(row: integer, col: integer, value: float) {
+        let offset = (row * this.cols + col) * this.element_size
+        write_float_to_file(this.file_path, offset, value)
+    }
+}

@@ -1,0 +1,99 @@
+contract NeuralNetwork {
+    persistent storage layers: list
+    persistent storage learning_rate: float = 0.01
+    
+    action init(layer_sizes: list) {
+        this.layers = []
+        for each i in range(0, len(layer_sizes) - 1) {
+            let weights = zeros(layer_sizes[i+1], layer_sizes[i])
+            let biases = zeros(layer_sizes[i+1], 1)
+            this.layers.push({weights: weights, biases: biases})
+        }
+    }
+    
+    action forward(input: list) -> list {
+        let activation = matrix(len(input), 1, input)
+        
+        for each layer in this.layers {
+            let z = layer.weights.multiply(activation).add(layer.biases)
+            activation = sigmoid(z)  // Apply activation function
+        }
+        
+        return activation.data
+    }
+    
+    action train(X: list, y: list, epochs: integer) {
+        for each epoch in range(0, epochs) {
+            let total_error = 0.0
+            
+            for each i in range(0, len(X)) {
+                let prediction = this.forward(X[i])
+                let error = vector_subtract(y[i], prediction)
+                total_error = total_error + vector_norm(error)
+                
+                // Backpropagation would go here
+                this.backward_pass(X[i], y[i])
+            }
+            
+            if epoch % 100 == 0 {
+                print("Epoch " + string(epoch) + ", Error: " + string(total_error))
+            }
+        }
+    }
+    
+    action sigmoid(m: Matrix) -> Matrix {
+        let data = list_map(m.data, action(x) { return 1.0 / (1.0 + exp(-x)) })
+        return matrix(m.rows(), m.cols(), data)
+    }
+}
+
+// K-means clustering
+export action kmeans(data: list, k: integer, max_iter: integer = 100) -> list {
+    // Initialize centroids randomly
+    let centroids = list_map(range(0, k), action(_) { 
+        return data[math_random_int(0, len(data)-1)] 
+    })
+    
+    let clusters = []
+    let iterations = 0
+    
+    while iterations < max_iter {
+        // Assignment step
+        clusters = list_map(range(0, k), action(_) { return [] })
+        
+        for each point in data {
+            let min_dist = INFINITY
+            let best_cluster = 0
+            
+            for each i in range(0, k) {
+                let dist = euclidean_distance(point, centroids[i])
+                if dist < min_dist {
+                    min_dist = dist
+                    best_cluster = i
+                }
+            }
+            
+            clusters[best_cluster].push(point)
+        }
+        
+        // Update step
+        let new_centroids = []
+        for each i in range(0, k) {
+            if len(clusters[i]) > 0 {
+                new_centroids.push(vector_mean(clusters[i]))
+            } else {
+                new_centroids.push(centroids[i])  // Keep old centroid if cluster is empty
+            }
+        }
+        
+        // Check convergence
+        if vectors_equal(centroids, new_centroids) {
+            break
+        }
+        
+        centroids = new_centroids
+        iterations = iterations + 1
+    }
+    
+    return {clusters: clusters, centroids: centroids, iterations: iterations}
+}

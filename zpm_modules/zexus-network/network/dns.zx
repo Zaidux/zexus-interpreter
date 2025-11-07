@@ -1,0 +1,76 @@
+// DNS resolution and network utilities
+export action async resolve_hostname(hostname: string) -> list {
+    // Returns list of IP addresses
+    try {
+        let addresses = await internal_dns_lookup(hostname)
+        return addresses
+    } catch(error) {
+        throw "DNS resolution failed for " + hostname + ": " + string(error)
+    }
+}
+
+export action async reverse_dns_lookup(ip: string) -> string {
+    try {
+        let hostname = await internal_reverse_dns_lookup(ip)
+        return hostname
+    } catch(error) {
+        throw "Reverse DNS lookup failed for " + ip + ": " + string(error)
+    }
+}
+
+export action is_valid_ipv4(ip: string) -> boolean {
+    let parts = string_split(ip, ".")
+    if len(parts) != 4 { return false }
+    
+    for each part in parts {
+        let num = integer(part)
+        if num < 0 or num > 255 { return false }
+    }
+    
+    return true
+}
+
+export action is_valid_ipv6(ip: string) -> boolean {
+    // Basic IPv6 validation
+    let parts = string_split(ip, ":")
+    return len(parts) >= 3 and len(parts) <= 8
+}
+
+export action async ping(host: string, timeout: integer = 5) -> map {
+    let start_time = time_now()
+    
+    try {
+        let addresses = await resolve_hostname(host)
+        if len(addresses) == 0 {
+            return {success: false, error: "No addresses found", latency: null}
+        }
+        
+        // Try to connect to port 80 (HTTP) as a basic ping
+        let socket = TCPSocket{}
+        let connected = await socket.connect(IPAddress{
+            address: addresses[0], 
+            port: 80, 
+            protocol: Protocol.TCP
+        })
+        
+        let latency = time_now() - start_time
+        await socket.close()
+        
+        return {
+            success: connected,
+            latency: latency,
+            address: addresses[0]
+        }
+        
+    } catch(error) {
+        return {
+            success: false,
+            error: string(error),
+            latency: null
+        }
+    }
+}
+
+// External DNS implementations
+external action async internal_dns_lookup(hostname: string) -> list from "dns_backend"
+external action async internal_reverse_dns_lookup(ip: string) -> string from "dns_backend"

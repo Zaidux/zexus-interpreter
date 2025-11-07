@@ -1,0 +1,85 @@
+// Parallel computation for expensive math operations
+export action async parallel_integrate(f: MathFunction, a: float, b: float, chunks: integer = 4) -> float {
+    let chunk_size = (b - a) / float(chunks)
+    let tasks = []
+    
+    for each i in range(0, chunks) {
+        let start = a + float(i) * chunk_size
+        let end = start + chunk_size
+        let task = spawn integrate(f, start, end, 250)  // Fewer steps per chunk
+        tasks.push(task)
+    }
+    
+    let results = await all(tasks)
+    return reduce(results, 0.0, action(acc, x) { return acc + x })
+}
+
+// Monte Carlo integration with async sampling
+export action async monte_carlo_integrate(f: MathFunction, a: float, b: float, samples: integer = 10000) -> float {
+    let sum = 0.0
+    let batch_size = 1000
+    let num_batches = samples / batch_size
+    
+    for each batch in range(0, num_batches) {
+        let batch_sum = 0.0
+        for each _ in range(0, batch_size) {
+            let x = a + (b - a) * math_random()
+            batch_sum = batch_sum + f.evaluate(x)
+        }
+        sum = sum + batch_sum
+        await sleep(0)  // Yield to other tasks
+    }
+    
+    return (b - a) * sum / float(samples)
+}
+
+// Event-driven numerical analysis
+event ConvergenceEvent {
+    iteration: integer,
+    value: float,
+    error: float,
+    method: string
+}
+
+export action async iterative_solver(f: MathFunction, initial_guess: float, method: string = "newton") -> float {
+    register_event("convergence", action(event: ConvergenceEvent) {
+        debug "Iteration " + string(event.iteration) + 
+              ": value=" + string(event.value) + 
+              ", error=" + string(event.error)
+    })
+    
+    let x = initial_guess
+    let iteration = 0
+    let tolerance = 1e-12
+    
+    while iteration < 1000 {
+        let fx = f.evaluate(x)
+        let error = math_abs(fx)
+        
+        emit ConvergenceEvent {
+            iteration: iteration,
+            value: x,
+            error: error,
+            method: method
+        }
+        
+        if error < tolerance {
+            return x
+        }
+        
+        if method == "newton" {
+            let dfx = derivative(f, x)
+            x = x - fx / dfx
+        } else if method == "steffensen" {
+            // Steffensen's method for faster convergence
+            let fx = f.evaluate(x)
+            let gx = (f.evaluate(x + fx) - fx) / fx
+            x = x - fx / gx
+        }
+        
+        iteration = iteration + 1
+        await sleep(0)  // Yield for async rendering
+    }
+    
+    throw "Solver didn't converge"
+}

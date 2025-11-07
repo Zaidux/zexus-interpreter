@@ -1,0 +1,139 @@
+// WebSocket events
+event WebSocketOpen {
+    url: string,
+    timestamp: integer
+}
+
+event WebSocketMessage {
+    data: any,
+    type: string,
+    timestamp: integer
+}
+
+event WebSocketError {
+    error: string,
+    timestamp: integer
+}
+
+event WebSocketClose {
+    code: integer,
+    reason: string,
+    timestamp: integer
+}
+
+contract WebSocketClient {
+    persistent storage url: string
+    persistent storage protocols: list
+    persistent storage is_connected: boolean = false
+    persistent storage message_handlers: list = []
+    persistent storage reconnect_attempts: integer = 0
+    
+    action async connect() -> boolean {
+        try {
+            emit WebSocketConnecting { url: this.url }
+            
+            await this.internal_connect()
+            this.is_connected = true
+            this.reconnect_attempts = 0
+            
+            emit WebSocketOpen { 
+                url: this.url, 
+                timestamp: time_now() 
+            }
+            
+            // Start listening for messages
+            spawn this.message_loop()
+            
+            return true
+            
+        } catch(error) {
+            emit WebSocketError { 
+                error: "Connection failed: " + string(error),
+                timestamp: time_now()
+            }
+            
+            // Auto-reconnect logic
+            if this.reconnect_attempts < 3 {
+                this.reconnect_attempts = this.reconnect_attempts + 1
+                await sleep(2.0 * this.reconnect_attempts)  // Exponential backoff
+                return await this.connect()
+            }
+            
+            return false
+        }
+    }
+    
+    action async send(data: any) -> boolean {
+        if not this.is_connected {
+            throw "WebSocket not connected"
+        }
+        
+        try {
+            await this.internal_send(data)
+            return true
+        } catch(error) {
+            emit WebSocketError { 
+                error: "Send failed: " + string(error),
+                timestamp: time_now()
+            }
+            return false
+        }
+    }
+    
+    action async send_json(data: map) -> boolean {
+        return await this.send(stringify_json(data))
+    }
+    
+    action async close(code: integer = 1000, reason: string = "Normal closure") {
+        if this.is_connected {
+            await this.internal_close(code, reason)
+            this.is_connected = false
+            
+            emit WebSocketClose {
+                code: code,
+                reason: reason,
+                timestamp: time_now()
+            }
+        }
+    }
+    
+    action on_message(handler: action) {
+        this.message_handlers.push(handler)
+    }
+    
+    action async message_loop() {
+        while this.is_connected {
+            try {
+                let message = await this.internal_receive()
+                
+                if message != null {
+                    let message_event = WebSocketMessage {
+                        data: message.data,
+                        type: message.type,
+                        timestamp: time_now()
+                    }
+                    
+                    // Call all registered handlers
+                    for each handler in this.message_handlers {
+                        spawn handler(message_event)
+                    }
+                }
+                
+            } catch(error) {
+                if this.is_connected {  // Only emit if we're supposed to be connected
+                    emit WebSocketError {
+                        error: "Receive error: " + string(error),
+                        timestamp: time_now()
+                    }
+                }
+                break
+            }
+        }
+    }
+    
+    // External implementations
+    external action async internal_connect() from "websocket_backend"
+    external action async internal_send(data: any) from "websocket_backend"
+    external action async internal_receive() -> map from "websocket_backend"
+    external action async internal_close(code: integer, reason: string) from "websocket_backend"
+}

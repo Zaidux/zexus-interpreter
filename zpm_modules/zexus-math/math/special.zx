@@ -1,0 +1,64 @@
+// Gamma function using Lanczos approximation
+export action gamma(z: float) -> float {
+    let coefficients = [
+        676.5203681218851, -1259.1392167224028, 771.32342877765313,
+        -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+        9.9843695780195716e-6, 1.5056327351493116e-7
+    ]
+    
+    if z < 0.5 {
+        return PI / (sin(PI * z) * gamma(1.0 - z))
+    }
+    
+    z = z - 1.0
+    let x = 0.99999999999980993
+    
+    for each i in range(0, len(coefficients)) {
+        x = x + coefficients[i] / (z + float(i) + 1.0)
+    }
+    
+    let t = z + float(len(coefficients)) - 0.5
+    return sqrt(2 * PI) * pow(t, z + 0.5) * exp(-t) * x
+}
+
+// Bessel functions
+export action bessel_j(n: integer, x: float) -> float {
+    let sum = 0.0
+    let tolerance = 1e-12
+    let k = 0
+    
+    while true {
+        let term = pow(-1, k) * pow(x/2.0, float(2*k + n)) / (factorial(k) * factorial(k + n))
+        sum = sum + term
+        
+        if math_abs(term) < tolerance {
+            break
+        }
+        k = k + 1
+        
+        if k > 1000 {
+            throw "Bessel function didn't converge"
+        }
+    }
+    
+    return sum
+}
+
+// Error function
+export action erf(x: float) -> float {
+    // Approximation with max error ~1e-7
+    let a1 = 0.254829592
+    let a2 = -0.284496736
+    let a3 = 1.421413741
+    let a4 = -1.453152027
+    let a5 = 1.061405429
+    let p = 0.3275911
+    
+    let sign = if x < 0 then -1.0 else 1.0
+    x = math_abs(x)
+    
+    let t = 1.0 / (1.0 + p * x)
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * exp(-x * x)
+    
+    return sign * y
+}

@@ -1,0 +1,146 @@
+// Zexus Network Library - Main Entry Point
+// This file exports the entire network library as a unified API
+
+// Import all modules from network directory
+export use "./network/core" as core
+export use "./network/http" as http
+export use "./network/websocket" as websocket
+export use "./network/socket" as socket
+export use "./network/server" as server
+export use "./network/dns" as dns
+export use "./network/security" as security
+
+// Protocol exports
+export enum Protocol = core.Protocol
+export enum HttpMethod = core.HttpMethod  
+export enum HttpStatus = core.HttpStatus
+export protocol NetworkAddress = core.NetworkAddress
+export protocol Socket = socket.Socket
+export protocol Server = server.Server
+
+// Class exports
+export contract IPAddress = core.IPAddress
+export contract HttpClient = http.HttpClient
+export contract JsonHttpClient = http.JsonHttpClient
+export contract WebSocketClient = websocket.WebSocketClient
+export contract TCPSocket = socket.TCPSocket
+export contract UDPSocket = socket.UDPSocket
+export contract TCPServer = server.TCPServer
+export contract HttpServer = server.HttpServer
+export contract SecureSocket = security.SecureSocket
+export contract RateLimiter = security.RateLimiter
+
+// Utility functions
+export action async resolve_hostname = dns.resolve_hostname
+export action async reverse_dns_lookup = dns.reverse_dns_lookup
+export action is_valid_ipv4 = dns.is_valid_ipv4
+export action is_valid_ipv6 = dns.is_valid_ipv6
+export action async ping = dns.ping
+export action sign_request = security.sign_request
+export action verify_signature = security.verify_signature
+
+// Convenience constructors
+export action ip_address(addr: string, port: integer, proto: Protocol) -> IPAddress {
+    return IPAddress{address: addr, port: port, protocol: proto}
+}
+
+export action http_client(base_url: string = "", headers: map = {}) -> HttpClient {
+    return HttpClient{base_url: base_url, default_headers: headers}
+}
+
+export action json_http_client(base_url: string = "", headers: map = {}) -> JsonHttpClient {
+    return JsonHttpClient{base_url: base_url, default_headers: headers}
+}
+
+export action websocket_client(url: string, protocols: list = []) -> WebSocketClient {
+    return WebSocketClient{url: url, protocols: protocols}
+}
+
+export action tcp_socket() -> TCPSocket {
+    return TCPSocket{}
+}
+
+export action udp_socket() -> UDPSocket {
+    return UDPSocket{}
+}
+
+export action tcp_server() -> TCPServer {
+    return TCPServer{}
+}
+
+export action http_server() -> HttpServer {
+    return HttpServer{}
+}
+
+export action secure_socket(cert_file: string = "", key_file: string = "") -> SecureSocket {
+    return SecureSocket{cert_file: cert_file, key_file: key_file}
+}
+
+export action rate_limiter(window_seconds: integer = 60, max_requests: integer = 100) -> RateLimiter {
+    return RateLimiter{window_seconds: window_seconds, max_requests: max_requests}
+}
+
+// Common HTTP methods as async actions
+export action async http_get(url: string, headers: map = {}) -> http.HttpResponse {
+    let client = http_client()
+    return await client.get(url, headers)
+}
+
+export action async http_post(url: string, data: any, headers: map = {}) -> http.HttpResponse {
+    let client = http_client()
+    return await client.post(url, data, headers)
+}
+
+export action async http_put(url: string, data: any, headers: map = {}) -> http.HttpResponse {
+    let client = http_client()
+    return await client.put(url, data, headers)
+}
+
+export action async http_delete(url: string, headers: map = {}) -> http.HttpResponse {
+    let client = http_client()
+    return await client.delete(url, headers)
+}
+
+// JSON-specific HTTP shortcuts
+export action async http_get_json(url: string, headers: map = {}) -> map {
+    let client = json_http_client()
+    return await client.get_json(url, headers)
+}
+
+export action async http_post_json(url: string, data: map, headers: map = {}) -> map {
+    let client = json_http_client()
+    return await client.post_json(url, data, headers)
+}
+
+// Configuration
+persistent storage NETWORK_CONFIG: map = core.NETWORK_CONFIG
+
+export action set_network_config(key: string, value: any) {
+    NETWORK_CONFIG[key] = value
+}
+
+export action get_network_config(key: string) -> any {
+    return NETWORK_CONFIG.get(key, null)
+}
+
+// Async sleep utility for network operations
+export action async sleep(seconds: float) {
+    await internal_sleep(integer(seconds * 1000))
+}
+
+external action async internal_sleep(ms: integer) from "system"
+
+// Version info
+export let VERSION: string = "1.0.0"
+export let AUTHOR: string = "Zexus Network Team"
+export let LICENSE: string = "MIT"
+
+// Library initialization
+action init() {
+    print("Zexus Network Library v" + VERSION + " initialized")
+    print("Available modules: HTTP client, WebSocket, TCP/UDP sockets, servers, DNS, security")
+    print("All operations support async/await for non-blocking networking")
+}
+
+// Auto-initialize
+init()

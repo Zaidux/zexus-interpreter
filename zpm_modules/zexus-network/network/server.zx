@@ -1,0 +1,201 @@
+// Server events
+event ServerStarted {
+    address: NetworkAddress,
+    timestamp: integer
+}
+
+event ServerStopped {
+    address: NetworkAddress,
+    timestamp: integer
+}
+
+event ClientConnected {
+    client_address: NetworkAddress,
+    server_address: NetworkAddress,
+    timestamp: integer
+}
+
+event ClientDisconnected {
+    client_address: NetworkAddress,
+    server_address: NetworkAddress,
+    timestamp: integer
+}
+
+protocol Server {
+    action async start(port: integer, host: string = "0.0.0.0") -> boolean
+    action async stop()
+    action is_running() -> boolean
+    action get_address() -> NetworkAddress
+}
+
+contract TCPServer implements Server {
+    persistent storage address: NetworkAddress
+    persistent storage running: boolean = false
+    persistent storage clients: list = []
+    persistent storage connection_handler: action = null
+    
+    action async start(port: integer, host: string = "0.0.0.0") -> boolean {
+        try {
+            this.address = IPAddress{address: host, port: port, protocol: Protocol.TCP}
+            await this.internal_start(host, port)
+            this.running = true
+            
+            emit ServerStarted {
+                address: this.address,
+                timestamp: time_now()
+            }
+            
+            // Start accepting connections
+            spawn this.accept_loop()
+            
+            return true
+        } catch(error) {
+            emit ServerError {
+                error: "Server start failed: " + string(error),
+                address: this.address,
+                timestamp: time_now()
+            }
+            return false
+        }
+    }
+    
+    action async stop() {
+        if this.running {
+            await this.internal_stop()
+            this.running = false
+            
+            // Close all client connections
+            for each client in this.clients {
+                await client.close()
+            }
+            this.clients = []
+            
+            emit ServerStopped {
+                address: this.address,
+                timestamp: time_now()
+            }
+        }
+    }
+    
+    action on_connection(handler: action) {
+        this.connection_handler = handler
+    }
+    
+    action async accept_loop() {
+        while this.running {
+            try {
+                let client_socket = await this.internal_accept()
+                let client_address = client_socket.get_address()
+                
+                emit ClientConnected {
+                    client_address: client_address,
+                    server_address: this.address,
+                    timestamp: time_now()
+                }
+                
+                this.clients.push(client_socket)
+                
+                // Handle the connection
+                if this.connection_handler != null {
+                    spawn this.connection_handler(client_socket)
+                }
+                
+            } catch(error) {
+                if this.running {  // Only log if we're supposed to be running
+                    emit ServerError {
+                        error: "Accept error: " + string(error),
+                        address: this.address,
+                        timestamp: time_now()
+                    }
+                }
+            }
+        }
+    }
+    
+    action is_running() -> boolean { return this.running }
+    action get_address() -> NetworkAddress { return this.address }
+    
+    // External implementations
+    external action async internal_start(host: string, port: integer) from "tcp_server_backend"
+    external action async internal_stop() from "tcp_server_backend"
+    external action async internal_accept() -> Socket from "tcp_server_backend"
+}
+
+// Simple HTTP server
+contract HttpServer {
+    persistent storage tcp_server: TCPServer
+    persistent storage routes: map = {}
+    persistent storage middleware: list = []
+    
+    action async start(port: integer, host: string = "0.0.0.0") -> boolean {
+        this.tcp_server = TCPServer{}
+        this.tcp_server.on_connection(action(socket) {
+            spawn this.handle_http_connection(socket)
+        })
+        
+        return await this.tcp_server.start(port, host)
+    }
+    
+    action async stop() {
+        await this.tcp_server.stop()
+    }
+    
+    action route(method: HttpMethod, path: string, handler: action) {
+        let key = string(method) + ":" + path
+        this.routes[key] = handler
+    }
+    
+    action use(middleware_handler: action) {
+        this.middleware.push(middleware_handler)
+    }
+    
+    action async handle_http_connection(socket: Socket) {
+        try {
+            while socket.is_connected() {
+                let data = await socket.receive(8192)
+                let request = this.parse_http_request(data)
+                
+                if request != null {
+                    let response = await this.handle_request(request)
+                    await socket.send(this.build_http_response(response))
+                }
+            }
+        } catch(error) {
+            // Client disconnected or error occurred
+        } finally {
+            await socket.close()
+        }
+    }
+    
+    action async handle_request(request: map) -> map {
+        // Apply middleware
+        for each mw in this.middleware {
+            request = await mw(request)
+        }
+        
+        // Find route handler
+        let key = request.method + ":" + request.path
+        let handler = this.routes.get(key, null)
+        
+        if handler != null {
+            return await handler(request)
+        } else {
+            return {
+                status: HttpStatus.NOT_FOUND,
+                headers: {"Content-Type": "text/plain"},
+                body: "404 Not Found"
+            }
+        }
+    }
+    
+    action parse_http_request(data: list) -> map {
+        // Parse HTTP request from bytes
+        // Implementation would convert bytes to string and parse headers/body
+        return null  // Placeholder
+    }
+    
+    action build_http_response(response: map) -> list {
+        // Convert response map to HTTP response bytes
+        return []  // Placeholder
+    }
+}

@@ -1,0 +1,232 @@
+// Advanced cross-chain bridge with multi-chain support
+contract CrossChainBridge {
+    persistent storage supported_chains: list = [ChainType.ZIVER, ChainType.ETHEREUM, ChainType.TON, ChainType.BSC, ChainType.POLYGON]
+    persistent storage bridge_contracts: Map<ChainType, string> = {}
+    persistent storage asset_registry: Map<string, CrossChainAsset> = {}
+    persistent storage pending_transfers: Map<string, BridgeTransfer> = {}
+    persistent storage validators: Map<ChainType, list> = {}
+    
+    action async initialize_bridge() {
+        // Deploy or connect to bridge contracts on each chain
+        for each chain in this.supported_chains {
+            let bridge_addr = await this.deploy_bridge_contract(chain)
+            this.bridge_contracts[chain] = bridge_addr
+            
+            emit BridgeInitialized {
+                chain: chain,
+                contract_address: bridge_addr,
+                timestamp: time_now()
+            }
+        }
+        
+        // Setup asset mappings
+        await this.initialize_asset_registry()
+    }
+    
+    action async transfer_assets(
+        from_chain: ChainType,
+        to_chain: ChainType, 
+        asset: string,
+        amount: integer,
+        recipient: Address
+    ) -> string {
+        
+        require(this.supported_chains.contains(from_chain), "Source chain not supported")
+        require(this.supported_chains.contains(to_chain), "Destination chain not supported")
+        require(from_chain != to_chain, "Cannot transfer within same chain")
+        
+        let cross_chain_asset = this.asset_registry.get(asset, null)
+        require(cross_chain_asset != null, "Asset not supported for cross-chain transfer")
+        
+        // Lock assets on source chain
+        let lock_tx_hash = await this.lock_assets(from_chain, asset, amount, recipient.toString())
+        
+        // Create bridge transfer
+        let transfer = BridgeTransfer{
+            transfer_id: this.generate_transfer_id(),
+            from_chain: from_chain,
+            to_chain: to_chain,
+            asset: asset,
+            amount: amount,
+            recipient: recipient,
+            lock_tx_hash: lock_tx_hash,
+            status: BridgeTransferStatus.LOCKED,
+            created_at: time_now()
+        }
+        
+        this.pending_transfers[transfer.transfer_id] = transfer
+        
+        // Start validation process
+        spawn this.process_bridge_transfer(transfer)
+        
+        emit BridgeTransferInitiated {
+            transfer_id: transfer.transfer_id,
+            from_chain: from_chain,
+            to_chain: to_chain,
+            asset: asset,
+            amount: amount,
+            recipient: recipient,
+            lock_tx_hash: lock_tx_hash
+        }
+        
+        return transfer.transfer_id
+    }
+    
+    action async process_bridge_transfer(transfer: BridgeTransfer) {
+        // Wait for confirmation on source chain
+        let confirmed = await this.wait_for_confirmation(transfer.from_chain, transfer.lock_tx_hash)
+        
+        if confirmed {
+            transfer.status = BridgeTransferStatus.CONFIRMED
+            
+            // Get validator signatures
+            let signatures = await this.collect_validator_signatures(transfer)
+            
+            if len(signatures) >= this.get_required_signatures(transfer.to_chain) {
+                // Mint/release assets on destination chain
+                let release_tx_hash = await this.release_assets(
+                    transfer.to_chain, 
+                    transfer.asset, 
+                    transfer.amount, 
+                    transfer.recipient,
+                    signatures
+                )
+                
+                transfer.release_tx_hash = release_tx_hash
+                transfer.status = BridgeTransferStatus.COMPLETED
+                transfer.completed_at = time_now()
+                
+                emit BridgeTransferCompleted {
+                    transfer_id: transfer.transfer_id,
+                    release_tx_hash: release_tx_hash,
+                    completed_at: transfer.completed_at
+                }
+            }
+        } else {
+            transfer.status = BridgeTransferStatus.FAILED
+            transfer.failed_at = time_now()
+            
+            emit BridgeTransferFailed {
+                transfer_id: transfer.transfer_id,
+                reason: "Source chain transaction not confirmed",
+                failed_at: transfer.failed_at
+            }
+        }
+        
+        this.pending_transfers[transfer.transfer_id] = transfer
+    }
+    
+    action async lock_assets(chain: ChainType, asset: string, amount: integer, recipient: string) -> string {
+        let bridge_contract = this.bridge_contracts[chain]
+        
+        if chain == ChainType.ETHEREUM {
+            // Use Ethereum bridge contract
+            return await this.ethereum_lock_assets(bridge_contract, asset, amount, recipient)
+        } else if chain == ChainType.TON {
+            // Use TON bridge contract
+            return await this.ton_lock_assets(bridge_contract, asset, amount, recipient)
+        } else if chain == ChainType.ZIVER {
+            // Use native Ziver chain locking
+            return await this.ziver_lock_assets(asset, amount, recipient)
+        }
+        
+        throw "Unsupported chain for asset locking"
+    }
+    
+    action async release_assets(
+        chain: ChainType, 
+        asset: string, 
+        amount: integer, 
+        recipient: Address,
+        signatures: list
+    ) -> string {
+        
+        let bridge_contract = this.bridge_contracts[chain]
+        
+        if chain == ChainType.ETHEREUM {
+            return await this.ethereum_release_assets(bridge_contract, asset, amount, recipient, signatures)
+        } else if chain == ChainType.TON {
+            return await this.ton_release_assets(bridge_contract, asset, amount, recipient, signatures)
+        } else if chain == ChainType.ZIVER {
+            return await this.ziver_release_assets(asset, amount, recipient, signatures)
+        }
+        
+        throw "Unsupported chain for asset release"
+    }
+    
+    action async collect_validator_signatures(transfer: BridgeTransfer) -> list {
+        let validators = this.validators.get(transfer.to_chain, [])
+        let signatures = []
+        let message = this.get_signing_message(transfer)
+        
+        for each validator in validators {
+            try {
+                let signature = await validator.sign_bridge_message(message)
+                if this.verify_validator_signature(signature, validator) {
+                    signatures.push({
+                        validator: validator.get_address(),
+                        signature: signature,
+                        timestamp: time_now()
+                    })
+                }
+            } catch(error) {
+                print("Validator " + validator.get_address() + " failed to sign: " + string(error))
+            }
+        }
+        
+        return signatures
+    }
+    
+    // Asset registry for cross-chain tokens
+    contract CrossChainAsset {
+        persistent storage asset_id: string
+        persistent storage chains: Map<ChainType, AssetInfo> = {}
+        persistent storage is_wrapped: boolean
+        persistent storage bridge_fee: float
+        
+        action get_chain_asset(chain: ChainType) -> AssetInfo {
+            return this.chains.get(chain, null)
+        }
+        
+        action add_chain_support(chain: ChainType, contract_address: string, decimals: integer) {
+            this.chains[chain] = AssetInfo{
+                contract_address: contract_address,
+                decimals: decimals,
+                is_native: chain == this.get_native_chain()
+            }
+            
+            emit ChainSupportAdded {
+                asset_id: this.asset_id,
+                chain: chain,
+                contract_address: contract_address,
+                timestamp: time_now()
+            }
+        }
+        
+        action calculate_bridge_fee(amount: integer, from_chain: ChainType, to_chain: ChainType) -> integer {
+            let base_fee = this.bridge_fee * amount
+            let chain_multiplier = this.get_chain_fee_multiplier(from_chain, to_chain)
+            return integer(base_fee * chain_multiplier)
+        }
+    }
+}
+
+// Bridge transfer tracking
+contract BridgeTransfer {
+    persistent storage transfer_id: string
+    persistent storage from_chain: ChainType
+    persistent storage to_chain: ChainType
+    persistent storage asset: string
+    persistent storage amount: integer
+    persistent storage recipient: Address
+    persistent storage lock_tx_hash: string
+    persistent storage release_tx_hash: string = ""
+    persistent storage status: BridgeTransferStatus
+    persistent storage created_at: integer
+    persistent storage completed_at: integer = 0
+    persistent storage failed_at: integer = 0
+}
+
+export enum BridgeTransferStatus {
+    LOCKED, CONFIRMED, RELEASING, COMPLETED, FAILED
+}

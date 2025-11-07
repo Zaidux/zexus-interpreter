@@ -1,0 +1,4 @@
+print("Compiler test")
+let x = 42
+let s = string(x)
+print("Result: " + s)

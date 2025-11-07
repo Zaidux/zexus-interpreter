@@ -1,0 +1,142 @@
+// Enhanced transaction with bounce-back feature
+contract BounceBackTransaction extends BasicTransaction {
+    persistent storage bounce_back_enabled: boolean = true
+    persistent storage bounce_back_delay: integer = 86400  // 24 hours in seconds
+    
+    action init(from_addr: Address, to_addr: Address, amount: integer, chain: ChainType) {
+        super.init(from_addr, to_addr, amount, chain)
+        
+        // Auto-enable bounce-back for certain conditions
+        if this.should_enable_bounce_back(to_addr, chain) {
+            this.bounce_back_enabled = true
+        }
+    }
+    
+    action execute() -> boolean {
+        if not this.verify() {
+            return false
+        }
+        
+        // Check if recipient address is valid and exists
+        if this.bounce_back_enabled and not this.recipient_exists() {
+            // Schedule bounce-back instead of failing
+            this.schedule_bounce_back()
+            return true  // Return success but schedule bounce-back
+        }
+        
+        // Normal execution if recipient exists
+        return super.execute()
+    }
+    
+    action recipient_exists() -> boolean {
+        let recipient = this.to.toString()
+        
+        // Check various conditions for non-existent addresses
+        if this.is_zero_address(recipient) {
+            return false
+        }
+        
+        if this.is_invalid_format(recipient) {
+            return false
+        }
+        
+        if not this.has_activity(recipient) {
+            return false
+        }
+        
+        return true
+    }
+    
+    action schedule_bounce_back() {
+        let bounce_time = time_now() + (this.bounce_back_delay * 1000)
+        
+        emit BounceBackScheduled {
+            tx_hash: bytes_to_hex(this.hash()),
+            from: this.from,
+            intended_to: this.to,
+            amount: this.value,
+            bounce_time: bounce_time,
+            reason: this.get_bounce_reason()
+        }
+        
+        // Schedule the actual bounce-back
+        spawn this.execute_bounce_back(bounce_time)
+    }
+    
+    action async execute_bounce_back(scheduled_time: integer) {
+        let current_time = time_now()
+        let delay = scheduled_time - current_time
+        
+        if delay > 0 {
+            await sleep(delay / 1000.0)
+        }
+        
+        // Return funds to sender
+        emit BounceBackExecuted {
+            tx_hash: bytes_to_hex(this.hash()),
+            from: this.from,
+            returned_to: this.from,  // Return to sender
+            amount: this.value,
+            original_recipient: this.to,
+            reason: this.get_bounce_reason()
+        }
+        
+        // Execute the bounce-back transaction
+        let bounce_tx = BasicTransaction{
+            from: this.to,  // From the "failed" address (system handled)
+            to: this.from,  // Back to original sender
+            value: this.value,
+            chain: this.from.get_chain()
+        }
+        
+        // System signs and executes the bounce-back
+        bounce_tx.execute()
+    }
+    
+    action get_bounce_reason() -> string {
+        let recipient = this.to.toString()
+        
+        if this.is_zero_address(recipient) {
+            return "Zero address recipient"
+        }
+        
+        if this.is_invalid_format(recipient) {
+            return "Invalid address format"
+        }
+        
+        if not this.has_activity(recipient) {
+            return "Recipient has no on-chain activity"
+        }
+        
+        return "Recipient validation failed"
+    }
+    
+    action is_zero_address(addr: string) -> boolean {
+        let zero_patterns = [
+            "0x0000000000000000000000000000000000000000",
+            "EQ00000000000000000000000000000000000000000000000000",
+            "0x0"
+        ]
+        return zero_patterns.contains(addr)
+    }
+    
+    action is_invalid_format(addr: string) -> boolean {
+        let chain = this.to.get_chain()
+        
+        if chain == ChainType.ETHEREUM or chain == ChainType.ZIVER {
+            return len(addr) != 42 or not addr.startsWith("0x") or not this.is_hex(addr[2:])
+        } else if chain == ChainType.TON {
+            return len(addr) != 48 or not addr.startsWith("EQ")
+        }
+        
+        return false
+    }
+    
+    action has_activity(addr: string) -> boolean {
+        // Check if address has any on-chain activity
+        // This would query the blockchain state
+        return check_address_activity(addr, this.to.get_chain())
+    }
+    
+    external action check_address_activity(addr: string, chain: ChainType) -> boolean from "chain_analysis"
+}

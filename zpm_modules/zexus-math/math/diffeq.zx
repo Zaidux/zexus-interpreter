@@ -1,0 +1,43 @@
+protocol DifferentialEquation {
+    action evaluate(t: float, y: list) -> list
+}
+
+// Runge-Kutta 4th order method
+export action runge_kutta_4(f: DifferentialEquation, y0: list, t0: float, tf: float, steps: integer) -> list {
+    let h = (tf - t0) / float(steps)
+    let t = t0
+    let y = y0
+    let solution = [[t] + y]
+    
+    for each _ in range(0, steps) {
+        let k1 = f.evaluate(t, y)
+        let k2 = f.evaluate(t + h/2, vector_add(y, vector_scale(k1, h/2)))
+        let k3 = f.evaluate(t + h/2, vector_add(y, vector_scale(k2, h/2)))
+        let k4 = f.evaluate(t + h, vector_add(y, vector_scale(k3, h)))
+        
+        let derivative = vector_scale(vector_add(k1, vector_scale(vector_add(k2, k3), 2), k4), h/6)
+        y = vector_add(y, derivative)
+        t = t + h
+        
+        solution.push([t] + y)
+    }
+    
+    return solution
+}
+
+// Lorenz system example
+contract LorenzSystem implements DifferentialEquation {
+    persistent storage sigma: float = 10.0
+    persistent storage rho: float = 28.0  
+    persistent storage beta: float = 8.0/3.0
+    
+    action evaluate(t: float, y: list) -> list {
+        let x = y[0], y_val = y[1], z = y[2]
+        
+        let dx_dt = this.sigma * (y_val - x)
+        let dy_dt = x * (this.rho - z) - y_val
+        let dz_dt = x * y_val - this.beta * z
+        
+        return [dx_dt, dy_dt, dz_dt]
+    }
+}

@@ -1,0 +1,29 @@
+// test_minimal.zx - Minimal test
+print("🔍 Testing library imports...")
+
+try {
+    use "zexus-math" as math
+    print("✅ zexus-math imported successfully!")
+    print("   Version: " + math.VERSION)
+} catch(error) {
+    print("❌ zexus-math import failed: " + string(error))
+}
+
+try {
+    use "zexus-network" as net  
+    print("✅ zexus-network imported successfully!")
+    print("   Version: " + net.VERSION)
+} catch(error) {
+    print("❌ zexus-network import failed: " + string(error))
+}
+
+try {
+    use "zexus-blockchain" as blockchain
+    print("✅ zexus-blockchain imported successfully!")
+    print("   Version: " + blockchain.VERSION)
+} catch(error) {
+    print("❌ zexus-blockchain import failed: " + string(error))
+}
+
+print("")
+print("🎯 Import test completed!")

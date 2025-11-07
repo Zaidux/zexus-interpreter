@@ -1,0 +1,151 @@
+contract Matrix2D implements Matrix {
+    persistent storage data: list
+    persistent storage num_rows: integer
+    persistent storage num_cols: integer
+    
+    action init(rows: integer, cols: integer, data: list) {
+        require(len(data) == rows * cols, "Data size doesn't match dimensions")
+        this.num_rows = rows
+        this.num_cols = cols
+        this.data = data
+    }
+    
+    action rows() -> integer { return this.num_rows }
+    action cols() -> integer { return this.num_cols }
+    
+    action get(row: integer, col: integer) -> float {
+        require(row >= 0 and row < this.num_rows, "Row index out of bounds")
+        require(col >= 0 and col < this.num_cols, "Column index out of bounds")
+        return this.data[row * this.num_cols + col]
+    }
+    
+    action determinant() -> float {
+        require(this.num_rows == this.num_cols, "Matrix must be square")
+        
+        if this.num_rows == 1 {
+            return this.get(0, 0)
+        } else if this.num_rows == 2 {
+            return this.get(0, 0) * this.get(1, 1) - this.get(0, 1) * this.get(1, 0)
+        } else {
+            // Recursive determinant calculation
+            let det = 0.0
+            for each col in range(0, this.num_cols) {
+                let minor = this.minor_matrix(0, col)
+                let sign = if col % 2 == 0 then 1.0 else -1.0
+                det = det + sign * this.get(0, col) * minor.determinant()
+            }
+            return det
+        }
+    }
+    
+    action minor_matrix(row: integer, col: integer) -> Matrix {
+        let minor_data = []
+        for each r in range(0, this.num_rows) {
+            if r == row { continue }
+            for each c in range(0, this.num_cols) {
+                if c == col { continue }
+                minor_data.push(this.get(r, c))
+            }
+        }
+        return Matrix2D{
+            rows: this.num_rows - 1,
+            cols: this.num_cols - 1,
+            data: minor_data
+        }
+    }
+    
+    action multiply(other: Matrix) -> Matrix {
+        require(this.num_cols == other.rows(), "Matrix dimensions don't match for multiplication")
+        
+        let result_data = []
+        for each i in range(0, this.num_rows) {
+            for each j in range(0, other.cols()) {
+                let sum = 0.0
+                for each k in range(0, this.num_cols) {
+                    sum = sum + this.get(i, k) * other.get(k, j)
+                }
+                result_data.push(sum)
+            }
+        }
+        
+        return Matrix2D{
+            rows: this.num_rows,
+            cols: other.cols(),
+            data: result_data
+        }
+    }
+    
+    action inverse() -> Matrix {
+        let det = this.determinant()
+        require(det != 0, "Matrix is singular, cannot invert")
+        
+        if this.num_rows == 2 {
+            let a = this.get(0, 0)
+            let b = this.get(0, 1)
+            let c = this.get(1, 0)
+            let d = this.get(1, 1)
+            
+            return Matrix2D{
+                rows: 2,
+                cols: 2,
+                data: [d/det, -b/det, -c/det, a/det]
+            }
+        } else {
+            // Use adjugate matrix for larger matrices
+            return this.adjugate().scale(1.0 / det)
+        }
+    }
+    
+    action adjugate() -> Matrix {
+        let cofactor_data = []
+        for each i in range(0, this.num_rows) {
+            for each j in range(0, this.num_cols) {
+                let minor = this.minor_matrix(i, j)
+                let sign = if (i + j) % 2 == 0 then 1.0 else -1.0
+                cofactor_data.push(sign * minor.determinant())
+            }
+        }
+        
+        // Transpose the cofactor matrix
+        let adjugate_data = []
+        for each j in range(0, this.num_cols) {
+            for each i in range(0, this.num_rows) {
+                adjugate_data.push(cofactor_data[i * this.num_cols + j])
+            }
+        }
+        
+        return Matrix2D{
+            rows: this.num_cols,
+            cols: this.num_rows,
+            data: adjugate_data
+        }
+    }
+    
+    action scale(factor: float) -> Matrix {
+        let scaled_data = list_map(this.data, action(x) { return x * factor })
+        return Matrix2D{
+            rows: this.num_rows,
+            cols: this.num_cols,
+            data: scaled_data
+        }
+    }
+}
+
+// Matrix constructors
+export action matrix(rows: integer, cols: integer, data: list) -> Matrix {
+    return Matrix2D{rows: rows, cols: cols, data: data}
+}
+
+export action identity(size: integer) -> Matrix {
+    let data = []
+    for each i in range(0, size) {
+        for each j in range(0, size) {
+            data.push(if i == j then 1.0 else 0.0)
+        }
+    }
+    return matrix(size, size, data)
+}
+
+export action zeros(rows: integer, cols: integer) -> Matrix {
+    return matrix(rows, cols, list_map(range(0, rows * cols), action(_) { return 0.0 }))
+}

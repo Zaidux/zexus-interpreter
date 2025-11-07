@@ -1,0 +1,64 @@
+contract Complex implements ComplexNumber {
+    persistent storage real_part: float
+    persistent storage imag_part: float
+    
+    action init(real: float, imag: float) {
+        this.real_part = real
+        this.imag_part = imag
+    }
+    
+    action real() -> float { return this.real_part }
+    action imag() -> float { return this.imag_part }
+    
+    action magnitude() -> float {
+        return sqrt(this.real_part * this.real_part + this.imag_part * this.imag_part)
+    }
+    
+    action phase() -> float {
+        return atan2(this.imag_part, this.real_part)
+    }
+    
+    action conjugate() -> ComplexNumber {
+        return Complex{real: this.real_part, imag: -this.imag_part}
+    }
+    
+    action add(other: ComplexNumber) -> ComplexNumber {
+        return Complex{
+            real: this.real_part + other.real(),
+            imag: this.imag_part + other.imag()
+        }
+    }
+    
+    action multiply(other: ComplexNumber) -> ComplexNumber {
+        let a = this.real_part
+        let b = this.imag_part
+        let c = other.real()
+        let d = other.imag()
+        
+        return Complex{
+            real: a * c - b * d,
+            imag: a * d + b * c
+        }
+    }
+    
+    // String representation
+    action toString() -> string {
+        if this.imag_part >= 0 {
+            return string(this.real_part) + " + " + string(this.imag_part) + "i"
+        } else {
+            return string(this.real_part) + " - " + string(-this.imag_part) + "i"
+        }
+    }
+}
+
+// Complex number constructors
+export action complex(real: float, imag: float) -> ComplexNumber {
+    return Complex{real: real, imag: imag}
+}
+
+export action from_polar(magnitude: float, phase: float) -> ComplexNumber {
+    return Complex{
+        real: magnitude * cos(phase),
+        imag: magnitude * sin(phase)
+    }
+}

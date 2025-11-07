@@ -1,0 +1,227 @@
+// Advanced oracle system with AI-powered data verification
+contract AIEnhancedOracle {
+    persistent storage data_feeds: Map<string, DataFeed> = {}
+    persistent storage oracles: Map<string, OracleNode> = {}
+    persistent storage ai_verification: AIVerificationEngine
+    persistent storage price_feeds: Map<string, PriceFeed> = {}
+    
+    action async initialize_oracle() {
+        this.ai_verification = AIVerificationEngine{}
+        
+        // Initialize standard data feeds
+        await this.initialize_price_feeds()
+        await this.initialize_weather_feeds()
+        await this.initialize_sports_feeds()
+        await this.initialize_randomness_feeds()
+        
+        emit OracleSystemInitialized {
+            timestamp: time_now(),
+            feed_count: len(this.data_feeds),
+            ai_engine_version: "1.0.0"
+        }
+    }
+    
+    action async get_price(asset: string, chain: ChainType) -> map {
+        let feed_id = "price_" + asset + "_" + string(chain)
+        let feed = this.price_feeds.get(feed_id, null)
+        
+        if feed == null {
+            throw "Price feed not found for asset: " + asset
+        }
+        
+        return await feed.get_current_price()
+    }
+    
+    action async get_verified_data(feed_id: string) -> map {
+        let feed = this.data_feeds.get(feed_id, null)
+        require(feed != null, "Data feed not found")
+        
+        // Collect data from multiple oracles
+        let oracle_data = await this.collect_oracle_data(feed_id)
+        
+        // AI-powered data verification
+        let verified_data = await this.ai_verification.verify_and_aggregate(oracle_data, feed_id)
+        
+        // Store verified data on-chain
+        let storage_key = "verified_" + feed_id + "_" + string(time_now())
+        set_storage(storage_key, verified_data)
+        
+        emit DataVerified {
+            feed_id: feed_id,
+            verified_data: verified_data,
+            oracle_count: len(oracle_data),
+            ai_confidence: verified_data.confidence,
+            timestamp: time_now()
+        }
+        
+        return verified_data
+    }
+    
+    action async collect_oracle_data(feed_id: string) -> list {
+        let relevant_oracles = this.get_oracles_for_feed(feed_id)
+        let data_points = []
+        
+        for each oracle in relevant_oracles {
+            try {
+                let data = await oracle.query_data(feed_id)
+                if data != null {
+                    data_points.push({
+                        oracle: oracle.get_address(),
+                        data: data,
+                        timestamp: time_now(),
+                        signature: await oracle.sign_data(data)
+                    })
+                }
+            } catch(error) {
+                print("Oracle " + oracle.get_address() + " failed: " + string(error))
+            }
+        }
+        
+        return data_points
+    }
+}
+
+// AI Verification Engine for oracle data
+contract AIVerificationEngine {
+    persistent storage model_versions: Map<string, string> = {}
+    persistent storage accuracy_scores: Map<string, float> = {}
+    persistent storage anomaly_detection: AnomalyDetector
+    
+    action async verify_and_aggregate(data_points: list, feed_id: string) -> map {
+        // Step 1: Anomaly detection
+        let cleaned_data = await this.detect_anomalies(data_points, feed_id)
+        
+        // Step 2: Weighted aggregation based on oracle reputation
+        let aggregated = await this.weighted_aggregation(cleaned_data, feed_id)
+        
+        // Step 3: Cross-verification with external sources
+        let cross_verified = await this.cross_verify(aggregated, feed_id)
+        
+        // Step 4: Confidence scoring
+        let confidence = await this.calculate_confidence(cross_verified, feed_id)
+        
+        return {
+            value: cross_verified.value,
+            timestamp: time_now(),
+            confidence: confidence,
+            sources_used: len(cleaned_data),
+            aggregation_method: "ai_weighted",
+            model_version: this.model_versions.get(feed_id, "1.0.0")
+        }
+    }
+    
+    action async detect_anomalies(data_points: list, feed_id: string) -> list {
+        let anomalies = []
+        let normal_data = []
+        
+        for each data_point in data_points {
+            let is_anomaly = await this.anomaly_detection.is_anomalous(data_point.data, feed_id)
+            
+            if is_anomaly {
+                anomalies.push(data_point)
+                
+                emit OracleAnomalyDetected {
+                    oracle: data_point.oracle,
+                    feed_id: feed_id,
+                    data: data_point.data,
+                    timestamp: time_now(),
+                    ai_confidence: is_anomaly.confidence
+                }
+            } else {
+                normal_data.push(data_point)
+            }
+        }
+        
+        return normal_data
+    }
+    
+    action async weighted_aggregation(data_points: list, feed_id: string) -> map {
+        let total_weight = 0.0
+        let weighted_sum = 0.0
+        
+        for each data_point in data_points {
+            let weight = this.get_oracle_weight(data_point.oracle, feed_id)
+            total_weight = total_weight + weight
+            weighted_sum = weighted_sum + (data_point.data.value * weight)
+        }
+        
+        return {
+            value: weighted_sum / total_weight,
+            total_weight: total_weight,
+            data_point_count: len(data_points)
+        }
+    }
+    
+    action get_oracle_weight(oracle_address: string, feed_id: string) -> float {
+        let base_accuracy = this.accuracy_scores.get(oracle_address, 0.5)
+        let feed_specific_accuracy = this.accuracy_scores.get(oracle_address + "_" + feed_id, base_accuracy)
+        
+        // AI-calculated weight based on historical performance
+        return this.ai_calculate_weight(base_accuracy, feed_specific_accuracy)
+    }
+}
+
+// Price feed with multi-source aggregation
+contract PriceFeed {
+    persistent storage asset: string
+    persistent storage chain: ChainType
+    persistent storage sources: list = []
+    persistent storage update_interval: integer = 30  // seconds
+    
+    action async get_current_price() -> map {
+        let sources_data = []
+        
+        // Query multiple price sources
+        let tasks = []
+        for each source in this.sources {
+            tasks.push(spawn source.get_price(this.asset, this.chain))
+        }
+        
+        let results = await all(tasks)
+        
+        // Aggregate prices
+        let aggregated = this.aggregate_prices(results)
+        
+        // Store with timestamp
+        this.update_storage(aggregated)
+        
+        return aggregated
+    }
+    
+    action aggregate_prices(price_data: list) -> map {
+        let valid_prices = list_filter(price_data, action(p) { return p != null and p.timestamp > time_now() - 60000 })
+        
+        if len(valid_prices) == 0 {
+            throw "No valid price data available"
+        }
+        
+        // Use median for robustness against outliers
+        let sorted_prices = list_sort(valid_prices, action(a, b) { return a.price - b.price })
+        let median_price = sorted_prices[len(sorted_prices) // 2].price
+        
+        return {
+            price: median_price,
+            timestamp: time_now(),
+            source_count: len(valid_prices),
+            confidence: this.calculate_confidence(valid_prices),
+            asset: this.asset,
+            chain: this.chain
+        }
+    }
+    
+    action async start_price_stream() {
+        while true {
+            let price = await this.get_current_price()
+            
+            emit PriceUpdated {
+                asset: this.asset,
+                chain: this.chain,
+                price: price.price,
+                confidence: price.confidence,
+                timestamp: price.timestamp
+            }
+            
+            await sleep(this.update_interval)
+        }
+    }
+}

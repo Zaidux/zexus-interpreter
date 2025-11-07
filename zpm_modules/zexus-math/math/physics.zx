@@ -1,0 +1,48 @@
+// Quantum mechanics operations
+export action schrodinger_solver(potential: MathFunction, 
+                                energy_guess: float, 
+                                x_min: float, 
+                                x_max: float) -> (float, MathFunction) {
+    // Solve time-independent Schrödinger equation
+    // Returns energy eigenvalue and wavefunction
+    let hbar = 1.0545718e-34  // Reduced Planck's constant
+    
+    contract SchrodingerEquation implements DifferentialEquation {
+        action evaluate(x: float, psi: list) -> list {
+            let [psi_val, psi_prime] = psi
+            let psi_double_prime = -2.0 * (energy_guess - potential.evaluate(x)) * psi_val
+            return [psi_prime, psi_double_prime]
+        }
+    }
+    
+    let eq = SchrodingerEquation{}
+    let solution = runge_kutta_4(eq, [0.0, 1.0], x_min, x_max, 1000)
+    
+    return (find_eigenvalue(solution), normalize_wavefunction(solution))
+}
+
+// General relativity - Christoffel symbols
+export action christoffel_symbols(metric: Matrix, coordinates: list) -> Matrix {
+    // Calculate Γᵏᵢⱼ for general relativity
+    let dim = len(coordinates)
+    let christoffel = zeros(dim, dim, dim)
+    
+    let metric_inv = metric.inverse()
+    
+    for each k in range(0, dim) {
+        for each i in range(0, dim) {
+            for each j in range(0, dim) {
+                let sum = 0.0
+                for each l in range(0, dim) {
+                    let term1 = derivative_by_index(metric, j, l, i, coordinates)
+                    let term2 = derivative_by_index(metric, i, l, j, coordinates)  
+                    let term3 = derivative_by_index(metric, i, j, l, coordinates)
+                    sum = sum + metric_inv.get(k, l) * (term1 + term2 - term3)
+                }
+                christoffel.set(k, i, j, 0.5 * sum)
+            }
+        }
+    }
+    
+    return christoffel
+}

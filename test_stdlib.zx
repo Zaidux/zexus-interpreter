@@ -1,0 +1,26 @@
+// test_stdlib.zx
+use "zexus-math" as math
+use "zexus-network" as net
+use "zexus-blockchain" as blockchain
+
+print("🧮 Testing Math Library...")
+let z = math.complex(3, 4)
+print("   Complex number: " + z.toString())
+
+let A = math.matrix(2, 2, [1, 2, 3, 4])
+print("   Matrix determinant: " + string(A.determinant()))
+
+print("")
+print("⛓️ Testing Blockchain Library...")
+let address = blockchain.create_address("0x1234567890abcdef", blockchain.ChainType.ZIVER)
+print("   Address: " + address.toString())
+
+let keypair = blockchain.generate_keypair(blockchain.ChainType.ZIVER)
+print("   Keypair generated: " + keypair.get_address().toString())
+
+print("")
+print("🌐 Testing Network Library...")
+print("   Network version: " + net.VERSION)
+
+print("")
+print("✅ ALL LIBRARIES WORKING! 🎉")

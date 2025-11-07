@@ -1,0 +1,15 @@
+{
+  "name": "zexus-math",
+  "version": "1.0.0",
+  "description": "Advanced mathematical computing library for Zexus",
+  "author": "Zexus Team",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.zx",
+    "./core": "./math/core.zx",
+    "./complex": "./math/complex.zx",
+    "./linalg": "./math/linalg.zx",
+    "./calculus": "./math/calculus.zx"
+  },
+  "keywords": ["math", "linear-algebra", "calculus", "complex-numbers", "machine-learning"]
+}

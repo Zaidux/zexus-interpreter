@@ -1,0 +1,47 @@
+export action mean(data: list) -> float {
+    let sum = reduce(data, 0.0, action(acc, x) { return acc + x })
+    return sum / float(len(data))
+}
+
+export action variance(data: list) -> float {
+    let mu = mean(data)
+    let squared_diffs = list_map(data, action(x) { return (x - mu) * (x - mu) })
+    return mean(squared_diffs)
+}
+
+export action standard_deviation(data: list) -> float {
+    return sqrt(variance(data))
+}
+
+export action correlation(x_data: list, y_data: list) -> float {
+    require(len(x_data) == len(y_data), "Data sets must have same length")
+    
+    let x_mean = mean(x_data)
+    let y_mean = mean(y_data)
+    
+    let numerator = 0.0
+    let x_variance = 0.0
+    let y_variance = 0.0
+    
+    for each i in range(0, len(x_data)) {
+        let x_diff = x_data[i] - x_mean
+        let y_diff = y_data[i] - y_mean
+        
+        numerator = numerator + x_diff * y_diff
+        x_variance = x_variance + x_diff * x_diff
+        y_variance = y_variance + y_diff * y_diff
+    }
+    
+    return numerator / sqrt(x_variance * y_variance)
+}
+
+// Probability distributions
+export action normal_pdf(x: float, mean: float = 0.0, std_dev: float = 1.0) -> float {
+    let exponent = -0.5 * ((x - mean) / std_dev) * ((x - mean) / std_dev)
+    return (1.0 / (std_dev * sqrt(2 * PI))) * exp(exponent)
+}
+
+export action binomial_probability(k: integer, n: integer, p: float) -> float {
+    let combinations = factorial(n) / (factorial(k) * factorial(n - k))
+    return combinations * pow(p, k) * pow(1 - p, n - k)
+}

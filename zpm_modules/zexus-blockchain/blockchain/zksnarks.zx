@@ -1,0 +1,157 @@
+// Zero-Knowledge Proof System for privacy
+contract ZKSNARKSystem {
+    persistent storage proving_keys: Map<string, list> = {}
+    persistent storage verification_keys: Map<string, list> = {}
+    persistent storage circuit_registry: Map<string, ZKCircuit> = {}
+    persistent storage proof_verification: ProofVerifier
+    
+    action async generate_proof(circuit_id: string, private_inputs: map, public_inputs: map) -> ZKProof {
+        let circuit = this.circuit_registry.get(circuit_id, null)
+        require(circuit != null, "Circuit not found")
+        
+        let proving_key = this.proving_keys.get(circuit_id, null)
+        require(proving_key != null, "Proving key not found for circuit")
+        
+        // Generate witness
+        let witness = await circuit.calculate_witness(private_inputs, public_inputs)
+        
+        // Generate proof
+        let proof = await this.generate_snark_proof(proving_key, witness, public_inputs)
+        
+        let zk_proof = ZKProof{
+            proof: proof,
+            public_inputs: public_inputs,
+            circuit_id: circuit_id,
+            timestamp: time_now()
+        }
+        
+        emit ProofGenerated {
+            circuit_id: circuit_id,
+            proof_id: zk_proof.get_id(),
+            public_inputs: public_inputs,
+            timestamp: time_now()
+        }
+        
+        return zk_proof
+    }
+    
+    action verify_proof(proof: ZKProof) -> boolean {
+        let circuit_id = proof.circuit_id
+        let verification_key = this.verification_keys.get(circuit_id, null)
+        
+        if verification_key == null {
+            throw "Verification key not found for circuit"
+        }
+        
+        let is_valid = this.proof_verification.verify_proof(
+            verification_key, 
+            proof.proof, 
+            proof.public_inputs
+        )
+        
+        emit ProofVerified {
+            proof_id: proof.get_id(),
+            circuit_id: circuit_id,
+            is_valid: is_valid,
+            timestamp: time_now()
+        }
+        
+        return is_valid
+    }
+    
+    // Private transaction circuit
+    contract PrivateTransactionCircuit extends ZKCircuit {
+        action calculate_witness(private_inputs: map, public_inputs: map) -> map {
+            // Circuit for private transactions:
+            // Proves that:
+            // 1. Sender has sufficient balance
+            // 2. Transaction is properly signed
+            // 3. Output commitments sum to input commitments
+            // Without revealing amounts or addresses
+            
+            let witness = {}
+            
+            // Private inputs (hidden)
+            witness.sender_balance_commitment = this.pedersen_commit(private_inputs.sender_balance)
+            witness.amount_commitment = this.pedersen_commit(private_inputs.amount)
+            witness.receiver_commitment = this.poseidon_hash(private_inputs.receiver_address)
+            witness.sender_private_key = private_inputs.sender_private_key
+            
+            // Public inputs (visible)
+            witness.sender_public_key = public_inputs.sender_public_key
+            witness.transaction_hash = public_inputs.transaction_hash
+            witness.nullifier = public_inputs.nullifier
+            
+            // Circuit constraints
+            witness.balance_check = this.verify_balance(
+                witness.sender_balance_commitment,
+                witness.amount_commitment
+            )
+            
+            witness.signature_check = this.verify_signature(
+                witness.sender_private_key,
+                witness.transaction_hash
+            )
+            
+            return witness
+        }
+    }
+    
+    // Anonymous voting circuit
+    contract AnonymousVotingCircuit extends ZKCircuit {
+        action calculate_witness(private_inputs: map, public_inputs: map) -> map {
+            // Circuit for anonymous voting:
+            // Proves that:
+            // 1. Voter is eligible
+            // 2. Vote is valid (0 or 1)
+            // 3. Voter hasn't voted before
+            // Without revealing voter identity
+            
+            let witness = {}
+            
+            // Private inputs
+            witness.voter_identity = this.poseidon_hash(private_inputs.voter_address)
+            witness.vote = private_inputs.vote
+            witness.voting_key = private_inputs.voting_key
+            
+            // Public inputs
+            witness.eligible_voters_root = public_inputs.eligible_voters_root
+            witness.nullifier = public_inputs.nullifier
+            witness.vote_commitment = public_inputs.vote_commitment
+            
+            // Circuit constraints
+            witness.eligibility_proof = this.verify_merkle_proof(
+                witness.voter_identity,
+                witness.eligible_voters_root
+            )
+            
+            witness.vote_validity = (witness.vote == 0) or (witness.vote == 1)
+            witness.nullifier_check = this.verify_nullifier(witness.nullifier)
+            
+            return witness
+        }
+    }
+}
+
+// ZK Proof structure
+contract ZKProof {
+    persistent storage proof: list
+    persistent storage public_inputs: map
+    persistent storage circuit_id: string
+    persistent storage timestamp: integer
+    
+    action get_id() -> string {
+        return this.poseidon_hash(this.proof + stringify_json(this.public_inputs))
+    }
+    
+    action verify() -> boolean {
+        let verifier = ZKSNARKSystem.get_instance()
+        return verifier.verify_proof(this)
+    }
+}
+
+// External ZK-SNARK operations
+external action generate_snark_proof(proving_key: list, witness: map, public_inputs: map) -> list from "zk_backend"
+external action verify_snark_proof(verification_key: list, proof: list, public_inputs: map) -> boolean from "zk_backend"
+external action pedersen_commit(value: integer) -> list from "crypto_backend"
+external action poseidon_hash(data: list) -> list from "crypto_backend"

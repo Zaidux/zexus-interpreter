@@ -1,0 +1,34 @@
+use "zexus-network" as net
+
+contract ChatClient {
+    persistent storage ws: net.WebSocketClient
+    persistent storage username: string
+    
+    action async connect(server_url: string, user: string) {
+        this.username = user
+        this.ws = net.websocket_client(server_url)
+        
+        this.ws.on_message(action(message) {
+            let data = parse_json(message.data)
+            if data.type == "message" {
+                print(data.user + ": " + data.content)
+            }
+        })
+        
+        if await this.ws.connect() {
+            await this.ws.send_json({
+                type: "join",
+                user: this.username
+            })
+        }
+    }
+    
+    action async send_message(content: string) {
+        await this.ws.send_json({
+            type: "message",
+            user: this.username,
+            content: content,
+            timestamp: time_now()
+        })
+    }
+}

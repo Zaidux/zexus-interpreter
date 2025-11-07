@@ -1,0 +1,23 @@
+use "zexus-network" as net
+
+action async advanced_http_examples() {
+    // Custom headers and timeouts
+    let client = net.http_client("https://api.example.com", {
+        "Authorization": "Bearer token123",
+        "User-Agent": "MyApp/1.0"
+    })
+    
+    // File upload
+    let file_data = read_file_binary("document.pdf")
+    let upload_response = await client.post("/upload", file_data, {
+        "Content-Type": "application/pdf"
+    })
+    
+    // Error handling
+    try {
+        let response = await client.get("/protected-resource")
+        print("Success: " + response.body)
+    } catch(error) {
+        print("Request failed: " + string(error))
+    }
+}

@@ -1,2 +1,11 @@
-let x = 42
-print(x)
+// test_simple.zx
+use "zexus-math" as math
+
+print("🧮 Testing Math Library Basics...")
+print("   PI: " + string(math.PI))
+print("   E: " + string(math.E))
+
+let z = math.complex(1, 2)
+print("   Complex created: " + string(z.real()) + " + " + string(z.imag()) + "i")
+
+print("✅ Math library basic test passed!")

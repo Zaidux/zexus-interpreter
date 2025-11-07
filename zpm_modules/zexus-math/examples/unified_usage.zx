@@ -1,0 +1,58 @@
+// Single import for entire standard library
+use "zexus-standard-library" as std
+
+action demo_unified_math() {
+    print("Using unified standard library")
+    print("Library version: " + std.version())
+    
+    // All math operations available through std.math
+    let z = std.math.complex(3, 4)
+    let A = std.math.matrix(2, 2, [1, 2, 3, 4])
+    let det = A.determinant()
+    
+    print("Complex number: " + z.toString())
+    print("Matrix determinant: " + string(det))
+    
+    // Using async math
+    let f = std.math.Polynomial{coefficients: [0, 0, 1]} // x²
+    spawn async_math_demo(f)
+}
+
+action async async_math_demo(f: std.math.MathFunction) {
+    let result = await std.math.parallel_integrate(f, 0, 1, 4)
+    print("Async integration result: " + string(result))
+    
+    // Benchmark performance
+    let perf = await std.benchmark(action {
+        return std.math.integrate(f, 0, 1)
+    }, 10)
+    
+    print("Performance: " + string(perf.average_time) + "ms average")
+}
+
+// Event handling across libraries
+std.on_math_event("progress", action(event) {
+    print("Math progress: " + string(event.progress * 100) + "%")
+})
+
+action advanced_computation() {
+    // Solve differential equation
+    let lorenz = std.math.LorenzSystem{}
+    let solution = std.math.runge_kutta_4(lorenz, [1, 1, 1], 0, 10, 1000)
+    
+    // Cluster data
+    let data = [[1, 2], [1, 4], [10, 2], [10, 4]]
+    let clusters = std.math.kmeans(data, 2)
+    
+    // Cryptographic operations
+    let keys = std.math.generate_rsa_keys(128) // Small for demo
+    
+    print("Computation complete!")
+    print(" - Differential equation: " + string(len(solution)) + " steps")
+    print(" - Clusters found: " + string(len(clusters.clusters)))
+    print(" - RSA keys generated: " + string(keys.public_key.n))
+}
+
+// Run demos
+demo_unified_math()
+advanced_computation()

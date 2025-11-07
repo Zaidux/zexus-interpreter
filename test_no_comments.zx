@@ -1,0 +1,5 @@
+print("Test 1")
+let x = 10
+print(x)
+let y = string(x)
+print(y)

@@ -1,0 +1,62 @@
+use "math/core" as math
+use "math/complex" as complex
+use "math/linalg" as linalg
+use "math/calculus" as calc
+use "math/async" as async_math
+
+action demo_complex_math() {
+    let z1 = complex.complex(3, 4)  // 3 + 4i
+    let z2 = complex.complex(1, -2) // 1 - 2i
+    
+    let sum = z1.add(z2)
+    let product = z1.multiply(z2)
+    
+    print("Sum: " + sum.toString())        // 4 + 2i
+    print("Product: " + product.toString()) // 11 - 2i
+    print("Magnitude z1: " + string(z1.magnitude())) // 5.0
+}
+
+action demo_linear_algebra() {
+    let A = linalg.matrix(2, 2, [1, 2, 3, 4])
+    let B = linalg.matrix(2, 2, [2, 0, 1, 2])
+    
+    let product = A.multiply(B)
+    let det_A = A.determinant()
+    let inv_A = A.inverse()
+    
+    print("Determinant of A: " + string(det_A)) // -2.0
+}
+
+action demo_calculus() {
+    let f = Polynomial{coefficients: [1, -2, 1]} // x² - 2x + 1
+    
+    let derivative_at_2 = calc.derivative(f, 2.0)
+    let integral = calc.integrate(f, 0, 1)
+    let root = calc.newton_raphson(f, 0.5)
+    
+    print("f'(2) = " + string(derivative_at_2)) // 2.0
+    print("∫₀¹ f(x)dx = " + string(integral))   // ~0.333
+    print("Root: " + string(root))              // 1.0
+}
+
+action async demo_async_math() {
+    let f = Polynomial{coefficients: [0, 0, 1]} // x²
+    
+    // Parallel integration
+    let result = await async_math.parallel_integrate(f, 0, 1, 4)
+    print("Parallel integral of x² from 0 to 1: " + string(result)) // ~0.333
+    
+    // Monte Carlo integration
+    let mc_result = await async_math.monte_carlo_integrate(f, 0, 1, 100000)
+    print("Monte Carlo result: " + string(mc_result))
+    
+    // Iterative solver with progress events
+    let solver_result = await async_math.iterative_solver(f, 0.5)
+    print("Solver found root at: " + string(solver_result))
+}
+
+// Run all demos
+demo_complex_math()
+demo_linear_algebra() 
+demo_calculus()
+spawn demo_async_math()

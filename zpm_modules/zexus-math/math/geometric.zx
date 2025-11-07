@@ -1,0 +1,60 @@
+contract GeometricAlgebra {
+    persistent storage dimension: integer
+    persistent storage metric: list
+    
+    action init(dim: integer, metric_diag: list) {
+        this.dimension = dim
+        this.metric = metric_diag
+    }
+    
+    action geometric_product(a: list, b: list) -> list {
+        // Implementation of geometric product
+        let result = list_map(range(0, 1 << this.dimension), action(_) { return 0.0 })
+        
+        for each i in range(0, len(a)) {
+            for each j in range(0, len(b)) {
+                if a[i] != 0 and b[j] != 0 {
+                    let (sign, basis) = this.basis_product(i, j)
+                    result[basis] = result[basis] + sign * a[i] * b[j]
+                }
+            }
+        }
+        
+        return result
+    }
+    
+    action basis_product(i_basis: integer, j_basis: integer) -> (integer, integer) {
+        // Calculate basis blade product with anti-commutation
+        let result_basis = i_basis ^ j_basis
+        let sign = 1
+        
+        for each j in range(0, this.dimension) {
+            if (j_basis >> j) & 1 != 0 {
+                // Count basis vectors in i that are greater than j
+                let count = 0
+                for each k in range(j + 1, this.dimension) {
+                    if (i_basis >> k) & 1 != 0 {
+                        count = count + 1
+                    }
+                }
+                if count % 2 == 1 {
+                    sign = -sign
+                }
+            }
+        }
+        
+        return (sign, result_basis)
+    }
+    
+    action rotor(angle: float, plane_bivector: list) -> list {
+        // Create a rotor for rotations
+        let normalized_bivector = vector_normalize(plane_bivector)
+        let cos_half = cos(angle / 2.0)
+        let sin_half = sin(angle / 2.0)
+        
+        let scalar_part = [cos_half] + list_map(range(1, len(plane_bivector)), action(_) { return 0.0 })
+        let bivector_part = vector_scale(normalized_bivector, sin_half)
+        
+        return this.geometric_product(scalar_part, bivector_part)
+    }
+}

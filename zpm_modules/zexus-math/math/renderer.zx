@@ -1,0 +1,43 @@
+// Mathematical visualization components
+Screen graph_screen {
+    width: 100,
+    height: 40,
+    theme: "math_theme"
+}
+
+Component function_plot {
+    type: "plot",
+    x_min: -10,
+    x_max: 10,
+    y_min: -5,
+    y_max: 5,
+    width: 80,
+    height: 30
+}
+
+Theme math_theme {
+    primary: "blue",
+    accent: "green",
+    background: "black",
+    text: "white",
+    grid: "gray"
+}
+
+export action async plot_function(f: MathFunction, x_min: float, x_max: float) {
+    define_screen("graph_screen")
+    define_component("function_plot")
+    
+    let plot_data = []
+    let step = (x_max - x_min) / 80.0
+    
+    for each x in range(x_min, x_max, step) {
+        let y = f.evaluate(x)
+        plot_data.push({x: x, y: y})
+    }
+    
+    // This would integrate with your renderer system
+    emit PlotDataReady { data: plot_data, function: f.toString() }
+    
+    let output = render_screen("graph_screen")
+    print(output)
+}

@@ -1,0 +1,83 @@
+// SSL/TLS support
+contract SecureSocket extends TCPSocket {
+    persistent storage cert_file: string = ""
+    persistent storage key_file: string = ""
+    persistent storage verify_peer: boolean = true
+    
+    action async connect(address: NetworkAddress) -> boolean {
+        try {
+            await this.internal_ssl_connect(address, this.cert_file, this.key_file, this.verify_peer)
+            this.connected = true
+            return true
+        } catch(error) {
+            emit SocketError {
+                error: "SSL connection failed: " + string(error),
+                address: address,
+                timestamp: time_now()
+            }
+            return false
+        }
+    }
+    
+    external action async internal_ssl_connect(address: NetworkAddress, cert_file: string, key_file: string, verify_peer: boolean) from "ssl_backend"
+}
+
+// Rate limiting
+contract RateLimiter {
+    persistent storage requests: Map<string, list> = {}  // IP -> [timestamps]
+    persistent storage window_seconds: integer = 60
+    persistent storage max_requests: integer = 100
+    
+    action is_rate_limited(identifier: string) -> boolean {
+        let now = time_now()
+        let window_start = now - (this.window_seconds * 1000)
+        
+        if not this.requests.has(identifier) {
+            this.requests[identifier] = []
+            return false
+        }
+        
+        let recent_requests = list_filter(this.requests[identifier], action(ts) {
+            return ts >= window_start
+        })
+        
+        this.requests[identifier] = recent_requests
+        
+        return len(recent_requests) >= this.max_requests
+    }
+    
+    action record_request(identifier: string) {
+        if not this.requests.has(identifier) {
+            this.requests[identifier] = []
+        }
+        
+        this.requests[identifier].push(time_now())
+    }
+}
+
+// Request signing for APIs
+export action sign_request(request: map, secret: string) -> map {
+    let timestamp = string(time_now())
+    let data_to_sign = request.method + request.path + timestamp + stringify_json(request.body)
+    let signature = hmac_sha256(data_to_sign, secret)
+    
+    return request.merge({
+        headers: request.headers.merge({
+            "X-Signature": signature,
+            "X-Timestamp": timestamp
+        })
+    })
+}
+
+export action verify_signature(request: map, secret: string) -> boolean {
+    let signature = request.headers.get("X-Signature", "")
+    let timestamp = request.headers.get("X-Timestamp", "")
+    
+    let data_to_sign = request.method + request.path + timestamp + stringify_json(request.body)
+    let expected_signature = hmac_sha256(data_to_sign, secret)
+    
+    return signature == expected_signature
+}
+
+// External crypto functions
+external action hmac_sha256(data: string, key: string) -> string from "crypto_backend"

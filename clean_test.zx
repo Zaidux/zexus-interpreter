@@ -1,0 +1,6 @@
+// clean_test.zx
+print("Compiler test starting")
+let test_num = 42
+let string_result = string(test_num)
+print("String conversion: " + string_result)
+print("Test completed")

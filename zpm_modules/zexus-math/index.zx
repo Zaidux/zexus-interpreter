@@ -1,0 +1,286 @@
+// Zexus Math Library - Main Entry Point
+// This file exports the entire math library as a unified API
+
+// Re-export all core modules
+export use "./math/core" as core
+export use "./math/complex" as complex
+export use "./math/linalg" as linalg  
+export use "./math/calculus" as calculus
+export use "./math/optimization" as optimization
+export use "./math/signal" as signal
+export use "./math/diffeq" as diffeq
+export use "./math/ml" as ml
+export use "./math/crypto" as crypto
+export use "./math/geometric" as geometric
+export use "./math/async" as async_math
+export use "./math/stats" as stats
+export use "./math/special" as special
+
+// NEW MODULES - Add these exports
+export use "./math/numerical" as numerical
+export use "./math/advanced_linalg" as advanced_linalg
+export use "./math/interpolation" as interpolation
+export use "./math/physics" as physics
+export use "./math/symbolic" as symbolic
+export use "./math/performance" as performance
+export use "./math/validation" as validation
+
+// Core constants (direct exports for convenience)
+export let PI: float = core.PI
+export let E: float = core.E  
+export let PHI: float = core.PHI
+export let INFINITY: float = core.INFINITY
+export let NAN: float = core.NAN
+
+// Commonly used constructors (convenience exports)
+export action complex(real: float, imag: float) -> complex.ComplexNumber {
+    return complex.complex(real, imag)
+}
+
+export action from_polar(magnitude: float, phase: float) -> complex.ComplexNumber {
+    return complex.from_polar(magnitude, phase)
+}
+
+export action matrix(rows: integer, cols: integer, data: list) -> linalg.Matrix {
+    return linalg.matrix(rows, cols, data)
+}
+
+export action identity(size: integer) -> linalg.Matrix {
+    return linalg.identity(size)
+}
+
+export action zeros(rows: integer, cols: integer) -> linalg.Matrix {
+    return linalg.zeros(rows, cols)
+}
+
+// NEW: Sparse matrix constructor
+export action sparse_matrix(rows: integer, cols: integer) -> advanced_linalg.SparseMatrix {
+    return advanced_linalg.SparseMatrix{rows: rows, cols: cols}
+}
+
+// Common function shortcuts
+export action sin(x: float) -> float {
+    return core.sin(x)
+}
+
+export action cos(x: float) -> float {
+    return core.cos(x)
+}
+
+export action exp(x: float) -> float {
+    return core.exp(x)
+}
+
+export action log(x: float) -> float {
+    return core.log(x)
+}
+
+export action sqrt(x: float) -> float {
+    return core.sqrt(x)
+}
+
+// NEW: Advanced math functions
+export action condition_number = numerical.condition_number
+export action svd = advanced_linalg.svd
+export action eigen = advanced_linalg.eigen
+export action lagrange_interpolation = interpolation.lagrange_interpolation
+export action cubic_spline = interpolation.cubic_spline
+export action schrodinger_solver = physics.schrodinger_solver
+export action symbolic_derivative = symbolic.symbolic_derivative
+export action cache_optimized_matmul = performance.cache_optimized_matmul
+export action run_math_validation = validation.run_math_validation
+
+// Protocol re-exports
+export protocol MathFunction = calculus.MathFunction
+export protocol ObjectiveFunction = optimization.ObjectiveFunction  
+export protocol DifferentialEquation = diffeq.DifferentialEquation
+export protocol ComplexNumber = complex.ComplexNumber
+export protocol Matrix = linalg.Matrix
+export protocol SymbolicExpression = symbolic.SymbolicExpression  // NEW
+
+// Class re-exports
+export contract Complex = complex.Complex
+export contract Matrix2D = linalg.Matrix2D
+export contract Polynomial = calculus.Polynomial
+export contract QuadraticFunction = optimization.QuadraticFunction
+export contract LorenzSystem = diffeq.LorenzSystem
+export contract NeuralNetwork = ml.NeuralNetwork
+export contract EllipticCurve = crypto.EllipticCurve
+export contract GeometricAlgebra = geometric.GeometricAlgebra
+
+// NEW: Additional class exports
+export contract SparseMatrix = advanced_linalg.SparseMatrix
+export contract SymbolicVariable = symbolic.SymbolicVariable
+export contract SymbolicAdd = symbolic.SymbolicAdd
+export contract LargeMatrix = performance.LargeMatrix
+
+// Async math operations
+export action async parallel_integrate = async_math.parallel_integrate
+export action async monte_carlo_integrate = async_math.monte_carlo_integrate
+export action async iterative_solver = async_math.iterative_solver
+
+// NEW: Async advanced operations
+export action async parallel_matrix_multiply = performance.parallel_matrix_multiply
+export action async real_time_fft = async_math.real_time_fft
+
+// Statistical functions
+export action mean = stats.mean
+export action variance = stats.variance
+export action standard_deviation = stats.standard_deviation
+export action correlation = stats.correlation
+export action normal_pdf = stats.normal_pdf
+
+// Special functions
+export action gamma = special.gamma
+export action erf = special.erf
+export action bessel_j = special.bessel_j
+
+// Signal processing
+export action fft = signal.fft
+export action lowpass_filter = signal.lowpass_filter
+export action convolve = signal.convolve
+
+// NEW: Advanced signal processing
+export action fft_with_window = interpolation.fft_with_window
+export action apply_window = interpolation.apply_window
+
+// Optimization
+export action gradient_descent = optimization.gradient_descent
+export action simplex_method = optimization.simplex_method
+
+// Differential equations
+export action runge_kutta_4 = diffeq.runge_kutta_4
+
+// Machine learning
+export action kmeans = ml.kmeans
+
+// Cryptography
+export action mod_exp = crypto.mod_exp
+export action extended_gcd = crypto.extended_gcd
+export action generate_rsa_keys = crypto.generate_rsa_keys
+
+// Geometric algebra
+export action geometric_product = geometric.geometric_product
+export action rotor = geometric.rotor
+
+// NEW: Numerical analysis
+export action pseudo_inverse = numerical.pseudo_inverse
+export action adaptive_derivative = numerical.adaptive_derivative
+export action validate_precision = validation.validate_precision
+
+// Event system for math operations
+event MathProgress {
+    operation: string,
+    progress: float,
+    current_value: any,
+    metadata: map
+}
+
+let math_event_handlers = {}
+
+export action on_math_event(event_type: string, handler: action) {
+    if not math_event_handlers.has(event_type) {
+        math_event_handlers[event_type] = []
+    }
+    math_event_handlers[event_type].push(handler)
+}
+
+export action emit_math_event(event_type: string, data: map) {
+    let event = MathProgress {
+        operation: event_type,
+        progress: data.get("progress", 0.0),
+        current_value: data.get("current_value", null),
+        metadata: data.get("metadata", {})
+    }
+
+    if math_event_handlers.has(event_type) {
+        for each handler in math_event_handlers[event_type] {
+            spawn handler(event)
+        }
+    }
+}
+
+// Configuration system
+persistent storage MATH_CONFIG: map = {
+    precision: 15,
+    angle_mode: "radians",
+    parallel_threshold: 1000,
+    convergence_tolerance: 1e-12,
+    max_iterations: 1000,
+    enable_gpu: false,  // NEW
+    cache_block_size: 32  // NEW
+}
+
+export action set_math_config(key: string, value: any) {
+    MATH_CONFIG[key] = value
+}
+
+export action get_math_config(key: string) -> any {
+    return MATH_CONFIG.get(key, null)
+}
+
+// Utility functions
+export action vector_norm(v: list) -> float {
+    let sum_squares = reduce(v, 0.0, action(acc, x) { return acc + x * x })
+    return sqrt(sum_squares)
+}
+
+export action vector_add(v1: list, v2: list) -> list {
+    require(len(v1) == len(v2), "Vectors must have same length")
+    return list_map(range(0, len(v1)), action(i) { return v1[i] + v2[i] })
+}
+
+export action vector_scale(v: list, scalar: float) -> list {
+    return list_map(v, action(x) { return x * scalar })
+}
+
+export action vector_dot(v1: list, v2: list) -> float {
+    require(len(v1) == len(v2), "Vectors must have same length")
+    let sum = 0.0
+    for each i in range(0, len(v1)) {
+        sum = sum + v1[i] * v2[i]
+    }
+    return sum
+}
+
+// NEW: Advanced utility functions
+export action matrix_norm(A: Matrix) -> float {
+    // Frobenius norm
+    let sum_squares = 0.0
+    for each i in range(0, A.rows()) {
+        for each j in range(0, A.cols()) {
+            let val = A.get(i, j)
+            sum_squares = sum_squares + val * val
+        }
+    }
+    return sqrt(sum_squares)
+}
+
+export action is_symmetric(A: Matrix, tolerance: float = 1e-12) -> boolean {
+    require(A.rows() == A.cols(), "Matrix must be square")
+    for each i in range(0, A.rows()) {
+        for each j in range(i + 1, A.cols()) {
+            if math_abs(A.get(i, j) - A.get(j, i)) > tolerance {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+// Version info
+export let VERSION: string = "2.0.0"  // Updated version
+export let AUTHOR: string = "Zexus Math Team"
+export let LICENSE: string = "MIT"
+
+// Library initialization
+action init() {
+    print("Zexus Math Library v" + VERSION + " initialized")
+    print("Available modules: complex, linalg, calculus, optimization, signal, diffeq, ml, crypto, geometric")
+    print("NEW modules: numerical, advanced_linalg, interpolation, physics, symbolic, performance, validation")
+    print("Async operations: parallel_integrate, monte_carlo_integrate, iterative_solver")
+    print("Advanced features: SVD, eigenvalues, symbolic math, GPU support")
+}
+
+// Auto-initialize
+init()

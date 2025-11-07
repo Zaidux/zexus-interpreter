@@ -1,0 +1,94 @@
+// AI-powered transaction explanations
+contract ExplainableTransaction extends BasicTransaction {
+    persistent storage ai_explanation: string = ""
+    persistent storage risk_assessment: map = {}
+    persistent storage suggested_improvements: list = []
+    
+    action async generate_explanation() -> string {
+        let tx_context = {
+            from: this.from.toString(),
+            to: this.to.toString(),
+            value: this.value,
+            gas_price: this.gas_price,
+            gas_limit: this.gas_limit,
+            chain: this.chain,
+            timestamp: time_now()
+        }
+        
+        this.ai_explanation = await this.ai_analyze_transaction(tx_context)
+        this.risk_assessment = await this.ai_assess_risks(tx_context)
+        this.suggested_improvements = await this.ai_suggest_improvements(tx_context)
+        
+        emit TransactionExplained {
+            tx_hash: bytes_to_hex(this.hash()),
+            explanation: this.ai_explanation,
+            risk_level: this.risk_assessment.overall_risk,
+            confidence: this.risk_assessment.confidence,
+            improvements: this.suggested_improvements
+        }
+        
+        return this.ai_explanation
+    }
+    
+    action get_explanation() -> string {
+        if this.ai_explanation == "" {
+            return "Explanation not yet generated. Call generate_explanation() first."
+        }
+        return this.ai_explanation
+    }
+    
+    action get_risk_assessment() -> map {
+        return this.risk_assessment
+    }
+    
+    action get_suggested_improvements() -> list {
+        return this.suggested_improvements
+    }
+    
+    external action async ai_analyze_transaction(context: map) -> string from "ai_explanation"
+    external action async ai_assess_risks(context: map) -> map from "ai_risk_assessment"
+    external action async ai_suggest_improvements(context: map) -> list from "ai_improvements"
+}
+
+// Enhanced transaction pool with explanations
+contract ExplainableTransactionPool extends TransactionPool {
+    action async add_transaction(tx: ExplainableTransaction) -> boolean {
+        let success = await super.add_transaction(tx)
+        
+        if success {
+            // Generate AI explanation for the transaction
+            spawn tx.generate_explanation()
+            
+            emit TransactionWithExplanation {
+                tx_hash: bytes_to_hex(tx.hash()),
+                explanation: await tx.get_explanation(),
+                risk_level: (await tx.get_risk_assessment()).overall_risk
+            }
+        }
+        
+        return success
+    }
+    
+    action async get_transaction_with_explanation(tx_hash: string) -> map {
+        let tx = this.pending_txs.get(tx_hash, null)
+        if tx == null {
+            throw "Transaction not found"
+        }
+        
+        if tx is ExplainableTransaction {
+            return {
+                transaction: tx,
+                explanation: tx.get_explanation(),
+                risk_assessment: tx.get_risk_assessment(),
+                improvements: tx.get_suggested_improvements()
+            }
+        } else {
+            return {
+                transaction: tx,
+                explanation: "Standard transaction - no AI explanation available",
+                risk_assessment: {overall_risk: "unknown", confidence: 0},
+                improvements: []
+            }
+        }
+    }
+}

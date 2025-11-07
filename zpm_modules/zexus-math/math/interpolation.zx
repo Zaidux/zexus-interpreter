@@ -1,0 +1,45 @@
+// Polynomial interpolation
+export action lagrange_interpolation(points: list) -> MathFunction {
+    // points = [{x: x1, y: y1}, {x: x2, y: y2}, ...]
+    return Polynomial{
+        coefficients: compute_lagrange_coefficients(points)
+    }
+}
+
+// Spline interpolation
+export action cubic_spline(points: list) -> MathFunction {
+    let n = len(points)
+    let h = list_map(range(0, n-1), action(i) { 
+        return points[i+1].x - points[i].x 
+    })
+    
+    // Solve tridiagonal system for spline coefficients
+    let coefficients = solve_tridiagonal_system(points, h)
+    
+    return SplineFunction{points: points, coefficients: coefficients}
+}
+
+// Fast Fourier Transform with windowing
+export action fft_with_window(signal: list, window_type: string = "hann") -> list {
+    let windowed_signal = apply_window(signal, window_type)
+    return fft(windowed_signal)
+}
+
+export action apply_window(signal: list, window_type: string) -> list {
+    let N = len(signal)
+    let window = []
+    
+    if window_type == "hann" {
+        for each n in range(0, N) {
+            window.push(0.5 * (1 - cos(2 * PI * n / (N - 1))))
+        }
+    } else if window_type == "hamming" {
+        for each n in range(0, N) {
+            window.push(0.54 - 0.46 * cos(2 * PI * n / (N - 1)))
+        }
+    } else { // rectangular
+        window = list_map(range(0, N), action(_) { return 1.0 })
+    }
+    
+    return vector_multiply(signal, window)
+}

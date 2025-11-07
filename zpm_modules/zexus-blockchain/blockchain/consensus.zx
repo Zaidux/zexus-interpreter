@@ -1,0 +1,188 @@
+// Consensus protocol implementations
+protocol ConsensusProtocol {
+    action async validate_block(block: Block) -> boolean
+    action async select_validator() -> Address
+    action async achieve_consensus(block: Block) -> boolean
+}
+
+contract ProofOfWork implements ConsensusProtocol {
+    persistent storage difficulty: integer
+    persistent storage mining_reward: integer
+    
+    action init(initial_difficulty: integer, reward: integer) {
+        this.difficulty = initial_difficulty
+        this.mining_reward = reward
+    }
+    
+    action async validate_block(block: Block) -> boolean {
+        let block_hash = block.hash()
+        let hash_int = bytes_to_bigint(block_hash)
+        let target = this.calculate_target()
+        
+        // Check proof of work
+        if hash_int > target {
+            return false
+        }
+        
+        // Validate transactions
+        for each tx in block.transactions {
+            if not tx.verify() {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    action async mine_block(block: Block, miner: Address) -> boolean {
+        let nonce = 0
+        let max_nonce = 1000000000
+        
+        while nonce < max_nonce {
+            block.set_nonce(nonce)
+            let block_hash = block.hash()
+            let hash_int = bytes_to_bigint(block_hash)
+            let target = this.calculate_target()
+            
+            if hash_int <= target {
+                // Block mined!
+                block.finalize(miner, this.mining_reward)
+                
+                emit BlockMined {
+                    block_number: block.number,
+                    block_hash: bytes_to_hex(block_hash),
+                    miner: miner,
+                    timestamp: time_now(),
+                    transaction_count: len(block.transactions)
+                }
+                
+                return true
+            }
+            
+            nonce = nonce + 1
+            
+            // Yield to other operations periodically
+            if nonce % 10000 == 0 {
+                await sleep(0)
+            }
+        }
+        
+        return false
+    }
+    
+    action calculate_target() -> bigint {
+        // Target = 2^(256 - difficulty)
+        return pow(2, 256 - this.difficulty)
+    }
+    
+    action async select_validator() -> Address {
+        // In PoW, validator is whoever mines the block
+        return null  // Not applicable for PoW
+    }
+    
+    action async achieve_consensus(block: Block) -> boolean {
+        // In PoW, consensus is achieved when block is mined
+        return await this.validate_block(block)
+    }
+}
+
+contract ProofOfStake implements ConsensusProtocol {
+    persistent storage validators: Map<Address, integer> = {}  // Address -> stake amount
+    persistent storage total_stake: integer = 0
+    persistent storage epoch_length: integer = 100  // blocks
+    
+    action add_validator(validator: Address, stake: integer) {
+        this.validators[validator.toString()] = stake
+        this.total_stake = this.total_stake + stake
+        
+        emit ValidatorAdded {
+            validator: validator,
+            stake: stake,
+            total_stake: this.total_stake
+        }
+    }
+    
+    action async select_validator() -> Address {
+        if this.total_stake == 0 {
+            throw "No validators with stake"
+        }
+        
+        // Weighted random selection based on stake
+        let random_point = random_integer(0, this.total_stake - 1)
+        let current_sum = 0
+        
+        for each validator_addr in this.validators {
+            let stake = this.validators[validator_addr]
+            current_sum = current_sum + stake
+            
+            if random_point < current_sum {
+                return Address{address: validator_addr, chain: ChainType.ZIVER}
+            }
+        }
+        
+        throw "Validator selection failed"
+    }
+    
+    action async validate_block(block: Block) -> boolean {
+        let validator = block.miner
+        let validator_stake = this.validators.get(validator.toString(), 0)
+        
+        // Validator must have minimum stake
+        if validator_stake < 1000 {  // Minimum stake requirement
+            return false
+        }
+        
+        // Validate block signature
+        if not block.verify_signature() {
+            // Slash validator's stake for malicious behavior
+            this.slash_validator(validator)
+            return false
+        }
+        
+        // Validate transactions
+        for each tx in block.transactions {
+            if not tx.verify() {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    action slash_validator(validator: Address) {
+        let slash_amount = this.validators.get(validator.toString(), 0) * 0.1  // 10% slash
+        this.validators[validator.toString()] = this.validators[validator.toString()] - slash_amount
+        this.total_stake = this.total_stake - slash_amount
+        
+        emit ValidatorSlashed {
+            validator: validator,
+            amount: slash_amount,
+            reason: "Invalid block production"
+        }
+    }
+    
+    action async achieve_consensus(block: Block) -> boolean {
+        // In PoS, we need 2/3 of validators to agree
+        let approvals = 0
+        let required_approvals = len(this.validators) * 2 / 3
+        
+        for each validator_addr in this.validators {
+            let validator = Address{address: validator_addr, chain: ChainType.ZIVER}
+            if await this.validator_approves(validator, block) {
+                approvals = approvals + 1
+            }
+            
+            if approvals >= required_approvals {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    action async validator_approves(validator: Address, block: Block) -> boolean {
+        // Simulate validator voting
+        // In real implementation, this would involve network communication
+        return random_boolean(0.95)  // 95% chance of approval for valid blocks
+    }
+}

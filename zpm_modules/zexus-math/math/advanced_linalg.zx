@@ -1,0 +1,56 @@
+// Singular Value Decomposition (SVD)
+export action svd(A: Matrix) -> (Matrix, list, Matrix) {
+    // Implementation of Golub-Reinsch SVD algorithm
+    let m = A.rows()
+    let n = A.cols()
+    
+    // Bidiagonalization
+    let (U, B, V) = bidiagonalize(A)
+    
+    // Diagonalization with QR algorithm
+    let (S, U_final, V_final) = diagonalize_bidiagonal(B, U, V)
+    
+    return (U_final, S, V_final)
+}
+
+// Eigenvalue decomposition
+export action eigen(A: Matrix) -> (list, Matrix) {
+    require(A.rows() == A.cols(), "Matrix must be square")
+    
+    // QR algorithm for eigenvalues
+    let values = qr_algorithm(A)
+    let vectors = compute_eigenvectors(A, values)
+    
+    return (values, vectors)
+}
+
+// Sparse matrix support
+contract SparseMatrix implements Matrix {
+    persistent storage rows: integer
+    persistent storage cols: integer
+    persistent storage data: Map<(integer, integer), float>
+    
+    action get(row: integer, col: integer) -> float {
+        return this.data.get((row, col), 0.0)
+    }
+    
+    action set(row: integer, col: integer, value: float) {
+        if value != 0.0 {
+            this.data[(row, col)] = value
+        }
+    }
+    
+    action multiply(other: Matrix) -> Matrix {
+        // Efficient sparse matrix multiplication
+        let result = SparseMatrix{rows: this.rows, cols: other.cols()}
+        
+        for each (i, j) in this.data {
+            let value = this.data[(i, j)]
+            for each k in range(0, other.cols()) {
+                result.set(i, k, result.get(i, k) + value * other.get(j, k))
+            }
+        }
+        
+        return result
+    }
+}

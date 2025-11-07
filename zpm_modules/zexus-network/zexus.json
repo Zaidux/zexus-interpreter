@@ -1,0 +1,14 @@
+{
+  "name": "zexus-network", 
+  "version": "1.0.0",
+  "description": "Comprehensive networking library for Zexus",
+  "author": "Zexus Team",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.zx",
+    "./http": "./network/http.zx",
+    "./websocket": "./network/websocket.zx",
+    "./socket": "./network/socket.zx"
+  },
+  "keywords": ["networking", "http", "websocket", "tcp", "udp", "dns"]
+}

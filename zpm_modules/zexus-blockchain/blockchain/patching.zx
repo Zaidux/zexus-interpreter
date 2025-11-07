@@ -1,0 +1,187 @@
+// Seamless hot-patching system
+contract HotPatchSystem {
+    persistent storage active_patches: Map<string, map> = {}
+    persistent storage patch_queue: list = []
+    persistent storage patch_history: list = []
+    persistent storage system_checksums: Map<string, string> = {}
+    
+    action async apply_patch(patch_code: list, patch_metadata: map) -> boolean {
+        // Validate patch signature and integrity
+        if not this.validate_patch(patch_code, patch_metadata) {
+            return false
+        }
+        
+        // Schedule patch for application
+        let patch_id = this.generate_patch_id(patch_metadata)
+        this.patch_queue.push({
+            id: patch_id,
+            code: patch_code,
+            metadata: patch_metadata,
+            scheduled_time: time_now() + (patch_metadata.delay or 0)
+        })
+        
+        emit PatchScheduled {
+            patch_id: patch_id,
+            type: patch_metadata.type,
+            description: patch_metadata.description,
+            scheduled_time: this.patch_queue[len(this.patch_queue) - 1].scheduled_time,
+            estimated_downtime: patch_metadata.estimated_downtime or 0
+        }
+        
+        // Apply patch at scheduled time
+        spawn this.apply_scheduled_patch(patch_id)
+        
+        return true
+    }
+    
+    action async apply_scheduled_patch(patch_id: string) {
+        let patch = null
+        for each queued_patch in this.patch_queue {
+            if queued_patch.id == patch_id {
+                patch = queued_patch
+                break
+            }
+        }
+        
+        if patch == null {
+            return
+        }
+        
+        let delay = patch.scheduled_time - time_now()
+        if delay > 0 {
+            await sleep(delay / 1000.0)
+        }
+        
+        // Apply the patch
+        try {
+            await this.execute_patch(patch.code, patch.metadata)
+            
+            this.active_patches[patch_id] = {
+                applied_at: time_now(),
+                metadata: patch.metadata,
+                checksum: this.calculate_checksum(patch.code)
+            }
+            
+            this.patch_history.push({
+                id: patch_id,
+                applied_at: time_now(),
+                metadata: patch.metadata,
+                status: "success"
+            })
+            
+            // Remove from queue
+            this.patch_queue = list_filter(this.patch_queue, action(p) { return p.id != patch_id })
+            
+            emit PatchApplied {
+                patch_id: patch_id,
+                applied_at: time_now(),
+                type: patch.metadata.type,
+                description: patch.metadata.description,
+                status: "success"
+            }
+            
+        } catch(error) {
+            this.patch_history.push({
+                id: patch_id,
+                applied_at: time_now(),
+                metadata: patch.metadata,
+                status: "failed",
+                error: string(error)
+            })
+            
+            emit PatchFailed {
+                patch_id: patch_id,
+                applied_at: time_now(),
+                error: string(error),
+                type: patch.metadata.type
+            }
+        }
+    }
+    
+    action async execute_patch(patch_code: list, metadata: map) {
+        let patch_type = metadata.type
+        
+        if patch_type == "contract_upgrade" {
+            await this.upgrade_contract(metadata.contract_address, patch_code)
+        } else if patch_type == "consensus_fix" {
+            await this.patch_consensus(patch_code)
+        } else if patch_type == "security_update" {
+            await this.apply_security_patch(patch_code)
+        } else if patch_type == "performance_optimization" {
+            await this.optimize_performance(patch_code)
+        } else {
+            throw "Unknown patch type: " + patch_type
+        }
+    }
+    
+    action async upgrade_contract(contract_address: string, new_code: list) {
+        // Seamless contract upgrade without downtime
+        let old_contract = get_contract(Address{address: contract_address, chain: ChainType.ZIVER})
+        let new_contract = ZexusVM{
+            address: old_contract.address,
+            owner: old_contract.owner,
+            code: new_code
+        }
+        
+        // Migrate state
+        new_contract.storage = old_contract.storage
+        
+        // Update contract registry
+        update_contract_registry(contract_address, new_contract)
+        
+        emit ContractUpgraded {
+            contract_address: contract_address,
+            old_version: old_contract.version,
+            new_version: new_contract.version,
+            upgrade_time: time_now(),
+            state_preserved: true
+        }
+    }
+    
+    action validate_patch(patch_code: list, metadata: map) -> boolean {
+        // Verify patch signature
+        let signer = metadata.signer
+        let signature = metadata.signature
+        
+        if not verify_signature(patch_code, signature, signer) {
+            return false
+        }
+        
+        // Check patch compatibility
+        if not this.is_patch_compatible(metadata) {
+            return false
+        }
+        
+        // Validate patch checksum
+        let expected_checksum = metadata.checksum
+        let actual_checksum = this.calculate_checksum(patch_code)
+        
+        if expected_checksum != actual_checksum {
+            return false
+        }
+        
+        return true
+    }
+    
+    action rollback_patch(patch_id: string) -> boolean {
+        let patch = this.active_patches.get(patch_id, null)
+        if patch == null {
+            return false
+        }
+        
+        // Execute rollback logic based on patch type
+        if patch.metadata.type == "contract_upgrade" {
+            this.rollback_contract_upgrade(patch.metadata.contract_address)
+        }
+        
+        this.active_patches.remove(patch_id)
+        
+        emit PatchRolledBack {
+            patch_id: patch_id,
+            rolled_back_at: time_now(),
+            reason: "Manual rollback requested"
+        }
+        
+        return true
+    }
+}

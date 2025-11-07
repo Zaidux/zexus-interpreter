@@ -1,0 +1,202 @@
+// Smart contract virtual machine
+protocol SmartContract {
+    action execute_method(method: string, params: list) -> any
+    action get_storage(key: string) -> any
+    action set_storage(key: string, value: any) -> boolean
+}
+
+contract ZexusVM implements SmartContract {
+    persistent storage storage: Map<string, any> = {}
+    persistent storage code: list
+    persistent storage address: Address
+    persistent storage owner: Address
+    
+    action init(contract_address: Address, contract_owner: Address, contract_code: list) {
+        this.address = contract_address
+        this.owner = contract_owner
+        this.code = contract_code
+    }
+    
+    action execute_method(method: string, params: list) -> any {
+        // Parse and execute contract code
+        let method_handler = this.find_method(method)
+        if method_handler == null {
+            throw "Method not found: " + method
+        }
+        
+        // Execute in isolated environment
+        let result = this.execute_in_sandbox(method_handler, params)
+        
+        emit ContractMethodCalled {
+            contract: this.address,
+            method: method,
+            caller: msg.sender,
+            params: params,
+            result: result
+        }
+        
+        return result
+    }
+    
+    action find_method(method: string) -> action {
+        // Parse bytecode to find method implementations
+        // This would involve bytecode analysis and method dispatch
+        if method == "transfer" {
+            return action(params) { return this.transfer_method(params) }
+        } else if method == "balanceOf" {
+            return action(params) { return this.balance_method(params) }
+        }
+        return null
+    }
+    
+    action transfer_method(params: list) -> boolean {
+        let to = params[0]
+        let amount = params[1]
+        
+        let sender_balance = this.get_storage("balance_" + msg.sender.toString())
+        if sender_balance < amount {
+            return false
+        }
+        
+        this.set_storage("balance_" + msg.sender.toString(), sender_balance - amount)
+        
+        let receiver_balance = this.get_storage("balance_" + to.toString())
+        this.set_storage("balance_" + to.toString(), receiver_balance + amount)
+        
+        emit Transfer {
+            from: msg.sender,
+            to: to,
+            amount: amount
+        }
+        
+        return true
+    }
+    
+    action get_storage(key: string) -> any {
+        return this.storage.get(key, 0)
+    }
+    
+    action set_storage(key: string, value: any) -> boolean {
+        this.storage[key] = value
+        return true
+    }
+    
+    action execute_in_sandbox(method: action, params: list) -> any {
+        // Isolated execution environment
+        try {
+            return method(params)
+        } catch(error) {
+            emit ContractExecutionError {
+                contract: this.address,
+                method: "unknown",
+                error: string(error)
+            }
+            return null
+        }
+    }
+}
+
+// ERC-20 Token Standard Implementation
+contract ERC20Token {
+    persistent storage name: string
+    persistent storage symbol: string
+    persistent storage decimals: integer
+    persistent storage total_supply: integer
+    persistent storage balances: Map<string, integer>
+    persistent storage allowances: Map<string, Map<string, integer>>
+    
+    action init(token_name: string, token_symbol: string, initial_supply: integer) {
+        this.name = token_name
+        this.symbol = token_symbol
+        this.decimals = 18
+        this.total_supply = initial_supply
+        this.balances[msg.sender.toString()] = initial_supply
+        
+        emit Transfer {
+            from: Address{address: "0x0", chain: ChainType.ZIVER},
+            to: msg.sender,
+            amount: initial_supply
+        }
+    }
+    
+    action transfer(to: Address, amount: integer) -> boolean {
+        let sender = msg.sender.toString()
+        let recipient = to.toString()
+        
+        require(this.balances.get(sender, 0) >= amount, "Insufficient balance")
+        require(amount > 0, "Amount must be positive")
+        
+        this.balances[sender] = this.balances.get(sender, 0) - amount
+        this.balances[recipient] = this.balances.get(recipient, 0) + amount
+        
+        emit Transfer {
+            from: msg.sender,
+            to: to,
+            amount: amount
+        }
+        
+        return true
+    }
+    
+    action transfer_from(from: Address, to: Address, amount: integer) -> boolean {
+        let sender = from.toString()
+        let recipient = to.toString()
+        let spender = msg.sender.toString()
+        
+        let allowance = this.allowances.get(sender, {}).get(spender, 0)
+        require(allowance >= amount, "Insufficient allowance")
+        require(this.balances.get(sender, 0) >= amount, "Insufficient balance")
+        
+        this.allowances[sender][spender] = allowance - amount
+        this.balances[sender] = this.balances.get(sender, 0) - amount
+        this.balances[recipient] = this.balances.get(recipient, 0) + amount
+        
+        emit Transfer {
+            from: from,
+            to: to,
+            amount: amount
+        }
+        
+        return true
+    }
+    
+    action approve(spender: Address, amount: integer) -> boolean {
+        let owner = msg.sender.toString()
+        let spender_addr = spender.toString()
+        
+        if not this.allowances.has(owner) {
+            this.allowances[owner] = {}
+        }
+        
+        this.allowances[owner][spender_addr] = amount
+        
+        emit Approval {
+            owner: msg.sender,
+            spender: spender,
+            amount: amount
+        }
+        
+        return true
+    }
+    
+    action balance_of(owner: Address) -> integer {
+        return this.balances.get(owner.toString(), 0)
+    }
+    
+    action allowance(owner: Address, spender: Address) -> integer {
+        return this.allowances.get(owner.toString(), {}).get(spender.toString(), 0)
+    }
+}
+
+// Event definitions for ERC20
+event Transfer {
+    from: Address,
+    to: Address,
+    amount: integer
+}
+
+event Approval {
+    owner: Address,
+    spender: Address,
+    amount: integer
+}

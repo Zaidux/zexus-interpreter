@@ -1,0 +1,67 @@
+protocol ObjectiveFunction {
+    action evaluate(x: list) -> float
+    action gradient(x: list) -> list
+}
+
+// Gradient descent optimization
+export action gradient_descent(f: ObjectiveFunction, initial: list, learning_rate: float = 0.01, max_iter: integer = 1000) -> list {
+    let x = initial
+    let iteration = 0
+    
+    while iteration < max_iter {
+        let grad = f.gradient(x)
+        let new_x = []
+        
+        for each i in range(0, len(x)) {
+            new_x.push(x[i] - learning_rate * grad[i])
+        }
+        
+        // Check convergence
+        let improvement = vector_norm(vector_subtract(new_x, x))
+        if improvement < 1e-8 {
+            break
+        }
+        
+        x = new_x
+        iteration = iteration + 1
+    }
+    
+    return x
+}
+
+// Linear programming solver
+export action simplex_method(c: list, A: list, b: list) -> list {
+    // Implement simplex algorithm for:
+    // maximize cᵀx subject to Ax ≤ b, x ≥ 0
+    let solution = []
+    // ... simplex implementation
+    return solution
+}
+
+contract QuadraticFunction implements ObjectiveFunction {
+    persistent storage Q: Matrix
+    persistent storage c: list
+    persistent storage constant: float
+    
+    action evaluate(x: list) -> float {
+        let x_vector = matrix(1, len(x), x)
+        let x_transpose = matrix(len(x), 1, x)
+        
+        let quadratic_term = x_transpose.multiply(this.Q).multiply(x_vector).get(0, 0)
+        let linear_term = reduce(vector_multiply(this.c, x), 0.0, action(acc, val) { return acc + val })
+        
+        return 0.5 * quadratic_term + linear_term + this.constant
+    }
+    
+    action gradient(x: list) -> list {
+        let grad = []
+        for each i in range(0, len(x)) {
+            let partial = 0.0
+            for each j in range(0, len(x)) {
+                partial = partial + this.Q.get(i, j) * x[j]
+            }
+            grad.push(partial + this.c[i])
+        }
+        return grad
+    }
+}
