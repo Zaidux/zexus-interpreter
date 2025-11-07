@@ -38,6 +38,12 @@ def run_compiler_test(code, desc):
 	try:
 		from zexus.compiler import ZexusCompiler, BUILTINS, Parser as CompParser
 
+		# If Parser is not available (None), provide clear diagnostic and fail test
+		if CompParser is None:
+			print("❌ Compiler Parser is not available (zexus.compiler.Parser is None).")
+			print("   This indicates an import-time problem in src/zexus/compiler/__init__.py or src/zexus/compiler/parser.py.")
+			return False
+
 		has_string = False
 		try:
 			# BUILTINS may be a dict or similar mapping
