@@ -26,11 +26,15 @@ if __name__ == "__main__":
         # Already has syntax style flag, just run
         pass
     else:
-        # Add default syntax style
-        sys.argv.append('--syntax-style=auto')
+        # Add default syntax style — insert before the subcommand so Click recognizes it
+        # Find position to insert (after script name, before any command like 'run')
+        insert_pos = 1
+        # If there's an explicit command name at argv[1], we still want options before it
+        sys.argv.insert(insert_pos, '--syntax-style=auto')
 
     # Enable advanced parsing by default
     if not any('--no-advanced-parsing' in arg for arg in sys.argv):
-        sys.argv.append('--advanced-parsing')
+        # Insert before command as well so Click treats it as a group option
+        sys.argv.insert(1, '--advanced-parsing')
 
     cli()

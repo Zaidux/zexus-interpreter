@@ -27,6 +27,11 @@ DEFAULT_RUNTIME = {
     'syntax_style': 'auto',
     'enable_advanced_parsing': True,
     'enable_debug_logs': False,
+    # Legacy runtime flags expected by older modules
+    'use_hybrid_compiler': True,
+    'fallback_to_interpreter': True,
+    'compiler_line_threshold': 100,
+    'enable_execution_stats': False,
 }
 
 
@@ -135,6 +140,47 @@ class Config:
                 self.debug_level = 'minimal'
         else:
             self.debug_level = 'none'
+
+    # Legacy runtime properties
+    @property
+    def use_hybrid_compiler(self):
+        return self._data.get('runtime', {}).get('use_hybrid_compiler', True)
+
+    @use_hybrid_compiler.setter
+    def use_hybrid_compiler(self, value):
+        self._data.setdefault('runtime', {})['use_hybrid_compiler'] = bool(value)
+        self._write()
+
+    @property
+    def fallback_to_interpreter(self):
+        return self._data.get('runtime', {}).get('fallback_to_interpreter', True)
+
+    @fallback_to_interpreter.setter
+    def fallback_to_interpreter(self, value):
+        self._data.setdefault('runtime', {})['fallback_to_interpreter'] = bool(value)
+        self._write()
+
+    @property
+    def compiler_line_threshold(self):
+        return int(self._data.get('runtime', {}).get('compiler_line_threshold', 100))
+
+    @compiler_line_threshold.setter
+    def compiler_line_threshold(self, value):
+        try:
+            v = int(value)
+        except Exception:
+            v = 100
+        self._data.setdefault('runtime', {})['compiler_line_threshold'] = v
+        self._write()
+
+    @property
+    def enable_execution_stats(self):
+        return bool(self._data.get('runtime', {}).get('enable_execution_stats', False))
+
+    @enable_execution_stats.setter
+    def enable_execution_stats(self, value):
+        self._data.setdefault('runtime', {})['enable_execution_stats'] = bool(value)
+        self._write()
 
     # Helper logging function used by modules
     def should_log(self, level='debug'):
