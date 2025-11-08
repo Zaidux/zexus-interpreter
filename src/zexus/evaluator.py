@@ -1208,16 +1208,87 @@ def eval_node(node, env, stack_trace=None):
 
         elif node_type == UseStatement:
             debug_log("  UseStatement node", node.file_path)
-            # Simplified module import
-            print(f"[IMPORT] Loading module: {node.file_path}")
-            # For now, return a dummy module environment
-            module_env = Environment()
-            if node.alias:
-                env.set(node.alias, module_env)
+            from .module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path
+
+            # Extract file path from node
+            file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
+            if isinstance(file_path_attr, StringLiteral):
+                file_path = file_path_attr.value
             else:
-                # Import all exports into current scope
-                for name, value in module_env.get_exports().items():
-                    env.set(name, value)
+                file_path = file_path_attr
+
+            if not file_path:
+                return EvaluationError("use: missing file path")
+
+            debug_log("  UseStatement loading", file_path)
+
+            # Try to get normalized path and candidates
+            normalized_path = normalize_path(file_path)
+            candidates = get_module_candidates(file_path)
+
+            # Check cache first
+            cached_env = get_cached_module(normalized_path)
+            if cached_env:
+                debug_log("  Found module in cache", normalized_path)
+                module_env = cached_env
+                loaded = True
+            else:
+                # Not in cache, load from filesystem
+                debug_log("  Module not in cache, loading from disk")
+                module_env = Environment()
+                loaded = False
+                parse_errors = []
+
+                for candidate in candidates:
+                    try:
+                        if not os.path.exists(candidate):
+                            continue
+                        debug_log("  Found module file", candidate)
+                        with open(candidate, 'r', encoding='utf-8') as f:
+                            code = f.read()
+                        
+                        # Import parser/lexer here to avoid top-level circular imports
+                        from .lexer import Lexer
+                        from .parser import Parser
+                        lexer = Lexer(code)
+                        parser = Parser(lexer)
+                        program = parser.parse_program()
+                        
+                        if getattr(parser, 'errors', None):
+                            parse_errors.append((candidate, parser.errors))
+                            continue
+                            
+                        # Evaluate module into its own environment
+                        eval_node(program, module_env)
+                        # Cache the successfully loaded module
+                        cache_module(normalized_path, module_env)
+                        loaded = True
+                        debug_log("  Module loaded and cached", normalized_path)
+                        break
+                    except Exception as e:
+                        parse_errors.append((candidate, str(e)))
+
+            if not loaded:
+                debug_log("  UseStatement failed to load candidates", parse_errors)
+                return EvaluationError(f"Module not found or failed to load: {file_path}")
+
+            # Set alias or import exported names
+            alias = getattr(node, 'alias', None)
+            if alias:
+                debug_log("  Setting module alias", alias)
+                env.set(alias, module_env)
+            else:
+                try:
+                    exports = module_env.get_exports()
+                    for name, value in exports.items():
+                        debug_log("  Importing export", name)
+                        env.set(name, value)
+                except Exception:
+                    # If module has no exports, make its env available as a module object
+                    module_name = os.path.basename(file_path)
+                    debug_log("  Setting module object", module_name)
+                    env.set(module_name, module_env)
+
             return NULL
 
         elif node_type == ExactlyStatement:

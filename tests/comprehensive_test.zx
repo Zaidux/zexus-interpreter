@@ -1,0 +1,149 @@
+# Comprehensive Test File for Zexus Language
+# This file tests various language features and edge cases
+
+# === Basic Variable Declarations and Operations ===
+let x = 42
+let y = 3.14
+let str = "Hello, World!"
+let bool = true
+let empty = null
+
+# String concatenation and complex expressions
+print "Basic math: " + (x + y)
+print "Complex expression: " + ((x * 2) + (y / 2))
+
+# === Arrays and Complex Data Structures ===
+let numbers = [1, 2, 3, 4, 5]
+let nested = [[1, 2], [3, 4], [5, 6]]
+let mixed = [1, "two", true, [3, 4], {"key": "value"}]
+
+# Map literals and nesting
+let person = {
+    name: "John",
+    age: 30,
+    address: {
+        street: "123 Main St",
+        city: "Tech City",
+        country: "Codeland"
+    },
+    hobbies: ["coding", "reading", "gaming"]
+}
+
+# === Functions and Lambdas ===
+action greet(name) {
+    print "Hello, " + name + "!"
+}
+
+action fibonacci(n) {
+    if (n <= 1) {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+# Lambda expressions
+let double = lambda(x) { return x * 2 }
+let add = lambda(a, b) { return a + b }
+
+# Higher-order functions
+let numbers_doubled = numbers.map(double)
+let sum = numbers.reduce(add, 0)
+
+# === Control Flow and Error Handling ===
+try {
+    let result = x / 0
+} catch err {
+    print "Caught error: " + err
+}
+
+if (x > 20) {
+    print "x is greater than 20"
+} else if (x > 10) {
+    print "x is greater than 10"
+} else {
+    print "x is less than or equal to 10"
+}
+
+let count = 0
+while (count < 5) {
+    print "Count: " + count
+    count = count + 1
+}
+
+for each item in numbers {
+    print "Item: " + item
+}
+
+# === Modules and Exports ===
+export greet
+export fibonacci
+
+# === Advanced Features ===
+# Screen definition
+screen MainScreen {
+    let background = "#ffffff"
+    let components = ["header", "content", "footer"]
+}
+
+# Embedded code
+embedded Python {
+    import math
+    def calculate_pi():
+        return math.pi
+}
+
+# Method chaining
+let processed = numbers
+    .map(lambda(x) { return x * 2 })
+    .filter(lambda(x) { return x > 5 })
+    .reduce(lambda(acc, x) { return acc + x }, 0)
+
+# === Edge Cases ===
+# Unicode strings
+let unicode = "Hello 🌍 世界"
+print unicode
+
+# Large numbers and precision
+let large_num = 9999999999
+let decimal = 0.0000000001
+
+# Nested control structures
+if (true) {
+    for each n in [1, 2, 3] {
+        try {
+            if (n == 2) {
+                throw "Found two!"
+            }
+            print n
+        } catch e {
+            print "Caught: " + e
+        }
+    }
+}
+
+# Complex object manipulation
+let state = {
+    users: [
+        { id: 1, name: "Alice", active: true },
+        { id: 2, name: "Bob", active: false }
+    ],
+    settings: {
+        theme: {
+            dark: {
+                background: "#000000",
+                text: "#ffffff"
+            },
+            light: {
+                background: "#ffffff",
+                text: "#000000"
+            }
+        }
+    }
+}
+
+# Canvas drawing
+let canvas = create_canvas(800, 600)
+draw_line(canvas, 0, 0, 800, 600)
+draw_text(canvas, 400, 300, "Hello Canvas!")
+
+print "Comprehensive test completed!"

@@ -60,6 +60,15 @@ class ContextStackParser:
             if result is not None:
                 if isinstance(result, Statement):
                     print(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
+                    # If we got a BlockStatement but it has no inner statements,
+                    # attempt to populate it from the block tokens (best-effort).
+                    if isinstance(result, BlockStatement) and not getattr(result, 'statements', None):
+                        tokens = block_info.get('tokens', [])
+                        if tokens:
+                            print(f"  🔧 Populating empty BlockStatement from {len(tokens)} tokens")
+                            parsed_stmts = self._parse_block_statements(tokens)
+                            result.statements = parsed_stmts
+                            print(f"  ✅ Populated BlockStatement with {len(parsed_stmts)} statements")
                     return result
                 elif isinstance(result, Expression):
                     print(f"  ✅ Parsed: ExpressionStatement at line {block_info.get('start_token', {}).get('line', 'unknown')}")
@@ -499,52 +508,117 @@ class ContextStackParser:
             return None
 
     def _parse_print_statement(self, block_info, all_tokens):
-        """Parse print statement with sophisticated expression parsing"""
-        print("🔧 [Context] Parsing print statement with expression")
+        """Parse print statement with sophisticated expression parsing and boundary detection"""
+        print("🔧 [Context] Parsing print statement with enhanced expression boundary detection")
         tokens = block_info['tokens']
 
         if len(tokens) < 3:
             return PrintStatement(StringLiteral(""))
 
-        inner_tokens = tokens[1:-1]
+        # Collect tokens up to a statement boundary
+        inner_tokens = []
+        statement_terminators = {SEMICOLON, RBRACE}
+        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY}
+        nesting_level = 0
+
+        for token in tokens[1:]:  # Skip the PRINT token
+            # Track nesting level for parentheses/braces
+            if token.type in {LPAREN, LBRACE}:
+                nesting_level += 1
+            elif token.type in {RPAREN, RBRACE}:
+                nesting_level -= 1
+                if nesting_level < 0:  # Found closing without opening
+                    break
+
+            # Only check for boundaries when not inside nested structure
+            if nesting_level == 0:
+                if token.type in statement_terminators or token.type in statement_starters:
+                    break
+
+            inner_tokens.append(token)
 
         if not inner_tokens:
             return PrintStatement(StringLiteral(""))
 
+        print(f"  📝 Print statement tokens: {[t.literal for t in inner_tokens]}")
         expression = self._parse_expression(inner_tokens)
+        print(f"  ✅ Parsed print expression: {type(expression).__name__ if expression else 'None'}")
         return PrintStatement(expression if expression is not None else StringLiteral(""))
 
     def _parse_expression(self, tokens):
-        """Parse a full expression from tokens"""
+        """Parse a full expression from tokens with improved boundary detection and nesting"""
         if not tokens:
             return StringLiteral("")
+
+        print(f"  🔍 Parsing expression from tokens: {[t.literal for t in tokens]}")
 
         # Map literal first
         if tokens[0].type == LBRACE:
             return self._parse_map_literal(tokens)
 
-        # Handle string concatenation or infix plus
+        # Handle function calls and member access
+        if len(tokens) >= 3:
+            # Handle chained member access and function calls
+            parts = []
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
+                # Member access: object.member
+                if (i + 2 < len(tokens) and token.type == IDENT 
+                    and tokens[i + 1].type == DOT and tokens[i + 2].type == IDENT):
+                    parts.append((token.literal, tokens[i + 2].literal))
+                    i += 3
+                # Function call: func(args)
+                elif (i + 1 < len(tokens) and token.type == IDENT 
+                      and tokens[i + 1].type == LPAREN):
+                    func_name = token.literal
+                    nested_tokens = self._extract_nested_tokens(tokens, i + 1)
+                    arguments = self._parse_argument_list(nested_tokens)
+                    
+                    # Build function call expression
+                    if parts:
+                        # It's a method call on object chain
+                        obj = parts[0][0]
+                        for part1, part2 in parts[1:]:
+                            obj = f"{obj}.{part1}"
+                        obj = f"{obj}.{parts[-1][1]}"
+                        expr = CallExpression(Identifier(obj), arguments)
+                    else:
+                        # Regular function call
+                        expr = CallExpression(Identifier(func_name), arguments)
+                    
+                    i += len(nested_tokens) + 2  # Skip past function call
+                    return expr
+                else:
+                    i += 1
+
+            # If we collected member access parts but no function call,
+            # treat it as a member access chain
+            if parts:
+                chain = parts[0][0]
+                for part1, part2 in parts[1:]:
+                    chain = f"{chain}.{part1}"
+                chain = f"{chain}.{parts[-1][1]}"
+                return Identifier(chain)
+
+        # Handle string concatenation or infix operators
         for i, token in enumerate(tokens):
-            if token.type == PLUS:
+            if token.type in {PLUS, MINUS, ASTERISK, SLASH, 
+                            LT, GT, EQ, NOT_EQ, LTE, GTE}:
                 left_tokens = tokens[:i]
                 right_tokens = tokens[i + 1:]
                 left_expr = self._parse_expression(left_tokens)
                 right_expr = self._parse_expression(right_tokens)
-                return InfixExpression(left_expr, "+", right_expr)
-
-        # Handle function calls
-        if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == LPAREN:
-            function_name = tokens[0].literal
-            arg_tokens = self._extract_nested_tokens(tokens, 1)
-            arguments = self._parse_argument_list(arg_tokens)
-            return CallExpression(Identifier(function_name), arguments)
+                return InfixExpression(left_expr, token.literal, right_expr)
 
         # Single token expressions
         if len(tokens) == 1:
             return self._parse_single_token_expression(tokens[0])
 
         # Compound expressions (best-effort)
-        return self._parse_compound_expression(tokens)
+        expr = self._parse_compound_expression(tokens)
+        print(f"  ✅ Parsed expression result: {type(expr).__name__ if expr else 'None'}")
+        return expr
 
     def _parse_single_token_expression(self, token):
         """Parse a single token into an expression"""
@@ -616,23 +690,39 @@ class ContextStackParser:
         return nested_tokens
 
     def _parse_argument_list(self, tokens):
-        """Parse comma-separated argument list"""
+        """Parse comma-separated argument list with improved nesting support"""
+        print("  🔍 Parsing argument list")
         arguments = []
         current_arg = []
-
+        nesting_level = 0
+        
         for token in tokens:
-            if token.type == COMMA:
+            # Track nesting level for parentheses/braces
+            if token.type in {LPAREN, LBRACE}:
+                nesting_level += 1
+            elif token.type in {RPAREN, RBRACE}:
+                nesting_level -= 1
+            
+            # Only treat commas as separators when not inside nested structures
+            if token.type == COMMA and nesting_level == 0:
                 if current_arg:
-                    arguments.append(self._parse_expression(current_arg))
+                    arg_expr = self._parse_expression(current_arg)
+                    print(f"  📝 Parsed argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
+                    arguments.append(arg_expr)
                     current_arg = []
             else:
                 current_arg.append(token)
-
+        
+        # Handle last argument
         if current_arg:
-            arguments.append(self._parse_expression(current_arg))
-
+            arg_expr = self._parse_expression(current_arg)
+            print(f"  📝 Parsed final argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
+            arguments.append(arg_expr)
+        
         # Filter out None arguments by replacing with empty string literal
-        return [arg if arg is not None else StringLiteral("") for arg in arguments]
+        arguments = [arg if arg is not None else StringLiteral("") for arg in arguments]
+        print(f"  ✅ Parsed {len(arguments)} arguments total")
+        return arguments
 
     def _parse_function_call(self, block_info, all_tokens):
         """Parse function call expression with arguments"""
