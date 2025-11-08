@@ -39,6 +39,11 @@ RBRACE = "}"
 LBRACKET = "["
 RBRACKET = "]"
 
+# Backwards-compatible alias: some parts of the codebase expect the name
+# ASTERISK for the multiplication token. Provide a stable alias to avoid
+# NameError when older modules reference ASTERISK.
+ASTERISK = STAR
+
 # Keywords
 LET = "LET"
 PRINT = "PRINT"

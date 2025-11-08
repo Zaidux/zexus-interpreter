@@ -10,6 +10,10 @@ class Lexer:
         self.in_embedded_block = False
         self.line = 1
         self.column = 1
+        # Hint for parser: when '(' starts a lambda parameter list that is
+        # immediately followed by '=>', this flag will be set for the token
+        # produced for that '('. Parser can check and consume accordingly.
+        self._next_paren_has_lambda = False
         self.read_char()
 
     def read_char(self):
@@ -47,11 +51,20 @@ class Lexer:
         current_column = self.column
 
         if self.ch == '=':
+            # Equality '=='
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(EQ, literal)
+                tok.line = current_line
+                tok.column = current_column
+            # Arrow '=>' (treat as lambda shorthand)
+            elif self.peek_char() == '>':
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(LAMBDA, literal)
                 tok.line = current_line
                 tok.column = current_column
             else:
@@ -132,6 +145,33 @@ class Lexer:
             tok.line = current_line
             tok.column = current_column
         elif self.ch == '(':
+            # Quick char-level scan: detect if this '(' pairs with a ')' that
+            # is followed by '=>' (arrow). If so, set a hint flag so parser
+            # can treat the parentheses as a lambda-parameter list.
+            try:
+                src = self.input
+                i = self.position
+                depth = 0
+                found = False
+                while i < len(src):
+                    c = src[i]
+                    if c == '(':
+                        depth += 1
+                    elif c == ')':
+                        depth -= 1
+                        if depth == 0:
+                            # look ahead for '=>' skipping whitespace
+                            j = i + 1
+                            while j < len(src) and src[j].isspace():
+                                j += 1
+                            if j + 1 < len(src) and src[j] == '=' and src[j + 1] == '>':
+                                found = True
+                            break
+                    i += 1
+                self._next_paren_has_lambda = found
+            except Exception:
+                self._next_paren_has_lambda = False
+
             tok = Token(LPAREN, self.ch)
             tok.line = current_line
             tok.column = current_column

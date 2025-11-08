@@ -81,6 +81,7 @@ class UltimateParser:
             AND: self.parse_infix_expression,
             OR: self.parse_infix_expression,
             ASSIGN: self.parse_assignment_expression,
+            LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
         }
@@ -616,6 +617,42 @@ class UltimateParser:
         body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)
 
+    def parse_lambda_infix(self, left):
+        """Parse arrow-style lambda when encountering leftside 'params' followed by =>
+
+        Examples:
+            x => x + 1
+            (a, b) => a + b
+        """
+        # Current token is LAMBDA because caller advanced to it
+        # Build parameter list from `left` expression
+        params = []
+        # Single identifier param
+        if isinstance(left, Identifier):
+            params = [left]
+        else:
+            # If left is a grouped expression returning a ListLiteral-like container
+            # we'll attempt to extract identifiers from it (best-effort)
+            try:
+                if hasattr(left, 'elements'):
+                    for el in left.elements:
+                        if isinstance(el, Identifier):
+                            params.append(el)
+            except Exception:
+                pass
+
+        # Consume the LAMBDA token (already current)
+        # The parse loop has already advanced current token to LAMBDA, so
+        # now move to the body
+        self.next_token()
+
+        # Support optional colon or arrow-like separators were handled at lexing stage
+        if self.cur_token_is(COLON):
+            self.next_token()
+
+        body = self.parse_expression(LOWEST)
+        return LambdaExpression(parameters=params, body=body)
+
     def _parse_parameter_list(self):
         parameters = []
 
@@ -960,11 +997,79 @@ class UltimateParser:
         return expression
 
     def parse_grouped_expression(self):
+        # Special-case: if this parenthesized group is followed by a lambda arrow
+        # treat its contents as a parameter list for an arrow-style lambda: (a, b) => ...
+        # The lexer sets a hint flag when it detects a ')' followed by '=>'. Use
+        # that as a fast-path check to parse the contents as parameter identifiers.
+        if getattr(self.lexer, '_next_paren_has_lambda', False) or self._lookahead_token_after_matching_paren() == LAMBDA:
+            # Consume '('
+            self.next_token()
+            self.lexer._next_paren_has_lambda = False  # Clear lexer hint after consuming parenthesis
+            params = []
+            # If immediate RPAREN, empty params
+            if self.cur_token_is(RPAREN):
+                self.next_token()
+                return ListLiteral(elements=params)
+
+            # Collect identifiers separated by commas
+            if self.cur_token_is(IDENT):
+                params.append(Identifier(self.cur_token.literal))
+
+            while self.peek_token_is(COMMA):
+                self.next_token()  # move to comma
+                self.next_token()  # move to next identifier
+                if self.cur_token_is(IDENT):
+                    params.append(Identifier(self.cur_token.literal))
+                else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
+                    break
+
+            # Expect closing paren
+            if not self.expect_peek(RPAREN):
+                return None
+
+            # Return a ListLiteral-like node carrying identifiers for lambda parsing
+            return ListLiteral(elements=params)
+
+        # Default grouped expression behavior
         self.next_token()
         exp = self.parse_expression(LOWEST)
         if not self.expect_peek(RPAREN):
             return None
         return exp
+
+    def _lookahead_token_after_matching_paren(self):
+        """Character-level lookahead: detect if the matching ')' is followed by '=>' (arrow).
+
+        This avoids consuming parser state by scanning the lexer's input string from the
+        current position and counting parentheses. It's best-effort and ignores strings
+        or escapes — suitable for parameter lists which are simple identifier lists.
+        """
+        lexer = self.lexer
+        src = getattr(lexer, 'input', '')
+        pos = getattr(lexer, 'position', 0)
+
+        i = pos
+        depth = 0
+        length = len(src)
+
+        while i < length:
+            ch = src[i]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+                if depth == 0:
+                    # look ahead for '=>' skipping whitespace
+                    j = i + 1
+                    while j < length and src[j].isspace():
+                        j += 1
+                    if j + 1 < length and src[j] == '=' and src[j + 1] == '>':
+                        return LAMBDA
+                    return None
+            i += 1
+
+        return None
 
     def parse_if_expression(self):
         expression = IfExpression(condition=None, consequence=None, alternative=None)

@@ -569,57 +569,111 @@ class ContextStackParser:
         if tokens[0].type == LBRACE:
             return self._parse_map_literal(tokens)
 
-        # Handle function calls and member access
-        if len(tokens) >= 3:
-            # Handle chained member access and function calls
-            parts = []
-            i = 0
-            while i < len(tokens):
-                token = tokens[i]
-                # Member access: object.member
-                if (i + 2 < len(tokens) and token.type == IDENT 
-                    and tokens[i + 1].type == DOT and tokens[i + 2].type == IDENT):
-                    parts.append((token.literal, tokens[i + 2].literal))
-                    i += 3
-                # Function call: func(args)
-                elif (i + 1 < len(tokens) and token.type == IDENT 
-                      and tokens[i + 1].type == LPAREN):
-                    func_name = token.literal
-                    nested_tokens = self._extract_nested_tokens(tokens, i + 1)
-                    arguments = self._parse_argument_list(nested_tokens)
-                    
-                    # Build function call expression
-                    if parts:
-                        # It's a method call on object chain
-                        obj = parts[0][0]
-                        for part1, part2 in parts[1:]:
-                            obj = f"{obj}.{part1}"
-                        obj = f"{obj}.{parts[-1][1]}"
-                        expr = CallExpression(Identifier(obj), arguments)
-                    else:
-                        # Regular function call
-                        expr = CallExpression(Identifier(func_name), arguments)
-                    
-                    i += len(nested_tokens) + 2  # Skip past function call
-                    return expr
-                else:
-                    i += 1
+        # List literal support
+        if tokens[0].type == LBRACKET:
+            return self._parse_list_literal(tokens)
 
-            # If we collected member access parts but no function call,
-            # treat it as a member access chain
-            if parts:
-                chain = parts[0][0]
-                for part1, part2 in parts[1:]:
-                    chain = f"{chain}.{part1}"
-                chain = f"{chain}.{parts[-1][1]}"
-                return Identifier(chain)
+        # Lambda expression support
+        if tokens[0].type == LAMBDA:
+            return self._parse_lambda(tokens)
+
+        # Robust primary + chaining parser: build a primary expression then
+        # apply calls (LPAREN) and property/method access (DOT) repeatedly.
+        if len(tokens) >= 1:
+            i = 0
+            current_expr = None
+
+            def parse_primary_at(idx):
+                t = tokens[idx]
+                # Parenthesized expression
+                if t.type == LPAREN:
+                    nested = self._extract_nested_tokens(tokens, idx)
+                    return self._parse_expression(nested), len(nested) + 2
+                # Identifier possibly followed by call
+                if t.type == IDENT:
+                    # Function call as primary: ident(...)
+                    if idx + 1 < len(tokens) and tokens[idx + 1].type == LPAREN:
+                        nested = self._extract_nested_tokens(tokens, idx + 1)
+                        args = self._parse_argument_list(nested)
+                        return CallExpression(Identifier(t.literal), args), len(nested) + 2
+                    else:
+                        return Identifier(t.literal), 1
+                # Literals (string, int, float, boolean)
+                return self._parse_single_token_expression(t), 1
+
+            # Initialize primary
+            current_expr, adv = parse_primary_at(i)
+            i += adv
+
+            # Repeatedly apply chaining: dot-access, method calls, or call-on-expression
+            while i < len(tokens):
+                tk = tokens[i]
+                # Method or property access: .name or .name(...)
+                if tk.type == DOT and i + 1 < len(tokens) and tokens[i + 1].type == IDENT:
+                    name_token = tokens[i + 1]
+                    # Method call: .name(...)
+                    if i + 2 < len(tokens) and tokens[i + 2].type == LPAREN:
+                        nested = self._extract_nested_tokens(tokens, i + 2)
+                        args = self._parse_argument_list(nested)
+                        current_expr = MethodCallExpression(object=current_expr, method=Identifier(name_token.literal), arguments=args)
+                        i += len(nested) + 3
+                        continue
+                    else:
+                        # Property access
+                        current_expr = PropertyAccessExpression(object=current_expr, property=Identifier(name_token.literal))
+                        i += 2
+                        continue
+
+                # Call on the current expression: expr(...)
+                if tk.type == LPAREN:
+                    nested = self._extract_nested_tokens(tokens, i)
+                    args = self._parse_argument_list(nested)
+                    current_expr = CallExpression(function=current_expr, arguments=args)
+                    i += len(nested) + 2
+                    continue
+
+                # If none match, stop chaining
+                break
+
+            return current_expr
 
         # Handle string concatenation or infix operators
         for i, token in enumerate(tokens):
             if token.type in {PLUS, MINUS, ASTERISK, SLASH, 
-                            LT, GT, EQ, NOT_EQ, LTE, GTE}:
+                            LT, GT, EQ, NOT_EQ, LTE, GTE, LAMBDA}:
                 left_tokens = tokens[:i]
                 right_tokens = tokens[i + 1:]
+                # Arrow-style lambda: treat LAMBDA as a lambda operator where
+                # left side are parameters and right side is the body.
+                if token.type == LAMBDA:
+                    # Parse left as parameters (ident or parenthesized list)
+                    params = []
+                    if left_tokens:
+                        # single identifier
+                        if len(left_tokens) == 1 and left_tokens[0].type == IDENT:
+                            params = [Identifier(left_tokens[0].literal)]
+                        else:
+                            # try to parse as a list of idents (e.g. (a,b))
+                            first = left_tokens[0]
+                            if first.type == LBRACKET or first.type == LPAREN:
+                                inner = left_tokens[1:-1]
+                                # split on commas
+                                cur = []
+                                ids = []
+                                for t in inner:
+                                    if t.type == COMMA:
+                                        if cur and cur[0].type == IDENT:
+                                            ids.append(Identifier(cur[0].literal))
+                                        cur = []
+                                    else:
+                                        cur.append(t)
+                                if cur and cur[0].type == IDENT:
+                                    ids.append(Identifier(cur[0].literal))
+                                params = ids
+
+                    body_expr = self._parse_expression(right_tokens)
+                    return LambdaExpression(parameters=params, body=body_expr)
+
                 left_expr = self._parse_expression(left_tokens)
                 right_expr = self._parse_expression(right_tokens)
                 return InfixExpression(left_expr, token.literal, right_expr)
