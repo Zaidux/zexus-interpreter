@@ -604,15 +604,23 @@ class UltimateParser:
         elif self.cur_token_is(IDENT):
             parameters = self._parse_parameter_list()
 
+        # Normalize possible separators between parameter list and body
+        # Accept either ':' (keyword-style), '=>' (tokenized as LAMBDA) or '->' style
         if self.cur_token_is(COLON):
+            # current token is ':', advance to the first token of the body
             self.next_token()
         elif self.cur_token_is(MINUS) and self.peek_token_is(GT):
+            # support '->' (legacy), consume both '-' and '>' and advance to body
             self.next_token()
             self.next_token()
         else:
-            if not (isinstance(self.cur_token, Token) and self.cur_token.type in [IDENT, INT, STRING, TRUE, FALSE, LPAREN, LBRACKET, LBRACE]):
-                if not self.expect_peek(COLON):
-                    pass
+            # If a colon is the *next* token (peek), consume it and advance past it
+            if self.peek_token_is(COLON):
+                # move to colon
+                self.next_token()
+                # and move to the token after colon (the start of the body)
+                self.next_token()
+            # Otherwise, continue — body parsing will attempt to parse the current token
 
         body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)

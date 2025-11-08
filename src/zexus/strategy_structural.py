@@ -226,18 +226,30 @@ class StructuralAnalyzer:
                 continue
 
             # Fallback: consume single token as a minimal block
+            # Fallback: collect a run of tokens until a clear statement boundary
+            # to avoid creating many single-token blocks which fragment expressions.
+            start_idx = i
+            run_tokens = [t]
+            j = i + 1
+            while j < n:
+                tj = tokens[j]
+                if tj.type in stop_types or tj.type in statement_starters or tj.type == LBRACE or tj.type == TRY:
+                    break
+                run_tokens.append(tj)
+                j += 1
+
             self.blocks[block_id] = {
                 'id': block_id,
-                'type': 'token',
-                'subtype': t.type,
-                'tokens': [t],
-                'start_token': t,
-                'start_index': i,
-                'end_index': i,
+                'type': 'statement',
+                'subtype': run_tokens[0].type if run_tokens else 'token_run',
+                'tokens': run_tokens,
+                'start_token': run_tokens[0] if run_tokens else t,
+                'start_index': start_idx,
+                'end_index': j - 1,
                 'parent': None
             }
             block_id += 1
-            i += 1
+            i = j
 
         return self.blocks
 

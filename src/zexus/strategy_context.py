@@ -380,6 +380,8 @@ class ContextStackParser:
 
         statements = []
         i = 0
+        # Common statement-starter tokens used by several heuristics and fallbacks
+        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
         while i < len(tokens):
             token = tokens[i]
 
@@ -444,7 +446,38 @@ class ContextStackParser:
                 i = j
 
             else:
-                i += 1
+                # Fallback: collect a run of tokens until a statement boundary
+                # and attempt to parse them as a single expression. This reduces
+                # token fragmentation caused by the structural analyzer splitting
+                # long expressions into many tiny blocks.
+                j = i
+                run_tokens = []
+                nesting = 0
+                while j < len(tokens):
+                    t = tokens[j]
+                    # update nesting for parentheses/brackets/braces
+                    if t.type in {LPAREN, LBRACE, LBRACKET}:
+                        nesting += 1
+                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                        if nesting > 0:
+                            nesting -= 1
+
+                    # stop at top-level statement terminators or starters
+                    if nesting == 0 and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
+                        break
+
+                    run_tokens.append(t)
+                    j += 1
+
+                if run_tokens:
+                    expr = self._parse_expression(run_tokens)
+                    if expr:
+                        statements.append(ExpressionStatement(expr))
+                # Advance to the token after the run (or by one to avoid infinite loop)
+                if j == i:
+                    i += 1
+                else:
+                    i = j
 
         print(f"    ✅ Parsed {len(statements)} statements from block")
         return statements
@@ -755,6 +788,94 @@ class ContextStackParser:
             i += 1
 
         return nested_tokens
+
+    def _parse_list_literal(self, tokens):
+        """Parse a list literal [a, b, c] from a token list"""
+        print("  🔧 [List] Parsing list literal")
+        if not tokens or tokens[0].type != LBRACKET:
+            print("  ❌ [List] Not a list literal")
+            return None
+
+        elements = []
+        i = 1
+        cur = []
+        nesting = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t.type in {LBRACKET, LPAREN, LBRACE}:
+                nesting += 1
+                cur.append(t)
+            elif t.type in {RBRACKET, RPAREN, RBRACE}:
+                if nesting > 0:
+                    nesting -= 1
+                    cur.append(t)
+                else:
+                    # reached closing bracket of the list
+                    if cur:
+                        elem = self._parse_expression(cur)
+                        elements.append(elem)
+                    break
+            elif t.type == COMMA and nesting == 0:
+                if cur:
+                    elem = self._parse_expression(cur)
+                    elements.append(elem)
+                    cur = []
+            else:
+                cur.append(t)
+            i += 1
+
+        # If there is a trailing element
+        if cur:
+            elem = self._parse_expression(cur)
+            elements.append(elem)
+
+        print(f"  ✅ Parsed list with {len(elements)} elements")
+        return ListLiteral(elements)
+
+    def _parse_lambda(self, tokens):
+        """Parse a lambda expression from tokens starting with LAMBDA (keyword-style)
+
+        Supports forms:
+          lambda x: x + 1
+          lambda (x, y): x + y
+        """
+        print("  🔧 [Lambda] Parsing lambda expression (keyword-style)")
+        if not tokens or tokens[0].type != LAMBDA:
+            return None
+
+        i = 1
+        params = []
+
+        # parenthesized params
+        if i < len(tokens) and tokens[i].type == LPAREN:
+            # collect tokens inside parentheses
+            nested = self._extract_nested_tokens(tokens, i)
+            j = 0
+            cur_ident = None
+            while j < len(nested):
+                tk = nested[j]
+                if tk.type == IDENT:
+                    params.append(Identifier(tk.literal))
+                j += 1
+            i += len(nested) + 2
+        # single identifier param
+        elif i < len(tokens) and tokens[i].type == IDENT:
+            params.append(Identifier(tokens[i].literal))
+            i += 1
+
+        # Accept ':' or '=>' or '-' '>' sequence
+        if i < len(tokens) and tokens[i].type == COLON:
+            i += 1
+        elif i < len(tokens) and tokens[i].type == MINUS and i + 1 < len(tokens) and tokens[i + 1].type == GT:
+            i += 2
+        elif i < len(tokens) and tokens[i].type == LAMBDA:
+            # defensive: allow repeated LAMBDA token produced by lexer for '=>'
+            i += 1
+
+        # Remaining tokens are body
+        body_tokens = tokens[i:]
+        body = self._parse_expression(body_tokens) if body_tokens else StringLiteral("")
+        return LambdaExpression(parameters=params, body=body)
 
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
