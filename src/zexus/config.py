@@ -1,71 +1,154 @@
-# src/zexus/config.py
 """
-Configuration system for Zexus Hybrid Architecture
+Configuration manager for Zexus interpreter.
+Provides per-user persistent config stored at ~/.zexus/config.json
+Exports a `config` singleton with convenient helpers.
 """
 
-class ZexusConfig:
+import os
+import json
+from pathlib import Path
+from datetime import datetime, timezone
+
+DEFAULT_CONFIG = {
+    "debug": {
+        "enabled": False,
+        "level": "none",  # none, minimal, full
+        "last_updated": None
+    },
+    "user_preferences": {
+        "show_warnings": True,
+        "color_output": True,
+        "max_output_lines": 1000
+    }
+}
+
+# Backwards-compatible runtime settings expected by earlier modules
+DEFAULT_RUNTIME = {
+    'syntax_style': 'auto',
+    'enable_advanced_parsing': True,
+    'enable_debug_logs': False,
+}
+
+
+class Config:
     def __init__(self):
-        # Parser settings
-        self.enable_advanced_parsing = True
-        self.enable_debug_logs = False
-        self.syntax_style = "universal"
-        
-        # Hybrid system settings
-        self.use_hybrid_compiler = True
-        self.fallback_to_interpreter = True
-        self.enable_jit = False
-        
-        # Performance settings
-        self.optimize_bytecode = True
-        self.cache_compiled_code = False
-        
-        # Execution thresholds
-        self.compiler_line_threshold = 100  # Use compiler for files > 100 lines
-        self.enable_execution_stats = True
-        
-        # Compiler-specific settings
-        self.enable_compiler_optimizations = True
-    
-    @classmethod
-    def production(cls):
-        """Production configuration - minimal logging, maximum performance"""
-        config = cls()
-        config.enable_debug_logs = False
-        config.enable_advanced_parsing = False
-        config.use_hybrid_compiler = True
-        config.optimize_bytecode = True
-        config.enable_execution_stats = False
-        config.compiler_line_threshold = 50  # More aggressive compilation
-        return config
-    
-    @classmethod
-    def development(cls):
-        """Development configuration - more verbose"""
-        config = cls()
-        config.enable_debug_logs = True
-        config.enable_advanced_parsing = True
-        config.use_hybrid_compiler = True  # Enable hybrid for testing
-        config.enable_execution_stats = True
-        return config
-    
-    @classmethod
-    def performance(cls):
-        """Performance configuration - always use compiler when possible"""
-        config = cls()
-        config.enable_debug_logs = False
-        config.use_hybrid_compiler = True
-        config.fallback_to_interpreter = False  # No fallback - fail if compiler fails
-        config.compiler_line_threshold = 10  # Use compiler for even small files
-        config.enable_compiler_optimizations = True
-        return config
-    
-    @classmethod  
-    def interpreter_only(cls):
-        """Interpreter-only configuration"""
-        config = cls()
-        config.use_hybrid_compiler = False
-        config.enable_debug_logs = True
-        return config
+        self.config_dir = Path.home() / ".zexus"
+        self.config_file = self.config_dir / "config.json"
+        self._data = DEFAULT_CONFIG.copy()
+        self._ensure_loaded()
 
-# Global configuration instance
-config = ZexusConfig.development()  # Default to development for now
+        # ensure runtime defaults exist for backward compatibility
+        self._data.setdefault('runtime', {})
+        for k, v in DEFAULT_RUNTIME.items():
+            self._data['runtime'].setdefault(k, v)
+
+    def _ensure_loaded(self):
+        try:
+            self.config_dir.mkdir(mode=0o700, exist_ok=True)
+            if self.config_file.exists():
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    content = json.load(f)
+                    # Merge with defaults to keep compatibility
+                    self._data = self._merge_dicts(DEFAULT_CONFIG, content)
+            else:
+                self._data = DEFAULT_CONFIG.copy()
+                self._write()
+        except Exception:
+            # If anything goes wrong, fall back to defaults in-memory
+            self._data = DEFAULT_CONFIG.copy()
+
+    def _merge_dicts(self, base, override):
+        result = base.copy()
+        for k, v in override.items():
+            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = self._merge_dicts(result[k], v)
+            else:
+                result[k] = v
+        return result
+
+    def _write(self):
+        try:
+            self.config_dir.mkdir(mode=0o700, exist_ok=True)
+            self._data['debug']['last_updated'] = datetime.now(timezone.utc).isoformat()
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self._data, f, indent=4)
+        except Exception:
+            # Fail silently; we do not want to crash the interpreter for config issues
+            pass
+
+    # Public API
+    @property
+    def debug_level(self):
+        return self._data.get('debug', {}).get('level', 'none')
+
+    @debug_level.setter
+    def debug_level(self, value):
+        if value not in ('none', 'minimal', 'full'):
+            raise ValueError('Invalid debug level')
+        self._data.setdefault('debug', {})['level'] = value
+        self._data['debug']['enabled'] = (value != 'none')
+        self._write()
+
+    def enable_debug(self, level='full'):
+        self.debug_level = level
+
+    def disable_debug(self):
+        self.debug_level = 'none'
+
+    def is_debug_full(self):
+        return self.debug_level == 'full'
+
+    def is_debug_minimal(self):
+        return self.debug_level == 'minimal'
+
+    def is_debug_none(self):
+        return self.debug_level == 'none'
+
+    # Backwards-compatible properties
+    @property
+    def syntax_style(self):
+        return self._data.get('runtime', {}).get('syntax_style', 'auto')
+
+    @syntax_style.setter
+    def syntax_style(self, value):
+        self._data.setdefault('runtime', {})['syntax_style'] = value
+        self._write()
+
+    @property
+    def enable_advanced_parsing(self):
+        return self._data.get('runtime', {}).get('enable_advanced_parsing', True)
+
+    @enable_advanced_parsing.setter
+    def enable_advanced_parsing(self, value):
+        self._data.setdefault('runtime', {})['enable_advanced_parsing'] = bool(value)
+        self._write()
+
+    @property
+    def enable_debug_logs(self):
+        # Map legacy flag to debug level
+        return self.debug_level != 'none'
+
+    @enable_debug_logs.setter
+    def enable_debug_logs(self, value):
+        if value:
+            if self.debug_level == 'none':
+                self.debug_level = 'minimal'
+        else:
+            self.debug_level = 'none'
+
+    # Helper logging function used by modules
+    def should_log(self, level='debug'):
+        """Decide whether to emit a log of a particular level.
+        Levels: 'debug' (very verbose), 'info' (useful info), 'warn', 'error'
+        """
+        dl = self.debug_level
+        if dl == 'full':
+            return True
+        if dl == 'minimal':
+            return level in ('error', 'warn', 'info')
+        # none
+        return level in ('error',)
+
+
+# Singleton
+config = Config()

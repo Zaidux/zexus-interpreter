@@ -450,5 +450,29 @@ main()
     console.print(f"📝 [bold blue]Using {syntax_style} syntax style[/bold blue]")
     console.print(f"🚀 [bold blue]Default execution mode: {mode}[/bold blue]")
 
+@cli.command()
+@click.argument('action', type=click.Choice(['on', 'off', 'minimal', 'status']))
+@click.pass_context
+def debug(ctx, action):
+    """Control persistent debug logging: on/off/minimal/status"""
+    if action == 'status':
+        console.print(f"🔍 Debug level: [bold]{config.debug_level}[/bold]")
+        return
+
+    if action == 'on':
+        config.enable_debug('full')
+        console.print("✅ Debugging enabled (full)")
+        return
+
+    if action == 'minimal':
+        config.enable_debug('minimal')
+        console.print("✅ Debugging set to minimal (errors/warnings)")
+        return
+
+    if action == 'off':
+        config.disable_debug()
+        console.print("✅ Debugging disabled")
+        return
+
 if __name__ == "__main__":
     cli()

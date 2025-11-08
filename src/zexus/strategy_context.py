@@ -1,6 +1,19 @@
 # strategy_context.py (PRODUCTION-READY VERSION)
 from .zexus_token import *
 from .zexus_ast import *
+from .config import config as zexus_config
+
+# Local helper to control debug printing according to user config
+def ctx_debug(msg, data=None, level='debug'):
+    try:
+        if not zexus_config.should_log(level):
+            return
+    except Exception:
+        return
+    if data is not None:
+        print(f"🔍 [CTX DEBUG] {msg}: {data}")
+    else:
+        print(f"🔍 [CTX DEBUG] {msg}")
 
 class ContextStackParser:
     def __init__(self, structural_analyzer):
@@ -28,13 +41,13 @@ class ContextStackParser:
         """Push a new context onto the stack"""
         context_str = f"{context_type}:{context_name}" if context_name else context_type
         self.current_context.append(context_str)
-        print(f"📥 [Context] Pushed: {context_str}")
+        ctx_debug(f"📥 [Context] Pushed: {context_str}", level='debug')
 
     def pop_context(self):
         """Pop the current context from the stack"""
         if len(self.current_context) > 1:
             popped = self.current_context.pop()
-            print(f"📤 [Context] Popped: {popped}")
+            ctx_debug(f"📤 [Context] Popped: {popped}", level='debug')
             return popped
         return None
 

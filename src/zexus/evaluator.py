@@ -68,15 +68,24 @@ class FixedEvaluationError:
 def is_error(obj):
     return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
 
-# === DEBUG FLAGS ===
-DEBUG_EVAL = True  # Set to True to enable debug output
+# === DEBUG FLAGS (controlled by user config) ===
+from .config import config as zexus_config
 
-def debug_log(message, data=None):
-    if DEBUG_EVAL:
-        if data is not None:
-            print(f"🔍 [EVAL DEBUG] {message}: {data}")
-        else:
-            print(f"🔍 [EVAL DEBUG] {message}")
+def debug_log(message, data=None, level='debug'):
+    """Conditional debug logging that respects the user's persistent config.
+    level: 'debug' (very verbose), 'info', 'warn', 'error'
+    """
+    try:
+        if not zexus_config.should_log(level):
+            return
+    except Exception:
+        # If config fails for any reason, default to not logging
+        return
+
+    if data is not None:
+        print(f"🔍 [EVAL DEBUG] {message}: {data}")
+    else:
+        print(f"🔍 [EVAL DEBUG] {message}")
 
 # === FIXED HELPER FUNCTIONS ===
 
