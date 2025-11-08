@@ -206,37 +206,50 @@ class StructuralAnalyzer:
             # Statement-like tokens: try to collect tokens up to a statement boundary
             if t.type in statement_starters:
                 start_idx = i
-                stmt_tokens = [t]
+                stmt_tokens = [t]  # Start with the statement starter token
                 j = i + 1
+                nesting = 0  # Track nesting level for (), [], {}
+                
                 while j < n:
                     tj = tokens[j]
-                    # stop at explicit terminator or when next token starts a new statement
-                    if tj.type in stop_types:
-                        break
-                    if tj.type in statement_starters:
-                        break
-                    # also stop if we encounter a top-level block start
-                    if tj.type == LBRACE:
-                        break
-                    # Heuristic: if we've seen an assignment in current stmt and now an IDENT followed by LPAREN appears,
-                    # it's likely the IDENT(LPAREN) starts a new statement (e.g. missing semicolon). Stop here.
-                    if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
-                        if any(st.type == ASSIGN for st in stmt_tokens):
+                    
+                    # Track nesting level
+                    if tj.type in {LPAREN, LBRACE, LBRACKET}:
+                        nesting += 1
+                    elif tj.type in {RPAREN, RBRACE, RBRACKET}:
+                        nesting -= 1
+                        
+                    # Only consider statement boundaries when not in nested structure
+                    if nesting == 0:
+                        # Stop at explicit terminators
+                        if tj.type in stop_types:
+                            stmt_tokens.append(tj)  # Include the terminator
                             break
-                        stmt_tokens.append(tj)
+                        # Stop at new statement starters only if we're done with current
+                        if tj.type in statement_starters:
+                            # Exception: allow chained method calls
+                            prev = tokens[j-1] if j > 0 else None
+                            if not (prev and prev.type == DOT):
+                                break
+                            
+                    # Always collect tokens while in nested structures
+                    stmt_tokens.append(tj)
                     j += 1
-                    filtered_stmt_tokens = [tk for tk in stmt_tokens if not _is_empty_token(tk)]
+                    
+                # Create block for the collected statement
+                filtered_stmt_tokens = [tk for tk in stmt_tokens if not _is_empty_token(tk)]
+                if filtered_stmt_tokens:  # Only create block if we have meaningful tokens
                     self.blocks[block_id] = {
                         'id': block_id,
-                        'type': 'statement',
+                        'type': 'statement', 
                         'subtype': t.type,
                         'tokens': filtered_stmt_tokens,
-                        'start_token': (tokens[start_idx] if filtered_stmt_tokens else tokens[start_idx]),
+                        'start_token': tokens[start_idx],
                         'start_index': start_idx,
                         'end_index': j,
                         'parent': None
                     }
-                block_id += 1
+                    block_id += 1
                 i = j
                 continue
 

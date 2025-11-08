@@ -147,7 +147,7 @@ class ContextStackParser:
     # === DIRECT STATEMENT PARSERS - THESE RETURN ACTUAL STATEMENTS ===
 
     def _parse_let_statement_block(self, block_info, all_tokens):
-        """Parse let statement block - RETURNS LetStatement"""
+        """Parse let statement block with robust method chain handling"""
         print("🔧 [Context] Parsing let statement")
         tokens = block_info['tokens']
 
@@ -172,23 +172,44 @@ class ContextStackParser:
             print("  ❌ Invalid let statement: no assignment operator")
             return None
 
-        # CRITICAL FIX: only collect RHS tokens up to a statement boundary
+        # Collect RHS tokens with proper nesting support
         value_tokens = []
-        stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
+        nesting = 0
         j = equals_index + 1
+        
         while j < len(tokens):
             t = tokens[j]
-            # stop if we hit an explicit terminator or the start of next statement
-            if t.type in stop_types or t.type in statement_starters:
-                break
+            
+            # Track nested structures
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            
+            # Only check statement boundaries when not in nested structure
+            if nesting == 0:
+                # Stop at explicit terminators
+                if t.type == SEMICOLON:
+                    break
+                # Allow method chains but stop at other statement starters
+                if t.type in {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                    prev = tokens[j-1] if j > 0 else None
+                    if not (prev and prev.type == DOT):  # Allow if part of method chain
+                        break
+                        
             value_tokens.append(t)
             j += 1
+            
         print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
-        # CRITICAL FIX: Check if this is a map literal
-        if value_tokens and value_tokens[0].type == LBRACE:
-            print("  🗺️ Detected map literal in let statement")
+        # Parse the value expression
+        if not value_tokens:
+            print("  ❌ No value tokens found")
+            return None
+            
+        # Special case: map literal
+        if value_tokens[0].type == LBRACE:
+            print("  🗺️ Detected map literal")
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
@@ -604,83 +625,195 @@ class ContextStackParser:
         return PrintStatement(expression if expression is not None else StringLiteral(""))
 
     def _parse_expression(self, tokens):
-        """Parse a full expression from tokens with improved boundary detection and nesting"""
+        """Parse a full expression with robust method chaining and property access"""
         if not tokens:
             return StringLiteral("")
 
         print(f"  🔍 Parsing expression from tokens: {[t.literal for t in tokens]}")
 
-        # Map literal first
+        # Special cases first
         if tokens[0].type == LBRACE:
             return self._parse_map_literal(tokens)
-
-        # List literal support
         if tokens[0].type == LBRACKET:
             return self._parse_list_literal(tokens)
-
-        # Lambda expression support
         if tokens[0].type == LAMBDA:
             return self._parse_lambda(tokens)
 
-        # Robust primary + chaining parser: build a primary expression then
-        # apply calls (LPAREN) and property/method access (DOT) repeatedly.
-        if len(tokens) >= 1:
-            i = 0
-            current_expr = None
+        # Main expression parser with chaining
+        i = 0
+        n = len(tokens)
+        current_expr = None
+        nesting = 0
 
-            def parse_primary_at(idx):
-                t = tokens[idx]
-                # Parenthesized expression
-                if t.type == LPAREN:
-                    nested = self._extract_nested_tokens(tokens, idx)
-                    return self._parse_expression(nested), len(nested) + 2
-                # Identifier possibly followed by call
-                if t.type == IDENT:
-                    # Function call as primary: ident(...)
-                    if idx + 1 < len(tokens) and tokens[idx + 1].type == LPAREN:
-                        nested = self._extract_nested_tokens(tokens, idx + 1)
-                        args = self._parse_argument_list(nested)
-                        return CallExpression(Identifier(t.literal), args), len(nested) + 2
-                    else:
-                        return Identifier(t.literal), 1
-                # Literals (string, int, float, boolean)
-                return self._parse_single_token_expression(t), 1
+        # Helper to parse a primary expression at current position
+        def parse_primary():
+            nonlocal i
+            if i >= n:
+                return None
+            
+            t = tokens[i]
+            if t.type == LPAREN:  # Parenthesized expression
+                i += 1
+                start = i
+                depth = 1
+                while i < n and depth > 0:
+                    if tokens[i].type == LPAREN:
+                        depth += 1
+                    elif tokens[i].type == RPAREN:
+                        depth -= 1
+                    i += 1
+                if depth == 0:  # Found closing paren
+                    inner = self._parse_expression(tokens[start:i-1])
+                    return inner if inner else StringLiteral("")
+                return StringLiteral("")
+                
+            elif t.type == IDENT:  # Identifier or function call
+                name = t.literal
+                i += 1
+                # Check for immediate function call
+                if i < n and tokens[i].type == LPAREN:
+                    i += 1  # Skip LPAREN
+                    args = []
+                    # Collect argument expressions
+                    while i < n and tokens[i].type != RPAREN:
+                        start = i
+                        depth = 0
+                        # Find end of current argument
+                        while i < n:
+                            if tokens[i].type in {LPAREN, LBRACE, LBRACKET}:
+                                depth += 1
+                            elif tokens[i].type in {RPAREN, RBRACE, RBRACKET}:
+                                depth -= 1
+                                if depth < 0:  # Found closing of call
+                                    break
+                            elif tokens[i].type == COMMA and depth == 0:
+                                break
+                            i += 1
+                        # Parse the argument expression
+                        if start < i:
+                            arg = self._parse_expression(tokens[start:i])
+                            if arg:
+                                args.append(arg)
+                        if i < n and tokens[i].type == COMMA:
+                            i += 1  # Skip comma
+                    if i < n and tokens[i].type == RPAREN:
+                        i += 1  # Skip RPAREN
+                    return CallExpression(Identifier(name), args)
+                else:
+                    return Identifier(name)
+                    
+            # Literals
+            else:
+                i += 1
+                return self._parse_single_token_expression(t)
 
-            # Initialize primary
-            current_expr, adv = parse_primary_at(i)
-            i += adv
+        # Start with primary expression
+        current_expr = parse_primary()
+        if not current_expr:
+            return StringLiteral("")
 
-            # Repeatedly apply chaining: dot-access, method calls, or call-on-expression
-            while i < len(tokens):
-                tk = tokens[i]
-                # Method or property access: .name or .name(...)
-                if tk.type == DOT and i + 1 < len(tokens) and tokens[i + 1].type == IDENT:
-                    name_token = tokens[i + 1]
-                    # Method call: .name(...)
-                    if i + 2 < len(tokens) and tokens[i + 2].type == LPAREN:
-                        nested = self._extract_nested_tokens(tokens, i + 2)
-                        args = self._parse_argument_list(nested)
-                        current_expr = MethodCallExpression(object=current_expr, method=Identifier(name_token.literal), arguments=args)
-                        i += len(nested) + 3
-                        continue
-                    else:
-                        # Property access
-                        current_expr = PropertyAccessExpression(object=current_expr, property=Identifier(name_token.literal))
-                        i += 2
-                        continue
+        # Repeatedly parse chained operations
+        while i < n:
+            t = tokens[i]
+            
+            # Method call or property access
+            if t.type == DOT and i + 1 < n:
+                i += 1  # Skip DOT
+                if i >= n:
+                    break
+                    
+                name_token = tokens[i]
+                if name_token.type != IDENT:
+                    break
+                    
+                i += 1  # Skip name
+                # Method call: expr.name(args)
+                if i < n and tokens[i].type == LPAREN:
+                    i += 1  # Skip LPAREN
+                    args = []
+                    # Parse arguments same as function call
+                    while i < n and tokens[i].type != RPAREN:
+                        start = i
+                        depth = 0
+                        while i < n:
+                            if tokens[i].type in {LPAREN, LBRACE, LBRACKET}:
+                                depth += 1
+                            elif tokens[i].type in {RPAREN, RBRACE, RBRACKET}:
+                                depth -= 1
+                                if depth < 0:
+                                    break
+                            elif tokens[i].type == COMMA and depth == 0:
+                                break
+                            i += 1
+                        if start < i:
+                            arg = self._parse_expression(tokens[start:i])
+                            if arg:
+                                args.append(arg)
+                        if i < n and tokens[i].type == COMMA:
+                            i += 1
+                    if i < n and tokens[i].type == RPAREN:
+                        i += 1
+                    current_expr = MethodCallExpression(
+                        object=current_expr,
+                        method=Identifier(name_token.literal),
+                        arguments=args
+                    )
+                else:
+                    # Property access: expr.name
+                    current_expr = PropertyAccessExpression(
+                        object=current_expr,
+                        property=Identifier(name_token.literal)
+                    )
+                continue
 
-                # Call on the current expression: expr(...)
-                if tk.type == LPAREN:
-                    nested = self._extract_nested_tokens(tokens, i)
-                    args = self._parse_argument_list(nested)
-                    current_expr = CallExpression(function=current_expr, arguments=args)
-                    i += len(nested) + 2
-                    continue
+            # Direct function call on expression
+            if t.type == LPAREN:
+                i += 1  # Skip LPAREN
+                args = []
+                while i < n and tokens[i].type != RPAREN:
+                    start = i
+                    depth = 0
+                    while i < n:
+                        if tokens[i].type in {LPAREN, LBRACE, LBRACKET}:
+                            depth += 1
+                        elif tokens[i].type in {RPAREN, RBRACE, RBRACKET}:
+                            depth -= 1
+                            if depth < 0:
+                                break
+                        elif tokens[i].type == COMMA and depth == 0:
+                            break
+                        i += 1
+                    if start < i:
+                        arg = self._parse_expression(tokens[start:i])
+                        if arg:
+                            args.append(arg)
+                    if i < n and tokens[i].type == COMMA:
+                        i += 1
+                if i < n and tokens[i].type == RPAREN:
+                    i += 1
+                current_expr = CallExpression(
+                    function=current_expr,
+                    arguments=args
+                )
+                continue
 
-                # If none match, stop chaining
-                break
+            # Binary operators
+            if t.type in {PLUS, MINUS, ASTERISK, SLASH, 
+                         LT, GT, EQ, NOT_EQ, LTE, GTE}:
+                i += 1  # Skip operator
+                right = self._parse_expression(tokens[i:])
+                if right:
+                    current_expr = InfixExpression(
+                        left=current_expr,
+                        operator=t.literal,
+                        right=right
+                    )
+                break  # Stop after handling one binary operator
 
-            return current_expr
+            # No more chaining possible
+            break
+
+        return current_expr
 
         # Handle string concatenation or infix operators
         for i, token in enumerate(tokens):
