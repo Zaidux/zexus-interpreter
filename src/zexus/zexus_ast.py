@@ -68,13 +68,21 @@ class EmbeddedCodeStatement(Statement):
         return f"EmbeddedCodeStatement(name={self.name}, language={self.language})"
 
 class UseStatement(Statement):
-    def __init__(self, embedded_ref, method, arguments):
-        self.embedded_ref = embedded_ref
-        self.method = method
-        self.arguments = arguments
+    def __init__(self, file_path, alias=None):
+        self.file_path = file_path  # StringLiteral for file path
+        self.alias = alias          # Optional Identifier for alias
 
     def __repr__(self):
-        return f"UseStatement(embedded_ref={self.embedded_ref}, method={self.method})"
+        alias_str = f", alias={self.alias}" if self.alias else ""
+        return f"UseStatement(file_path={self.file_path}{alias_str})"
+
+class FromStatement(Statement):
+    def __init__(self, file_path, imports=None):
+        self.file_path = file_path  # StringLiteral for file path
+        self.imports = imports or [] # List of (Identifier, Optional Identifier) for name and alias
+
+    def __repr__(self):
+        return f"FromStatement(file_path={self.file_path}, imports={len(self.imports)})"
 
 class IfStatement(Statement):
     def __init__(self, condition, consequence, alternative=None):

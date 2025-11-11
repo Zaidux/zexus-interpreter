@@ -1,0 +1,2 @@
+use "./tests/fixtures/modules/mathmod.zx"
+print(pi)

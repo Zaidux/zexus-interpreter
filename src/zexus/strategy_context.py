@@ -478,6 +478,137 @@ class ContextStackParser:
 
                 i = j
 
+            # USE statement heuristic
+            elif token.type == USE:
+                j = i + 1
+                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
+                    j += 1
+
+                use_tokens = tokens[i:j]
+                print(f"    📝 Found use statement: {[t.literal for t in use_tokens]}")
+
+                # Expect a string literal as module path
+                module_path = None
+                alias = None
+                if len(use_tokens) >= 2 and use_tokens[1].type == STRING:
+                    module_path = StringLiteral(use_tokens[1].literal)
+
+                # Look for 'as' alias pattern
+                for k in range(2, len(use_tokens)):
+                    if use_tokens[k].type == IDENT and use_tokens[k].literal == 'as' and k + 1 < len(use_tokens):
+                        if use_tokens[k+1].type == IDENT:
+                            alias = Identifier(use_tokens[k+1].literal)
+                        break
+
+                statements.append(UseStatement(module_path, alias))
+                i = j
+                continue
+
+            # EXPORT statement heuristic
+            elif token.type == EXPORT:
+                j = i + 1
+                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
+                    j += 1
+
+                export_tokens = tokens[i:j]
+                print(f"    📝 Found export statement: {[t.literal for t in export_tokens]}")
+
+                export_name = None
+                if len(export_tokens) >= 2 and export_tokens[1].type == IDENT:
+                    export_name = Identifier(export_tokens[1].literal)
+
+                statements.append(ExportStatement(export_name))
+                i = j
+                continue
+
+            # ACTION (function-like) statement heuristic
+            elif token.type == ACTION:
+                j = i + 1
+                stmt_tokens = [token]
+                brace_nest = 0
+                paren_nest = 0
+                # Collect until the matching closing brace for the action body
+                while j < len(tokens):
+                    tj = tokens[j]
+                    stmt_tokens.append(tj)
+                    if tj.type == LPAREN:
+                        paren_nest += 1
+                    elif tj.type == RPAREN:
+                        if paren_nest > 0:
+                            paren_nest -= 1
+                    elif tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+
+                print(f"    📝 Found action statement: {[t.literal for t in stmt_tokens]}")
+
+                # Extract name, params and body
+                action_name = None
+                params = []
+                body_block = BlockStatement()
+
+                if len(stmt_tokens) >= 2 and stmt_tokens[1].type == IDENT:
+                    action_name = stmt_tokens[1].literal
+
+                # find parameter list
+                paren_start = None
+                paren_end = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LPAREN:
+                        paren_start = k
+                        break
+                if paren_start is not None:
+                    depth = 0
+                    for k in range(paren_start, len(stmt_tokens)):
+                        if stmt_tokens[k].type == LPAREN:
+                            depth += 1
+                        elif stmt_tokens[k].type == RPAREN:
+                            depth -= 1
+                            if depth == 0:
+                                paren_end = k
+                                break
+                if paren_start is not None and paren_end is not None and paren_end > paren_start + 1:
+                    inner = stmt_tokens[paren_start+1:paren_end]
+                    # collect identifiers as parameters
+                    cur = []
+                    for tk in inner:
+                        if tk.type == IDENT:
+                            params.append(Identifier(tk.literal))
+
+                # find body tokens between the outermost braces
+                brace_start = None
+                brace_end = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LBRACE:
+                        brace_start = k
+                        break
+                if brace_start is not None:
+                    depth = 0
+                    for k in range(brace_start, len(stmt_tokens)):
+                        if stmt_tokens[k].type == LBRACE:
+                            depth += 1
+                        elif stmt_tokens[k].type == RBRACE:
+                            depth -= 1
+                            if depth == 0:
+                                brace_end = k
+                                break
+                if brace_start is not None and brace_end is not None and brace_end > brace_start + 1:
+                    inner_body = stmt_tokens[brace_start+1:brace_end]
+                    body_block.statements = self._parse_block_statements(inner_body)
+
+                statements.append(ActionStatement(
+                    name=Identifier(action_name if action_name else 'anonymous'),
+                    parameters=params,
+                    body=body_block
+                ))
+
+                i = j
+                continue
             else:
                 # Fallback: collect a run of tokens until a statement boundary
                 # and attempt to parse them as a single expression. This reduces

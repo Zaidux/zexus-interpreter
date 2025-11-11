@@ -1,0 +1,3 @@
+use "./tests/fixtures/modules/a.zx"
+print(a)
+print(b)

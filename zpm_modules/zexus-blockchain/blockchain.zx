@@ -1,0 +1,25 @@
+// Mock blockchain module implementation
+const ChainType = {
+    ZIVER: "ZIVER",
+    ETHEREUM: "ETH"
+}
+
+action create_address(hex_key, chain_type) {
+    let address_obj = {
+        hex: hex_key,
+        chain: chain_type,
+        toString: () => chain_type + ":" + hex_key
+    }
+    return address_obj
+}
+
+action generate_keypair(chain_type) {
+    let addr = create_address("0x" + string(Date.now()), chain_type)
+    return {
+        get_address: () => addr
+    }
+}
+
+export ChainType
+export create_address 
+export generate_keypair

@@ -1,0 +1,31 @@
+let m = import("./math_simple.zx")
+
+print("🧪 Testing Math Library v0.1.0")
+print("----------------------------------------")
+
+print("Testing complex numbers:")
+let z1 = m.complex(3, 4)
+print("z1 = " + z1.toString())
+let z2 = m.complex(1, 2) 
+print("z2 = " + z2.toString())
+print("----------------------------------------")
+
+print("Testing matrix operations:")
+let A = m.matrix(2, 2, [1, 2, 3, 4])
+print("Matrix A =")
+print(A.toString())
+print("det(A) = " + string(A.determinant()))
+print("----------------------------------------")
+
+print("Testing special functions:")
+let x = 1.5
+print("x = " + string(x))
+print("exp(" + string(x) + ") = " + string(m.exp(x)))
+print("log(" + string(x) + ") = " + string(m.log(x)))
+print("sin(" + string(x) + ") = " + string(m.sin(x)))
+print("cos(" + string(x) + ") = " + string(m.cos(x)))
+print("----------------------------------------")
+
+print("Testing constants:")
+print("PI = " + string(m.PI))
+print("E = " + string(m.E))

@@ -1,20 +1,15 @@
 // Zexus Math Library - Main Entry Point
-// This file exports the entire math library as a unified API
+use "./math.zx" as math
 
-// Re-export all core modules
-export use "./math/core" as core
-export use "./math/complex" as complex
-export use "./math/linalg" as linalg  
-export use "./math/calculus" as calculus
-export use "./math/optimization" as optimization
-export use "./math/signal" as signal
-export use "./math/diffeq" as diffeq
-export use "./math/ml" as ml
-export use "./math/crypto" as crypto
-export use "./math/geometric" as geometric
-export use "./math/async" as async_math
-export use "./math/stats" as stats
-export use "./math/special" as special
+// Re-export core functions
+export use math.complex
+export use math.matrix
+export use math.exp
+export use math.log
+export use math.sin
+export use math.cos
+export use math.PI
+export use math.E
 
 // NEW MODULES - Add these exports
 export use "./math/numerical" as numerical

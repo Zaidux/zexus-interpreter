@@ -1,0 +1,17 @@
+let debug = true
+
+action log(msg) {
+    if debug {
+        print("[DEBUG] " + msg)
+    }
+}
+
+action error(msg) {
+    print("[ERROR] " + msg)
+}
+
+return {
+    log: log,
+    error: error,
+    debug: debug
+}

@@ -1,0 +1,2 @@
+let pi = 42
+print(pi)

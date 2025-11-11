@@ -1,0 +1,4 @@
+let a = 1
+export a
+use "./tests/fixtures/modules/b.zx"
+export b

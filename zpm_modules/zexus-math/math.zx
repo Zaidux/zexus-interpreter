@@ -1,0 +1,137 @@
+// Core math implementation
+action complex(real, imag) {
+    let obj = {
+        real: real,
+        imag: imag,
+        toString: () => {
+            if imag >= 0 {
+                return string(real) + " + " + string(imag) + "i"
+            } else {
+                return string(real) + " - " + string(-imag) + "i"
+            }
+        }
+    }
+    return obj
+}
+
+action matrix(rows, cols, data) {
+    require(len(data) == rows * cols, "Data size must match matrix dimensions")
+    
+    let obj = {
+        rows: rows,
+        cols: cols,
+        data: data[:],  // Make a copy to prevent mutation
+        
+        get: (row, col) => {
+            require(row >= 0 and row < rows, "Row index out of bounds")
+            require(col >= 0 and col < cols, "Column index out of bounds")
+            return data[row * cols + col]
+        },
+        
+        toString: () => {
+            let result = ""
+            for each i in range(0, rows) {
+                if i > 0 {
+                    result = result + "\n"
+                }
+                result = result + "["
+                for each j in range(0, cols) {
+                    if j > 0 {
+                        result = result + ", "
+                    }
+                    result = result + string(obj.get(i, j))
+                }
+                result = result + "]"
+            }
+            return result
+        },
+        
+        determinant: () => {
+            require(rows == cols, "Matrix must be square")
+            if rows == 2 {
+                return obj.get(0, 0) * obj.get(1, 1) - obj.get(0, 1) * obj.get(1, 0)
+            }
+            throw "Determinant only implemented for 2x2 matrices"
+        }
+    }
+    return obj
+}
+
+export complex
+export matrix
+
+// Special functions with proper implementations
+export action exp(x) {
+    let result = 1.0
+    let term = 1.0
+    let n = 1
+    
+    // Use Taylor series up to 10 terms for good accuracy
+    while n < 10 {
+        term = term * x / n
+        result = result + term
+        n = n + 1
+    }
+    
+    return result
+}
+
+export action log(x) {
+    require(x > 0, "Log undefined for non-positive numbers")
+    
+    // Use log(x) = 2(a + a^3/3 + a^5/5 + ...) where a = (x-1)/(x+1)
+    let a = (x - 1) / (x + 1)
+    let a2 = a * a
+    let term = a
+    let result = term
+    let n = 3
+    
+    // Use first 5 terms for decent accuracy
+    while n <= 9 {
+        term = term * a2
+        result = result + term / n
+        n = n + 2
+    }
+    
+    return 2 * result
+}
+
+export action sin(x) {
+    let term = x
+    let result = term
+    let n = 1
+    let sign = -1
+    let x2 = x * x
+    
+    // Use Taylor series up to 7 terms
+    while n < 7 {
+        term = term * x2 / ((2 * n) * (2 * n + 1))
+        result = result + sign * term
+        sign = -sign
+        n = n + 1
+    }
+    
+    return result
+}
+
+export action cos(x) {
+    let term = 1
+    let result = term
+    let n = 1
+    let sign = -1
+    let x2 = x * x
+    
+    // Use Taylor series up to 7 terms
+    while n < 7 {
+        term = term * x2 / ((2 * n - 1) * (2 * n))
+        result = result + sign * term
+        sign = -sign
+        n = n + 1
+    }
+    
+    return result
+}
+
+// Constants
+export let PI = 3.141592653589793
+export let E = 2.718281828459045

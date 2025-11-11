@@ -1,0 +1,10 @@
+let value = 42
+
+action add(a, b) {
+    return a + b
+}
+
+return {
+    value: value,
+    add: add
+}

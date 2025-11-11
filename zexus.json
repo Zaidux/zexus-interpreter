@@ -1,12 +1,14 @@
 {
   "name": "testing",
-  "version": "yes",
-  "description": "nothing but testing",
+  "version": "0.1.0",
+  "description": "Testing Zexus math functionality",
   "author": "zaidu abububakar",
-  "main": "test.zx",
+  "main": "test_math_core.zx",
   "scripts": {
-    "start": "zx test.zx",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "zx test_math_core.zx",
+    "test": "zx test_math_core.zx"
   },
-  "dependencies": {}
+  "dependencies": {
+    "zexus-math": "^0.1.0"
+  }
 }

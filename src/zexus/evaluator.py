@@ -3,6 +3,7 @@ import sys
 import traceback
 import json
 import os
+import asyncio
 from . import zexus_ast
 from .zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
@@ -21,6 +22,9 @@ from .object import (
 )
 
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
+
+# Registry for builtin functions (populated later)
+builtins = {}
 
 class EvaluationError(Exception):
     """Enhanced exception for evaluation errors with location info and stack traces"""
@@ -68,6 +72,34 @@ class FixedEvaluationError:
 def is_error(obj):
     return isinstance(obj, (EvaluationError, ObjectEvaluationError, FixedEvaluationError))
 
+# Summary counters for lightweight, 5-line summary logging when debug is off
+EVAL_SUMMARY = {
+    'parsed_statements': 0,
+    'evaluated_statements': 0,
+    'errors': 0,
+    'async_tasks_run': 0,
+    'max_statements_in_block': 0
+}
+
+def _is_awaitable(obj):
+    try:
+        return asyncio.iscoroutine(obj) or isinstance(obj, asyncio.Future)
+    except Exception:
+        return False
+
+def _resolve_awaitable(obj):
+    """If obj is a coroutine/future, run it to completion and return the result.
+    If already in an event loop, return the coroutine (caller may handle it).
+    """
+    if _is_awaitable(obj):
+        try:
+            EVAL_SUMMARY['async_tasks_run'] += 1
+            return asyncio.run(obj)
+        except RuntimeError:
+            # Already running event loop (e.g., invoked from async VM). Return as-is.
+            return obj
+    return obj
+
 # === DEBUG FLAGS (controlled by user config) ===
 from .config import config as zexus_config
 
@@ -91,16 +123,28 @@ def debug_log(message, data=None, level='debug'):
 
 def eval_program(statements, env):
     debug_log("eval_program", f"Processing {len(statements)} statements")
+    try:
+        EVAL_SUMMARY['parsed_statements'] = max(EVAL_SUMMARY.get('parsed_statements', 0), len(statements))
+    except Exception:
+        pass
+
     result = NULL
     for i, stmt in enumerate(statements):
         debug_log(f"  Statement {i+1}", type(stmt).__name__)
-        result = eval_node(stmt, env)
-        if isinstance(result, ReturnValue):
-            debug_log("  ReturnValue encountered", result.value)
-            return result.value
-        if is_error(result):
-            debug_log("  Error encountered", result)
-            return result
+        res = eval_node(stmt, env)
+        res = _resolve_awaitable(res)
+        EVAL_SUMMARY['evaluated_statements'] += 1
+        if isinstance(res, ReturnValue):
+            debug_log("  ReturnValue encountered", res.value)
+            return res.value
+        if is_error(res):
+            debug_log("  Error encountered", res)
+            try:
+                EVAL_SUMMARY['errors'] += 1
+            except Exception:
+                pass
+            return res
+        result = res
     debug_log("eval_program completed", result)
     return result
 
@@ -118,12 +162,25 @@ def eval_assignment_expression(node, env):
 
 def eval_block_statement(block, env):
     debug_log("eval_block_statement", f"Processing {len(block.statements)} statements in block")
+    try:
+        EVAL_SUMMARY['max_statements_in_block'] = max(EVAL_SUMMARY.get('max_statements_in_block', 0), len(block.statements))
+    except Exception:
+        pass
+
     result = NULL
     for stmt in block.statements:
-        result = eval_node(stmt, env)
-        if isinstance(result, (ReturnValue, EvaluationError, ObjectEvaluationError)):
-            debug_log("  Block interrupted", result)
-            return result
+        res = eval_node(stmt, env)
+        res = _resolve_awaitable(res)
+        EVAL_SUMMARY['evaluated_statements'] += 1
+        if isinstance(res, (ReturnValue, EvaluationError, ObjectEvaluationError)):
+            debug_log("  Block interrupted", res)
+            if is_error(res):
+                try:
+                    EVAL_SUMMARY['errors'] += 1
+                except Exception:
+                    pass
+            return res
+        result = res
     debug_log("  Block completed", result)
     return result
 
@@ -132,12 +189,18 @@ def eval_expressions(expressions, env):
     results = []
     for i, expr in enumerate(expressions):
         debug_log(f"  Expression {i+1}", type(expr).__name__)
-        result = eval_node(expr, env)
-        if is_error(result):
-            debug_log("  Expression evaluation interrupted", result)
-            return result
-        results.append(result)
-        debug_log(f"  Expression {i+1} result", result)
+        res = eval_node(expr, env)
+        res = _resolve_awaitable(res)
+        if is_error(res):
+            debug_log("  Expression evaluation interrupted", res)
+            try:
+                EVAL_SUMMARY['errors'] += 1
+            except Exception:
+                pass
+            return res
+        results.append(res)
+        EVAL_SUMMARY['evaluated_statements'] += 1
+        debug_log(f"  Expression {i+1} result", res)
     debug_log("  All expressions evaluated", results)
     return results
 
@@ -340,6 +403,7 @@ def apply_function(fn, args, call_site=None):
         debug_log("  Calling user-defined function")
         extended_env = extend_function_env(fn, args)
         evaluated = eval_node(fn.body, extended_env)
+        evaluated = _resolve_awaitable(evaluated)
         return unwrap_return_value(evaluated)
     elif isinstance(fn, Builtin):
         debug_log("  Calling builtin function", f"{fn.name} with args: {args}")
@@ -348,6 +412,9 @@ def apply_function(fn, args, call_site=None):
             if not isinstance(args, (list, tuple)):
                 return EvaluationError("Invalid arguments to builtin")
             result = fn.fn(*args)
+            # If builtin returned a coroutine/future, resolve it when possible
+            if _is_awaitable(result):
+                result = _resolve_awaitable(result)
             debug_log("  Builtin result", result)
             return result
         except Exception as e:
@@ -1248,9 +1315,20 @@ def eval_node(node, env, stack_trace=None):
                 loaded = False
                 parse_errors = []
 
+                # CRITICAL: Cache a placeholder before evaluation to break circular dependencies.
+                # This allows module A -> module B -> module A to resolve to the same Environment
+                # instance rather than recursing indefinitely.
+                try:
+                    cache_module(normalized_path, module_env)
+                except Exception:
+                    # Best-effort: if caching fails, continue without placeholder
+                    pass
+
                 for candidate in candidates:
                     try:
+                        print(f"[MOD-DEBUG] trying candidate: {candidate}")
                         if not os.path.exists(candidate):
+                            print(f"[MOD-DEBUG] candidate does not exist: {candidate}")
                             continue
                         debug_log("  Found module file", candidate)
                         with open(candidate, 'r', encoding='utf-8') as f:
@@ -1264,25 +1342,49 @@ def eval_node(node, env, stack_trace=None):
                         program = parser.parse_program()
                         
                         if getattr(parser, 'errors', None):
+                            print(f"[MOD-DEBUG] parser errors for {candidate}: {parser.errors}")
                             parse_errors.append((candidate, parser.errors))
                             continue
                             
                         # Evaluate module into its own environment
                         eval_node(program, module_env)
-                        # Cache the successfully loaded module
+                        # Cache the successfully loaded module (overwrite placeholder)
                         cache_module(normalized_path, module_env)
                         loaded = True
                         debug_log("  Module loaded and cached", normalized_path)
+                        print(f"[MOD-DEBUG] module evaluated: {candidate}")
                         break
                     except Exception as e:
+                        print(f"[MOD-DEBUG] exception loading candidate {candidate}: {e}")
                         parse_errors.append((candidate, str(e)))
 
             if not loaded:
+                # If we previously placed a placeholder in cache, remove it to avoid stale entries
+                try:
+                    invalidate = None
+                    try:
+                        # import locally to avoid top-level import cycles
+                        from .module_cache import invalidate_module
+                        invalidate = invalidate_module
+                    except Exception:
+                        invalidate = None
+                    if invalidate:
+                        invalidate(normalized_path)
+                except Exception:
+                    pass
+
                 debug_log("  UseStatement failed to load candidates", parse_errors)
                 return EvaluationError(f"Module not found or failed to load: {file_path}")
 
             # Set alias or import exported names
             alias = getattr(node, 'alias', None)
+
+            # Debug: show exports discovered in module_env
+            try:
+                exports_debug = module_env.get_exports() if hasattr(module_env, 'get_exports') else {}
+                print(f"[MOD-DEBUG] module_env exports for {file_path}: {exports_debug}")
+            except Exception as e:
+                print(f"[MOD-DEBUG] error reading exports: {e}")
             if alias:
                 debug_log("  Setting module alias", alias)
                 env.set(alias, module_env)
@@ -1308,6 +1410,14 @@ def eval_node(node, env, stack_trace=None):
         elif node_type == IntegerLiteral:
             debug_log("  IntegerLiteral node", node.value)
             return Integer(node.value)
+
+        elif node_type == zexus_ast.FloatLiteral or node_type.__name__ == 'FloatLiteral':
+            # FloatLiteral support
+            try:
+                val = getattr(node, 'value', None)
+                return Float(val)
+            except Exception:
+                return EvaluationError(f"Invalid float literal: {getattr(node, 'value', None)}")
 
         elif node_type == StringLiteral:
             debug_log("  StringLiteral node", node.value)
@@ -1405,9 +1515,23 @@ def evaluate(program, env, debug_mode=False):
         print("🔧 Debug mode enabled")
 
     result = eval_node(program, env)
+    # Resolve awaitables at the top level when possible
+    result = _resolve_awaitable(result)
 
     if debug_mode:
         env.disable_debug()
+
+    # When debug mode is off, print a concise 5-line summary only
+    if not debug_mode:
+        try:
+            print(f"Summary: statements parsed={EVAL_SUMMARY.get('parsed_statements',0)}")
+            print(f"Summary: statements evaluated={EVAL_SUMMARY.get('evaluated_statements',0)}")
+            print(f"Summary: errors={EVAL_SUMMARY.get('errors',0)}")
+            print(f"Summary: async_tasks_run={EVAL_SUMMARY.get('async_tasks_run',0)}")
+            print(f"Summary: max_statements_in_block={EVAL_SUMMARY.get('max_statements_in_block',0)}")
+        except Exception:
+            # If summary printing fails, ignore and continue
+            pass
 
     if isinstance(result, (EvaluationError, ObjectEvaluationError)):
         return str(result)

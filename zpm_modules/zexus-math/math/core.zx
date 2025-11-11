@@ -6,16 +6,28 @@ protocol ComplexNumber {
     action phase() -> float
     action conjugate() -> ComplexNumber
     action add(other: ComplexNumber) -> ComplexNumber
+    action subtract(other: ComplexNumber) -> ComplexNumber
     action multiply(other: ComplexNumber) -> ComplexNumber
+    action divide(other: ComplexNumber) -> ComplexNumber
+    action pow(n: integer) -> ComplexNumber
+    action equals(other: ComplexNumber) -> boolean
+    action toString() -> string
 }
 
 protocol Matrix {
     action rows() -> integer
     action cols() -> integer
     action get(row: integer, col: integer) -> float
+    action set(row: integer, col: integer, value: float)
     action determinant() -> float
+    action trace() -> float
+    action transpose() -> Matrix
     action inverse() -> Matrix
     action multiply(other: Matrix) -> Matrix
+    action add(other: Matrix) -> Matrix
+    action subtract(other: Matrix) -> Matrix
+    action scale(factor: float) -> Matrix
+    action toString() -> string
 }
 
 // Constants with precision
@@ -24,7 +36,97 @@ export let E: float = 2.71828182845904523536
 export let PHI: float = 1.61803398874989484820
 export let INFINITY: float = 1.0 / 0.0
 export let NAN: float = 0.0 / 0.0
+export let EPSILON: float = 2.2204460492503131e-16  // Machine epsilon
 
-// Precision configuration
-persistent storage MATH_PRECISION: integer = 15
-persistent storage ANGLE_MODE: string = "radians"  // "radians" or "degrees"
+// Configuration system
+persistent storage MATH_CONFIG: map = {
+    precision: 15,
+    angle_mode: "radians",  // "radians" or "degrees"
+    matrix_epsilon: 1e-10,  // For matrix rank calculations
+    complex_epsilon: 1e-12, // For complex number comparisons
+    max_iterations: 1000,   // For iterative algorithms
+    cache_results: true     // Enable caching of expensive computations
+}
+
+export action get_math_config(key: string, default: any = null) -> any {
+    return MATH_CONFIG.get(key, default)
+}
+
+export action set_math_config(key: string, value: any) {
+    require(MATH_CONFIG.has(key), "Invalid configuration key: " + key)
+    MATH_CONFIG[key] = value
+}
+
+// Core math functions with validation
+export action sin(x: float) -> float {
+    if get_math_config("angle_mode") == "degrees" {
+        x = x * PI / 180
+    }
+    // TODO: Implement proper sin function
+    return 0
+}
+
+export action cos(x: float) -> float {
+    if get_math_config("angle_mode") == "degrees" {
+        x = x * PI / 180
+    }
+    // TODO: Implement proper cos function
+    return 0
+}
+
+export action tan(x: float) -> float {
+    let c = cos(x)
+    require(abs(c) > EPSILON, "Tangent undefined at this angle")
+    return sin(x) / c
+}
+
+export action exp(x: float) -> float {
+    // TODO: Implement proper exp function
+    return E ** x
+}
+
+export action log(x: float, base: float = E) -> float {
+    require(x > 0, "Logarithm undefined for non-positive numbers")
+    require(base > 0 and base != 1, "Invalid logarithm base")
+    // TODO: Implement proper log function
+    return 0
+}
+
+export action sqrt(x: float) -> float {
+    require(x >= 0, "Square root undefined for negative numbers")
+    // TODO: Implement proper sqrt function
+    return x ** 0.5
+}
+
+// Utility functions
+action abs(x: float) -> float {
+    return if x < 0 then -x else x
+}
+
+action float(x: any) -> float {
+    if typeof(x) == "integer" {
+        return x * 1.0
+    }
+    if typeof(x) == "string" {
+        try {
+            return parse_float(x)
+        } catch {
+            throw "Cannot convert string to float: " + x
+        }
+    }
+    throw "Cannot convert to float: " + string(x)
+}
+
+action parse_float(str: string) -> float {
+    // TODO: Implement proper float parsing
+    return 0.0
+}
+
+// Initialize module
+action init() {
+    print("Core math module initialized")
+    print("Precision: " + string(get_math_config("precision")))
+    print("Angle mode: " + get_math_config("angle_mode"))
+}
+
+init()

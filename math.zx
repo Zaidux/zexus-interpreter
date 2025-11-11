@@ -1,0 +1,136 @@
+action complex(real, imag) {
+    let z = {
+        real: real,
+        imag: imag,
+        toString: () => {
+            if imag >= 0 {
+                return string(real) + " + " + string(imag) + "i"
+            } else {
+                return string(real) + " - " + string(-imag) + "i"
+            }
+        }
+    }
+    return z
+}
+
+action matrix(rows, cols, data) {
+    require(len(data) == rows * cols, "Data size must match matrix dimensions")
+    
+    let M = {
+        rows: rows,
+        cols: cols,
+        data: data[:],
+        
+        get: (i, j) => {
+            require(i >= 0 and i < rows, "Row index out of bounds") 
+            require(j >= 0 and j < cols, "Column index out of bounds")
+            return M.data[i * cols + j]
+        },
+        
+        toString: () => {
+            let result = ""
+            for each i in range(0, rows) {
+                if i > 0 {
+                    result = result + "\n"
+                }
+                result = result + "["
+                for each j in range(0, cols) {
+                    if j > 0 {
+                        result = result + ", "
+                    }
+                    result = result + string(M.get(i, j))
+                }
+                result = result + "]"
+            }
+            return result
+        },
+        
+        determinant: () => {
+            require(rows == cols, "Matrix must be square")
+            if rows == 2 {
+                return M.get(0, 0) * M.get(1, 1) - M.get(0, 1) * M.get(1, 0)
+            }
+            throw "Determinant only implemented for 2x2 matrices"
+        }
+    }
+    return M
+}
+
+action exp(x) {
+    let result = 1.0
+    let term = 1.0
+    let n = 1
+    
+    while n < 10 {
+        term = term * x / n 
+        result = result + term
+        n = n + 1
+    }
+    
+    return result
+}
+
+action log(x) {
+    require(x > 0, "Log undefined for non-positive numbers")
+    let a = (x - 1) / (x + 1)
+    let a2 = a * a
+    let term = a
+    let result = term
+    let n = 3
+    
+    while n <= 9 {
+        term = term * a2
+        result = result + term / n
+        n = n + 2
+    }
+    
+    return 2 * result
+}
+
+action sin(x) {
+    let term = x
+    let result = term
+    let n = 1
+    let sign = -1
+    let x2 = x * x
+    
+    while n < 7 {
+        term = term * x2 / ((2 * n) * (2 * n + 1))
+        result = result + sign * term
+        sign = -sign
+        n = n + 1
+    }
+    
+    return result
+}
+
+action cos(x) {
+    let term = 1.0
+    let result = term
+    let n = 1
+    let sign = -1
+    let x2 = x * x
+    
+    while n < 7 {
+        term = term * x2 / ((2 * n - 1) * (2 * n))
+        result = result + sign * term
+        sign = -sign
+        n = n + 1
+    }
+    
+    return result
+}
+
+let PI = 3.141592653589793
+let E = 2.718281828459045
+
+return {
+    complex: complex,
+    matrix: matrix,
+    exp: exp,
+    log: log,
+    sin: sin,
+    cos: cos,
+    PI: PI,
+    E: E
+}

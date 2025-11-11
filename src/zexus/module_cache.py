@@ -28,6 +28,18 @@ def clear_module_cache() -> None:
     with _MODULE_CACHE_LOCK:
         _MODULE_CACHE.clear()
 
+def invalidate_module(module_path: str) -> None:
+    """Invalidate a single module entry from the cache (if present)"""
+    norm = normalize_path(module_path)
+    with _MODULE_CACHE_LOCK:
+        if norm in _MODULE_CACHE:
+            del _MODULE_CACHE[norm]
+
+def list_cached_modules() -> list[str]:
+    """Return a list of normalized module paths currently cached"""
+    with _MODULE_CACHE_LOCK:
+        return list(_MODULE_CACHE.keys())
+
 def get_module_candidates(file_path: str) -> list[str]:
     """Get candidate paths for a module, checking zpm_modules etc."""
     candidates = []

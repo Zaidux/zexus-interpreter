@@ -73,6 +73,12 @@ class Parser:
         elif self.cur_token_is(ACTION):
             print("DEBUG: ACTION token detected, calling parse_action_statement")
             return self.parse_action_statement()
+        elif self.cur_token_is(USE):
+            return self.parse_use_statement()
+        elif self.cur_token_is(FROM):
+            return self.parse_from_statement()
+        elif self.cur_token_is(EXPORT):
+            return self.parse_export_statement()
         else:
             return self.parse_expression_statement()
 
@@ -355,3 +361,76 @@ class Parser:
 
     def cur_precedence(self):
         return precedences.get(self.cur_token.type, LOWEST)
+
+    def parse_use_statement(self):
+        # Handle simple use statement: use "module-name" [as alias]
+        self.next_token()  # Skip 'use' keyword
+        
+        # Parse module name (as string or identifier)
+        if self.cur_token_is(STRING):
+            module_name = self.parse_string_literal()
+        else:
+            module_name = self.parse_identifier()
+            
+        # Check for alias with 'as' keyword
+        alias = None
+        if self.peek_token_is(AS):
+            self.next_token()  # consume 'as'
+            if not self.expect_peek(IDENT):
+                return None
+            alias = Identifier(value=self.cur_token.literal)
+            
+        return UseStatement(module_name=module_name, alias=alias)
+
+    def parse_from_statement(self):
+        # Handle from statement: from "module-name" use id1 [as alias1], id2 [as alias2], ...
+        self.next_token()  # Skip 'from' keyword
+        
+        # Parse module name (as string or identifier)
+        if self.cur_token_is(STRING):
+            module_name = self.parse_string_literal()
+        else:
+            module_name = self.parse_identifier()
+            
+        # Expect 'use' keyword
+        if not self.expect_peek(USE):
+            return None
+            
+        # Parse import list
+        imports = []
+        while True:
+            if not self.expect_peek(IDENT):
+                break
+                
+            name = Identifier(value=self.cur_token.literal)
+            alias = None
+            
+            # Check for alias
+            if self.peek_token_is(AS):
+                self.next_token()  # consume 'as'
+                if not self.expect_peek(IDENT):
+                    break
+                alias = Identifier(value=self.cur_token.literal)
+                
+            imports.append((name, alias))
+            
+            # Continue if there's a comma
+            if not self.peek_token_is(COMMA):
+                break
+            self.next_token()  # consume comma
+            
+        return FromStatement(module_name=module_name, imports=imports)
+
+    def parse_export_statement(self):
+        # Handle export statement: export let name = value | export action name() { ... }
+        self.next_token()  # Skip 'export' keyword
+        
+        # Parse the declaration being exported
+        if self.cur_token_is(LET):
+            declaration = self.parse_let_statement()
+        elif self.cur_token_is(ACTION):
+            declaration = self.parse_action_statement()
+        else:
+            return None
+            
+        return ExportStatement(declaration=declaration)

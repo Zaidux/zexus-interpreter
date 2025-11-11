@@ -4,10 +4,31 @@ contract Matrix2D implements Matrix {
     persistent storage num_cols: integer
     
     action init(rows: integer, cols: integer, data: list) {
+        require(rows > 0, "Number of rows must be positive")
+        require(cols > 0, "Number of columns must be positive")
+        
+        // Auto-expand empty data
+        if len(data) == 0 {
+            data = list_map(range(0, rows * cols), action(_) { return 0.0 })
+        }
+        
         require(len(data) == rows * cols, "Data size doesn't match dimensions")
+        
+        // Validate and convert data elements
+        let validated_data = []
+        for each val in data {
+            if typeof(val) == "integer" {
+                validated_data.push(float(val))
+            } else if typeof(val) == "float" {
+                validated_data.push(val)
+            } else {
+                throw "Matrix elements must be numeric"
+            }
+        }
+        
         this.num_rows = rows
         this.num_cols = cols
-        this.data = data
+        this.data = validated_data
     }
     
     action rows() -> integer { return this.num_rows }
@@ -77,7 +98,7 @@ contract Matrix2D implements Matrix {
     
     action inverse() -> Matrix {
         let det = this.determinant()
-        require(det != 0, "Matrix is singular, cannot invert")
+        require(abs(det) > EPSILON, "Matrix is singular, cannot invert")
         
         if this.num_rows == 2 {
             let a = this.get(0, 0)
@@ -85,15 +106,93 @@ contract Matrix2D implements Matrix {
             let c = this.get(1, 0)
             let d = this.get(1, 1)
             
+            let inv_det = 1.0 / det
             return Matrix2D{
                 rows: 2,
                 cols: 2,
-                data: [d/det, -b/det, -c/det, a/det]
+                data: [d * inv_det, -b * inv_det, -c * inv_det, a * inv_det]
             }
         } else {
             // Use adjugate matrix for larger matrices
             return this.adjugate().scale(1.0 / det)
         }
+    }
+    
+    // New methods
+    action trace() -> float {
+        require(this.num_rows == this.num_cols, "Trace requires square matrix")
+        let sum = 0.0
+        for each i in range(0, this.num_rows) {
+            sum = sum + this.get(i, i)
+        }
+        return sum
+    }
+    
+    action add(other: Matrix) -> Matrix {
+        require(this.num_rows == other.rows() and this.num_cols == other.cols(),
+               "Matrix dimensions must match for addition")
+        
+        let result_data = []
+        for each i in range(0, len(this.data)) {
+            result_data.push(this.data[i] + other.data[i])
+        }
+        
+        return Matrix2D{rows: this.num_rows, cols: this.num_cols, data: result_data}
+    }
+    
+    action subtract(other: Matrix) -> Matrix {
+        require(this.num_rows == other.rows() and this.num_cols == other.cols(),
+               "Matrix dimensions must match for subtraction")
+        
+        let result_data = []
+        for each i in range(0, len(this.data)) {
+            result_data.push(this.data[i] - other.data[i])
+        }
+        
+        return Matrix2D{rows: this.num_rows, cols: this.num_cols, data: result_data}
+    }
+    
+    action transpose() -> Matrix {
+        let transposed_data = []
+        for each j in range(0, this.num_cols) {
+            for each i in range(0, this.num_rows) {
+                transposed_data.push(this.get(i, j))
+            }
+        }
+        
+        return Matrix2D{rows: this.num_cols, cols: this.num_rows, data: transposed_data}
+    }
+    
+    action is_symmetric(tolerance: float = EPSILON) -> boolean {
+        if this.num_rows != this.num_cols {
+            return false
+        }
+        
+        for each i in range(0, this.num_rows) {
+            for each j in range(i + 1, this.num_cols) {
+                if abs(this.get(i, j) - this.get(j, i)) > tolerance {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    action is_diagonal(tolerance: float = EPSILON) -> boolean {
+        if this.num_rows != this.num_cols {
+            return false
+        }
+        
+        for each i in range(0, this.num_rows) {
+            for each j in range(0, this.num_cols) {
+                if i != j and abs(this.get(i, j)) > tolerance {
+                    return false
+                }
+            }
+        }
+        
+        return true
     }
     
     action adjugate() -> Matrix {
@@ -131,12 +230,40 @@ contract Matrix2D implements Matrix {
     }
 }
 
-// Matrix constructors
-export action matrix(rows: integer, cols: integer, data: list) -> Matrix {
+// Constants and utilities
+let EPSILON = 1e-10
+
+action float(x: any) -> float {
+    if typeof(x) == "integer" {
+        return x * 1.0
+    }
+    if typeof(x) == "float" {
+        return x
+    }
+    throw "Cannot convert to float: " + string(x)
+}
+
+action abs(x: float) -> float {
+    return if x < 0 then -x else x
+}
+
+// Matrix constructors with validation
+export action matrix(rows: integer, cols: integer, data: list = []) -> Matrix {
+    // Validate dimensions
+    require(rows > 0, "Number of rows must be positive")
+    require(cols > 0, "Number of columns must be positive")
+    
+    // If data is empty, create zero matrix
+    if len(data) == 0 {
+        data = list_map(range(0, rows * cols), action(_) { return 0.0 })
+    }
+    
     return Matrix2D{rows: rows, cols: cols, data: data}
 }
 
 export action identity(size: integer) -> Matrix {
+    require(size > 0, "Matrix size must be positive")
+    
     let data = []
     for each i in range(0, size) {
         for each j in range(0, size) {
@@ -147,5 +274,67 @@ export action identity(size: integer) -> Matrix {
 }
 
 export action zeros(rows: integer, cols: integer) -> Matrix {
-    return matrix(rows, cols, list_map(range(0, rows * cols), action(_) { return 0.0 }))
+    return matrix(rows, cols)  // Empty data creates zero matrix
 }
+
+export action ones(rows: integer, cols: integer) -> Matrix {
+    let data = list_map(range(0, rows * cols), action(_) { return 1.0 })
+    return matrix(rows, cols, data)
+}
+
+export action diagonal(values: list) -> Matrix {
+    let size = len(values)
+    let data = []
+    for each i in range(0, size) {
+        for each j in range(0, size) {
+            data.push(if i == j then float(values[i]) else 0.0)
+        }
+    }
+    return matrix(size, size, data)
+}
+
+// Advanced matrix operations
+export action solve_linear_system(A: Matrix, b: Matrix) -> Matrix {
+    require(A.rows() == A.cols(), "Coefficient matrix must be square")
+    require(A.rows() == b.rows(), "Dimensions mismatch between A and b")
+    require(b.cols() == 1, "b must be a column vector")
+    
+    return A.inverse().multiply(b)
+}
+
+export action eigenvalues(A: Matrix) -> list {
+    // TODO: Implement eigenvalue calculation
+    // For now, only support 2x2 matrices
+    require(A.rows() == 2 and A.cols() == 2, "Only 2x2 matrices supported for eigenvalues")
+    
+    let a = A.get(0, 0)
+    let b = A.get(0, 1)
+    let c = A.get(1, 0)
+    let d = A.get(1, 1)
+    
+    let trace = a + d
+    let det = a * d - b * c
+    
+    let disc = trace * trace - 4 * det
+    if disc < 0 {
+        throw "Complex eigenvalues not yet supported"
+    }
+    
+    let sqrt_disc = sqrt(disc)
+    return [(trace + sqrt_disc) / 2, (trace - sqrt_disc) / 2]
+}
+
+action sqrt(x: float) -> float {
+    require(x >= 0, "Square root of negative number")
+    // TODO: Implement proper sqrt
+    return x ** 0.5
+}
+
+// Initialize module
+action init() {
+    print("Linear algebra module initialized")
+    print("Supporting: matrix operations, determinants, inverses")
+    print("Matrix sizes: arbitrary (some operations limited to 2x2)")
+}
+
+init()

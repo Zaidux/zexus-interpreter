@@ -1,0 +1,21 @@
+use "./debug.zx" as debug
+
+let modules = {}
+
+action register(name, module) {
+    debug.log("Registering module: " + name)
+    modules[name] = module
+}
+
+action get(name) {
+    if modules.has(name) {
+        return modules[name]
+    }
+    debug.error("Module not found: " + name)
+    throw "Module not found: " + name
+}
+
+return {
+    register: register,
+    get: get
+}

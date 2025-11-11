@@ -3,6 +3,17 @@ contract Complex implements ComplexNumber {
     persistent storage imag_part: float
     
     action init(real: float, imag: float) {
+        // Type validation and conversion
+        if typeof(real) == "integer" {
+            real = float(real)
+        }
+        if typeof(imag) == "integer" {
+            imag = float(imag)
+        }
+        
+        require(typeof(real) == "float", "Real part must be a number")
+        require(typeof(imag) == "float", "Imaginary part must be a number")
+        
         this.real_part = real
         this.imag_part = imag
     }
@@ -23,13 +34,29 @@ contract Complex implements ComplexNumber {
     }
     
     action add(other: ComplexNumber) -> ComplexNumber {
+        require(other != null, "Cannot add null to complex number")
+        require(other is ComplexNumber, "Can only add ComplexNumber types")
+        
         return Complex{
             real: this.real_part + other.real(),
             imag: this.imag_part + other.imag()
         }
     }
     
+    action subtract(other: ComplexNumber) -> ComplexNumber {
+        require(other != null, "Cannot subtract null from complex number")
+        require(other is ComplexNumber, "Can only subtract ComplexNumber types")
+        
+        return Complex{
+            real: this.real_part - other.real(),
+            imag: this.imag_part - other.imag()
+        }
+    }
+    
     action multiply(other: ComplexNumber) -> ComplexNumber {
+        require(other != null, "Cannot multiply by null")
+        require(other is ComplexNumber, "Can only multiply with ComplexNumber types")
+        
         let a = this.real_part
         let b = this.imag_part
         let c = other.real()
@@ -41,24 +68,131 @@ contract Complex implements ComplexNumber {
         }
     }
     
-    // String representation
-    action toString() -> string {
-        if this.imag_part >= 0 {
-            return string(this.real_part) + " + " + string(this.imag_part) + "i"
-        } else {
-            return string(this.real_part) + " - " + string(-this.imag_part) + "i"
+    action divide(other: ComplexNumber) -> ComplexNumber {
+        require(other != null, "Cannot divide by null")
+        require(other is ComplexNumber, "Can only divide by ComplexNumber types")
+        require(other.magnitude() != 0, "Cannot divide by zero")
+        
+        let a = this.real_part
+        let b = this.imag_part
+        let c = other.real()
+        let d = other.imag()
+        let denom = c * c + d * d
+        
+        return Complex{
+            real: (a * c + b * d) / denom,
+            imag: (b * c - a * d) / denom
         }
+    }
+    
+    action pow(n: integer) -> ComplexNumber {
+        require(n >= 0, "Only non-negative integer powers supported")
+        
+        if n == 0 {
+            return Complex{real: 1, imag: 0}
+        }
+        
+        let result = Complex{real: this.real_part, imag: this.imag_part}
+        for each i in range(1, n) {
+            result = result.multiply(this)
+        }
+        return result
+    }
+    
+    action equals(other: ComplexNumber) -> boolean {
+        if other == null {
+            return false
+        }
+        if not (other is ComplexNumber) {
+            return false
+        }
+        let epsilon = 1e-10  // For floating point comparison
+        return abs(this.real_part - other.real()) < epsilon and 
+               abs(this.imag_part - other.imag()) < epsilon
+    }
+    
+    // String representation with precision control
+    action toString() -> string {
+        let precision = get_math_config("precision") or 6
+        let real_str = format_float(this.real_part, precision)
+        let imag_str = format_float(abs(this.imag_part), precision)
+        
+        if this.imag_part == 0 {
+            return real_str
+        }
+        if this.real_part == 0 {
+            return (if this.imag_part < 0 then "-" else "") + imag_str + "i"
+        }
+        return real_str + (if this.imag_part < 0 then " - " else " + ") + imag_str + "i"
     }
 }
 
-// Complex number constructors
-export action complex(real: float, imag: float) -> ComplexNumber {
+// Utility functions
+action format_float(value: float, precision: integer) -> string {
+    if abs(value) < 1e-12 {
+        return "0"
+    }
+    // TODO: Implement proper float formatting with precision
+    return string(value)
+}
+
+action get_math_config(key: string) -> any {
+    // TODO: Implement proper config system
+    return 6  // Default precision
+}
+
+// Complex number constructors with enhanced validation and flexibility
+export action complex(real: float = 0, imag: float = 0) -> ComplexNumber {
+    // Handle string inputs (like "3+4i")
+    if typeof(real) == "string" {
+        let str = real
+        let match = parse_complex_string(str)
+        if match {
+            real = match.real
+            imag = match.imag
+        } else {
+            throw "Invalid complex number string format"
+        }
+    }
+    
     return Complex{real: real, imag: imag}
 }
 
 export action from_polar(magnitude: float, phase: float) -> ComplexNumber {
+    require(magnitude >= 0, "Magnitude must be non-negative")
+    
+    // Convert from degrees if needed
+    if get_angle_mode() == "degrees" {
+        phase = phase * PI / 180
+    }
+    
     return Complex{
         real: magnitude * cos(phase),
         imag: magnitude * sin(phase)
     }
 }
+
+// Parse complex number from string (helper function)
+action parse_complex_string(str: string) -> map {
+    // TODO: Implement proper regex-based parsing
+    // For now, just handle basic format like "3+4i"
+    try {
+        let parts = str.split("+")
+        if len(parts) == 2 {
+            let real = float(parts[0])
+            let imag = float(parts[1].replace("i", ""))
+            return {real: real, imag: imag}
+        }
+    } catch {
+        return null
+    }
+    return null
+}
+
+action get_angle_mode() -> string {
+    // TODO: Implement proper config system
+    return "radians"
+}
+
+// Constants
+let PI = 3.14159265358979323846

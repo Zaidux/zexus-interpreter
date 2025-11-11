@@ -1,0 +1,106 @@
+// Complex number constructor
+action complex(real, imag) {
+    return {
+        real: real,
+        imag: imag,
+        toString: () => {
+            if imag >= 0 {
+                return string(real) + " + " + string(imag) + "i"
+            } else {
+                return string(real) + " - " + string(-imag) + "i"
+            }
+        }
+    }
+}
+
+// Matrix constructor
+action matrix(rows, cols, data) {
+    require(len(data) == rows * cols, "Data size must match dimensions")
+    let M = {
+        data: data[:],
+        get: (i, j) => data[i * cols + j],
+        toString: () => {
+            let result = ""
+            for each i in range(0, rows) {
+                if i > 0 { result = result + "\n" }
+                result = result + "["
+                for each j in range(0, cols) {
+                    if j > 0 { result = result + ", " }
+                    result = result + string(data[i * cols + j])
+                }
+                result = result + "]"
+            }
+            return result
+        },
+        determinant: () => {
+            require(rows == cols, "Matrix must be square")
+            require(rows == 2, "Only 2x2 matrices supported")
+            return data[0] * data[3] - data[1] * data[2]
+        }
+    }
+    return M
+}
+
+// Special functions
+action exp(x) {
+    let result = 1.0
+    let term = 1.0
+    for each n in range(1, 10) {
+        term = term * x / n
+        result = result + term
+    }
+    return result
+}
+
+action log(x) {
+    require(x > 0, "Log undefined for non-positive numbers")
+    let a = (x - 1) / (x + 1)
+    let result = a
+    let a2 = a * a
+    let term = a
+    for each n in range(3, 10, 2) {
+        term = term * a2
+        result = result + term / n
+    }
+    return 2 * result
+}
+
+action sin(x) {
+    let term = x
+    let result = term
+    let sign = -1
+    let x2 = x * x
+    for each n in range(1, 7) {
+        term = term * x2 / ((2*n) * (2*n + 1))
+        result = result + sign * term
+        sign = -sign
+    }
+    return result
+}
+
+action cos(x) {
+    let term = 1.0
+    let result = term
+    let sign = -1
+    let x2 = x * x
+    for each n in range(1, 7) {
+        term = term * x2 / ((2*n - 1) * (2*n))
+        result = result + sign * term
+        sign = -sign
+    }
+    return result
+}
+
+let PI = 3.141592653589793
+let E = 2.718281828459045
+
+return {
+    complex: complex,
+    matrix: matrix,
+    exp: exp,
+    log: log,
+    sin: sin,
+    cos: cos,
+    PI: PI,
+    E: E
+}

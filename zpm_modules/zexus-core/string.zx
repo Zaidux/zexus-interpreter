@@ -1,0 +1,42 @@
+// Core string conversion functions
+
+action string(value) {
+    // Handle different types
+    if (value == null) {
+        return "null"
+    }
+    
+    // Get type of value for proper conversion
+    let type = typeof(value)
+    
+    if (type == "string") {
+        return value
+    }
+    
+    if (type == "number") {
+        return toString(value)
+    }
+    
+    if (type == "boolean") {
+        return value ? "true" : "false" 
+    }
+    
+    if (type == "array") {
+        let items = value.map(x => string(x))
+        return "[" + items.join(", ") + "]"
+    }
+    
+    if (type == "object") {
+        let pairs = []
+        for (let key in value) {
+            pairs.push(key + ": " + string(value[key]))
+        }
+        return "{" + pairs.join(", ") + "}"
+    }
+    
+    if (type == "function") {
+        return "[Function]"
+    }
+    
+    return "[" + type + "]"
+}
