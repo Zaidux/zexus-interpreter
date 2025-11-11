@@ -2,7 +2,7 @@ import subprocess
 import sys
 import os
 
-ROOT = os.path.abspath(os.path.dirname(__file__) + '/../..')
+ROOT = os.path.abspath(os.path.dirname(__file__) + '/..')
 ZX_CMD = os.path.join(ROOT, 'zx')
 
 def run_zx(script_path):

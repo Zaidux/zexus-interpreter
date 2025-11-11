@@ -311,3 +311,157 @@ class IfExpression(Expression):
 
     def __repr__(self):
         return f"IfExpression(condition={self.condition})"
+
+
+# =====================================================
+# NEW: ENTITY, VERIFY, CONTRACT, PROTECT STATEMENTS
+# =====================================================
+
+class EntityStatement(Statement):
+    """Entity declaration - advanced OOP with inheritance from let
+    
+    entity User {
+        name: string,
+        email: string,
+        role: string = "user"
+    }
+    """
+    def __init__(self, name, properties, parent=None, methods=None):
+        self.name = name                    # Identifier
+        self.properties = properties        # List of {name, type, default_value}
+        self.parent = parent                # Optional parent entity (inheritance)
+        self.methods = methods or []        # List of ActionStatement
+
+    def __repr__(self):
+        return f"EntityStatement(name={self.name}, properties={len(self.properties)})"
+
+
+class VerifyStatement(Statement):
+    """Verify security checks - wraps verification logic around components
+    
+    verify(transfer_funds, [
+        check_authenticated(),
+        check_balance(amount),
+        check_whitelist(recipient)
+    ])
+    """
+    def __init__(self, target, conditions, error_handler=None):
+        self.target = target                # Function/action to verify
+        self.conditions = conditions        # List of verification conditions
+        self.error_handler = error_handler  # Optional error handling action
+
+    def __repr__(self):
+        return f"VerifyStatement(target={self.target}, conditions={len(self.conditions)})"
+
+
+class ContractStatement(Statement):
+    """Smart contract declaration - persistent state + actions
+    
+    contract Token {
+        persistent storage balances: Map<Address, integer>
+        persistent storage owner: Address
+        
+        action transfer(to: Address, amount: integer) -> boolean { ... }
+    }
+    """
+    def __init__(self, name, storage_vars, actions, blockchain_config=None):
+        self.name = name                        # Identifier
+        self.storage_vars = storage_vars or []  # Persistent storage declarations
+        self.actions = actions or []            # Contract methods/actions
+        self.blockchain_config = blockchain_config or {}  # Network config
+
+    def __repr__(self):
+        return f"ContractStatement(name={self.name}, storage={len(self.storage_vars)})"
+
+
+class ProtectStatement(Statement):
+    """Protection guardrails - security rules against unauthorized access
+    
+    protect(app, {
+        rate_limit: 100,          // 100 requests per minute
+        auth_required: true,      // Must be authenticated
+        allowed_ips: ["10.0.0.0/8"],
+        blocked_ips: ["192.168.1.1"],
+        require_https: true,
+        min_password_strength: "strong",
+        session_timeout: 3600
+    })
+    """
+    def __init__(self, target, rules, enforcement_level="strict"):
+        self.target = target                    # Function/app to protect
+        self.rules = rules                      # Protection rules (Map or dict)
+        self.enforcement_level = enforcement_level  # "strict", "warn", or "audit"
+
+    def __repr__(self):
+        return f"ProtectStatement(target={self.target}, enforcement={self.enforcement_level})"
+
+
+# Additional advanced statements for completeness
+class MiddlewareStatement(Statement):
+    """Middleware registration - request/response processing
+    
+    middleware(authenticate, (request, response) -> {
+        let token = request.headers["Authorization"]
+        if (!verify_token(token)) {
+            response.status = 401
+            return false
+        }
+        return true
+    })
+    """
+    def __init__(self, name, handler):
+        self.name = name                    # Identifier
+        self.handler = handler              # ActionLiteral with (req, res) parameters
+
+    def __repr__(self):
+        return f"MiddlewareStatement(name={self.name})"
+
+
+class AuthStatement(Statement):
+    """Authentication configuration
+    
+    auth {
+        provider: "oauth2",
+        scopes: ["read", "write", "delete"],
+        token_expiry: 3600
+    }
+    """
+    def __init__(self, config):
+        self.config = config                # Map or dict with auth config
+
+    def __repr__(self):
+        return f"AuthStatement(config_keys={len(self.config.items()) if hasattr(self.config, 'items') else 0})"
+
+
+class ThrottleStatement(Statement):
+    """Rate limiting/throttling
+    
+    throttle(api_endpoint, {
+        requests_per_minute: 100,
+        burst_size: 10,
+        per_user: true
+    })
+    """
+    def __init__(self, target, limits):
+        self.target = target                # Function to throttle
+        self.limits = limits                # Throttle limits (Map or dict)
+
+    def __repr__(self):
+        return f"ThrottleStatement(target={self.target})"
+
+
+class CacheStatement(Statement):
+    """Caching directive
+    
+    cache(expensive_query, {
+        ttl: 3600,              // Time to live: 1 hour
+        key: "query_result",
+        invalidate_on: ["data_changed"]
+    })
+    """
+    def __init__(self, target, policy):
+        self.target = target                # Function to cache
+        self.policy = policy                # Cache policy (Map or dict)
+
+    def __repr__(self):
+        return f"CacheStatement(target={self.target})"

@@ -5,8 +5,145 @@ This document describes the source layout, responsibilities of each module under
 Use this as the canonical reference for contributors and maintainers.
 
 ---
-
 ## Quick commands
+## Security Best Practices for Zexus
+
+### The Defense-in-Depth Security Model
+
+Zexus provides multiple layers of security that work together:
+
+```
+┌─────────────────────────────────────┐
+│ 1. Export Access Control (File)     │  - WHO can access? (export + allowed_files)
+├─────────────────────────────────────┤
+│ 2. Verify Security Checks (Runtime) │  - Should they be allowed? (verify + conditions)
+├─────────────────────────────────────┤
+│ 3. Protect Guardrails (Enforcement) │  - Enforce rules (rate limit, auth, HTTPS, etc.)
+├─────────────────────────────────────┤
+│ 4. Middleware Validation (Request)  │  - Process & validate requests (auth, logging, CORS)
+├─────────────────────────────────────┤
+│ 5. Throttle & Cache (Performance)   │  - Prevent abuse, optimize access
+└─────────────────────────────────────┘
+```
+
+### Example: Secure Payment System
+
+```zexus
+// Step 1: Define entities with type safety
+entity PaymentRequest {
+    from: Address,
+    to: Address,
+    amount: integer,
+    timestamp: integer
+}
+
+// Step 2: Create contract with persistent state
+contract PaymentProcessor {
+    persistent storage transactions: List<PaymentRequest>
+    persistent storage daily_limits: Map<Address, integer>
+    persistent storage balances: Map<Address, integer>
+    
+    action process_payment(from: Address, to: Address, amount: integer) -> boolean {
+        require(balances[from] >= amount, "Insufficient funds")
+        require(daily_limits[from] + amount <= 10000, "Daily limit exceeded")
+        
+        balances[from] = balances[from] - amount
+        balances[to] = balances.get(to, 0) + amount
+        daily_limits[from] = daily_limits.get(from, 0) + amount
+        
+        transactions.push({from: from, to: to, amount: amount, timestamp: now()})
+        return true
+    }
+}
+
+// Step 3: Export with file restrictions
+let processor = contract PaymentProcessor()
+export processor to "payment_service.zx" with "execute"
+
+// Step 4: Add runtime verification
+verify(processor.process_payment, [
+    check_authenticated(),
+    check_user_kyc(),                    // Know Your Customer
+    check_not_suspended(),
+    check_transaction_limit()
+])
+
+// Step 5: Protect against abuse
+protect(processor.process_payment, {
+    rate_limit: 100,                    // Max 100 txns per minute
+    auth_required: true,
+    require_https: true,
+    min_password_strength: "very_strong",
+    session_timeout: 1800,              // 30 min session
+    blocked_ips: ["10.0.0.100"],       // Block known threat
+    allowed_ips: ["10.0.0.0/8"]        // Allow corporate only
+}, "strict")
+
+// Step 6: Add middleware
+middleware(fraud_detection, action(request, response) {
+    if (request.amount > 50000) {
+        // Flag for review
+        notify_fraud_team(request)
+    }
+    return true
+})
+
+middleware(audit_logging, action(request, response) {
+    log_transaction({
+        user: request.user,
+        action: "payment",
+        amount: request.amount,
+        timestamp: now(),
+        ip: request.client_ip
+    })
+    return true
+})
+
+// Step 7: Configure authentication
+auth {
+    provider: "oauth2",
+    scopes: ["payments:process"],
+    token_expiry: 3600,
+    mfa_required: true,
+    session_timeout: 1800
+}
+
+// Step 8: Apply throttling
+throttle(processor.process_payment, {
+    requests_per_minute: 100,
+    requests_per_hour: 5000,
+    per_user: true
+})
+
+// Step 9: Cache common lookups
+cache(get_exchange_rate, {
+    ttl: 300,  // 5 minutes - rates update frequently
+    invalidate_on: ["market_update"]
+})
+
+// Result: Secure, performant, auditable payment system!
+```
+
+### Security Checklist
+
+When building sensitive applications:
+
+- ✅ Define data types with `entity` for type safety
+- ✅ Use `contract` for persistent state management
+- ✅ Restrict access with `export` (file-level)
+- ✅ Add checks with `verify` (runtime conditions)
+- ✅ Enforce rules with `protect` (guardrails)
+- ✅ Validate requests with `middleware`
+- ✅ Configure `auth` for authentication
+- ✅ Limit abuse with `throttle`
+- ✅ Optimize access with `cache`
+- ✅ Log everything for auditing
+- ✅ Use HTTPS for all external communications
+- ✅ Implement MFA for sensitive operations
+- ✅ Rotate secrets regularly
+- ✅ Review and test security rules
+
+---
 
 - Run quick integration tests:
   - `python3 scripts/verify_integration.py`
@@ -731,6 +868,261 @@ export let API_KEY = "12345"          // Export variable
 action private_helper() {             // Not exported (private)
     return "internal use only"
 }
+```
+
+## Advanced Security & Entity Features
+
+### entity - Object-Oriented Data Structures
+
+Purpose: Define typed entities with properties and inheritance from `let`
+
+**What entity does:**
+- Creates reusable data structures similar to classes/structs
+- Supports typed properties with optional default values
+- Enables inheritance through composition
+- Type-checks property assignments
+
+```zexus
+// Define an entity
+entity User {
+    name: string,
+    email: string,
+    age: integer = 18,
+    role: string = "user"
+}
+
+// Create an instance
+let user = User{ name: "Alice", email: "alice@example.com" }
+
+// Access properties
+print(user.name)     // "Alice"
+print(user.age)      // 18 (uses default)
+
+// Update properties
+user.role = "admin"
+
+// Inheritance/composition
+entity Admin extends User {
+    permissions: list,
+    department: string
+}
+```
+
+### verify - Security Verification Checks
+
+Purpose: Wrap functions with security verification checks for maximum security
+
+**What verify does:**
+- Works alongside export for additional security layer
+- Allows multiple verification conditions before function execution
+- Provides custom error handling on verification failure
+- Perfect for sensitive operations (payments, data deletion, etc.)
+
+**How export + verify complement each other:**
+- `export` controls **WHO** can access a function (file-level access control)
+- `verify` controls **IF** access is allowed based on runtime conditions (runtime security checks)
+- Together they provide **defense in depth** - two layers of security
+
+```zexus
+action transfer_funds(to: Address, amount: integer) -> boolean {
+    return amount > 0 && balance >= amount
+}
+
+// Export to specific files AND verify before execution
+export transfer_funds to "payment_service.zx" with "read_write"
+
+verify(transfer_funds, [
+    check_authenticated(),        // User must be logged in
+    check_balance(amount),        // Sufficient balance
+    check_whitelist(to),          // Recipient on whitelist
+    check_rate_limit()            // Not exceeded daily limit
+])
+
+// Usage: Can only be called if exported to correct file AND all verify checks pass
+let result = transfer_funds("0x123...", 100)
+```
+
+### contract - Smart Contracts with Persistent State
+
+Purpose: Define blockchain smart contracts with persistent storage and methods
+
+**What contract does:**
+- Creates contracts with persistent state variables
+- Stores state permanently (suitable for blockchain operations)
+- Enables complex business logic with state management
+- Supports transaction-like operations
+
+```zexus
+contract Token {
+    persistent storage balances: Map<Address, integer>
+    persistent storage owner: Address
+    persistent storage total_supply: integer = 1000000
+    
+    action transfer(to: Address, amount: integer) -> boolean {
+        require(balances[msg.sender] >= amount, "Insufficient balance")
+        balances[msg.sender] = balances[msg.sender] - amount
+        balances[to] = balances.get(to, 0) + amount
+        return true
+    }
+    
+    action get_balance(account: Address) -> integer {
+        return balances.get(account, 0)
+    }
+    
+    action mint(to: Address, amount: integer) {
+        require(msg.sender == owner, "Only owner can mint")
+        balances[to] = balances.get(to, 0) + amount
+        total_supply = total_supply + amount
+    }
+}
+
+// Deploy contract
+let token = contract Token()
+
+// Use contract methods
+let balance = token.get_balance("0xAlice")
+token.transfer("0xBob", 100)
+token.mint("0xAlice", 1000)
+```
+
+### protect - Security Guardrails Against Unauthorized Access
+
+Purpose: Set protection rules and enforce security guardrails against attacks
+
+**What protect does:**
+- Enforces rate limiting to prevent brute force attacks
+- Requires authentication/authorization
+- Validates HTTPS connections
+- Enforces password strength requirements
+- Manages session timeouts
+- Blocks malicious IP addresses
+- Works in three enforcement modes: strict, warn, audit
+
+```zexus
+action login(username: string, password: string) -> boolean {
+    // ... login logic ...
+    return true
+}
+
+protect(login, {
+    rate_limit: 10,                          // Max 10 login attempts per minute
+    auth_required: true,                     // Must authenticate
+    require_https: true,                     // Only allow HTTPS
+    min_password_strength: "strong",         // Password complexity requirement
+    session_timeout: 3600,                   // 1 hour session timeout
+    allowed_ips: ["10.0.0.0/8"],            // Allow private network only
+    blocked_ips: ["192.168.1.100"],         // Block specific IP
+    require_mfa: true                        // Multi-factor authentication
+})
+
+// Example with enforcement levels
+protect(delete_account, {
+    auth_required: true,
+    require_mfa: true,
+    rate_limit: 1  // Only 1 deletion per day
+}, "strict")  // Strictly enforce - deny on any violation
+
+protect(log_access, {
+    rate_limit: 1000
+}, "warn")  // Warn but allow - log violations
+
+protect(audit_trail, {
+    rate_limit: 5000
+}, "audit")  // Allow but record - for audit purposes
+```
+
+### middleware - Request/Response Processing
+
+Purpose: Register middleware handlers for request/response processing pipelines
+
+```zexus
+middleware(authenticate, action(request, response) {
+    let token = request.headers["Authorization"]
+    if (!verify_token(token)) {
+        response.status = 401
+        response.body = "Unauthorized"
+        return false  // Stop chain
+    }
+    return true  // Continue chain
+})
+
+middleware(log_requests, action(request, response) {
+    print("[LOG] " + request.method + " " + request.path)
+    return true
+})
+
+middleware(cors, action(request, response) {
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return true
+})
+```
+
+### auth - Authentication Configuration
+
+Purpose: Configure global authentication settings
+
+```zexus
+auth {
+    provider: "oauth2",              // OAuth2, JWT, SAML, etc.
+    scopes: ["read", "write", "delete"],
+    token_expiry: 3600,              // 1 hour
+    refresh_enabled: true,
+    mfa_required: false,
+    session_timeout: 7200,           // 2 hours
+    password_min_length: 12,
+    password_require_uppercase: true,
+    password_require_symbols: true
+}
+```
+
+### throttle - Rate Limiting
+
+Purpose: Throttle function execution to prevent abuse
+
+```zexus
+action api_endpoint() {
+    return { status: "ok" }
+}
+
+throttle(api_endpoint, {
+    requests_per_minute: 100,    // Max 100 requests per minute
+    burst_size: 10,              // Allow 10 requests instantly
+    per_user: true               // Apply limit per user, not globally
+})
+
+// Advanced throttling
+throttle(expensive_operation, {
+    requests_per_minute: 5,
+    requests_per_hour: 50,
+    requests_per_day: 500,
+    per_user: true
+})
+```
+
+### cache - Caching Directives
+
+Purpose: Cache function results for performance optimization
+
+```zexus
+action expensive_query(user_id: string) {
+    // ... database query that takes 2 seconds ...
+    return results
+}
+
+cache(expensive_query, {
+    ttl: 3600,                   // Cache for 1 hour
+    key: "query_result",         // Cache key
+    invalidate_on: ["data_changed", "user_updated"]  // Events that clear cache
+})
+
+// First call: executes query, caches result
+let result1 = expensive_query("user123")  // Takes 2 seconds
+
+// Second call within TTL: returns cached result
+let result2 = expensive_query("user123")  // Instant - from cache
+
+// After TTL or invalidation event: re-executes query
+let result3 = expensive_query("user123")  // Takes 2 seconds again
 ```
 
 Special Types and Values

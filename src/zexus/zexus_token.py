@@ -86,6 +86,12 @@ ENUM = "ENUM"
 PROTOCOL = "PROTOCOL"
 IMPORT = "IMPORT"
 
+# SECURITY & ADVANCED FEATURES
+ENTITY = "ENTITY"              # Entity declaration: entity User { ... }
+VERIFY = "VERIFY"              # Verify checks: verify(action_name, ...conditions)
+CONTRACT = "CONTRACT"          # Smart contracts: contract Token { ... }
+PROTECT = "PROTECT"            # Protection guardrails: protect(action, rules)
+
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
 RENDER = "RENDER"              # Render screen: render_screen("login")
@@ -105,6 +111,14 @@ BORDER = "BORDER"
 STYLE = "STYLE"
 RADIUS = "RADIUS"
 FILL = "FILL"
+
+# ADVANCED FEATURE TOKENS
+MIDDLEWARE = "MIDDLEWARE"
+AUTH = "AUTH"
+THROTTLE = "THROTTLE"
+CACHE = "CACHE"
+PERSISTENT = "PERSISTENT"
+REQUIRE = "REQUIRE"
 
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):

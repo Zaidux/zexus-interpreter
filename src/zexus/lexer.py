@@ -356,6 +356,16 @@ class Lexer:
             "enum": ENUM,
             "protocol": PROTOCOL,
             "import": IMPORT,
+            # NEW: Entity, Verify, Contract, Protect
+            "entity": ENTITY,
+            "verify": VERIFY,
+            "contract": CONTRACT,
+            "protect": PROTECT,
+            # Advanced features
+            "middleware": "MIDDLEWARE",
+            "auth": "AUTH",
+            "throttle": "THROTTLE",
+            "cache": "CACHE",
         }
         return keywords.get(ident, IDENT)
 
