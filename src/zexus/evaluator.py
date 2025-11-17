@@ -24,90 +24,10 @@ from .object import (
 NULL, TRUE, FALSE = Null(), BooleanObj(True), BooleanObj(False)
 
 # Registry for builtin functions (populated later)
-from .zexus_ast import (
-    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
-    ActionStatement, IfStatement, WhileStatement, ForEachStatement, MethodCallExpression,
-    EmbeddedLiteral, PrintStatement, ScreenStatement, EmbeddedCodeStatement, UseStatement,
-    ExactlyStatement, TryCatchStatement, IntegerLiteral, StringLiteral, ListLiteral, MapLiteral, Identifier,
-    ActionLiteral, CallExpression, PrefixExpression, InfixExpression, IfExpression,
-    Boolean as AST_Boolean, AssignmentExpression, PropertyAccessExpression,
-    ExportStatement, LambdaExpression,
-    EntityStatement, VerifyStatement, ContractStatement, ProtectStatement,
-    MiddlewareStatement, AuthStatement, ThrottleStatement, CacheStatement
-)
-        self.stack_trace = stack_trace or []
+builtins = {}
 
-    def __str__(self):
-        if self.line and self.column:
-            location = f"Line {self.line}:{self.column}"
-        else:
-        # NEW: Entity statement
-        elif node_type == EntityStatement:
-            debug_log("  EntityStatement node", f"entity {node.name.value}")
-            return eval_entity_statement(node, env)
-
-        # NEW: Verify statement
-        elif node_type == VerifyStatement:
-            debug_log("  VerifyStatement node")
-            return eval_verify_statement(node, env, stack_trace)
-
-        # NEW: Contract statement
-        elif node_type == ContractStatement:
-            debug_log("  ContractStatement node", f"contract {node.name.value}")
-            return eval_contract_statement(node, env, stack_trace)
-
-        # NEW: Protect statement
-        elif node_type == ProtectStatement:
-            debug_log("  ProtectStatement node")
-            return eval_protect_statement(node, env, stack_trace)
-
-        # NEW: Middleware statement
-        elif node_type == MiddlewareStatement:
-            debug_log("  MiddlewareStatement node", f"middleware {node.name.value}")
-            return eval_middleware_statement(node, env)
-
-        # NEW: Auth statement
-        elif node_type == AuthStatement:
-            debug_log("  AuthStatement node")
-            return eval_auth_statement(node, env)
-
-        # NEW: Throttle statement
-        elif node_type == ThrottleStatement:
-            debug_log("  ThrottleStatement node")
-            return eval_throttle_statement(node, env)
-
-        # NEW: Cache statement
-        elif node_type == CacheStatement:
-            debug_log("  CacheStatement node")
-            return eval_cache_statement(node, env)
-            location = "Unknown location"
-
-        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
-        trace_section = f"\n   Stack:\n{trace}" if trace else ""
-
-        return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
-
-# NEW: FixedEvaluationError to avoid secondary failures (like len() on errors)
-class FixedEvaluationError:
-    """Fixed error class that doesn't cause secondary errors"""
-    def __init__(self, message, stack_trace=None):
-        self.message = message
-        self.stack_trace = stack_trace or []
-
-    def __str__(self):
-        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
-        trace_section = f"\nStack:\n{trace}" if trace else ""
-        return f"❌ Runtime Error: {self.message}{trace_section}"
-
-    def type(self):
-        return "ERROR"
-
-    def inspect(self):
-        return str(self)
-
-    # CRITICAL: Add len method to prevent the secondary error
-    def __len__(self):
-        return len(self.message)
+# Use the unified EvaluationError from object.py
+EvaluationError = ObjectEvaluationError
 
 # Helper to centralize error checks (includes the new FixedEvaluationError)
 def is_error(obj):
@@ -538,22 +458,59 @@ def array_filter(array_obj, lambda_fn, env=None):
 # NEW: Export system
 def eval_export_statement(node, env):
     """Handle export statements"""
-    # Get the value to export
-    value = env.get(node.name.value)
-    if not value:
-        return EvaluationError(f"Cannot export undefined identifier: {node.name.value}")
+    # Support single-name and multi-name ExportStatement
+    names = []
+    if hasattr(node, 'names') and node.names:
+        names = [n.value if hasattr(n, 'value') else str(n) for n in node.names]
+    elif hasattr(node, 'name') and node.name is not None:
+        names = [node.name.value if hasattr(node.name, 'value') else str(node.name)]
 
-    # Export with security restrictions
-    env.export(node.name.value, value)
+    if not names:
+        return EvaluationError("export: no identifiers provided to export")
+
+    # Parse allowed_files/permission already on node
+    allowed_files = getattr(node, 'allowed_files', []) or []
+    permission = getattr(node, 'permission', 'read_only')
+
+    for nm in names:
+        value = env.get(nm)
+        if not value:
+            return EvaluationError(f"Cannot export undefined identifier: {nm}")
+        # Optionally tag exported value with metadata about allowed files/permission
+        try:
+            # store metadata on object if possible (best-effort)
+            if hasattr(value, '__dict__'):
+                value._allowed_files = allowed_files
+                value._export_permission = permission
+        except Exception:
+            pass
+
+        env.export(nm, value)
+
     return NULL
 
 def check_import_permission(exported_value, importer_file, env):
     """Check if importer has permission to access exported value"""
     # For now, implement basic file-based permission checking
     allowed_files = getattr(exported_value, '_allowed_files', [])
-    if allowed_files and importer_file not in allowed_files:
-        return EvaluationError(f"File '{importer_file}' not authorized to import this function")
-    return True
+    permission = getattr(exported_value, '_export_permission', 'read_only')
+    
+    # If no restrictions, allow
+    if not allowed_files or allowed_files == []:
+        return True
+    
+    # Normalize paths for comparison
+    importer_normalized = os.path.normpath(os.path.abspath(importer_file)) if importer_file else None
+    
+    for allowed in allowed_files:
+        allowed_normalized = os.path.normpath(os.path.abspath(allowed)) if allowed else None
+        if importer_normalized and allowed_normalized and importer_normalized == allowed_normalized:
+            return True
+        # Also allow if the allowed file is a substring (module path match)
+        if importer_file and allowed in importer_file:
+            return True
+    
+    return EvaluationError(f"File '{importer_file}' not authorized to import restricted export (permission: {permission})")
 
 # === FIXED: JSON CONVERSION FUNCTIONS ===
 def _zexus_to_python(value):
@@ -835,6 +792,67 @@ def builtin_filter(*args):
     if len(args) != 2:
         return EvaluationError("filter() takes 2 arguments (array, lambda)")
     return array_filter(args[0], args[1])
+
+# Register core builtins
+try:
+    builtins.update({
+        "now": Builtin(builtin_datetime_now, "now"),
+        "timestamp": Builtin(builtin_timestamp, "timestamp"),
+        "random": Builtin(builtin_math_random, "random"),
+        "to_hex": Builtin(builtin_to_hex, "to_hex"),
+        "from_hex": Builtin(builtin_from_hex, "from_hex"),
+        "sqrt": Builtin(builtin_sqrt, "sqrt"),
+
+        "file_read_text": Builtin(builtin_file_read_text, "file_read_text"),
+        "file_write_text": Builtin(builtin_file_write_text, "file_write_text"),
+        "file_exists": Builtin(builtin_file_exists, "file_exists"),
+        "file_read_json": Builtin(builtin_file_read_json, "file_read_json"),
+        "file_write_json": Builtin(builtin_file_write_json, "file_write_json"),
+        "file_append": Builtin(builtin_file_append, "file_append"),
+        "file_list_dir": Builtin(builtin_file_list_dir, "file_list_dir"),
+
+        "debug_log": Builtin(builtin_debug_log, "debug_log"),
+        "debug_trace": Builtin(builtin_debug_trace, "debug_trace"),
+
+        "string": Builtin(builtin_string, "string"),
+        "len": Builtin(builtin_len, "len"),
+        "first": Builtin(builtin_first, "first"),
+        "rest": Builtin(builtin_rest, "rest"),
+        "push": Builtin(builtin_push, "push"),
+        "reduce": Builtin(builtin_reduce, "reduce"),
+        "map": Builtin(builtin_map, "map"),
+        "filter": Builtin(builtin_filter, "filter"),
+    })
+except NameError:
+    # If Builtin class is not available at import time, keep pending mapping
+    try:
+        __CORE_BUILTINS_PENDING = {
+            "now": builtin_datetime_now,
+            "timestamp": builtin_timestamp,
+            "random": builtin_math_random,
+            "to_hex": builtin_to_hex,
+            "from_hex": builtin_from_hex,
+            "sqrt": builtin_sqrt,
+            "file_read_text": builtin_file_read_text,
+            "file_write_text": builtin_file_write_text,
+            "file_exists": builtin_file_exists,
+            "file_read_json": builtin_file_read_json,
+            "file_write_json": builtin_file_write_json,
+            "file_append": builtin_file_append,
+            "file_list_dir": builtin_file_list_dir,
+            "debug_log": builtin_debug_log,
+            "debug_trace": builtin_debug_trace,
+            "string": builtin_string,
+            "len": builtin_len,
+            "first": builtin_first,
+            "rest": builtin_rest,
+            "push": builtin_push,
+            "reduce": builtin_reduce,
+            "map": builtin_map,
+            "filter": builtin_filter,
+        }
+    except Exception:
+        pass
 
 # --- RENDERER REGISTRY & HELPERS ---------------------------------------
 # Try to use the real renderer backend if available, otherwise keep a safe registry.
@@ -1178,7 +1196,17 @@ def eval_node(node, env, stack_trace=None):
 
         # NEW: Export statement
         elif node_type == ExportStatement:
-            debug_log("  ExportStatement node", f"export {node.name.value}")
+            # safe logging for single/multi-name export statements
+            try:
+                if hasattr(node, 'names') and node.names:
+                    names_text = ','.join([n.value if hasattr(n, 'value') else str(n) for n in node.names])
+                elif hasattr(node, 'name') and node.name is not None:
+                    names_text = getattr(node.name, 'value', str(node.name))
+                else:
+                    names_text = '<no-names>'
+            except Exception:
+                names_text = '<unknown>'
+            debug_log("  ExportStatement node", f"export {names_text}")
             return eval_export_statement(node, env)
 
         elif node_type == IfStatement:
@@ -1432,8 +1460,19 @@ def eval_node(node, env, stack_trace=None):
             else:
                 try:
                     exports = module_env.get_exports()
+                    # Get importer file path (if available from stack trace or environment context)
+                    importer_file = env.get("__file__") if hasattr(env, 'get') else None
+                    if importer_file and hasattr(importer_file, 'value'):
+                        importer_file = importer_file.value
+                    
                     for name, value in exports.items():
                         debug_log("  Importing export", name)
+                        # Check permission if importer_file is available
+                        if importer_file:
+                            perm_check = check_import_permission(value, importer_file, env)
+                            if is_error(perm_check):
+                                debug_log("  Permission denied for export", name)
+                                return perm_check
                         env.set(name, value)
                 except Exception:
                     # If module has no exports, make its env available as a module object
@@ -1441,6 +1480,88 @@ def eval_node(node, env, stack_trace=None):
                     debug_log("  Setting module object", module_name)
                     env.set(module_name, module_env)
 
+            return NULL
+
+        # FROM statement: import specific names from a module
+        elif node_type == FromStatement:
+            debug_log("  FromStatement node", node.file_path)
+            # Reuse the UseStatement logic to obtain module env
+            use_node = UseStatement(node.file_path)
+            res = eval_node(use_node, env, stack_trace)
+            if is_error(res):
+                return res
+
+            # module should now be available in env (either alias or exports)
+            try:
+                module_env = env.get(os.path.basename(node.file_path))
+                if not module_env or not hasattr(module_env, 'get_exports'):
+                    # fallback: look up by normalized path
+                    module_env = None
+            except Exception:
+                module_env = None
+
+            # Import requested names
+            importer_file = env.get("__file__") if hasattr(env, 'get') else None
+            if importer_file and hasattr(importer_file, 'value'):
+                importer_file = importer_file.value
+            
+            for name_pair in node.imports:
+                src_name = name_pair[0].value if hasattr(name_pair[0], 'value') else str(name_pair[0])
+                as_name = name_pair[1].value if len(name_pair) > 1 and name_pair[1] is not None else src_name
+                try:
+                    value = module_env.get_exports().get(src_name)
+                    if value is None:
+                        return EvaluationError(f"From import: '{src_name}' not found in module")
+                    # Check permission if importer_file is available
+                    if importer_file:
+                        perm_check = check_import_permission(value, importer_file, env)
+                        if is_error(perm_check):
+                            debug_log("  Permission denied for from-import", src_name)
+                            return perm_check
+                    env.set(as_name, value)
+                except Exception:
+                    return EvaluationError(f"From import failed for '{src_name}'")
+
+            return NULL
+
+        elif node_type == ComponentStatement:
+            debug_log("  ComponentStatement node", node.name.value)
+            # Evaluate properties (map or block)
+            props = None
+            if hasattr(node, 'properties') and node.properties is not None:
+                props_val = eval_node(node.properties, env, stack_trace)
+                if is_error(props_val):
+                    return props_val
+                props = _to_python(props_val) if isinstance(props_val, (Map, List, String)) else None
+            # Register via runtime builtin if available
+            if 'define_component' in builtins:
+                return builtins['define_component'].fn(String(node.name.value), Map(props) if isinstance(props, dict) else NULL)
+            env.set(node.name.value, String(f"<component {node.name.value}>") )
+            return NULL
+
+        elif node_type == ThemeStatement:
+            debug_log("  ThemeStatement node", node.name.value)
+            props_val = eval_node(node.properties, env, stack_trace) if hasattr(node, 'properties') else NULL
+            if is_error(props_val):
+                return props_val
+            # Set theme locally
+            env.set(node.name.value, props_val)
+            return NULL
+
+        elif node_type == DebugStatement:
+            debug_log("  DebugStatement node")
+            val = eval_node(node.value, env, stack_trace)
+            if is_error(val):
+                return val
+            Debug.log(String(str(val)))
+            return NULL
+
+        elif node_type == ExternalDeclaration:
+            debug_log("  ExternalDeclaration node", node.name.value)
+            # Register a placeholder builtin that raises when called until linked
+            def _external_placeholder(*a):
+                return EvaluationError(f"External function '{node.name.value}' not linked")
+            env.set(node.name.value, Builtin(_external_placeholder, node.name.value))
             return NULL
 
         elif node_type == ExactlyStatement:
@@ -1548,220 +1669,274 @@ def eval_node(node, env, stack_trace=None):
         debug_log("  Exception in eval_node", error_msg)
         return EvaluationError(error_msg, stack_trace=stack_trace[-5:])  # Last 5 frames
 
-    # =====================================================
-    # NEW STATEMENT HANDLERS - ENTITY, VERIFY, CONTRACT, PROTECT
-    # =====================================================
 
-    def eval_entity_statement(node, env):
-        """Evaluate entity statement - create entity definition"""
-        from .security import EntityDefinition
-    
-        properties = {}
-        for prop in node.properties:
-            properties[prop["name"]] = {
-                "type": prop["type"],
-                "default_value": prop.get("default_value")
-            }
-    
-        entity_def = EntityDefinition(node.name.value, properties)
-        env.set(node.name.value, entity_def)
-        return NULL
+# =====================================================
+# NEW STATEMENT HANDLERS - ENTITY, VERIFY, CONTRACT, PROTECT
+# =====================================================
 
+def eval_entity_statement(node, env):
+    """Evaluate entity statement - create entity definition"""
+    from .security import EntityDefinition
 
-    def eval_verify_statement(node, env, stack_trace=None):
-        """Evaluate verify statement - register verification checks"""
-        from .security import VerifyWrapper, VerificationCheck, get_security_context
-    
-        # Evaluate target function
-        target_value = eval_node(node.target, env, stack_trace)
-        if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
-            return target_value
-    
-        # Evaluate conditions
-        checks = []
-        for condition_node in node.conditions:
-            condition_value = eval_node(condition_node, env, stack_trace)
-            if isinstance(condition_value, (EvaluationError, ObjectEvaluationError)):
-                return condition_value
-            if callable(condition_value) or isinstance(condition_value, Action):
-                checks.append(VerificationCheck(str(condition_node), lambda ctx: condition_value))
-    
-        # Wrap function with verification
-        wrapped = VerifyWrapper(target_value, checks, node.error_handler)
-    
-        # Register in security context
-        ctx = get_security_context()
-        ctx.register_verify_check(str(node.target), wrapped)
-    
-        return wrapped
+    properties = {}
+    for prop in node.properties:
+        properties[prop["name"]] = {
+            "type": prop["type"],
+            "default_value": prop.get("default_value")
+        }
+
+    entity_def = EntityDefinition(node.name.value, properties)
+    env.set(node.name.value, entity_def)
+    return NULL
 
 
-    def eval_contract_statement(node, env, stack_trace=None):
-        """Evaluate contract statement - create smart contract"""
-        from .security import SmartContract
-    
-        storage_vars = {}
-        for storage_var in node.storage_vars:
-            storage_vars[storage_var["name"]] = {}
-    
-        actions = {}
-        for action in node.actions:
-            actions[action.name.value] = action
-    
-        contract = SmartContract(node.name.value, storage_vars, actions)
-        contract.deploy()
-    
-        env.set(node.name.value, contract)
-        return NULL
+def eval_verify_statement(node, env, stack_trace=None):
+    """Evaluate verify statement - register verification checks"""
+    from .security import VerifyWrapper, VerificationCheck, get_security_context
+
+    # Evaluate target function
+    target_value = eval_node(node.target, env, stack_trace)
+    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+        return target_value
+
+    # Evaluate conditions
+    checks = []
+    for condition_node in node.conditions:
+        condition_value = eval_node(condition_node, env, stack_trace)
+        if isinstance(condition_value, (EvaluationError, ObjectEvaluationError)):
+            return condition_value
+        if callable(condition_value) or isinstance(condition_value, Action):
+            checks.append(VerificationCheck(str(condition_node), lambda ctx: condition_value))
+
+    # Wrap function with verification
+    wrapped = VerifyWrapper(target_value, checks, node.error_handler)
+
+    # Register in security context
+    ctx = get_security_context()
+    ctx.register_verify_check(str(node.target), wrapped)
+
+    return wrapped
 
 
-    def eval_protect_statement(node, env, stack_trace=None):
-        """Evaluate protect statement - register protection rules"""
-        from .security import ProtectionPolicy, get_security_context
-    
-        # Evaluate target
-        target_value = eval_node(node.target, env, stack_trace)
-        if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
-            return target_value
-    
-        # Evaluate rules
-        rules_value = eval_node(node.rules, env, stack_trace)
-        if isinstance(rules_value, (EvaluationError, ObjectEvaluationError)):
-            return rules_value
-    
-        # Convert rules to dict
-        rules_dict = {}
-        if isinstance(rules_value, Map):
-            for key, value in rules_value.pairs.items():
-                key_str = key.value if isinstance(key, String) else str(key)
-                rules_dict[key_str] = value
-    
-        # Create and register protection policy
-        policy = ProtectionPolicy(str(node.target), rules_dict, node.enforcement_level)
-        ctx = get_security_context()
-        ctx.register_protection(str(node.target), policy)
-    
-        return policy
+def eval_contract_statement(node, env, stack_trace=None):
+    """Evaluate contract statement - create smart contract"""
+    from .security import SmartContract
+
+    storage_vars = {}
+    for storage_var in node.storage_vars:
+        storage_vars[storage_var["name"]] = {}
+
+    actions = {}
+    for action in node.actions:
+        actions[action.name.value] = action
+
+    contract = SmartContract(node.name.value, storage_vars, actions)
+    contract.deploy()
+
+    env.set(node.name.value, contract)
+    return NULL
 
 
-    def eval_middleware_statement(node, env):
-        """Evaluate middleware statement - register middleware handler"""
-        from .security import Middleware, get_security_context
-    
-        # Evaluate handler
-        handler = eval_node(node.handler, env)
-        if isinstance(handler, (EvaluationError, ObjectEvaluationError)):
-            return handler
-    
-        # Create middleware
-        middleware = Middleware(node.name.value, handler)
-    
-        # Register in security context
-        ctx = get_security_context()
-        ctx.middlewares[node.name.value] = middleware
-    
-        return NULL
+def eval_protect_statement(node, env, stack_trace=None):
+    """Evaluate protect statement - register protection rules"""
+    from .security import ProtectionPolicy, get_security_context
+
+    # Evaluate target
+    target_value = eval_node(node.target, env, stack_trace)
+    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+        return target_value
+
+    # Evaluate rules
+    rules_value = eval_node(node.rules, env, stack_trace)
+    if isinstance(rules_value, (EvaluationError, ObjectEvaluationError)):
+        return rules_value
+
+    # Convert rules to dict
+    rules_dict = {}
+    if isinstance(rules_value, Map):
+        for key, value in rules_value.pairs.items():
+            key_str = key.value if isinstance(key, String) else str(key)
+            rules_dict[key_str] = value
+
+    # Create and register protection policy
+    policy = ProtectionPolicy(str(node.target), rules_dict, node.enforcement_level)
+    ctx = get_security_context()
+    ctx.register_protection(str(node.target), policy)
+
+    return policy
 
 
-    def eval_auth_statement(node, env):
-        """Evaluate auth statement - set authentication configuration"""
-        from .security import AuthConfig, get_security_context
-    
-        # Evaluate config
-        config_value = eval_node(node.config, env)
-        if isinstance(config_value, (EvaluationError, ObjectEvaluationError)):
-            return config_value
-    
-        # Convert config to dict
-        config_dict = {}
-        if isinstance(config_value, Map):
-            for key, value in config_value.pairs.items():
-                key_str = key.value if isinstance(key, String) else str(key)
-                config_dict[key_str] = value
-    
-        # Create auth config
-        auth_config = AuthConfig(config_dict)
-    
-        # Register in security context
-        ctx = get_security_context()
-        ctx.auth_config = auth_config
-    
-        return NULL
+def eval_middleware_statement(node, env):
+    """Evaluate middleware statement - register middleware handler"""
+    from .security import Middleware, get_security_context
+
+    # Evaluate handler
+    handler = eval_node(node.handler, env)
+    if isinstance(handler, (EvaluationError, ObjectEvaluationError)):
+        return handler
+
+    # Create middleware
+    middleware = Middleware(node.name.value, handler)
+
+    # Register in security context
+    ctx = get_security_context()
+    ctx.middlewares[node.name.value] = middleware
+
+    return NULL
 
 
-    def eval_throttle_statement(node, env):
-        """Evaluate throttle statement - register rate limiting"""
-        from .security import RateLimiter, get_security_context
-    
-        # Evaluate target and limits
-        target_value = eval_node(node.target, env)
-        if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
-            return target_value
-    
-        limits_value = eval_node(node.limits, env)
-        if isinstance(limits_value, (EvaluationError, ObjectEvaluationError)):
-            return limits_value
-    
-        # Extract limits from map
-        rpm = 100  # Default requests per minute
-        burst = 10  # Default burst size
-        per_user = False
-    
-        if isinstance(limits_value, Map):
-            for key, value in limits_value.pairs.items():
-                key_str = key.value if isinstance(key, String) else str(key)
-                if key_str == "requests_per_minute" and isinstance(value, Integer):
-                    rpm = value.value
-                elif key_str == "burst_size" and isinstance(value, Integer):
-                    burst = value.value
-                elif key_str == "per_user" and isinstance(value, BooleanObj):
-                    per_user = value.value
-    
-        # Create rate limiter
-        limiter = RateLimiter(rpm, burst, per_user)
-    
-        # Register in security context
-        ctx = get_security_context()
-        ctx.rate_limiters = getattr(ctx, 'rate_limiters', {})
-        ctx.rate_limiters[str(node.target)] = limiter
-    
-        return NULL
+def eval_auth_statement(node, env):
+    """Evaluate auth statement - set authentication configuration"""
+    from .security import AuthConfig, get_security_context
+
+    # Evaluate config
+    config_value = eval_node(node.config, env)
+    if isinstance(config_value, (EvaluationError, ObjectEvaluationError)):
+        return config_value
+
+    # Convert config to dict
+    config_dict = {}
+    if isinstance(config_value, Map):
+        for key, value in config_value.pairs.items():
+            key_str = key.value if isinstance(key, String) else str(key)
+            config_dict[key_str] = value
+
+    # Create auth config
+    auth_config = AuthConfig(config_dict)
+
+    # Register in security context
+    ctx = get_security_context()
+    ctx.auth_config = auth_config
+
+    return NULL
 
 
-    def eval_cache_statement(node, env):
-        """Evaluate cache statement - register caching policy"""
-        from .security import CachePolicy, get_security_context
-    
-        # Evaluate target and policy
-        target_value = eval_node(node.target, env)
-        if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
-            return target_value
-    
-        policy_value = eval_node(node.policy, env)
-        if isinstance(policy_value, (EvaluationError, ObjectEvaluationError)):
-            return policy_value
-    
-        # Extract policy settings from map
-        ttl = 3600  # Default 1 hour
-        invalidate_on = []
-    
-        if isinstance(policy_value, Map):
-            for key, value in policy_value.pairs.items():
-                key_str = key.value if isinstance(key, String) else str(key)
-                if key_str == "ttl" and isinstance(value, Integer):
-                    ttl = value.value
-                elif key_str == "invalidate_on" and isinstance(value, List):
-                    invalidate_on = [item.value if hasattr(item, 'value') else str(item) for item in value.elements]
-    
-        # Create cache policy
-        cache_policy = CachePolicy(ttl=ttl, invalidate_on=invalidate_on)
-    
-        # Register in security context
-        ctx = get_security_context()
-        ctx.cache_policies = getattr(ctx, 'cache_policies', {})
-        ctx.cache_policies[str(node.target)] = cache_policy
-    
-        return NULL
+def eval_throttle_statement(node, env):
+    """Evaluate throttle statement - register rate limiting"""
+    from .security import RateLimiter, get_security_context
+
+    # Evaluate target and limits
+    target_value = eval_node(node.target, env)
+    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+        return target_value
+
+    limits_value = eval_node(node.limits, env)
+    if isinstance(limits_value, (EvaluationError, ObjectEvaluationError)):
+        return limits_value
+
+    # Extract limits from map
+    rpm = 100  # Default requests per minute
+    burst = 10  # Default burst size
+    per_user = False
+
+    if isinstance(limits_value, Map):
+        for key, value in limits_value.pairs.items():
+            key_str = key.value if isinstance(key, String) else str(key)
+            if key_str == "requests_per_minute" and isinstance(value, Integer):
+                rpm = value.value
+            elif key_str == "burst_size" and isinstance(value, Integer):
+                burst = value.value
+            elif key_str == "per_user" and isinstance(value, BooleanObj):
+                per_user = value.value
+
+    # Create rate limiter
+    limiter = RateLimiter(rpm, burst, per_user)
+
+    # Register in security context
+    ctx = get_security_context()
+    ctx.rate_limiters = getattr(ctx, 'rate_limiters', {})
+    ctx.rate_limiters[str(node.target)] = limiter
+
+    return NULL
+
+
+def eval_cache_statement(node, env):
+    """Evaluate cache statement - register caching policy"""
+    from .security import CachePolicy, get_security_context
+
+    # Evaluate target and policy
+    target_value = eval_node(node.target, env)
+    if isinstance(target_value, (EvaluationError, ObjectEvaluationError)):
+        return target_value
+
+    policy_value = eval_node(node.policy, env)
+    if isinstance(policy_value, (EvaluationError, ObjectEvaluationError)):
+        return policy_value
+
+    # Extract policy settings from map
+    ttl = 3600  # Default 1 hour
+    invalidate_on = []
+
+    if isinstance(policy_value, Map):
+        for key, value in policy_value.pairs.items():
+            key_str = key.value if isinstance(key, String) else str(key)
+            if key_str == "ttl" and isinstance(value, Integer):
+                ttl = value.value
+            elif key_str == "invalidate_on" and isinstance(value, List):
+                invalidate_on = [item.value if hasattr(item, 'value') else str(item) for item in value.elements]
+
+    # Create cache policy
+    cache_policy = CachePolicy(ttl=ttl, invalidate_on=invalidate_on)
+
+    # Register in security context
+    ctx = get_security_context()
+    ctx.cache_policies = getattr(ctx, 'cache_policies', {})
+    ctx.cache_policies[str(node.target)] = cache_policy
+
+    return NULL
+
+
+def eval_seal_statement(node, env, stack_trace=None):
+    """Evaluate seal statement - mark a variable as sealed (immutable)
+
+    Only identifier targets are supported for simple sealing (e.g. `seal myVar`).
+    """
+    from .security import SealedObject
+
+    # Only support sealing identifiers for now
+    target = node.target
+    if target is None:
+        return EvaluationError("seal: missing target")
+
+    # If target is an Identifier, seal that variable in the environment
+    if isinstance(target, Identifier):
+        name = target.value
+        current = env.get(name)
+        if current is None:
+            return EvaluationError(f"seal: identifier '{name}' not found")
+        sealed = SealedObject(current)
+        env.set(name, sealed)
+        debug_log("  Sealed identifier", name)
+        return sealed
+
+    # If target is a property access, attempt to seal the referenced value
+    if hasattr(target, 'object') and hasattr(target, 'property'):
+        obj = eval_node(target.object, env, stack_trace)
+        if is_error(obj):
+            return obj
+        prop_name = target.property.value
+        # Try maps and entity instances
+        try:
+            # Map-like
+            if isinstance(obj, Map):
+                val = obj.pairs.get(prop_name)
+                if val is None:
+                    return EvaluationError(f"seal: property '{prop_name}' not found")
+                obj.pairs[prop_name] = SealedObject(val)
+                debug_log("  Sealed map property", prop_name)
+                return obj.pairs[prop_name]
+            # EntityInstance-like: try to set via set() API
+            if hasattr(obj, 'set') and hasattr(obj, 'get'):
+                val = obj.get(prop_name)
+                if val is None:
+                    return EvaluationError(f"seal: property '{prop_name}' not found on object")
+                obj.set(prop_name, SealedObject(val))
+                debug_log("  Sealed object property", prop_name)
+                return SealedObject(val)
+        except Exception as e:
+            return EvaluationError(f"seal error: {str(e)}")
+
+    return EvaluationError("seal: unsupported target; use an identifier or property access")
 
 # Production evaluation with enhanced debugging
 def evaluate(program, env, debug_mode=False):

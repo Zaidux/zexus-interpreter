@@ -56,6 +56,22 @@ class Map(Object):
             pairs.append(f"{key_str}: {value_str}")
         return "{" + ", ".join(pairs) + "}"
 
+    def get(self, key):
+        """Get value by key (compatible with string keys)"""
+        return self.pairs.get(key)
+
+    def set(self, key, value):
+        """Set value for key, blocking modification if key is sealed.
+
+        We avoid importing SealedObject to prevent circular imports; instead use
+        a runtime name-check of the wrapper class.
+        """
+        existing = self.pairs.get(key)
+        if existing is not None and existing.__class__.__name__ == 'SealedObject':
+            # Raise EvaluationError (defined later in this module) to signal runtime error
+            raise EvaluationError(f"Cannot modify sealed map key: {key}")
+        self.pairs[key] = value
+
 class EmbeddedCode(Object):
     def __init__(self, name, language, code):
         self.name = name
@@ -452,3 +468,7 @@ class EvaluationError(Object):
         trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
         trace_section = f"\n   Stack:\n{trace}" if trace else ""
         return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
+
+    def __len__(self):
+        """Support len() on errors to prevent secondary failures"""
+        return len(self.message)

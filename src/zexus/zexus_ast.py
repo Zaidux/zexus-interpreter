@@ -145,13 +145,16 @@ class ExactlyStatement(Statement):
 
 # Export statement
 class ExportStatement(Statement):
-    def __init__(self, name, allowed_files=None, permission=None):
-        self.name = name
+    def __init__(self, name=None, names=None, allowed_files=None, permission=None):
+        # `names` is a list of Identifier nodes; `name` kept for backward compatibility (first item)
+        self.names = names or ([] if names is not None else ([name] if name is not None else []))
+        self.name = self.names[0] if self.names else name
         self.allowed_files = allowed_files or []
         self.permission = permission or "read_only"
 
     def __repr__(self):
-        return f"ExportStatement(name={self.name}, files={len(self.allowed_files)}, permission='{self.permission}')"
+        names = [n.value if hasattr(n, 'value') else str(n) for n in self.names]
+        return f"ExportStatement(names={names}, files={len(self.allowed_files)}, permission='{self.permission}')"
 
 # NEW: Debug statement
 class DebugStatement(Statement):
@@ -465,3 +468,16 @@ class CacheStatement(Statement):
 
     def __repr__(self):
         return f"CacheStatement(target={self.target})"
+
+
+class SealStatement(Statement):
+    """Seal statement - make a variable/object immutable at runtime
+
+    seal myObj
+    """
+    def __init__(self, target):
+        # target is expected to be an Identifier or PropertyAccessExpression
+        self.target = target
+
+    def __repr__(self):
+        return f"SealStatement(target={self.target})"

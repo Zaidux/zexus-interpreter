@@ -321,6 +321,8 @@ class UltimateParser:
                 return self.parse_contract_statement()
             elif self.cur_token_is(PROTECT):
                 return self.parse_protect_statement()
+            elif self.cur_token_is(SEAL):
+                return self.parse_seal_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -718,12 +720,63 @@ class UltimateParser:
     def parse_export_statement(self):
         token = self.cur_token
 
-        if not self.expect_peek(IDENT):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'export'")
-            return None
+        names = []
 
-        name = Identifier(self.cur_token.literal)
+        # Support multiple forms: export { a, b }, export(a, b), export a, b ; export a:b; etc.
+        if self.peek_token_is(LBRACE):
+            # export { a, b, c }  -- tolerant manual consumption to avoid conflicts with other parsers
+            if not self.expect_peek(LBRACE):
+                return None
+            # move into the first token inside the braces
+            self.next_token()
+            while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                if self.cur_token_is(IDENT):
+                    names.append(Identifier(self.cur_token.literal))
+                # consume separators if present
+                if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON) or self.peek_token_is(COLON):
+                    self.next_token()  # move to separator
+                    self.next_token()  # move to token after separator
+                    continue
+                # otherwise advance
+                self.next_token()
+            # ensure we've consumed the closing brace
+            if not self.cur_token_is(RBRACE):
+                self.errors.append(f"Line {token.line}:{token.column} - Unterminated export block")
+                return None
 
+        elif self.peek_token_is(LPAREN):
+            # export(a, b) -- tolerant manual parsing of identifiers
+            if not self.expect_peek(LPAREN):
+                return None
+            # move into first token inside parens
+            self.next_token()
+            while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+                if self.cur_token_is(IDENT):
+                    names.append(Identifier(self.cur_token.literal))
+                if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON) or self.peek_token_is(COLON):
+                    self.next_token()
+                    self.next_token()
+                    continue
+                self.next_token()
+            if not self.cur_token_is(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Unterminated export(...)")
+                return None
+
+        else:
+            # Single identifier or comma/sep separated list without braces
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'export'")
+                return None
+            names.append(Identifier(self.cur_token.literal))
+            # allow subsequent separators
+            while self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON) or self.peek_token_is(COLON):
+                self.next_token()
+                if not self.expect_peek(IDENT):
+                    self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after separator in export")
+                    return None
+                names.append(Identifier(self.cur_token.literal))
+
+        # After names, optionally parse `to` allowed_files and `with` permission
         allowed_files = []
         if self.peek_token_is(IDENT) and self.peek_token.literal == "to":
             self.next_token()
@@ -751,7 +804,22 @@ class UltimateParser:
             else:
                 self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected permission string after 'with'")
                 return None
-        return ExportStatement(name=name, allowed_files=allowed_files, permission=permission)
+
+        return ExportStatement(names=names, allowed_files=allowed_files, permission=permission)
+
+    def parse_seal_statement(self):
+        """Parse seal statement to mark a variable/object as immutable.
+        
+        Syntax: seal identifier
+        """
+        token = self.cur_token
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'seal'")
+            return None
+        
+        target = Identifier(self.cur_token.literal)
+        return SealStatement(target=target)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):
@@ -1115,177 +1183,164 @@ class UltimateParser:
     def parse_block_statement(self):
         return self.parse_brace_block()
 
-    def parse_expression_list(self, end):
-        # =====================================================
-        # NEW STATEMENT PARSERS: ENTITY, VERIFY, CONTRACT, PROTECT
-        # =====================================================
-
-        def parse_entity_statement(self):
-            """Parse entity declaration
-        
-            entity User {
-                name: string,
-                email: string,
-                role: string = "user"
-            }
-            """
-            from .zexus_ast import EntityStatement
-        
-            if not self.expect_peek(IDENT):
-                return None
-        
-            entity_name = Identifier(self.cur_token.literal)
-        
-            if not self.expect_peek(LBRACE):
-                return None
-        
-            properties = []
-            while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-                self.next_token()
-                if self.cur_token_is(RBRACE):
-                    break
-            
-                # Parse property: name: type [= default]
-                if self.cur_token_is(IDENT):
-                    prop_name = self.cur_token.literal
-                
-                    if self.peek_token_is(COLON):
-                        self.next_token()
-                        self.next_token()
-                        prop_type = self.cur_token.literal
-                    
-                        default_value = None
-                        if self.peek_token_is(ASSIGN):
-                            self.next_token()
-                            self.next_token()
-                            default_value = self.parse_expression(LOWEST)
-                    
-                        properties.append({
-                            "name": prop_name,
-                            "type": prop_type,
-                            "default_value": default_value
-                        })
-                
-                    if self.peek_token_is(COMMA):
-                        self.next_token()
-        
-            self.expect_peek(RBRACE)
-            return EntityStatement(entity_name, properties)
-
-        def parse_verify_statement(self):
-            """Parse verify statement
-        
-            verify(transfer_funds, [
-                check_authenticated(),
-                check_balance(amount)
-            ])
-            """
-            from .zexus_ast import VerifyStatement
-        
-            if not self.expect_peek(LPAREN):
-                return None
-        
+    def parse_entity_statement(self):
+        """Parse entity declaration
+    
+        entity User {
+            name: string,
+            email: string,
+            role: string = "user"
+        }
+        """
+        if not self.expect_peek(IDENT):
+            return None
+    
+        entity_name = Identifier(self.cur_token.literal)
+    
+        if not self.expect_peek(LBRACE):
+            return None
+    
+        properties = []
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
             self.next_token()
-            target = self.parse_expression(LOWEST)
+            if self.cur_token_is(RBRACE):
+                break
         
-            if not self.expect_peek(COMMA):
-                return None
-        
-            self.next_token()
-            conditions = []
-        
-            if self.cur_token_is(LBRACKET):
-                conditions = self.parse_expression_list(RBRACKET)
-            else:
-                conditions.append(self.parse_expression(LOWEST))
-        
-            if not self.expect_peek(RPAREN):
-                return None
-        
-            return VerifyStatement(target, conditions)
-
-        def parse_contract_statement(self):
-            """Parse contract declaration
-        
-            contract Token {
-                persistent storage balances: Map<Address, integer>
+            # Parse property: name: type [= default]
+            if self.cur_token_is(IDENT):
+                prop_name = self.cur_token.literal
             
-                action transfer(to: Address, amount: integer) -> boolean { ... }
-            }
-            """
-            from .zexus_ast import ContractStatement
-        
-            if not self.expect_peek(IDENT):
-                return None
-        
-            contract_name = Identifier(self.cur_token.literal)
-        
-            if not self.expect_peek(LBRACE):
-                return None
-        
-            storage_vars = []
-            actions = []
-        
-            while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-                self.next_token()
-            
-                if self.cur_token_is(RBRACE):
-                    break
-            
-                # Check for persistent storage declaration
-                if self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
+                if self.peek_token_is(COLON):
                     self.next_token()
-                    if self.cur_token_is(IDENT) and self.cur_token.literal == "storage":
+                    self.next_token()
+                    prop_type = self.cur_token.literal
+                
+                    default_value = None
+                    if self.peek_token_is(ASSIGN):
                         self.next_token()
-                        if self.cur_token_is(IDENT):
-                            storage_name = self.cur_token.literal
-                            storage_vars.append({"name": storage_name})
+                        self.next_token()
+                        default_value = self.parse_expression(LOWEST)
+                
+                    properties.append({
+                        "name": prop_name,
+                        "type": prop_type,
+                        "default_value": default_value
+                    })
             
-                # Check for action definition
-                elif self.cur_token_is(ACTION):
-                    action = self.parse_action_statement()
-                    if action:
-                        actions.append(action)
-        
-            self.expect_peek(RBRACE)
-            return ContractStatement(contract_name, storage_vars, actions)
+                if self.peek_token_is(COMMA):
+                    self.next_token()
+    
+        self.expect_peek(RBRACE)
+        return EntityStatement(entity_name, properties)
 
-        def parse_protect_statement(self):
-            """Parse protect statement
-        
-            protect(app, {
-                rate_limit: 100,
-                auth_required: true,
-                require_https: true
-            })
-            """
-            from .zexus_ast import ProtectStatement
-        
-            if not self.expect_peek(LPAREN):
-                return None
-        
-            self.next_token()
-            target = self.parse_expression(LOWEST)
-        
-            if not self.expect_peek(COMMA):
-                return None
-        
-            self.next_token()
-            rules = self.parse_expression(LOWEST)  # Expect a map literal
-        
-            enforcement_level = "strict"
-            if self.peek_token_is(COMMA):
-                self.next_token()
-                self.next_token()
-                if self.cur_token_is(STRING):
-                    enforcement_level = self.cur_token.literal
-        
-            if not self.expect_peek(RPAREN):
-                return None
-        
-            return ProtectStatement(target, rules, enforcement_level)
+    def parse_verify_statement(self):
+        """Parse verify statement
+    
+        verify(transfer_funds, [
+            check_authenticated(),
+            check_balance(amount)
+        ])
+        """
+        if not self.expect_peek(LPAREN):
+            return None
+    
+        self.next_token()
+        target = self.parse_expression(LOWEST)
+    
+        if not self.expect_peek(COMMA):
+            return None
+    
+        self.next_token()
+        conditions = []
+    
+        if self.cur_token_is(LBRACKET):
+            conditions = self.parse_expression_list(RBRACKET)
+        else:
+            conditions.append(self.parse_expression(LOWEST))
+    
+        if not self.expect_peek(RPAREN):
+            return None
+    
+        return VerifyStatement(target, conditions)
 
-        def parse_expression_list(self, end):
+    def parse_contract_statement(self):
+        """Parse contract declaration
+    
+        contract Token {
+            persistent storage balances: Map<Address, integer>
+        
+            action transfer(to: Address, amount: integer) -> boolean { ... }
+        }
+        """
+        if not self.expect_peek(IDENT):
+            return None
+    
+        contract_name = Identifier(self.cur_token.literal)
+    
+        if not self.expect_peek(LBRACE):
+            return None
+    
+        storage_vars = []
+        actions = []
+    
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            self.next_token()
+        
+            if self.cur_token_is(RBRACE):
+                break
+        
+            # Check for persistent storage declaration
+            if self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
+                self.next_token()
+                if self.cur_token_is(IDENT) and self.cur_token.literal == "storage":
+                    self.next_token()
+                    if self.cur_token_is(IDENT):
+                        storage_name = self.cur_token.literal
+                        storage_vars.append({"name": storage_name})
+        
+            # Check for action definition
+            elif self.cur_token_is(ACTION):
+                action = self.parse_action_statement()
+                if action:
+                    actions.append(action)
+    
+        self.expect_peek(RBRACE)
+        return ContractStatement(contract_name, storage_vars, actions)
+
+    def parse_protect_statement(self):
+        """Parse protect statement
+    
+        protect(app, {
+            rate_limit: 100,
+            auth_required: true,
+            require_https: true
+        })
+        """
+        if not self.expect_peek(LPAREN):
+            return None
+    
+        self.next_token()
+        target = self.parse_expression(LOWEST)
+    
+        if not self.expect_peek(COMMA):
+            return None
+    
+        self.next_token()
+        rules = self.parse_expression(LOWEST)  # Expect a map literal
+    
+        enforcement_level = "strict"
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            if self.cur_token_is(STRING):
+                enforcement_level = self.cur_token.literal
+    
+        if not self.expect_peek(RPAREN):
+            return None
+    
+        return ProtectStatement(target, rules, enforcement_level)
+
+    def parse_expression_list(self, end):
         elements = []
         if self.peek_token_is(end):
             self.next_token()

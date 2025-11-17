@@ -135,9 +135,13 @@ class EntityInstance:
         return self.data.get(property_name)
         
     def set(self, property_name, value):
-        """Set property value"""
+        """Set property value (prevent modification if property is sealed)"""
         if property_name not in self.entity_def.get_all_properties():
             raise ValueError(f"Unknown property: {property_name}")
+        existing = self.data.get(property_name)
+        # Avoid importing SealedObject here to prevent circular imports; use name-based check
+        if existing is not None and existing.__class__.__name__ == 'SealedObject':
+            raise ValueError(f"Cannot modify sealed property: {property_name}")
         self.data[property_name] = value
         
     def to_dict(self):
@@ -473,6 +477,41 @@ class CachePolicy:
 
 
 # ===============================================
+# SEALING / IMMUTABILITY
+# ===============================================
+
+class SealedObject:
+    """Wraps an object and prevents mutation (assignments or property writes).
+
+    This is a lightweight runtime wrapper. The evaluator enforces immutability by
+    checking for instances of SealedObject before allowing assignments.
+    """
+
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value
+
+    def inspect(self):
+        # Delegate to inner object's inspect if available
+        if hasattr(self._value, 'inspect'):
+            return self._value.inspect()
+        return str(self._value)
+
+    def type(self):
+        # Delegate to inner object's type() if available, otherwise use its class name
+        try:
+            inner_type = self._value.type() if hasattr(self._value, 'type') else type(self._value).__name__
+        except Exception:
+            inner_type = type(self._value).__name__
+        return f"Sealed<{inner_type}>"
+
+    def __repr__(self):
+        return f"SealedObject({repr(self._value)})"
+
+
+# ===============================================
 # RATE LIMITING
 # ===============================================
 
@@ -551,3 +590,8 @@ def export_security_to_environment(env):
     env.set("entity", Builtin(make_entity, "entity"))
     env.set("verify", Builtin(make_verify, "verify"))
     env.set("contract", Builtin(deploy_contract, "contract"))
+    # sealing: make a variable/object immutable
+    def make_seal(value):
+        return SealedObject(value)
+
+    env.set("seal", Builtin(make_seal, "seal"))

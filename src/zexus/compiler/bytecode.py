@@ -19,7 +19,7 @@ New opcodes introduced/used:
 This generator focuses on action/function lowering and call sites.
 """
 from typing import List, Any, Dict, Tuple
-from ..zexus_ast import (
+from .zexus_ast import (
     Program, LetStatement, ExpressionStatement, PrintStatement, ReturnStatement,
     IfStatement, WhileStatement, Identifier, IntegerLiteral, StringLiteral,
     Boolean as AST_Boolean, InfixExpression, PrefixExpression, CallExpression,

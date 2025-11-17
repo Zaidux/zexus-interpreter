@@ -133,6 +133,7 @@ class Lexer:
             "in": IN,
             "screen": SCREEN,
             "action": ACTION,  # MAKE SURE THIS LINE EXISTS AND IS CORRECT
+            "seal": SEAL,
         }
         return keywords.get(ident, IDENT)
 

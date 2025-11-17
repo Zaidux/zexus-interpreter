@@ -91,6 +91,7 @@ ENTITY = "ENTITY"              # Entity declaration: entity User { ... }
 VERIFY = "VERIFY"              # Verify checks: verify(action_name, ...conditions)
 CONTRACT = "CONTRACT"          # Smart contracts: contract Token { ... }
 PROTECT = "PROTECT"            # Protection guardrails: protect(action, rules)
+SEAL = "SEAL"                  # Seal objects: seal identifier
 
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)

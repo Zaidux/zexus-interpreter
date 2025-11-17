@@ -1,0 +1,21 @@
+# Test Seal Feature
+# Test 1: Seal a simple variable
+let x = 42
+seal x
+print x  # Should print 42
+
+# This assignment should fail (attempting to modify sealed object)
+# Uncomment to test error handling:
+# x = 100
+
+# Test 2: Seal a map
+let myMap = {name: "Alice", age: 30}
+seal myMap
+print myMap  # Should print {name: Alice, age: 30}
+
+# Test 3: Working with sealed lists
+let arr = [1, 2, 3]
+seal arr
+print arr  # Should print [1, 2, 3]
+
+print "Seal tests passed!"

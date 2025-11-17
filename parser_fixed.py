@@ -79,6 +79,8 @@ class Parser:
             return self.parse_from_statement()
         elif self.cur_token_is(EXPORT):
             return self.parse_export_statement()
+        elif self.cur_token_is(SEAL):
+            return self.parse_seal_statement()
         else:
             return self.parse_expression_statement()
 
@@ -434,3 +436,14 @@ class Parser:
             return None
             
         return ExportStatement(declaration=declaration)
+
+    def parse_seal_statement(self):
+        # Handle: seal <identifier | property-access>
+        stmt = SealStatement(target=None)
+        # move to token after 'seal'
+        self.next_token()
+        # parse target expression (typically an identifier or property access)
+        stmt.target = self.parse_expression(LOWEST)
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        return stmt

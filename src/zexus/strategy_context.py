@@ -507,17 +507,36 @@ class ContextStackParser:
             # EXPORT statement heuristic
             elif token.type == EXPORT:
                 j = i + 1
-                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
-                    j += 1
+                # if the export uses a brace block, include the whole brace section
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    brace_nest = 0
+                    while j < len(tokens):
+                        if tokens[j].type == LBRACE:
+                            brace_nest += 1
+                        elif tokens[j].type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1
+                                break
+                        j += 1
+                else:
+                    while j < len(tokens) and tokens[j].type not in [SEMICOLON]:
+                        j += 1
 
                 export_tokens = tokens[i:j]
                 print(f"    📝 Found export statement: {[t.literal for t in export_tokens]}")
 
-                export_name = None
-                if len(export_tokens) >= 2 and export_tokens[1].type == IDENT:
-                    export_name = Identifier(export_tokens[1].literal)
+                # Extract identifier names from the token slice (tolerant)
+                names = []
+                k = 1
+                while k < len(export_tokens):
+                    tk = export_tokens[k]
+                    # stop at 'to' or 'with' clause
+                    if tk.type == IDENT and tk.literal not in ('to', 'with'):
+                        names.append(Identifier(tk.literal))
+                    k += 1
 
-                statements.append(ExportStatement(export_name))
+                statements.append(ExportStatement(names=names))
                 i = j
                 continue
 

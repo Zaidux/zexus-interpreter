@@ -1,0 +1,122 @@
+"""Compare top-level symbols between the interpreter (`evaluator.py`) and
+the compiler package (`src/zexus/compiler`) and print a simple report.
+
+This script is intentionally conservative: it only considers top-level
+FunctionDef, ClassDef, Assign/AnnAssign targets and simple name exports.
+It helps quickly discover API surface differences so we can decide what the
+compiler lacks compared to the interpreter.
+"""
+import ast
+import os
+import sys
+
+
+def collect_top_level_symbols(path):
+    """Return a set of top-level symbol names defined in the Python file at path."""
+    symbols = set()
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            src = f.read()
+    except Exception as e:
+        print(f"ERROR: could not read {path}: {e}")
+        return symbols
+
+    try:
+        tree = ast.parse(src, filename=path)
+    except SyntaxError as e:
+        print(f"ERROR: could not parse {path}: {e}")
+        return symbols
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    symbols.add(target.id)
+                elif isinstance(target, ast.Tuple):
+                    for elt in target.elts:
+                        if isinstance(elt, ast.Name):
+                            symbols.add(elt.id)
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name):
+                symbols.add(target.id)
+    return symbols
+
+
+def collect_package_symbols(dirpath):
+    """Walk dirpath and collect top-level symbols from all .py files."""
+    pkg_symbols = {}
+    for root, dirs, files in os.walk(dirpath):
+        for fn in files:
+            if not fn.endswith('.py'):
+                continue
+            if fn.startswith('__') and fn.endswith('.py'):
+                # still include __init__ possibly
+                pass
+            full = os.path.join(root, fn)
+            rel = os.path.relpath(full, dirpath)
+            pkg_symbols[rel] = collect_top_level_symbols(full)
+    return pkg_symbols
+
+
+def main():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    interp_path = os.path.join(repo_root, 'src', 'zexus', 'evaluator.py')
+    compiler_dir = os.path.join(repo_root, 'src', 'zexus', 'compiler')
+
+    if not os.path.exists(interp_path):
+        print('Interpreter file not found:', interp_path)
+        sys.exit(2)
+    if not os.path.isdir(compiler_dir):
+        print('Compiler directory not found:', compiler_dir)
+        sys.exit(2)
+
+    interp_symbols = collect_top_level_symbols(interp_path)
+    compiler_pkg = collect_package_symbols(compiler_dir)
+
+    # union all compiler symbols
+    compiler_symbols_union = set()
+    for fn, syms in compiler_pkg.items():
+        compiler_symbols_union.update(syms)
+
+    only_in_interp = sorted(interp_symbols - compiler_symbols_union)
+    only_in_compiler = sorted(compiler_symbols_union - interp_symbols)
+    common = sorted(interp_symbols & compiler_symbols_union)
+
+    print('\nComparison report: interpreter vs compiler package')
+    print('Interpreter file: ', interp_path)
+    print('Compiler package dir:', compiler_dir)
+    print('\nCounts:')
+    print('  interpreter symbols:', len(interp_symbols))
+    print('  compiler union symbols:', len(compiler_symbols_union))
+    print('\nOnly in interpreter ({}):'.format(len(only_in_interp)))
+    for name in only_in_interp:
+        print('   -', name)
+
+    print('\nOnly in compiler ({}):'.format(len(only_in_compiler)))
+    for name in only_in_compiler[:200]:
+        print('   -', name)
+
+    print('\nCommon symbols ({}):'.format(len(common)))
+    for name in common[:200]:
+        print('   -', name)
+
+    print('\nPer-file compiler symbol breakdown:')
+    for fn, syms in sorted(compiler_pkg.items()):
+        print(f'  {fn}: {len(syms)} symbols')
+
+    # Quick hints
+    if only_in_interp:
+        print("""
+HINT: The interpreter defines top-level symbols that are not present in the compiler package.
+Start by inspecting the names listed above to decide which functionality should be implemented
+or refactored into the compiler. This tool is conservative (top-level only) and may miss
+runtime/exported symbols. For a deeper comparison we can compare call-sites, used imports,
+or run tests that exercise both codepaths.
+""")
+
+
+if __name__ == '__main__':
+    main()

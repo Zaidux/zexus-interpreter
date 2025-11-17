@@ -38,5 +38,3 @@ def test_parsing_cases(label, code, expected_type, advanced):
     assert isinstance(value, expected_type), (
         f"For {label} expected value type {expected_type.__name__}, got {type(value).__name__} (advanced={advanced})"
     )
-
-*** End File

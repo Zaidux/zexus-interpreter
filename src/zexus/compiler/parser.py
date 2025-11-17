@@ -327,6 +327,13 @@ class ProductionParser:
         return elements
 
     # Statement parsing methods
+    def parse_expression_statement(self):
+        """Parse expression as a statement"""
+        stmt = ExpressionStatement(expression=self.parse_expression(LOWEST))
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        return stmt
+
     def parse_return_statement(self):
         stmt = ReturnStatement(return_value=None)
         self.next_token()
@@ -476,6 +483,143 @@ class ProductionParser:
         self.next_token()
         value = self.parse_expression(LOWEST)
         return AwaitExpression(expression=value)
+
+    def parse_if_expression(self):
+        """Parse if expression: if (condition) { consequence } else { alternative }"""
+        expression = IfExpression(condition=None, consequence=None, alternative=None)
+
+        if not self.expect_peek(LPAREN):
+            return None
+
+        self.next_token()
+        expression.condition = self.parse_expression(LOWEST)
+
+        if not self.expect_peek(RPAREN):
+            return None
+
+        if not self.expect_peek(LBRACE):
+            return None
+
+        expression.consequence = self.parse_block()
+
+        if self.peek_token_is(ELSE):
+            self.next_token()
+            if not self.expect_peek(LBRACE):
+                return None
+            expression.alternative = self.parse_block()
+
+        return expression
+
+    def parse_embedded_literal(self):
+        """Parse embedded code block: @{ language ... code ... }"""
+        if not self.expect_peek(LBRACE):
+            return None
+
+        self.next_token()
+        code_lines = []
+        
+        # Read until closing brace
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            code_lines.append(self.cur_token.literal)
+            self.next_token()
+        
+        if not self.cur_token_is(RBRACE):
+            self.errors.append("Expected } after embedded code block")
+            return None
+        
+        self.next_token()  # Skip closing brace
+        
+        code_content = ' '.join(code_lines)
+        lines = code_content.strip().split('\n')
+        
+        if not lines:
+            self.errors.append("Empty embedded code block")
+            return None
+        
+        # First line is language, rest is code
+        language_line = lines[0].strip() if lines else "unknown"
+        language = language_line if language_line else "unknown"
+        code = '\n'.join(lines[1:]).strip() if len(lines) > 1 else ""
+        
+        return EmbeddedLiteral(language=language, code=code)
+
+    def parse_lambda_expression(self):
+        """Parse lambda/arrow function: x => body or lambda(x): body"""
+        token = self.cur_token
+        parameters = []
+
+        self.next_token()
+
+        if self.cur_token_is(LPAREN):
+            self.next_token()
+            parameters = self.parse_parameter_list()
+            if not self.expect_peek(RPAREN):
+                return None
+        elif self.cur_token_is(IDENT):
+            # Single parameter without parens
+            parameters = [Identifier(self.cur_token.literal)]
+            self.next_token()
+
+        # Handle arrow or colon separator
+        if self.cur_token_is(COLON):
+            self.next_token()
+        elif self.cur_token_is(LAMBDA):  # => token
+            self.next_token()
+        elif self.cur_token_is(MINUS) and self.peek_token_is(GT):
+            self.next_token()  # Skip -
+            self.next_token()  # Skip >
+
+        body = self.parse_expression(LOWEST)
+        return LambdaExpression(parameters=parameters, body=body)
+
+    def parse_action_literal(self):
+        """Parse action literal: action (params) { body } or action (params) => expr"""
+        if not self.expect_peek(LPAREN):
+            return None
+            
+        parameters = self.parse_parameter_list()
+        if parameters is None:
+            return None
+
+        # Expect closing paren
+        if not self.expect_peek(RPAREN):
+            return None
+        
+        self.next_token()
+
+        # Action body can be a block or expression
+        if self.cur_token_is(LBRACE):
+            body = self.parse_block()
+        else:
+            # Expression body (shorthand)
+            body = self.parse_expression(LOWEST)
+        
+        action_lit = ActionLiteral(parameters=parameters, body=body)
+        return action_lit
+
+    def parse_parameter_list(self):
+        """Parse parameter list for functions"""
+        parameters = []
+        
+        if self.cur_token_is(RPAREN):
+            return parameters
+        
+        while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT):
+                parameters.append(Identifier(self.cur_token.literal))
+                self.next_token()
+            else:
+                break
+            
+            # Handle comma separator
+            if self.cur_token_is(COMMA):
+                self.next_token()
+            elif self.cur_token_is(RPAREN):
+                break
+            else:
+                break
+        
+        return parameters
 
     def parse_event_declaration(self):
         if not self.expect_peek(IDENT):

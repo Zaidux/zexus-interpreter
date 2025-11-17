@@ -361,6 +361,7 @@ class Lexer:
             "verify": VERIFY,
             "contract": CONTRACT,
             "protect": PROTECT,
+            "seal": SEAL,               # NEW: Seal keyword for immutable objects
             # Advanced features
             "middleware": "MIDDLEWARE",
             "auth": "AUTH",
