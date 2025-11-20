@@ -456,6 +456,15 @@ def array_filter(array_obj, lambda_fn, env=None):
 
     return List(filtered_elements)
 
+# DEBUG: Check what export methods are available
+debug_log("Environment export capabilities", {
+    'has_export_method': hasattr(env, 'export'),
+    'has_exports_dict': hasattr(env, 'exports'),
+    'has__exports': hasattr(env, '_exports'),
+    'has_exported_names': hasattr(env, 'exported_names'),
+    'env_type': type(env).__name__
+})
+
 # NEW: Export system
 def eval_export_statement(node, env):
     """Handle export statements - FIXED VERSION"""
