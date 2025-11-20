@@ -41,9 +41,14 @@ class Lexer:
     def next_token(self):
         self.skip_whitespace()
 
-        # Skip single line comments
+        # CRITICAL FIX: Skip single line comments (both # and // styles)
         if self.ch == '#' and self.peek_char() != '{':
             self.skip_comment()
+            return self.next_token()
+        
+        # NEW: Handle // style comments
+        if self.ch == '/' and self.peek_char() == '/':
+            self.skip_double_slash_comment()
             return self.next_token()
 
         tok = None
@@ -218,9 +223,15 @@ class Lexer:
             tok.line = current_line
             tok.column = current_column
         elif self.ch == '/':
-            tok = Token(SLASH, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            # Check if this is division or comment
+            if self.peek_char() == '/':
+                # It's a // comment, handle above
+                self.skip_double_slash_comment()
+                return self.next_token()
+            else:
+                tok = Token(SLASH, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '%':
             tok = Token(MOD, self.ch)
             tok.line = current_line
@@ -280,6 +291,18 @@ class Lexer:
         return char
 
     def skip_comment(self):
+        """Skip # style comments"""
+        while self.ch != '\n' and self.ch != "":
+            self.read_char()
+        self.skip_whitespace()
+
+    def skip_double_slash_comment(self):
+        """Skip // style comments"""
+        # Consume the first '/'
+        self.read_char()
+        # Consume the second '/'
+        self.read_char()
+        # Skip until end of line
         while self.ch != '\n' and self.ch != "":
             self.read_char()
         self.skip_whitespace()
