@@ -49,8 +49,7 @@ This exports the symbol `pi` from the module, making it available to importers.
 let version = "1.0"
 let author = "Zexus Labs"
 
-export version
-export author
+export { version, author }
 ```
 
 Multiple `export` statements can be used to export different symbols.
@@ -75,14 +74,12 @@ The module system handles circular imports gracefully:
 // file: a.zx
 let a = 1
 use "./b.zx"
-export a
-export b
+export(a, b)
 
 // file: b.zx
 let b = 2
 use "./a.zx"
-export b
-export a
+export b,a
 ```
 
 When `a.zx` uses `b.zx`, which in turn uses `a.zx`, the system prevents infinite recursion by:
@@ -103,8 +100,7 @@ Both modules are eventually fully evaluated and their exports are accessible in 
 let pi = 3.14159
 let e = 2.71828
 
-export pi
-export e
+export(pi, e)
 ```
 
 **main.zx:**
@@ -153,8 +149,7 @@ use "./core.zx"
 
 let extra = "feature"
 
-export version  // Re-export from core
-export extra    // Export local symbol
+export { version, extra }
 ```
 
 **main.zx:**
