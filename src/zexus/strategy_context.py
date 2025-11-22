@@ -35,6 +35,9 @@ class ContextStackParser:
             'print_statement': self._parse_print_statement_block,
             'assignment_statement': self._parse_assignment_statement,
             'function_call_statement': self._parse_function_call_statement,
+            # FIX 3 & 5: New Handlers
+            'entity_statement': self._parse_entity_statement_block,
+            'USE': self._parse_use_statement_block,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -176,16 +179,16 @@ class ContextStackParser:
         value_tokens = []
         nesting = 0
         j = equals_index + 1
-        
+
         while j < len(tokens):
             t = tokens[j]
-            
+
             # Track nested structures
             if t.type in {LPAREN, LBRACE, LBRACKET}:
                 nesting += 1
             elif t.type in {RPAREN, RBRACE, RBRACKET}:
                 nesting -= 1
-            
+
             # Only check statement boundaries when not in nested structure
             if nesting == 0:
                 # Stop at explicit terminators
@@ -196,17 +199,17 @@ class ContextStackParser:
                     prev = tokens[j-1] if j > 0 else None
                     if not (prev and prev.type == DOT):  # Allow if part of method chain
                         break
-                        
+
             value_tokens.append(t)
             j += 1
-            
+
         print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
         # Parse the value expression
         if not value_tokens:
             print("  ❌ No value tokens found")
             return None
-            
+
         # Special case: map literal
         if value_tokens[0].type == LBRACE:
             print("  🗺️ Detected map literal")
@@ -294,6 +297,129 @@ class ContextStackParser:
         call_expression = CallExpression(Identifier(function_name), arguments)
         return ExpressionStatement(call_expression)
 
+    # FIX 3: Entity Statement Parser
+    def _parse_entity_statement_block(self, block_info, all_tokens):
+        """Parse entity declaration block"""
+        print("🔧 [Context] Parsing entity statement")
+        tokens = block_info['tokens']
+        
+        if len(tokens) < 4:  # entity Name { ... }
+            return None
+        
+        entity_name = tokens[1].literal if tokens[1].type == IDENT else "Unknown"
+        print(f"  📝 Entity: {entity_name}")
+        
+        # Parse properties between braces
+        properties = []
+        brace_start = -1
+        brace_end = -1
+        brace_count = 0
+        
+        for i, token in enumerate(tokens):
+            if token.type == LBRACE:
+                if brace_count == 0:
+                    brace_start = i
+                brace_count += 1
+            elif token.type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    brace_end = i
+                    break
+        
+        if brace_start != -1 and brace_end != -1:
+            # Parse properties inside braces
+            i = brace_start + 1
+            while i < brace_end:
+                if tokens[i].type == IDENT:
+                    prop_name = tokens[i].literal
+                    
+                    # Look for colon and type
+                    if i + 1 < brace_end and tokens[i + 1].type == COLON:
+                        if i + 2 < brace_end:
+                            prop_type = tokens[i + 2].literal
+                            properties.append({
+                                "name": prop_name,
+                                "type": prop_type
+                            })
+                            print(f"  📝 Property: {prop_name}: {prop_type}")
+                            i += 3
+                            continue
+                
+                i += 1
+        
+        return EntityStatement(
+            name=Identifier(entity_name),
+            properties=properties
+        )
+
+    # FIX 5: Enhanced Use Statement Parsers
+    def _parse_use_statement_block(self, block_info, all_tokens):
+        """Enhanced use statement parser that handles both syntax styles"""
+        tokens = block_info['tokens']
+        print(f"    📝 Found use statement: {[t.literal for t in tokens]}")
+        
+        # Check for brace syntax: use { Name1, Name2 } from './module.zx'
+        has_braces = any(t.type == LBRACE for t in tokens)
+        
+        if has_braces:
+            return self._parse_use_with_braces(tokens)
+        else:
+            return self._parse_use_simple(tokens)
+
+    def _parse_use_with_braces(self, tokens):
+        """Parse use { names } from 'path' syntax"""
+        names = []
+        file_path = None
+        
+        # Find the brace section
+        brace_start = -1
+        brace_end = -1
+        for i, token in enumerate(tokens):
+            if token.type == LBRACE:
+                brace_start = i
+                break
+        
+        if brace_start != -1:
+            # Extract names from inside braces
+            i = brace_start + 1
+            while i < len(tokens) and tokens[i].type != RBRACE:
+                if tokens[i].type == IDENT:
+                    names.append(Identifier(tokens[i].literal))
+                i += 1
+            brace_end = i
+        
+        # Find 'from' and file path
+        if brace_end != -1 and brace_end + 1 < len(tokens):
+            for i in range(brace_end + 1, len(tokens)):
+                if tokens[i].type == IDENT and tokens[i].literal == 'from':
+                    if i + 1 < len(tokens) and tokens[i + 1].type == STRING:
+                        file_path = tokens[i + 1].literal
+                    break
+        
+        return UseStatement(
+            file_path=file_path or "",
+            names=names,
+            is_named_import=True
+        )
+
+    def _parse_use_simple(self, tokens):
+        """Parse simple use 'path' [as alias] syntax"""
+        file_path = None
+        alias = None
+        
+        for i, token in enumerate(tokens):
+            if token.type == STRING:
+                file_path = token.literal
+            elif token.type == IDENT and token.literal == 'as':
+                if i + 1 < len(tokens) and tokens[i + 1].type == IDENT:
+                    alias = tokens[i + 1].literal
+        
+        return UseStatement(
+            file_path=file_path or "",
+            alias=alias,
+            is_named_import=False
+        )
+
     def _parse_statement_block_context(self, block_info, all_tokens):
         """Parse standalone statement blocks - use direct parsers where available"""
         print(f"🔧 [Context] Parsing statement block: {block_info.get('subtype', 'unknown')}")
@@ -311,6 +437,10 @@ class ContextStackParser:
             return self._parse_assignment_statement(block_info, all_tokens)
         elif subtype == 'try_catch_statement':
             return self._parse_try_catch_statement(block_info, all_tokens)
+        elif subtype == 'entity_statement':
+            return self._parse_entity_statement_block(block_info, all_tokens)
+        elif subtype == 'USE':
+            return self._parse_use_statement_block(block_info, all_tokens)
         else:
             return self._parse_generic_statement_block(block_info, all_tokens)
 
@@ -414,7 +544,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
+        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY}
         while i < len(tokens):
             token = tokens[i]
 
@@ -478,29 +608,27 @@ class ContextStackParser:
 
                 i = j
 
-            # USE statement heuristic
+            # USE statement heuristic (fallback for non-structural detection)
             elif token.type == USE:
+                # This is kept for backward compatibility or nested uses
+                # The structural analyzer should now catch top-level uses
                 j = i + 1
-                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
+                while j < len(tokens) and tokens[j].type not in [SEMICOLON]:
+                    # Need to handle brace groups for complex uses
+                    if tokens[j].type == LBRACE:
+                        while j < len(tokens) and tokens[j].type != RBRACE:
+                            j += 1
                     j += 1
 
                 use_tokens = tokens[i:j]
-                print(f"    📝 Found use statement: {[t.literal for t in use_tokens]}")
+                print(f"    📝 Found use statement (heuristic): {[t.literal for t in use_tokens]}")
 
-                # Expect a string literal as module path
-                module_path = None
-                alias = None
-                if len(use_tokens) >= 2 and use_tokens[1].type == STRING:
-                    module_path = StringLiteral(use_tokens[1].literal)
-
-                # Look for 'as' alias pattern
-                for k in range(2, len(use_tokens)):
-                    if use_tokens[k].type == IDENT and use_tokens[k].literal == 'as' and k + 1 < len(use_tokens):
-                        if use_tokens[k+1].type == IDENT:
-                            alias = Identifier(use_tokens[k+1].literal)
-                        break
-
-                statements.append(UseStatement(module_path, alias))
+                # Reuse the sophisticated parser
+                block_info = {'tokens': use_tokens}
+                stmt = self._parse_use_statement_block(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+                
                 i = j
                 continue
 
@@ -537,6 +665,31 @@ class ContextStackParser:
                     k += 1
 
                 statements.append(ExportStatement(names=names))
+                i = j
+                continue
+            
+            # ENTITY statement heuristic
+            elif token.type == ENTITY:
+                j = i + 1
+                while j < len(tokens):
+                    # Skip until end of entity block (brace balanced)
+                    if tokens[j].type == LBRACE:
+                        nest = 1
+                        j += 1
+                        while j < len(tokens) and nest > 0:
+                            if tokens[j].type == LBRACE:
+                                nest += 1
+                            elif tokens[j].type == RBRACE:
+                                nest -= 1
+                            j += 1
+                        break
+                    j += 1
+                
+                entity_tokens = tokens[i:j]
+                block_info = {'tokens': entity_tokens}
+                stmt = self._parse_entity_statement_block(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
                 i = j
                 continue
 
@@ -800,7 +953,7 @@ class ContextStackParser:
             nonlocal i
             if i >= n:
                 return None
-            
+
             t = tokens[i]
             if t.type == LPAREN:  # Parenthesized expression
                 i += 1
@@ -816,7 +969,7 @@ class ContextStackParser:
                     inner = self._parse_expression(tokens[start:i-1])
                     return inner if inner else StringLiteral("")
                 return StringLiteral("")
-                
+
             elif t.type == IDENT:  # Identifier or function call
                 name = t.literal
                 i += 1
@@ -851,7 +1004,7 @@ class ContextStackParser:
                     return CallExpression(Identifier(name), args)
                 else:
                     return Identifier(name)
-                    
+
             # Literals
             else:
                 i += 1
@@ -865,17 +1018,17 @@ class ContextStackParser:
         # Repeatedly parse chained operations
         while i < n:
             t = tokens[i]
-            
+
             # Method call or property access
             if t.type == DOT and i + 1 < n:
                 i += 1  # Skip DOT
                 if i >= n:
                     break
-                    
+
                 name_token = tokens[i]
                 if name_token.type != IDENT:
                     break
-                    
+
                 i += 1  # Skip name
                 # Method call: expr.name(args)
                 if i < n and tokens[i].type == LPAREN:
@@ -964,56 +1117,6 @@ class ContextStackParser:
             break
 
         return current_expr
-
-        # Handle string concatenation or infix operators
-        for i, token in enumerate(tokens):
-            if token.type in {PLUS, MINUS, ASTERISK, SLASH, 
-                            LT, GT, EQ, NOT_EQ, LTE, GTE, LAMBDA}:
-                left_tokens = tokens[:i]
-                right_tokens = tokens[i + 1:]
-                # Arrow-style lambda: treat LAMBDA as a lambda operator where
-                # left side are parameters and right side is the body.
-                if token.type == LAMBDA:
-                    # Parse left as parameters (ident or parenthesized list)
-                    params = []
-                    if left_tokens:
-                        # single identifier
-                        if len(left_tokens) == 1 and left_tokens[0].type == IDENT:
-                            params = [Identifier(left_tokens[0].literal)]
-                        else:
-                            # try to parse as a list of idents (e.g. (a,b))
-                            first = left_tokens[0]
-                            if first.type == LBRACKET or first.type == LPAREN:
-                                inner = left_tokens[1:-1]
-                                # split on commas
-                                cur = []
-                                ids = []
-                                for t in inner:
-                                    if t.type == COMMA:
-                                        if cur and cur[0].type == IDENT:
-                                            ids.append(Identifier(cur[0].literal))
-                                        cur = []
-                                    else:
-                                        cur.append(t)
-                                if cur and cur[0].type == IDENT:
-                                    ids.append(Identifier(cur[0].literal))
-                                params = ids
-
-                    body_expr = self._parse_expression(right_tokens)
-                    return LambdaExpression(parameters=params, body=body_expr)
-
-                left_expr = self._parse_expression(left_tokens)
-                right_expr = self._parse_expression(right_tokens)
-                return InfixExpression(left_expr, token.literal, right_expr)
-
-        # Single token expressions
-        if len(tokens) == 1:
-            return self._parse_single_token_expression(tokens[0])
-
-        # Compound expressions (best-effort)
-        expr = self._parse_compound_expression(tokens)
-        print(f"  ✅ Parsed expression result: {type(expr).__name__ if expr else 'None'}")
-        return expr
 
     def _parse_single_token_expression(self, token):
         """Parse a single token into an expression"""
@@ -1178,14 +1281,14 @@ class ContextStackParser:
         arguments = []
         current_arg = []
         nesting_level = 0
-        
+
         for token in tokens:
             # Track nesting level for parentheses/braces
             if token.type in {LPAREN, LBRACE}:
                 nesting_level += 1
             elif token.type in {RPAREN, RBRACE}:
                 nesting_level -= 1
-            
+
             # Only treat commas as separators when not inside nested structures
             if token.type == COMMA and nesting_level == 0:
                 if current_arg:
@@ -1195,13 +1298,13 @@ class ContextStackParser:
                     current_arg = []
             else:
                 current_arg.append(token)
-        
+
         # Handle last argument
         if current_arg:
             arg_expr = self._parse_expression(current_arg)
             print(f"  📝 Parsed final argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
             arguments.append(arg_expr)
-        
+
         # Filter out None arguments by replacing with empty string literal
         arguments = [arg if arg is not None else StringLiteral("") for arg in arguments]
         print(f"  ✅ Parsed {len(arguments)} arguments total")
