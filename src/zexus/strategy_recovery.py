@@ -1,8 +1,6 @@
 # strategy_recovery.py
 from .zexus_token import *
-# FIX 4: Missing AST Import for EntityStatement
 from .zexus_ast import (
-    # ... existing imports ...
     EntityStatement,
     UseStatement,
     ExportStatement,
@@ -11,7 +9,6 @@ from .zexus_ast import (
     ExpressionStatement,
     Identifier,
     StringLiteral,
-    Token
 )
 
 class ErrorRecoveryEngine:
