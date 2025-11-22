@@ -1,4 +1,4 @@
-# object.py (COMPLETE PHASE 1 UPDATE)
+# src/zexus/object.py
 import time
 import random
 import json
@@ -10,7 +10,7 @@ class Object:
     def inspect(self):
         raise NotImplementedError("Subclasses must implement this method")
 
-# === EXISTING TYPES (unchanged) ===
+# === EXISTING TYPES ===
 class Integer(Object):
     def __init__(self, value): self.value = value
     def inspect(self): return str(self.value)
@@ -61,14 +61,9 @@ class Map(Object):
         return self.pairs.get(key)
 
     def set(self, key, value):
-        """Set value for key, blocking modification if key is sealed.
-
-        We avoid importing SealedObject to prevent circular imports; instead use
-        a runtime name-check of the wrapper class.
-        """
+        """Set value for key, blocking modification if key is sealed."""
         existing = self.pairs.get(key)
         if existing is not None and existing.__class__.__name__ == 'SealedObject':
-            # Raise EvaluationError (defined later in this module) to signal runtime error
             raise EvaluationError(f"Cannot modify sealed map key: {key}")
         self.pairs[key] = value
 
@@ -110,7 +105,48 @@ class Builtin(Object):
     def inspect(self): return f"<built-in function: {self.name}>"
     def type(self): return "BUILTIN"
 
-# === NEW: PHASE 1 UTILITY CLASSES ===
+# === ENTITY OBJECTS ===
+
+class EntityDefinition(Object):
+    def __init__(self, name, properties):
+        self.name = name
+        self.properties = properties  # List of property definitions
+        
+    def type(self):
+        return "ENTITY_DEF"
+        
+    def inspect(self):
+        props_str = ", ".join([f"{prop['name']}: {prop['type']}" for prop in self.properties])
+        return f"entity {self.name} {{ {props_str} }}"
+        
+    def create_instance(self, initial_values=None):
+        """Create an instance of this entity with optional initial values"""
+        return EntityInstance(self, initial_values or {})
+
+class EntityInstance(Object):
+    def __init__(self, entity_def, values):
+        self.entity_def = entity_def
+        self.values = values
+        
+    def type(self):
+        return "ENTITY_INSTANCE"
+        
+    def inspect(self):
+        values_str = ", ".join([f"{k}: {v.inspect()}" for k, v in self.values.items()])
+        return f"{self.entity_def.name} {{ {values_str} }}"
+        
+    def get(self, property_name):
+        return self.values.get(property_name, NULL)
+        
+    def set(self, property_name, value):
+        # Check if property exists in entity definition
+        prop_def = next((prop for prop in self.entity_def.properties if prop['name'] == property_name), None)
+        if prop_def:
+            self.values[property_name] = value
+            return TRUE
+        return FALSE
+
+# === UTILITY CLASSES ===
 
 class DateTime(Object):
     def __init__(self, timestamp=None):
