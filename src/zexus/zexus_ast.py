@@ -1,9 +1,12 @@
-# zexus_ast.py (ENHANCED WITH PHASE 1 NODES)
+# src/zexus/zexus_ast.py
 
 # Base classes
 class Node: 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
+
+    def __str__(self):
+        return self.__repr__()
 
 class Statement(Node): pass
 class Expression(Node): pass
@@ -68,13 +71,28 @@ class EmbeddedCodeStatement(Statement):
         return f"EmbeddedCodeStatement(name={self.name}, language={self.language})"
 
 class UseStatement(Statement):
-    def __init__(self, file_path, alias=None):
-        self.file_path = file_path  # StringLiteral for file path
+    def __init__(self, file_path, alias=None, names=None, is_named_import=False):
+        self.file_path = file_path  # StringLiteral or string path
         self.alias = alias          # Optional Identifier for alias
+        self.names = names or []    # List of Identifiers for named imports
+        self.is_named_import = is_named_import
 
     def __repr__(self):
+        if self.is_named_import:
+            names_list = [str(n.value if hasattr(n, 'value') else n) for n in self.names]
+            return f"UseStatement(file='{self.file_path}', names={names_list})"
         alias_str = f", alias={self.alias}" if self.alias else ""
         return f"UseStatement(file_path={self.file_path}{alias_str})"
+
+    def __str__(self):
+        if self.is_named_import:
+            names_str = ", ".join([str(n.value if hasattr(n, 'value') else n) for n in self.names])
+            return f"use {{ {names_str} }} from '{self.file_path}'"
+        elif self.alias:
+            alias_val = self.alias.value if hasattr(self.alias, 'value') else self.alias
+            return f"use '{self.file_path}' as {alias_val}"
+        else:
+            return f"use '{self.file_path}'"
 
 class FromStatement(Statement):
     def __init__(self, file_path, imports=None):
@@ -191,6 +209,9 @@ class Identifier(Expression):
 
     def __repr__(self):
         return f"Identifier('{self.value}')"
+    
+    def __str__(self):
+        return self.value
 
 class IntegerLiteral(Expression):
     def __init__(self, value): 
@@ -212,6 +233,9 @@ class StringLiteral(Expression):
 
     def __repr__(self):
         return f"StringLiteral('{self.value}')"
+    
+    def __str__(self):
+        return self.value
 
 class Boolean(Expression):
     def __init__(self, value): 
@@ -331,12 +355,17 @@ class EntityStatement(Statement):
     """
     def __init__(self, name, properties, parent=None, methods=None):
         self.name = name                    # Identifier
-        self.properties = properties        # List of {name, type, default_value}
+        self.properties = properties        # List of dicts: {name, type, default_value}
         self.parent = parent                # Optional parent entity (inheritance)
         self.methods = methods or []        # List of ActionStatement
 
     def __repr__(self):
         return f"EntityStatement(name={self.name}, properties={len(self.properties)})"
+
+    def __str__(self):
+        name_str = self.name.value if hasattr(self.name, 'value') else str(self.name)
+        props_str = ",\n    ".join([f"{prop['name']}: {prop['type']}" for prop in self.properties])
+        return f"entity {name_str} {{\n    {props_str}\n}}"
 
 
 class VerifyStatement(Statement):
