@@ -30,7 +30,7 @@ class StructuralAnalyzer:
         # helper sets for stopping heuristics (mirrors context parser)
         stop_types = {SEMICOLON, RBRACE}
         
-        # ADDED: CONTRACT, VERIFY, PROTECT, SEAL to match Parser capabilities
+        # Statement starters (keywords that begin a new statement)
         statement_starters = {
             LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
             SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL
@@ -48,7 +48,7 @@ class StructuralAnalyzer:
                 lit = getattr(tok, 'literal', None)
                 return (lit == '' or lit is None) and tok.type != STRING and tok.type != IDENT
 
-            # === IMPLEMENTED: Enhanced USE statement detection with braces ===
+            # === FIXED: Enhanced USE statement detection ===
             if t.type == USE:
                 start_idx = i
                 use_tokens = [t]
@@ -70,8 +70,12 @@ class StructuralAnalyzer:
                         i += 1
 
                     # Look for 'from' and file path
-                    while i < n and tokens[i].type != SEMICOLON and tokens[i].type != EOF:
-                        if tokens[i].type == IDENT and tokens[i].literal == 'from':
+                    # FIX: Stop if we hit a statement starter, semicolon, or EOF
+                    while i < n and tokens[i].type not in stop_types and tokens[i].type not in statement_starters:
+                        # FIX: Check for FROM token type OR identifier 'from'
+                        is_from = (tokens[i].type == FROM) or (tokens[i].type == IDENT and tokens[i].literal == 'from')
+                        
+                        if is_from:
                             # Include 'from' and the following string
                             use_tokens.append(tokens[i])
                             i += 1
@@ -84,7 +88,10 @@ class StructuralAnalyzer:
                             i += 1
                 else:
                     # Simple use 'path' syntax
-                    while i < n and tokens[i].type not in [SEMICOLON, EOF]:
+                    # FIX: Stop at statement starters to prevent greedy consumption
+                    while i < n and tokens[i].type not in stop_types and tokens[i].type != EOF:
+                        if tokens[i].type in statement_starters:
+                            break
                         use_tokens.append(tokens[i])
                         i += 1
 
@@ -150,7 +157,7 @@ class StructuralAnalyzer:
                 block_id += 1
                 continue
             
-            # ADDED: CONTRACT statement detection (Mirrors ENTITY logic)
+            # CONTRACT statement detection
             elif t.type == CONTRACT:
                 start_idx = i
                 contract_tokens = [t]
@@ -470,7 +477,6 @@ class StructuralAnalyzer:
             return results
 
         stop_types = {SEMICOLON, RBRACE}
-        # Added CONTRACT, VERIFY, PROTECT, SEAL here as well for inner blocks
         statement_starters = {
             LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
             SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL
@@ -494,7 +500,11 @@ class StructuralAnalyzer:
                 i += 1
                 brace_count = 0
 
+                # FIX: Check for statement starters here too to be safe
                 while i < n:
+                    if brace_count == 0 and tokens[i].type in statement_starters:
+                         break
+
                     use_tokens.append(tokens[i])
                     if tokens[i].type == LBRACE:
                         brace_count += 1
@@ -502,7 +512,8 @@ class StructuralAnalyzer:
                         brace_count -= 1
                         if brace_count == 0:
                             # Look for 'from' after closing brace
-                            if i + 1 < n and tokens[i + 1].type == IDENT and tokens[i + 1].literal == 'from':
+                            # FIX: Check FROM token type
+                            if i + 1 < n and (tokens[i + 1].type == FROM or (tokens[i + 1].type == IDENT and tokens[i + 1].literal == 'from')):
                                 use_tokens.append(tokens[i + 1])
                                 i += 1
                                 if i + 1 < n and tokens[i + 1].type == STRING:
