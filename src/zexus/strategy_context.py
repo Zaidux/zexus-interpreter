@@ -1,4 +1,4 @@
-# strategy_context.py (PRODUCTION-READY VERSION)
+# strategy_context.py (FIXED VERSION)
 from .zexus_token import *
 from .zexus_ast import *
 from .config import config as zexus_config
@@ -35,9 +35,10 @@ class ContextStackParser:
             'print_statement': self._parse_print_statement_block,
             'assignment_statement': self._parse_assignment_statement,
             'function_call_statement': self._parse_function_call_statement,
-            # FIX 3 & 5: New Handlers
             'entity_statement': self._parse_entity_statement_block,
             'USE': self._parse_use_statement_block,
+            # Added contract handling
+            'contract_statement': self._parse_contract_statement_block,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -112,6 +113,8 @@ class ContextStackParser:
 
         except Exception as e:
             print(f"⚠️ [Context] Error parsing {block_type}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
         finally:
             self.pop_context()
@@ -297,24 +300,23 @@ class ContextStackParser:
         call_expression = CallExpression(Identifier(function_name), arguments)
         return ExpressionStatement(call_expression)
 
-    # FIX 3: Entity Statement Parser
     def _parse_entity_statement_block(self, block_info, all_tokens):
         """Parse entity declaration block"""
         print("🔧 [Context] Parsing entity statement")
         tokens = block_info['tokens']
-        
+
         if len(tokens) < 4:  # entity Name { ... }
             return None
-        
+
         entity_name = tokens[1].literal if tokens[1].type == IDENT else "Unknown"
         print(f"  📝 Entity: {entity_name}")
-        
+
         # Parse properties between braces
         properties = []
         brace_start = -1
         brace_end = -1
         brace_count = 0
-        
+
         for i, token in enumerate(tokens):
             if token.type == LBRACE:
                 if brace_count == 0:
@@ -325,42 +327,51 @@ class ContextStackParser:
                 if brace_count == 0:
                     brace_end = i
                     break
-        
+
         if brace_start != -1 and brace_end != -1:
             # Parse properties inside braces
             i = brace_start + 1
             while i < brace_end:
                 if tokens[i].type == IDENT:
                     prop_name = tokens[i].literal
-                    
+                    print(f"  📝 Found property name: {prop_name}")
+
                     # Look for colon and type
                     if i + 1 < brace_end and tokens[i + 1].type == COLON:
                         if i + 2 < brace_end:
                             prop_type = tokens[i + 2].literal
                             properties.append({
-                                "name": prop_name,
-                                "type": prop_type
+                                "name": Identifier(prop_name), # Store as Identifier
+                                "type": Identifier(prop_type), # Store as Identifier
+                                "default_value": None
                             })
                             print(f"  📝 Property: {prop_name}: {prop_type}")
                             i += 3
                             continue
-                
+
                 i += 1
-        
+
         return EntityStatement(
             name=Identifier(entity_name),
             properties=properties
         )
 
-    # FIX 5: Enhanced Use Statement Parsers
+    def _parse_contract_statement_block(self, block_info, all_tokens):
+        """Parse contract declaration block"""
+        print("🔧 [Context] Parsing contract statement")
+        # Reuse entity logic for now or implement full contract parsing
+        return self._parse_entity_statement_block(block_info, all_tokens)
+
+
+    # === FIXED USE STATEMENT PARSERS ===
     def _parse_use_statement_block(self, block_info, all_tokens):
         """Enhanced use statement parser that handles both syntax styles"""
         tokens = block_info['tokens']
         print(f"    📝 Found use statement: {[t.literal for t in tokens]}")
-        
+
         # Check for brace syntax: use { Name1, Name2 } from './module.zx'
         has_braces = any(t.type == LBRACE for t in tokens)
-        
+
         if has_braces:
             return self._parse_use_with_braces(tokens)
         else:
@@ -370,7 +381,7 @@ class ContextStackParser:
         """Parse use { names } from 'path' syntax"""
         names = []
         file_path = None
-        
+
         # Find the brace section
         brace_start = -1
         brace_end = -1
@@ -378,7 +389,7 @@ class ContextStackParser:
             if token.type == LBRACE:
                 brace_start = i
                 break
-        
+
         if brace_start != -1:
             # Extract names from inside braces
             i = brace_start + 1
@@ -387,15 +398,19 @@ class ContextStackParser:
                     names.append(Identifier(tokens[i].literal))
                 i += 1
             brace_end = i
-        
+
         # Find 'from' and file path
         if brace_end != -1 and brace_end + 1 < len(tokens):
             for i in range(brace_end + 1, len(tokens)):
-                if tokens[i].type == IDENT and tokens[i].literal == 'from':
+                # FIX: Check for FROM token type OR identifier 'from'
+                is_from = (tokens[i].type == FROM) or (tokens[i].type == IDENT and tokens[i].literal == 'from')
+                
+                if is_from:
                     if i + 1 < len(tokens) and tokens[i + 1].type == STRING:
                         file_path = tokens[i + 1].literal
+                        print(f"    📝 Found import path: {file_path}")
                     break
-        
+
         return UseStatement(
             file_path=file_path or "",
             names=names,
@@ -406,14 +421,14 @@ class ContextStackParser:
         """Parse simple use 'path' [as alias] syntax"""
         file_path = None
         alias = None
-        
+
         for i, token in enumerate(tokens):
             if token.type == STRING:
                 file_path = token.literal
             elif token.type == IDENT and token.literal == 'as':
                 if i + 1 < len(tokens) and tokens[i + 1].type == IDENT:
                     alias = tokens[i + 1].literal
-        
+
         return UseStatement(
             file_path=file_path or "",
             alias=alias,
@@ -439,6 +454,10 @@ class ContextStackParser:
             return self._parse_try_catch_statement(block_info, all_tokens)
         elif subtype == 'entity_statement':
             return self._parse_entity_statement_block(block_info, all_tokens)
+        elif subtype == 'contract_statement':
+             return self._parse_contract_statement_block(block_info, all_tokens)
+        elif subtype == 'use_statement': # Fix subtype mismatch
+            return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype == 'USE':
             return self._parse_use_statement_block(block_info, all_tokens)
         else:
@@ -628,7 +647,7 @@ class ContextStackParser:
                 stmt = self._parse_use_statement_block(block_info, tokens)
                 if stmt:
                     statements.append(stmt)
-                
+
                 i = j
                 continue
 
@@ -667,7 +686,7 @@ class ContextStackParser:
                 statements.append(ExportStatement(names=names))
                 i = j
                 continue
-            
+
             # ENTITY statement heuristic
             elif token.type == ENTITY:
                 j = i + 1
@@ -684,7 +703,7 @@ class ContextStackParser:
                             j += 1
                         break
                     j += 1
-                
+
                 entity_tokens = tokens[i:j]
                 block_info = {'tokens': entity_tokens}
                 stmt = self._parse_entity_statement_block(block_info, tokens)
