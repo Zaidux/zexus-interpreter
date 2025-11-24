@@ -1,4 +1,4 @@
-# strategy_structural.py (FIXED VERSION)
+# src/zexus/strategy_structural.py
 from .zexus_token import *
 from typing import List, Dict
 
@@ -29,8 +29,12 @@ class StructuralAnalyzer:
 
         # helper sets for stopping heuristics (mirrors context parser)
         stop_types = {SEMICOLON, RBRACE}
-        # FIX 1: Added ENTITY to statement starters
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY}
+        
+        # ADDED: CONTRACT, VERIFY, PROTECT, SEAL to match Parser capabilities
+        statement_starters = {
+            LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
+            SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL
+        }
 
         while i < n:
             t = tokens[i]
@@ -44,19 +48,19 @@ class StructuralAnalyzer:
                 lit = getattr(tok, 'literal', None)
                 return (lit == '' or lit is None) and tok.type != STRING and tok.type != IDENT
 
-            # NEW: Enhanced USE statement detection with braces
+            # === IMPLEMENTED: Enhanced USE statement detection with braces ===
             if t.type == USE:
                 start_idx = i
                 use_tokens = [t]
                 i += 1
-                
+
                 # Handle use { ... } from ... syntax
                 if i < n and tokens[i].type == LBRACE:
                     # Collect until closing brace
                     brace_count = 1
                     use_tokens.append(tokens[i])
                     i += 1
-                    
+
                     while i < n and brace_count > 0:
                         use_tokens.append(tokens[i])
                         if tokens[i].type == LBRACE:
@@ -64,7 +68,7 @@ class StructuralAnalyzer:
                         elif tokens[i].type == RBRACE:
                             brace_count -= 1
                         i += 1
-                    
+
                     # Look for 'from' and file path
                     while i < n and tokens[i].type != SEMICOLON and tokens[i].type != EOF:
                         if tokens[i].type == IDENT and tokens[i].literal == 'from':
@@ -83,7 +87,7 @@ class StructuralAnalyzer:
                     while i < n and tokens[i].type not in [SEMICOLON, EOF]:
                         use_tokens.append(tokens[i])
                         i += 1
-                
+
                 # Create block for this use statement
                 filtered_tokens = [tk for tk in use_tokens if not _is_empty_token(tk)]
                 self.blocks[block_id] = {
@@ -99,17 +103,17 @@ class StructuralAnalyzer:
                 block_id += 1
                 continue
 
-            # NEW: Enhanced ENTITY statement detection
+            # Enhanced ENTITY statement detection
             elif t.type == ENTITY:
                 start_idx = i
                 entity_tokens = [t]
                 i += 1
-                
+
                 # Collect entity name
                 if i < n and tokens[i].type == IDENT:
                     entity_tokens.append(tokens[i])
                     i += 1
-                
+
                 # Collect until closing brace
                 brace_count = 0
                 while i < n:
@@ -121,7 +125,7 @@ class StructuralAnalyzer:
                         break
                     entity_tokens.append(tokens[i])
                     i += 1
-                
+
                 # Now collect until matching closing brace
                 while i < n and brace_count > 0:
                     entity_tokens.append(tokens[i])
@@ -130,13 +134,57 @@ class StructuralAnalyzer:
                     elif tokens[i].type == RBRACE:
                         brace_count -= 1
                     i += 1
-                
+
                 # Create block
                 filtered_tokens = [tk for tk in entity_tokens if not _is_empty_token(tk)]
                 self.blocks[block_id] = {
                     'id': block_id,
                     'type': 'statement',
                     'subtype': 'entity_statement',
+                    'tokens': filtered_tokens,
+                    'start_token': tokens[start_idx],
+                    'start_index': start_idx,
+                    'end_index': i - 1,
+                    'parent': None
+                }
+                block_id += 1
+                continue
+            
+            # ADDED: CONTRACT statement detection (Mirrors ENTITY logic)
+            elif t.type == CONTRACT:
+                start_idx = i
+                contract_tokens = [t]
+                i += 1
+
+                # Collect contract name
+                if i < n and tokens[i].type == IDENT:
+                    contract_tokens.append(tokens[i])
+                    i += 1
+
+                # Collect until closing brace
+                brace_count = 0
+                while i < n:
+                    if tokens[i].type == LBRACE:
+                        brace_count = 1
+                        contract_tokens.append(tokens[i])
+                        i += 1
+                        break
+                    contract_tokens.append(tokens[i])
+                    i += 1
+
+                while i < n and brace_count > 0:
+                    contract_tokens.append(tokens[i])
+                    if tokens[i].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[i].type == RBRACE:
+                        brace_count -= 1
+                    i += 1
+
+                filtered_tokens = [tk for tk in contract_tokens if not _is_empty_token(tk)]
+                self.blocks[block_id] = {
+                    'id': block_id,
+                    'type': 'statement',
+                    'subtype': 'contract_statement',
                     'tokens': filtered_tokens,
                     'start_token': tokens[start_idx],
                     'start_index': start_idx,
@@ -422,26 +470,30 @@ class StructuralAnalyzer:
             return results
 
         stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY}
+        # Added CONTRACT, VERIFY, PROTECT, SEAL here as well for inner blocks
+        statement_starters = {
+            LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
+            SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL
+        }
 
         cur = []
         i = 0
         n = len(tokens)
-        
+
         while i < n:
             t = tokens[i]
-            
-            # Enhanced use statement detection (with braces)
+
+            # Enhanced use statement detection (with braces) in inner blocks
             if t.type == USE:
                 if cur:  # Finish current statement
                     results.append(cur)
                     cur = []
-                
+
                 # Collect the entire use statement
                 use_tokens = [t]
                 i += 1
                 brace_count = 0
-                
+
                 while i < n:
                     use_tokens.append(tokens[i])
                     if tokens[i].type == LBRACE:
@@ -460,22 +512,22 @@ class StructuralAnalyzer:
                     elif brace_count == 0 and tokens[i].type in stop_types:
                         break
                     i += 1
-                
+
                 results.append(use_tokens)
                 i += 1
                 continue
 
-            # Entity statement detection
-            if t.type == ENTITY:
+            # Entity/Contract statement detection (generic brace collector)
+            if t.type == ENTITY or t.type == CONTRACT:
                 if cur:
                     results.append(cur)
                     cur = []
-                
+
                 # Collect until closing brace
                 entity_tokens = [t]
                 i += 1
                 brace_count = 0
-                
+
                 while i < n:
                     entity_tokens.append(tokens[i])
                     if tokens[i].type == LBRACE:
@@ -485,11 +537,11 @@ class StructuralAnalyzer:
                         if brace_count == 0:
                             break
                     i += 1
-                
+
                 results.append(entity_tokens)
                 i += 1
                 continue
-            
+
             # start of a statement
             if not cur:
                 cur.append(t)
