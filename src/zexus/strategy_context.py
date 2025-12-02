@@ -1,8 +1,8 @@
-# strategy_context.py (FIXED & ADAPTIVE)
+# strategy_context.py (FINAL FIXED VERSION)
 from .zexus_token import *
 from .zexus_ast import *
 from .config import config as zexus_config
-import inspect  # Added for adaptive AST construction
+from types import SimpleNamespace # Helper for AST node creation
 
 # Local helper to control debug printing according to user config
 def ctx_debug(msg, data=None, level='debug'):
@@ -15,6 +15,13 @@ def ctx_debug(msg, data=None, level='debug'):
         print(f"🔍 [CTX DEBUG] {msg}: {data}")
     else:
         print(f"🔍 [CTX DEBUG] {msg}")
+
+# Helper class to create objects that behave like AST nodes (dot notation access)
+class AstNodeShim:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def __repr__(self):
+        return f"AstNodeShim({self.__dict__})"
 
 class ContextStackParser:
     def __init__(self, structural_analyzer):
@@ -341,11 +348,12 @@ class ContextStackParser:
                     if i + 1 < brace_end and tokens[i + 1].type == COLON:
                         if i + 2 < brace_end:
                             prop_type = tokens[i + 2].literal
-                            properties.append({
-                                "name": Identifier(prop_name), # Store as Identifier
-                                "type": Identifier(prop_type), # Store as Identifier
-                                "default_value": None
-                            })
+                            # Use AstNodeShim so evaluator can use .name.value
+                            properties.append(AstNodeShim(
+                                name=Identifier(prop_name),
+                                type=Identifier(prop_type),
+                                default_value=None
+                            ))
                             print(f"  📝 Property: {prop_name}: {prop_type}")
                             i += 3
                             continue
@@ -358,7 +366,7 @@ class ContextStackParser:
         )
 
     def _parse_contract_statement_block(self, block_info, all_tokens):
-        """Parse contract declaration block - ADAPTIVE Constructor Fix"""
+        """Parse contract declaration block - FINAL FIXED VERSION"""
         print("🔧 [Context] Parsing contract statement")
         tokens = block_info['tokens']
 
@@ -384,11 +392,12 @@ class ContextStackParser:
                     brace_end = i
                     break
 
-        properties = []
+        # List to hold storage vars (Properties) and actions
+        storage_vars = []
         actions = []
 
         if brace_start != -1 and brace_end != -1:
-            # 3. Parse Internals (Properties and Actions)
+            # 3. Parse Internals
             i = brace_start + 1
             while i < brace_end:
                 token = tokens[i]
@@ -400,7 +409,7 @@ class ContextStackParser:
                     action_brace_nest = 0
                     action_brace_start_found = False
                     action_end = -1
-                    
+
                     j = i
                     while j < brace_end:
                         if tokens[j].type == LBRACE:
@@ -412,9 +421,8 @@ class ContextStackParser:
                                 action_end = j
                                 break
                         j += 1
-                    
+
                     if action_end != -1:
-                        # Extract action tokens
                         action_tokens = tokens[action_start:action_end+1]
                         
                         # Parse Action Name
@@ -427,9 +435,7 @@ class ContextStackParser:
                         paren_start = -1
                         paren_end = -1
                         for k, tk in enumerate(action_tokens):
-                            if tk.type == LPAREN:
-                                paren_start = k
-                                break
+                            if tk.type == LPAREN: paren_start = k; break
                         
                         if paren_start != -1:
                             depth = 0
@@ -437,9 +443,7 @@ class ContextStackParser:
                                 if action_tokens[k].type == LPAREN: depth += 1
                                 elif action_tokens[k].type == RPAREN:
                                     depth -= 1
-                                    if depth == 0:
-                                        paren_end = k
-                                        break
+                                    if depth == 0: paren_end = k; break
                             
                             if paren_end > paren_start:
                                 param_tokens = action_tokens[paren_start+1:paren_end]
@@ -449,20 +453,15 @@ class ContextStackParser:
 
                         # Parse Body
                         body_block = BlockStatement()
-                        # Reuse _parse_block_statements for the body tokens inside braces
                         act_brace_start = -1
                         for k, tk in enumerate(action_tokens):
-                            if tk.type == LBRACE:
-                                act_brace_start = k
-                                break
+                            if tk.type == LBRACE: act_brace_start = k; break
                         
                         if act_brace_start != -1:
-                             # The body is everything between the outermost braces of the action
                              body_tokens = action_tokens[act_brace_start+1:-1]
                              body_block.statements = self._parse_block_statements(body_tokens)
 
                         print(f"  ⚡ Found Contract Action: {act_name}")
-                        
                         actions.append(ActionStatement(
                             name=Identifier(act_name),
                             parameters=params,
@@ -474,10 +473,8 @@ class ContextStackParser:
 
                 # B. Handle State Variables (Properties)
                 elif token.type == IDENT:
-                    # Parsing: name : type = value
                     prop_name = token.literal
                     
-                    # Look ahead for COLON
                     if i + 1 < brace_end and tokens[i+1].type == COLON:
                         prop_type = "any"
                         default_val = None
@@ -487,9 +484,8 @@ class ContextStackParser:
                             prop_type = tokens[current_idx].literal
                             current_idx += 1
                         
-                        # Check for default value assignment
+                        # Check for default/initial value
                         if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
-                             # Simple heuristic: take next token or string
                              current_idx += 1
                              if current_idx < brace_end:
                                  val_token = tokens[current_idx]
@@ -501,11 +497,14 @@ class ContextStackParser:
                                      default_val = Identifier(val_token.literal)
                                  current_idx += 1
                         
-                        properties.append({
-                            "name": Identifier(prop_name),
-                            "type": Identifier(prop_type),
-                            "default_value": default_val
-                        })
+                        # CRITICAL FIX: Use AstNodeShim so evaluator can access .name and .initial_value via dot notation
+                        # The evaluator uses `storage_var_node.name.value` and `storage_var_node.initial_value`
+                        storage_vars.append(AstNodeShim(
+                            name=Identifier(prop_name),
+                            type=Identifier(prop_type),
+                            initial_value=default_val, # For Contract evaluator
+                            default_value=default_val  # For Entity evaluator (fallback compatibility)
+                        ))
                         
                         i = current_idx
                         continue
@@ -513,62 +512,22 @@ class ContextStackParser:
                 i += 1
 
         # 4. Inject Name property if missing (Fixes runtime error)
-        has_name = any(p['name'].value == 'name' for p in properties)
+        has_name = any(p.name.value == 'name' for p in storage_vars)
         if not has_name:
             print(f"  ⚡ Injecting .name property for runtime compatibility: {contract_name}")
-            properties.append({
-                "name": Identifier("name"),
-                "type": Identifier("string"),
-                "default_value": StringLiteral(contract_name)
-            })
+            storage_vars.append(AstNodeShim(
+                name=Identifier("name"),
+                type=Identifier("string"),
+                initial_value=StringLiteral(contract_name),
+                default_value=StringLiteral(contract_name)
+            ))
 
-        # 5. Adaptive Constructor - Try to find the right signature for ContractStatement
-        try:
-            # We know ContractStatement exists, but we don't know if it takes 'properties' or 'storage' or 'body'
-            if hasattr(ContractStatement, '__init__'):
-                arg_spec = inspect.getfullargspec(ContractStatement.__init__)
-                args = arg_spec.args
-                print(f"  🔍 ContractStatement args detected: {args}")
-
-                # Case A: Expects 'storage' and 'actions' (Modern Style)
-                if 'storage' in args and 'actions' in args:
-                    return ContractStatement(
-                        name=Identifier(contract_name),
-                        storage=properties,
-                        actions=actions
-                    )
-                # Case B: Expects 'properties' (Entity Style)
-                elif 'properties' in args:
-                    return ContractStatement(
-                        name=Identifier(contract_name),
-                        properties=properties
-                    )
-                # Case C: Expects 'body' (Generic Style)
-                elif 'body' in args:
-                    # We have to wrap actions into a block
-                    # This is lossy for properties unless we convert them to statements
-                    block = BlockStatement()
-                    block.statements = actions # Properties are lost in this specific fallback
-                    return ContractStatement(
-                        name=Identifier(contract_name),
-                        body=block
-                    )
-                else:
-                     # Case D: Just name?
-                     print("  ⚠️ ContractStatement arguments ambiguous, trying minimal init")
-                     return ContractStatement(name=Identifier(contract_name))
-            else:
-                return ContractStatement(name=Identifier(contract_name))
-
-        except Exception as e:
-            print(f"  ⚠️ Adaptive Contract Construction Failed: {e}")
-            print("  ⚠️ Falling back to EntityStatement (Safe Mode)")
-            # Fallback to EntityStatement so the code at least compiles and runs the identifier
-            return EntityStatement(
-                name=Identifier(contract_name),
-                properties=properties
-            )
-
+        # 5. Return ContractStatement with strict positional arguments
+        return ContractStatement(
+            name=Identifier(contract_name),
+            storage_vars=storage_vars,
+            actions=actions
+        )
 
     # === FIXED USE STATEMENT PARSERS ===
     def _parse_use_statement_block(self, block_info, all_tokens):
