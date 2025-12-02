@@ -357,10 +357,187 @@ class ContextStackParser:
         )
 
     def _parse_contract_statement_block(self, block_info, all_tokens):
-        """Parse contract declaration block"""
+        """Parse contract declaration block - FIXED to support proper ContractStatement AST"""
         print("🔧 [Context] Parsing contract statement")
-        # Reuse entity logic for now or implement full contract parsing
-        return self._parse_entity_statement_block(block_info, all_tokens)
+        tokens = block_info['tokens']
+
+        if len(tokens) < 3:
+            return None
+
+        # 1. Extract Name
+        contract_name = tokens[1].literal if tokens[1].type == IDENT else "UnknownContract"
+        print(f"  📝 Contract Name: {contract_name}")
+
+        # 2. Identify Block Boundaries
+        brace_start = -1
+        brace_end = -1
+        brace_count = 0
+
+        for i, token in enumerate(tokens):
+            if token.type == LBRACE:
+                if brace_count == 0: brace_start = i
+                brace_count += 1
+            elif token.type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    brace_end = i
+                    break
+
+        properties = []
+        actions = []
+
+        if brace_start != -1 and brace_end != -1:
+            # 3. Parse Internals (Properties and Actions)
+            i = brace_start + 1
+            while i < brace_end:
+                token = tokens[i]
+
+                # A. Handle Actions (Methods)
+                if token.type == ACTION:
+                    # Find the end of this action block
+                    action_start = i
+                    action_brace_nest = 0
+                    action_brace_start_found = False
+                    action_end = -1
+                    
+                    j = i
+                    while j < brace_end:
+                        if tokens[j].type == LBRACE:
+                            action_brace_nest += 1
+                            action_brace_start_found = True
+                        elif tokens[j].type == RBRACE:
+                            action_brace_nest -= 1
+                            if action_brace_start_found and action_brace_nest == 0:
+                                action_end = j
+                                break
+                        j += 1
+                    
+                    if action_end != -1:
+                        # Extract action tokens
+                        action_tokens = tokens[action_start:action_end+1]
+                        
+                        # Parse Action Name
+                        act_name = "anonymous"
+                        if action_start + 1 < len(tokens) and tokens[action_start+1].type == IDENT:
+                            act_name = tokens[action_start+1].literal
+
+                        # Parse Parameters
+                        params = []
+                        paren_start = -1
+                        paren_end = -1
+                        for k, tk in enumerate(action_tokens):
+                            if tk.type == LPAREN:
+                                paren_start = k
+                                break
+                        
+                        if paren_start != -1:
+                            depth = 0
+                            for k in range(paren_start, len(action_tokens)):
+                                if action_tokens[k].type == LPAREN: depth += 1
+                                elif action_tokens[k].type == RPAREN:
+                                    depth -= 1
+                                    if depth == 0:
+                                        paren_end = k
+                                        break
+                            
+                            if paren_end > paren_start:
+                                param_tokens = action_tokens[paren_start+1:paren_end]
+                                for pk in param_tokens:
+                                    if pk.type == IDENT:
+                                        params.append(Identifier(pk.literal))
+
+                        # Parse Body
+                        body_block = BlockStatement()
+                        # Reuse _parse_block_statements for the body tokens inside braces
+                        act_brace_start = -1
+                        for k, tk in enumerate(action_tokens):
+                            if tk.type == LBRACE:
+                                act_brace_start = k
+                                break
+                        
+                        if act_brace_start != -1:
+                             # The body is everything between the outermost braces of the action
+                             body_tokens = action_tokens[act_brace_start+1:-1]
+                             body_block.statements = self._parse_block_statements(body_tokens)
+
+                        print(f"  ⚡ Found Contract Action: {act_name}")
+                        
+                        actions.append(ActionStatement(
+                            name=Identifier(act_name),
+                            parameters=params,
+                            body=body_block
+                        ))
+                        
+                        i = action_end + 1
+                        continue
+
+                # B. Handle State Variables (Properties)
+                elif token.type == IDENT:
+                    # Parsing: name : type = value
+                    prop_name = token.literal
+                    
+                    # Look ahead for COLON
+                    if i + 1 < brace_end and tokens[i+1].type == COLON:
+                        prop_type = "any"
+                        default_val = None
+                        
+                        current_idx = i + 2
+                        if current_idx < brace_end and tokens[current_idx].type == IDENT:
+                            prop_type = tokens[current_idx].literal
+                            current_idx += 1
+                        
+                        # Check for default value assignment
+                        if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
+                             # Simple heuristic: take next token or string
+                             current_idx += 1
+                             if current_idx < brace_end:
+                                 val_token = tokens[current_idx]
+                                 if val_token.type == STRING:
+                                     default_val = StringLiteral(val_token.literal)
+                                 elif val_token.type == INT:
+                                     default_val = IntegerLiteral(int(val_token.literal))
+                                 elif val_token.type == IDENT:
+                                     default_val = Identifier(val_token.literal)
+                                 current_idx += 1
+                        
+                        properties.append({
+                            "name": Identifier(prop_name),
+                            "type": Identifier(prop_type),
+                            "default_value": default_val
+                        })
+                        
+                        i = current_idx
+                        continue
+                
+                i += 1
+
+        # 4. CRITICAL FIX for Runtime Error 'dict object has no attribute name'
+        # Ensure the contract/entity has a 'name' property that mimics the class name.
+        has_name = any(p['name'].value == 'name' for p in properties)
+        if not has_name:
+            print(f"  ⚡ Injecting .name property for runtime compatibility: {contract_name}")
+            properties.append({
+                "name": Identifier("name"),
+                "type": Identifier("string"),
+                "default_value": StringLiteral(contract_name)
+            })
+
+        # 5. Return ContractStatement (or robust EntityStatement fallback)
+        try:
+            return ContractStatement(
+                name=Identifier(contract_name),
+                properties=properties,
+                actions=actions
+            )
+        except NameError:
+            # Fallback if ContractStatement class is not defined in zexus_ast
+            print("  ⚠️ ContractStatement AST node not found, falling back to EntityStatement")
+            # Note: EntityStatement usually doesn't take 'actions', so we rely on the
+            # properties being correctly set up to function as data.
+            return EntityStatement(
+                name=Identifier(contract_name),
+                properties=properties
+            )
 
 
     # === FIXED USE STATEMENT PARSERS ===
@@ -404,7 +581,7 @@ class ContextStackParser:
             for i in range(brace_end + 1, len(tokens)):
                 # FIX: Check for FROM token type OR identifier 'from'
                 is_from = (tokens[i].type == FROM) or (tokens[i].type == IDENT and tokens[i].literal == 'from')
-                
+
                 if is_from:
                     if i + 1 < len(tokens) and tokens[i + 1].type == STRING:
                         file_path = tokens[i + 1].literal
