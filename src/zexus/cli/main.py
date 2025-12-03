@@ -8,10 +8,13 @@ from rich.syntax import Syntax
 from rich.panel import Panel
 from rich.table import Table
 
-# Import your existing modules
+# Import your existing modules - UPDATED IMPORTS
 from ..lexer import Lexer
 from ..parser import Parser
-from ..evaluator import eval_node, Environment
+# UPDATED: Import evaluate from evaluator package
+from ..evaluator import evaluate
+# UPDATED: Import Environment from object module
+from ..object import Environment
 from ..syntax_validator import SyntaxValidator
 from ..hybrid_orchestrator import orchestrator
 from ..config import config
@@ -20,9 +23,9 @@ console = Console()
 
 @click.group()
 @click.version_option(version="0.1.0", prog_name="Zexus")
-@click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']), 
+@click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']),
               default='auto', help='Syntax style to use (universal=strict, tolerable=flexible)')
-@click.option('--advanced-parsing', is_flag=True, default=True, 
+@click.option('--advanced-parsing', is_flag=True, default=True,
               help='Enable advanced multi-strategy parsing (recommended)')
 @click.option('--execution-mode', type=click.Choice(['interpreter', 'compiler', 'auto']),
               default='auto', help='Execution engine to use')
@@ -52,22 +55,22 @@ def run(ctx, file):
     try:
         with open(file, 'r') as f:
             source_code = f.read()
-
+        
         syntax_style = ctx.obj['SYNTAX_STYLE']
         advanced_parsing = ctx.obj['ADVANCED_PARSING']
         execution_mode = ctx.obj['EXECUTION_MODE']
         validator = SyntaxValidator()
-
+        
         console.print(f"🚀 [bold green]Running[/bold green] {file}")
         console.print(f"🔧 [bold blue]Execution mode:[/bold blue] {execution_mode}")
         console.print(f"📝 [bold blue]Syntax style:[/bold blue] {syntax_style}")
         console.print(f"🎯 [bold blue]Advanced parsing:[/bold blue] {'Enabled' if advanced_parsing else 'Disabled'}")
-
+        
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
             syntax_style = validator.suggest_syntax_style(source_code)
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
-
+        
         # Validate syntax
         validation_result = validator.validate_code(source_code, syntax_style)
         if not validation_result['is_valid']:
@@ -85,21 +88,36 @@ def run(ctx, file):
                     source_code = fixed_code
                 else:
                     console.print("[bold red]❌ Could not auto-fix errors, attempting to run anyway...[/bold red]")
-
-        # Use hybrid orchestrator for execution
+        
+        # Parse the program
+        lexer = Lexer(source_code)
+        parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
+        program = parser.parse_program()
+        
+        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+            console.print("[bold red]❌ Critical parser errors detected, cannot continue:[/bold red]")
+            for error in parser.errors:
+                console.print(f"  ❌ {error}")
+            sys.exit(1)
+        
+        # Use the evaluator package
         env = Environment()
-        result = orchestrator.execute(
-            source_code, 
-            environment=env, 
-            mode=execution_mode,
-            syntax_style=syntax_style
-        )
-
+        env.set("__file__", file)  # Set the current file for module imports
+        
+        # UPDATED: Use the evaluate function from the evaluator package
+        result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+        
         if result and hasattr(result, 'inspect') and result.inspect() != 'null':
             console.print(f"\n✅ [bold green]Result:[/bold green] {result.inspect()}")
+        elif isinstance(result, str) and result:
+            console.print(f"\n📤 [bold blue]Output:[/bold blue] {result}")
+        elif hasattr(result, 'value') and result.value is not None:
+            console.print(f"\n📊 [bold blue]Result:[/bold blue] {result.value}")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 @cli.command()
@@ -110,53 +128,53 @@ def check(ctx, file):
     try:
         with open(file, 'r') as f:
             source_code = f.read()
-
+        
         syntax_style = ctx.obj['SYNTAX_STYLE']
         advanced_parsing = ctx.obj['ADVANCED_PARSING']
         validator = SyntaxValidator()
-
+        
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
             syntax_style = validator.suggest_syntax_style(source_code)
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
 
         console.print(f"🔧 [bold blue]Advanced parsing:[/bold blue] {'Enabled' if advanced_parsing else 'Disabled'}")
-
+        
         # Run syntax validation
         validation_result = validator.validate_code(source_code, syntax_style)
-
+        
         # Also run parser for additional validation
         lexer = Lexer(source_code)
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
-
+        
         # Display results
         if parser.errors or not validation_result['is_valid']:
             console.print("[bold red]❌ Syntax Issues Found:[/bold red]")
-
+            
             # Show parser errors first
             for error in parser.errors:
                 console.print(f"  🚫 Parser: {error}")
-
+            
             # Show validator suggestions
             for suggestion in validation_result['suggestions']:
                 severity_icon = "🚫" if suggestion['severity'] == 'error' else "⚠️"
                 console.print(f"  {severity_icon} Validator: {suggestion['message']}")
-
+            
             # Show warnings
             for warning in validation_result['warnings']:
                 console.print(f"  ⚠️  Warning: {warning['message']}")
-
+            
             # Show recovery info if advanced parsing was used
             if advanced_parsing and hasattr(parser, 'use_advanced_parsing') and parser.use_advanced_parsing:
                 console.print(f"\n[bold yellow]🛡️  Advanced parsing recovered {len(program.statements)} statements[/bold yellow]")
-
+            
             sys.exit(1)
         else:
             console.print("[bold green]✅ Syntax is valid![/bold green]")
             if advanced_parsing and hasattr(parser, 'use_advanced_parsing') and parser.use_advanced_parsing:
                 console.print("[bold green]🔧 Advanced multi-strategy parsing successful![/bold green]")
-
+            
             if validation_result['warnings']:
                 console.print("\n[bold yellow]ℹ️  Warnings:[/bold yellow]")
                 for warning in validation_result['warnings']:
@@ -174,34 +192,33 @@ def validate(ctx, file):
     try:
         with open(file, 'r') as f:
             source_code = f.read()
-
+        
         syntax_style = ctx.obj['SYNTAX_STYLE']
         validator = SyntaxValidator()
-
+        
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
             syntax_style = validator.suggest_syntax_style(source_code)
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
-
+        
         console.print(f"📝 [bold blue]Validating with {syntax_style} syntax...[/bold blue]")
-
+        
         # Run validation and auto-fix
         fixed_code, validation_result = validator.auto_fix(source_code, syntax_style)
-
+        
         # Show results
         if validation_result['is_valid']:
             console.print("[bold green]✅ Code is valid![/bold green]")
         else:
             console.print(f"[bold yellow]🛠️  Applied {validation_result['applied_fixes']} fixes[/bold yellow]")
             console.print("[bold yellow]⚠️  Remaining issues:[/bold yellow]")
-
             for suggestion in validation_result['suggestions']:
                 severity_icon = "🚫" if suggestion['severity'] == 'error' else "⚠️"
                 console.print(f"  {severity_icon} Line {suggestion['line']}: {suggestion['message']}")
-
+            
             for warning in validation_result['warnings']:
                 console.print(f"  ⚠️  Warning: {warning['message']}")
-
+        
         # Write fixed code back to file if changes were made
         if validation_result['applied_fixes'] > 0:
             with open(file, 'w') as f:
@@ -220,30 +237,30 @@ def ast(ctx, file):
     try:
         with open(file, 'r') as f:
             source_code = f.read()
-
+        
         syntax_style = ctx.obj['SYNTAX_STYLE']
         advanced_parsing = ctx.obj['ADVANCED_PARSING']
         validator = SyntaxValidator()
-
+        
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
             syntax_style = validator.suggest_syntax_style(source_code)
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
-
+        
         console.print(f"🔧 [bold blue]Advanced parsing:[/bold blue] {'Enabled' if advanced_parsing else 'Disabled'}")
-
+        
         lexer = Lexer(source_code)
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
-
+        
         parsing_method = "Advanced Multi-Strategy" if (advanced_parsing and hasattr(parser, 'use_advanced_parsing') and parser.use_advanced_parsing) else "Traditional"
-
+        
         console.print(Panel.fit(
             str(program),
             title=f"[bold blue]Abstract Syntax Tree ({syntax_style} syntax) - {parsing_method} Parsing[/bold blue]",
             border_style="blue"
         ))
-
+        
         if parser.errors:
             console.print("\n[bold yellow]⚠️  Parser encountered errors but continued:[/bold yellow]")
             for error in parser.errors:
@@ -260,29 +277,29 @@ def tokens(ctx, file):
     try:
         with open(file, 'r') as f:
             source_code = f.read()
-
+        
         syntax_style = ctx.obj['SYNTAX_STYLE']
         validator = SyntaxValidator()
-
+        
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
             syntax_style = validator.suggest_syntax_style(source_code)
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
-
+        
         lexer = Lexer(source_code)
-
+        
         table = Table(title=f"Tokens ({syntax_style} syntax)")
         table.add_column("Type", style="cyan")
         table.add_column("Literal", style="green")
         table.add_column("Line", style="yellow")
         table.add_column("Column", style="yellow")
-
+        
         while True:
             token = lexer.next_token()
             if token.type == "EOF":
                 break
             table.add_row(token.type, token.literal, str(token.line), str(token.column))
-
+        
         console.print(table)
 
     except Exception as e:
@@ -297,7 +314,7 @@ def repl(ctx):
     execution_mode = ctx.obj['EXECUTION_MODE']
     env = Environment()
     validator = SyntaxValidator()
-
+    
     console.print("[bold green]Zexus Hybrid REPL v0.1.0[/bold green]")
     console.print(f"🚀 [bold blue]Execution mode:[/bold blue] {execution_mode}")
     console.print(f"📝 [bold blue]Syntax style:[/bold blue] {syntax_style}")
@@ -305,9 +322,9 @@ def repl(ctx):
     console.print("Type 'mode <interpreter|compiler|auto>' to switch execution mode")
     console.print("Type 'stats' to see execution statistics")
     console.print("Type 'exit' to quit\n")
-
+    
     current_mode = execution_mode
-
+    
     while True:
         try:
             code = console.input(f"[bold blue]zexus({current_mode})> [/bold blue]")
@@ -329,7 +346,7 @@ def repl(ctx):
                 continue
             elif not code.strip():
                 continue
-
+            
             # Validate syntax in REPL
             if syntax_style != 'auto':
                 validation_result = validator.validate_code(code, syntax_style)
@@ -337,18 +354,24 @@ def repl(ctx):
                     for suggestion in validation_result['suggestions']:
                         if suggestion['severity'] == 'error':
                             console.print(f"[red]Syntax: {suggestion['message']}[/red]")
-
-            # Use hybrid execution
-            result = orchestrator.execute(
-                code, 
-                environment=env, 
-                mode=current_mode,
-                syntax_style=syntax_style
-            )
+            
+            # Parse and evaluate
+            lexer = Lexer(code)
+            parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
+            program = parser.parse_program()
+            
+            if parser.errors and any("critical" in e.lower() for e in parser.errors):
+                console.print("[red]Parser error:[/red]")
+                for error in parser.errors:
+                    console.print(f"  ❌ {error}")
+                continue
+            
+            # UPDATED: Use evaluate from the evaluator package
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
             
             if result and hasattr(result, 'inspect') and result.inspect() != 'null':
                 console.print(f"[green]{result.inspect()}[/green]")
-
+            
         except KeyboardInterrupt:
             console.print("\n👋 Goodbye!")
             break
@@ -363,14 +386,14 @@ def init(ctx, mode):
     """Initialize a new Zexus project with hybrid execution support"""
     syntax_style = ctx.obj['SYNTAX_STYLE']
     project_name = click.prompt("Project name", default="my-zexus-app")
-
+    
     project_path = Path(project_name)
     project_path.mkdir(exist_ok=True)
-
+    
     # Create basic structure
     (project_path / "src").mkdir()
     (project_path / "tests").mkdir()
-
+    
     # Choose template based on syntax style and execution mode
     if syntax_style == "universal":
         main_content = f'''# Welcome to Zexus! (Universal Syntax)
@@ -401,7 +424,7 @@ action main() {{
 main()
 '''
     else:
-        main_content = f'''# Welcome to Zexus! (Flexible Syntax)  
+        main_content = f'''# Welcome to Zexus! (Flexible Syntax)
 # Execution Mode: {mode}
 
 let app_name = "My Zexus App"
@@ -426,13 +449,13 @@ action main():
 
 main()
 '''
-
+    
     (project_path / "main.zx").write_text(main_content)
-
+    
     # Create config file with hybrid settings
     config_content = f'''{{
     "name": "{project_name}",
-    "version": "0.1.0", 
+    "version": "0.1.0",
     "type": "application",
     "entry_point": "main.zx",
     "syntax_style": "{syntax_style}",
@@ -441,9 +464,9 @@ main()
     "fallback_to_interpreter": true
 }}
 '''
-
+    
     (project_path / "zexus.json").write_text(config_content)
-
+    
     console.print(f"\n✅ [bold green]Project '{project_name}' created![/bold green]")
     console.print(f"📁 cd {project_name}")
     console.print("🚀 zx run main.zx")
@@ -458,17 +481,17 @@ def debug(ctx, action):
     if action == 'status':
         console.print(f"🔍 Debug level: [bold]{config.debug_level}[/bold]")
         return
-
+    
     if action == 'on':
         config.enable_debug('full')
         console.print("✅ Debugging enabled (full)")
         return
-
+    
     if action == 'minimal':
         config.enable_debug('minimal')
         console.print("✅ Debugging set to minimal (errors/warnings)")
         return
-
+    
     if action == 'off':
         config.disable_debug()
         console.print("✅ Debugging disabled")
