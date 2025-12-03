@@ -1,11 +1,11 @@
 ## src/zexus/parser.py
-from .zexus_token import *
-from .lexer import Lexer
-from .zexus_ast import *
+from ..zexus_token import *
+from ..lexer import Lexer
+from ..zexus_ast import *
 from .strategy_structural import StructuralAnalyzer
 from .strategy_context import ContextStackParser
-from .strategy_recovery import ErrorRecoveryEngine
-from .config import config  # Import the config
+from ..strategy_recovery import ErrorRecoveryEngine
+from ..config import config  # Import the config
 
 # Precedence constants
 LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
