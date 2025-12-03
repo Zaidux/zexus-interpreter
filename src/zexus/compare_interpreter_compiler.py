@@ -1,4 +1,4 @@
-"""Compare top-level symbols between the interpreter (`evaluator.py`) and
+"""Compare top-level symbols between the interpreter (`evaluator/`) and
 the compiler package (`src/zexus/compiler`) and print a simple report.
 
 This script is intentionally conservative: it only considers top-level
@@ -63,33 +63,53 @@ def collect_package_symbols(dirpath):
 
 def main():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-    interp_path = os.path.join(repo_root, 'src', 'zexus', 'evaluator.py')
+    
+    # OLD: interp_path = os.path.join(repo_root, 'src', 'zexus', 'evaluator.py')
+    # NEW: interp_path is now the directory
+    interp_dir = os.path.join(repo_root, 'src', 'zexus', 'evaluator') 
     compiler_dir = os.path.join(repo_root, 'src', 'zexus', 'compiler')
 
-    if not os.path.exists(interp_path):
-        print('Interpreter file not found:', interp_path)
+    # Update the check to look for the directory instead of a file
+    if not os.path.isdir(interp_dir):
+        print('Interpreter directory not found:', interp_dir)
+        # Try to look for evaluator modules (Your provided check for directory content)
+        evaluator_files = []
+        if os.path.isdir(interp_dir):
+            evaluator_files = [os.path.join(interp_dir, f) for f in os.listdir(interp_dir) 
+                              if f.endswith('.py') and not f.startswith('__')]
+            if evaluator_files:
+                print('Found evaluator modules:', evaluator_files)
         sys.exit(2)
+        
     if not os.path.isdir(compiler_dir):
         print('Compiler directory not found:', compiler_dir)
         sys.exit(2)
 
-    interp_symbols = collect_top_level_symbols(interp_path)
+    # Collect symbols from the interpreter package
+    interp_pkg = collect_package_symbols(interp_dir)
+
+    # Collect symbols from the compiler package
     compiler_pkg = collect_package_symbols(compiler_dir)
+
+    # union all interpreter symbols
+    interp_symbols_union = set()
+    for fn, syms in interp_pkg.items():
+        interp_symbols_union.update(syms)
 
     # union all compiler symbols
     compiler_symbols_union = set()
     for fn, syms in compiler_pkg.items():
         compiler_symbols_union.update(syms)
 
-    only_in_interp = sorted(interp_symbols - compiler_symbols_union)
-    only_in_compiler = sorted(compiler_symbols_union - interp_symbols)
-    common = sorted(interp_symbols & compiler_symbols_union)
+    only_in_interp = sorted(interp_symbols_union - compiler_symbols_union)
+    only_in_compiler = sorted(compiler_symbols_union - interp_symbols_union)
+    common = sorted(interp_symbols_union & compiler_symbols_union)
 
-    print('\nComparison report: interpreter vs compiler package')
-    print('Interpreter file: ', interp_path)
+    print('\nComparison report: interpreter package vs compiler package')
+    print('Interpreter package dir:', interp_dir)
     print('Compiler package dir:', compiler_dir)
     print('\nCounts:')
-    print('  interpreter symbols:', len(interp_symbols))
+    print('  interpreter union symbols:', len(interp_symbols_union))
     print('  compiler union symbols:', len(compiler_symbols_union))
     print('\nOnly in interpreter ({}):'.format(len(only_in_interp)))
     for name in only_in_interp:
@@ -102,6 +122,10 @@ def main():
     print('\nCommon symbols ({}):'.format(len(common)))
     for name in common[:200]:
         print('   -', name)
+        
+    print('\nPer-file interpreter symbol breakdown:')
+    for fn, syms in sorted(interp_pkg.items()):
+        print(f'  {fn}: {len(syms)} symbols')
 
     print('\nPer-file compiler symbol breakdown:')
     for fn, syms in sorted(compiler_pkg.items()):
@@ -110,7 +134,7 @@ def main():
     # Quick hints
     if only_in_interp:
         print("""
-HINT: The interpreter defines top-level symbols that are not present in the compiler package.
+HINT: The interpreter package defines top-level symbols that are not present in the compiler package.
 Start by inspecting the names listed above to decide which functionality should be implemented
 or refactored into the compiler. This tool is conservative (top-level only) and may miss
 runtime/exported symbols. For a deeper comparison we can compare call-sites, used imports,
