@@ -1,4 +1,4 @@
-# ~/zexus-interpreter/src/zexus/__init__.py
+# src/zexus/__init__.py
 """
 Zexus Programming Language
 A declarative, intent-based programming language for modern applications.
@@ -10,14 +10,19 @@ __email__ = "dev@ziver.io"
 
 from .lexer import Lexer
 from .parser import Parser
-from .evaluator import eval_node, Environment
-from .object import (
+# UPDATED: Import from new evaluator structure
+from .evaluator import evaluate
+from .object import Environment, (
     Object, Integer, Float, String, Boolean, Null, 
     List, Map, Action, Builtin, ReturnValue, EmbeddedCode
 )
 
+# For backward compatibility, you can alias eval_node to evaluate if needed
+# but better to update callers to use evaluate
+eval_node = evaluate  # Alias for backward compatibility
+
 __all__ = [
-    "Lexer", "Parser", "eval_node", "Environment",
+    "Lexer", "Parser", "evaluate", "eval_node", "Environment",  # UPDATED
     "Object", "Integer", "Float", "String", "Boolean", 
     "Null", "List", "Map", "Action", "Builtin", "ReturnValue", "EmbeddedCode"
 ]
