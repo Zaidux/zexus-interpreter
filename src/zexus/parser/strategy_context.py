@@ -424,7 +424,7 @@ class ContextStackParser:
 
                     if action_end != -1:
                         action_tokens = tokens[action_start:action_end+1]
-                        
+
                         # Parse Action Name
                         act_name = "anonymous"
                         if action_start + 1 < len(tokens) and tokens[action_start+1].type == IDENT:
@@ -436,7 +436,7 @@ class ContextStackParser:
                         paren_end = -1
                         for k, tk in enumerate(action_tokens):
                             if tk.type == LPAREN: paren_start = k; break
-                        
+
                         if paren_start != -1:
                             depth = 0
                             for k in range(paren_start, len(action_tokens)):
@@ -444,7 +444,7 @@ class ContextStackParser:
                                 elif action_tokens[k].type == RPAREN:
                                     depth -= 1
                                     if depth == 0: paren_end = k; break
-                            
+
                             if paren_end > paren_start:
                                 param_tokens = action_tokens[paren_start+1:paren_end]
                                 for pk in param_tokens:
@@ -456,7 +456,7 @@ class ContextStackParser:
                         act_brace_start = -1
                         for k, tk in enumerate(action_tokens):
                             if tk.type == LBRACE: act_brace_start = k; break
-                        
+
                         if act_brace_start != -1:
                              body_tokens = action_tokens[act_brace_start+1:-1]
                              body_block.statements = self._parse_block_statements(body_tokens)
@@ -467,23 +467,67 @@ class ContextStackParser:
                             parameters=params,
                             body=body_block
                         ))
-                        
+
                         i = action_end + 1
                         continue
 
-                # B. Handle State Variables (Properties)
+                # B. Handle Persistent Storage Variables
+                elif token.type == PERSISTENT:
+                    # Check if next token is STORAGE
+                    if i + 1 < brace_end and tokens[i + 1].type == STORAGE:
+                        # Move to identifier after "persistent storage"
+                        i += 2
+                        if i < brace_end and tokens[i].type == IDENT:
+                            prop_name = tokens[i].literal
+                            prop_type = "any"
+                            default_val = None
+
+                            current_idx = i + 1
+                            if current_idx < brace_end and tokens[current_idx].type == COLON:
+                                current_idx += 1
+                                if current_idx < brace_end and tokens[current_idx].type == IDENT:
+                                    prop_type = tokens[current_idx].literal
+                                    current_idx += 1
+
+                            # Check for default/initial value
+                            if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
+                                current_idx += 1
+                                if current_idx < brace_end:
+                                    val_token = tokens[current_idx]
+                                    if val_token.type == STRING:
+                                        default_val = StringLiteral(val_token.literal)
+                                    elif val_token.type == INT:
+                                        default_val = IntegerLiteral(int(val_token.literal))
+                                    elif val_token.type == FLOAT:
+                                        default_val = FloatLiteral(float(val_token.literal))
+                                    elif val_token.type == IDENT:
+                                        default_val = Identifier(val_token.literal)
+                                    current_idx += 1
+
+                            # CRITICAL FIX: Use AstNodeShim so evaluator can access .name and .initial_value via dot notation
+                            storage_vars.append(AstNodeShim(
+                                name=Identifier(prop_name),
+                                type=Identifier(prop_type),
+                                initial_value=default_val, # For Contract evaluator
+                                default_value=default_val  # For Entity evaluator (fallback compatibility)
+                            ))
+
+                            i = current_idx
+                            continue
+
+                # C. Handle State Variables (Properties)
                 elif token.type == IDENT:
                     prop_name = token.literal
-                    
+
                     if i + 1 < brace_end and tokens[i+1].type == COLON:
                         prop_type = "any"
                         default_val = None
-                        
+
                         current_idx = i + 2
                         if current_idx < brace_end and tokens[current_idx].type == IDENT:
                             prop_type = tokens[current_idx].literal
                             current_idx += 1
-                        
+
                         # Check for default/initial value
                         if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
                              current_idx += 1
@@ -496,7 +540,7 @@ class ContextStackParser:
                                  elif val_token.type == IDENT:
                                      default_val = Identifier(val_token.literal)
                                  current_idx += 1
-                        
+
                         # CRITICAL FIX: Use AstNodeShim so evaluator can access .name and .initial_value via dot notation
                         # The evaluator uses `storage_var_node.name.value` and `storage_var_node.initial_value`
                         storage_vars.append(AstNodeShim(
@@ -505,10 +549,10 @@ class ContextStackParser:
                             initial_value=default_val, # For Contract evaluator
                             default_value=default_val  # For Entity evaluator (fallback compatibility)
                         ))
-                        
+
                         i = current_idx
                         continue
-                
+
                 i += 1
 
         # 4. Inject Name property if missing (Fixes runtime error)
