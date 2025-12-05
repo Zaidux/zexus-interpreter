@@ -1,7 +1,7 @@
 # strategy_context.py (FINAL FIXED VERSION)
-from .zexus_token import *
-from .zexus_ast import *
-from .config import config as zexus_config
+from ..zexus_token import *
+from ..zexus_ast import *
+from ..config import config as zexus_config
 from types import SimpleNamespace # Helper for AST node creation
 
 # Local helper to control debug printing according to user config
