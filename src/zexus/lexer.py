@@ -45,7 +45,7 @@ class Lexer:
         if self.ch == '#' and self.peek_char() != '{':
             self.skip_comment()
             return self.next_token()
-        
+
         # NEW: Handle // style comments
         if self.ch == '/' and self.peek_char() == '/':
             self.skip_double_slash_comment()
@@ -386,10 +386,14 @@ class Lexer:
             "protect": PROTECT,
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             # Advanced features
-            "middleware": "MIDDLEWARE",
-            "auth": "AUTH",
-            "throttle": "THROTTLE",
-            "cache": "CACHE",
+            "middleware": MIDDLEWARE,
+            "auth": AUTH,
+            "throttle": THROTTLE,
+            "cache": CACHE,
+            # NEW: Persistent storage keywords
+            "persistent": PERSISTENT,   # NEW: Persistent keyword
+            "storage": STORAGE,         # NEW: Storage keyword
+            "require": REQUIRE,         # Already defined in zexus_token.py
         }
         return keywords.get(ident, IDENT)
 
