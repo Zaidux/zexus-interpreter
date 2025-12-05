@@ -1,5 +1,5 @@
 # src/zexus/strategy_structural.py
-from .zexus_token import *
+from ..zexus_token import *
 from typing import List, Dict
 
 class StructuralAnalyzer:
