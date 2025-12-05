@@ -12,8 +12,8 @@ from .lexer import Lexer
 from .parser import Parser
 # UPDATED: Import from new evaluator structure
 from .evaluator import evaluate
-from .object import Environment, (
-    Object, Integer, Float, String, Boolean, Null, 
+from .object import (
+    Environment, Object, Integer, Float, String, Boolean, Null, 
     List, Map, Action, Builtin, ReturnValue, EmbeddedCode
 )
 
