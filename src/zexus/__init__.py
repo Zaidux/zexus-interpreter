@@ -6,7 +6,7 @@ A declarative, intent-based programming language for modern applications.
 
 __version__ = "0.1.0"
 __author__ = "Ziver Labs"
-__email__ = "dev@ziver.io"
+__email__ = "ziverofficial567@gmail.com"
 
 from .lexer import Lexer
 from .parser import Parser
