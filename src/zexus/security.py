@@ -1,3 +1,5 @@
+# src/zexus/security.py
+
 """
 Advanced Security and Contract Features for Zexus
 
@@ -5,10 +7,34 @@ This module implements entity, verify, contract, and protect statements
 providing a powerful security framework for Zexus programs.
 """
 
+import os
+import json
+import uuid
+import sqlite3
+import time
+
+# Try importing advanced database drivers
+try:
+    import plyvel # For LevelDB
+    _LEVELDB_AVAILABLE = True
+except ImportError:
+    _LEVELDB_AVAILABLE = False
+
+try:
+    import rocksdb # For RocksDB
+    _ROCKSDB_AVAILABLE = True
+except ImportError:
+    _ROCKSDB_AVAILABLE = False
+
 from .object import (
-    Environment, Map, String, Integer, Boolean as BooleanObj, 
+    Environment, Map, String, Integer, Float, Boolean as BooleanObj, 
     Builtin, List, Null, EvaluationError as ObjectEvaluationError
 )
+
+# Ensure storage directory exists
+STORAGE_DIR = "chain_data"
+if not os.path.exists(STORAGE_DIR):
+    os.makedirs(STORAGE_DIR)
 
 
 class SecurityContext:
@@ -196,30 +222,126 @@ class VerifyWrapper:
 
 
 # ===============================================
+# CONTRACT PERSISTENCE BACKENDS
+# ===============================================
+
+class StorageBackend:
+    """Interface for storage backends"""
+    def set(self, key, value): pass
+    def get(self, key): pass
+    def delete(self, key): pass
+    def close(self): pass
+
+class InMemoryBackend(StorageBackend):
+    def __init__(self):
+        self.data = {}
+    def set(self, key, value): self.data[key] = value
+    def get(self, key): return self.data.get(key)
+    def delete(self, key): 
+        if key in self.data: del self.data[key]
+
+class SQLiteBackend(StorageBackend):
+    def __init__(self, db_path):
+        import sqlite3
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.cursor = self.conn.cursor()
+        self.cursor.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
+        self.conn.commit()
+
+    def set(self, key, value):
+        self.cursor.execute("INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)", (key, value))
+        self.conn.commit()
+
+    def get(self, key):
+        self.cursor.execute("SELECT value FROM kv_store WHERE key=?", (key,))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
+    def delete(self, key):
+        self.cursor.execute("DELETE FROM kv_store WHERE key=?", (key,))
+        self.conn.commit()
+
+    def close(self):
+        self.conn.close()
+
+class LevelDBBackend(StorageBackend):
+    def __init__(self, db_path):
+        if not _LEVELDB_AVAILABLE: raise ImportError("plyvel not installed")
+        self.db = plyvel.DB(db_path, create_if_missing=True)
+
+    def set(self, key, value):
+        self.db.put(key.encode('utf-8'), value.encode('utf-8'))
+
+    def get(self, key):
+        res = self.db.get(key.encode('utf-8'))
+        return res.decode('utf-8') if res else None
+
+    def delete(self, key):
+        self.db.delete(key.encode('utf-8'))
+
+    def close(self):
+        self.db.close()
+
+class RocksDBBackend(StorageBackend):
+    def __init__(self, db_path):
+        if not _ROCKSDB_AVAILABLE: raise ImportError("rocksdb not installed")
+        self.db = rocksdb.DB(db_path, rocksdb.Options(create_if_missing=True))
+
+    def set(self, key, value):
+        self.db.put(key.encode('utf-8'), value.encode('utf-8'))
+
+    def get(self, key):
+        res = self.db.get(key.encode('utf-8'))
+        return res.decode('utf-8') if res else None
+
+    def delete(self, key):
+        self.db.delete(key.encode('utf-8'))
+
+# ===============================================
 # CONTRACT SYSTEM - Blockchain State & Logic
 # ===============================================
 
 class ContractStorage:
-    """Persistent storage for contract state"""
+    """Persistent storage for contract state with DB selection"""
 
-    def __init__(self):
-        self.state = {}
+    def __init__(self, contract_id, db_type="sqlite"):
         self.transaction_log = []
+        self.db_type = db_type
+        
+        # Determine strict path
+        base_path = os.path.join(STORAGE_DIR, f"{contract_id}")
+        
+        # Initialize Backend
+        if db_type == "leveldb" and _LEVELDB_AVAILABLE:
+            self.backend = LevelDBBackend(base_path)
+            print(f"   💾 Storage: LevelDB ({base_path})")
+        elif db_type == "rocksdb" and _ROCKSDB_AVAILABLE:
+            self.backend = RocksDBBackend(f"{base_path}.rdb")
+            print(f"   💾 Storage: RocksDB ({base_path}.rdb)")
+        elif db_type == "sqlite":
+            self.backend = SQLiteBackend(f"{base_path}.sqlite")
+            print(f"   💾 Storage: SQLite ({base_path}.sqlite)")
+        else:
+            print(f"   ⚠️ Storage Warning: '{db_type}' unavailable or unknown. Falling back to In-Memory.")
+            self.backend = InMemoryBackend()
 
     def get(self, key):
-        """Get value from storage"""
-        return self.state.get(key)
+        """Get value from storage and deserialize from JSON"""
+        raw_val = self.backend.get(key)
+        if raw_val is None:
+            return None
+        return self._deserialize(raw_val)
 
     def set(self, key, value):
-        """Set value in storage"""
-        self.state[key] = value
-        self._log_transaction("SET", key, value)
+        """Serialize to JSON and set value in storage"""
+        serialized = self._serialize(value)
+        self.backend.set(key, serialized)
+        self._log_transaction("SET", key, serialized)
 
     def delete(self, key):
         """Delete value from storage"""
-        if key in self.state:
-            del self.state[key]
-            self._log_transaction("DELETE", key, None)
+        self.backend.delete(key)
+        self._log_transaction("DELETE", key, None)
 
     def _log_transaction(self, op, key, value):
         """Log transaction for audit trail"""
@@ -230,75 +352,148 @@ class ContractStorage:
             "timestamp": _get_timestamp()
         })
 
-    def get_transaction_log(self):
-        """Get all transactions"""
-        return self.transaction_log
+    def _serialize(self, obj):
+        """Convert Zexus Object -> JSON String"""
+        if isinstance(obj, String):
+            return json.dumps({"type": "string", "val": obj.value})
+        elif isinstance(obj, Integer):
+            return json.dumps({"type": "integer", "val": obj.value})
+        elif isinstance(obj, Float):
+            return json.dumps({"type": "float", "val": obj.value})
+        elif isinstance(obj, BooleanObj):
+            return json.dumps({"type": "boolean", "val": obj.value})
+        elif isinstance(obj, List):
+            # Recursively serialize list elements
+            serialized_list = [self._serialize_val_recursive(e) for e in obj.elements]
+            return json.dumps({"type": "list", "val": serialized_list})
+        elif isinstance(obj, Map):
+            # Recursively serialize map elements
+            serialized_map = {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}
+            return json.dumps({"type": "map", "val": serialized_map})
+        elif obj is Null or obj is None:
+            return json.dumps({"type": "null", "val": None})
+        else:
+            # Fallback for complex objects or strings
+            return json.dumps({"type": "string", "val": str(obj)})
+
+    def _serialize_val_recursive(self, obj):
+        """Helper for nested structures (returns dict, not json string)"""
+        # This mirrors _serialize but returns the inner dict structure directly
+        if isinstance(obj, String): return {"type": "string", "val": obj.value}
+        elif isinstance(obj, Integer): return {"type": "integer", "val": obj.value}
+        elif isinstance(obj, BooleanObj): return {"type": "boolean", "val": obj.value}
+        elif isinstance(obj, List): 
+            return {"type": "list", "val": [self._serialize_val_recursive(e) for e in obj.elements]}
+        elif isinstance(obj, Map): 
+            return {"type": "map", "val": {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}}
+        elif obj is Null: return {"type": "null", "val": None}
+        return {"type": "string", "val": str(obj)}
+
+    def _deserialize(self, json_str):
+        """Convert JSON String -> Zexus Object"""
+        try:
+            data = json.loads(json_str)
+            return self._deserialize_recursive(data)
+        except Exception as e:
+            print(f"Settings corruption error: {e}")
+            return Null
+
+    def _deserialize_recursive(self, data):
+        """Helper to reconstruct objects"""
+        dtype = data.get("type")
+        val = data.get("val")
+
+        if dtype == "string": return String(val)
+        elif dtype == "integer": return Integer(val)
+        elif dtype == "float": return Float(val)
+        elif dtype == "boolean": return BooleanObj(val)
+        elif dtype == "null": return Null
+        elif dtype == "list":
+            # Reconstruct list
+            elements = [self._deserialize_recursive(item) for item in val]
+            return List(elements)
+        elif dtype == "map":
+            # Reconstruct map
+            pairs = {k: self._deserialize_recursive(v) for k, v in val.items()}
+            return Map(pairs)
+        return String(str(val)) # Fallback
 
 
 class SmartContract:
     """Represents a smart contract with persistent storage"""
 
-    def __init__(self, name, storage_vars, actions, blockchain_config=None):
+    def __init__(self, name, storage_vars, actions, blockchain_config=None, address=None):
         self.name = name
         self.storage_vars = storage_vars or []
         self.actions = actions or {}
         self.blockchain_config = blockchain_config or {}
-        self.storage = ContractStorage()
+        
+        # Generate a unique address/ID for this specific instance if not provided
+        self.address = address or str(uuid.uuid4())[:8]
+        
+        # Default to SQLite, can be configured via blockchain_config
+        db_pref = (blockchain_config or {}).get("storage_engine", "sqlite")
+        
+        # Initialize storage linked to unique address
+        # The unique ID ensures multiple "ZiverWallet()" calls don't overwrite each other
+        contract_id = f"{self.name}_{self.address}"
+        self.storage = ContractStorage(contract_id, db_type=db_pref)
         self.is_deployed = False
 
     def instantiate(self, args=None):
-        """Create a new instance of this contract when called like ZiverWallet().
-        
-        This is called when a contract is invoked as a function in the source code.
-        It should create a new contract instance with its own storage.
-        
-        Args:
-            args: Arguments passed to the contract constructor (optional)
-        
-        Returns:
-            A new contract instance ready for method calls
-        """
+        """Create a new instance of this contract when called like ZiverWallet()."""
         print(f"📄 SmartContract.instantiate() called for: {self.name}")
         
-        # Create a new contract instance with the same definition
-        # but its own independent storage
+        # Generate new unique address for the instance
+        new_address = str(uuid.uuid4())[:16]
+        
+        # Create instance with clean storage connection
         instance = SmartContract(
             name=self.name,
             storage_vars=self.storage_vars,
             actions=self.actions,
-            blockchain_config=self.blockchain_config
+            blockchain_config=self.blockchain_config,
+            address=new_address
         )
         
+        print(f"   🔗 Contract Address: {new_address}")
+
         # Deploy the instance (initialize storage)
         instance.deploy()
-        
-        # Store reference to parent contract for method resolution
         instance.parent_contract = self
         
-        # Log available actions for debugging
         print(f"   Available actions: {list(self.actions.keys())}")
-        
-        # Return the instance (not the original contract definition)
         return instance
 
     def __call__(self, *args):
-        """Allow contract to be called like a function: ZiverWallet()"""
         return self.instantiate(args)
 
     def deploy(self):
-        """Deploy the contract - FIXED VERSION to handle AstNodeShim objects"""
+        """Deploy the contract and initialize persistent storage"""
+        # Checks if we should reset storage or strictly load existing
+        # For simplicity in this VM, subsequent runs act like "loading" if DB exists
         self.is_deployed = True
-        # Initialize storage with default values
+        
+        # Initialize storage only if key doesn't exist (preserve persistence)
         for var_node in self.storage_vars:
-            # Handle AstNodeShim objects (from parser)
-            if hasattr(var_node, 'initial_value') and var_node.initial_value is not None:
-                # Extract the variable name from the AstNodeShim
+            var_name = None
+            default_value = None
+
+            if hasattr(var_node, 'initial_value'):
                 var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
-                self.storage.set(var_name, var_node.initial_value)
-            # Handle dictionary format (for backward compatibility)
+                default_value = var_node.initial_value
             elif isinstance(var_node, dict) and "initial_value" in var_node:
                 var_name = var_node.get("name")
-                self.storage.set(var_name, var_node["initial_value"])
+                default_value = var_node["initial_value"]
+
+            if var_name:
+                # ONLY set if not already in DB (Persistence Logic)
+                if self.storage.get(var_name) is None:
+                    if default_value is not None:
+                        self.storage.set(var_name, default_value)
+                    else:
+                        # Set reasonable defaults for types if null
+                        self.storage.set(var_name, Null)
 
     def execute_action(self, action_name, args, context, env=None):
         """Execute a contract action"""
@@ -308,19 +503,14 @@ class SmartContract:
         if action_name not in self.actions:
             return ObjectEvaluationError(f"Unknown action: {action_name}")
 
-        action = self.actions[action_name]
-        # Action execution would be delegated to evaluator
-        return action
+        return self.actions[action_name]
 
     def get_state(self):
-        """Get current contract state"""
-        return self.storage.state
+        return self.storage.backend.data if isinstance(self.storage.backend, InMemoryBackend) else {}
 
     def get_balance(self, account=None):
-        """Get balance from contract storage"""
-        if account:
-            return self.storage.get(f"balance_{account}") or Integer(0)
-        return self.storage.get("balance") or Integer(0)
+        val = self.storage.get(f"balance_{account}") if account else self.storage.get("balance")
+        return val or Integer(0)
 
 
 # ===============================================
