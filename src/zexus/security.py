@@ -246,6 +246,45 @@ class SmartContract:
         self.storage = ContractStorage()
         self.is_deployed = False
 
+    def instantiate(self, args=None):
+        """Create a new instance of this contract when called like ZiverWallet().
+        
+        This is called when a contract is invoked as a function in the source code.
+        It should create a new contract instance with its own storage.
+        
+        Args:
+            args: Arguments passed to the contract constructor (optional)
+        
+        Returns:
+            A new contract instance ready for method calls
+        """
+        print(f"📄 SmartContract.instantiate() called for: {self.name}")
+        
+        # Create a new contract instance with the same definition
+        # but its own independent storage
+        instance = SmartContract(
+            name=self.name,
+            storage_vars=self.storage_vars,
+            actions=self.actions,
+            blockchain_config=self.blockchain_config
+        )
+        
+        # Deploy the instance (initialize storage)
+        instance.deploy()
+        
+        # Store reference to parent contract for method resolution
+        instance.parent_contract = self
+        
+        # Log available actions for debugging
+        print(f"   Available actions: {list(self.actions.keys())}")
+        
+        # Return the instance (not the original contract definition)
+        return instance
+
+    def __call__(self, *args):
+        """Allow contract to be called like a function: ZiverWallet()"""
+        return self.instantiate(args)
+
     def deploy(self):
         """Deploy the contract - FIXED VERSION to handle AstNodeShim objects"""
         self.is_deployed = True
