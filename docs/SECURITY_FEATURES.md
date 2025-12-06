@@ -193,6 +193,35 @@ throttle(api_endpoint, {
 ```
 
 **Implementation:**
+### 8. **RESTRICT / TRAIL / SANDBOX (Runtime Enforcement & Observability)**
+**What they do:**
+- `restrict` records field-level access control policies (e.g., `read-only`, `admin-only`, `redact`).
+- `trail` enables lightweight, real-time event tracing for interpreter events (`audit`, `print`, `debug`, `*`).
+- `sandbox` executes Zexus code in isolated environments and the runtime records sandbox runs for observability.
+
+**Implementation (runtime hooks):**
+- `SecurityContext` now exposes registries and helpers:
+    - `register_restriction`, `get_restriction`, `list_restrictions`, `remove_restriction`
+    - `register_trail`, `list_trails`, `remove_trail`
+    - `register_sandbox_run`, `list_sandbox_runs`
+    - `emit_event(event_type, payload)` — dispatches events to active trails and records them to the `AuditLog`.
+
+**Enforcement integrated:**
+- Property access (reads) consult `get_restriction` in `src/zexus/evaluator/core.py`:
+    - `redact` returns `"***REDACTED***"` for matching fields.
+    - `admin-only` denies access unless `env.get('__is_admin__')` is truthy.
+- Property writes (assignments) consult `get_restriction` in `src/zexus/evaluator/statements.py`:
+    - `read-only` forbids writes.
+    - `admin-only` requires `env.get('__is_admin__')` to be truthy.
+    - Sealed properties are still respected.
+
+**Observability:**
+- `eval_print_statement`, `eval_audit_statement`, and `eval_debug_statement` now emit events via `SecurityContext.emit_event`, making trails immediately useful for debugging or monitoring.
+
+**Notes & Next Steps:**
+- Current trail filtering is substring-based and written to the in-memory `AuditLog` and stdout; consider adding sinks (file, remote) and structured selectors.
+- Sandbox policies are recorded; to enforce builtin/API restrictions, add checks into builtin adapters and external bridges.
+
 - ✅ AST Node: `ThrottleStatement` in `zexus_ast.py`
 - ✅ Token: `THROTTLE` in `zexus_token.py`
 - ✅ Evaluator: `eval_throttle_statement()` in `evaluator.py`
