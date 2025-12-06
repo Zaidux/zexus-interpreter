@@ -36,6 +36,113 @@ STORAGE_DIR = "chain_data"
 if not os.path.exists(STORAGE_DIR):
     os.makedirs(STORAGE_DIR)
 
+# Audit logging directory
+AUDIT_DIR = os.path.join(STORAGE_DIR, "audit_logs")
+if not os.path.exists(AUDIT_DIR):
+    os.makedirs(AUDIT_DIR)
+
+
+class AuditLog:
+    """Comprehensive audit logging system for compliance tracking
+    
+    Maintains audit trail of data access, modifications, and sensitive operations
+    for regulatory compliance (GDPR, HIPAA, SOC2, etc.)
+    """
+    
+    def __init__(self, max_entries=10000, persist_to_file=False):
+        self.entries = []  # In-memory audit log
+        self.max_entries = max_entries
+        self.persist_to_file = persist_to_file
+        self.audit_file = os.path.join(AUDIT_DIR, f"audit_{uuid.uuid4().hex[:8]}.jsonl")
+    
+    def log(self, data_name, action, data_type, timestamp=None, additional_context=None):
+        """Log a single audit entry
+        
+        Args:
+            data_name: Name of the data being audited
+            action: Action type (access, modification, deletion, etc.)
+            data_type: Type of data (STRING, MAP, ARRAY, FUNCTION, etc.)
+            timestamp: Optional ISO 8601 timestamp (auto-generated if None)
+            additional_context: Optional dict with additional audit context
+        
+        Returns:
+            Audit entry dict
+        """
+        import datetime
+        
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        
+        entry = {
+            "id": str(uuid.uuid4()),
+            "data_name": data_name,
+            "action": action,
+            "data_type": data_type,
+            "timestamp": timestamp,
+            "context": additional_context or {}
+        }
+        
+        self.entries.append(entry)
+        
+        # Enforce max entries limit
+        if len(self.entries) > self.max_entries:
+            self.entries = self.entries[-self.max_entries:]
+        
+        # Optionally persist to file
+        if self.persist_to_file:
+            self._write_entry_to_file(entry)
+        
+        return entry
+    
+    def _write_entry_to_file(self, entry):
+        """Write audit entry to JSONL file"""
+        try:
+            with open(self.audit_file, 'a') as f:
+                f.write(json.dumps(entry) + '\n')
+        except IOError as e:
+            print(f"Warning: Could not write audit log to file: {e}")
+    
+    def get_entries(self, data_name=None, action=None, limit=None):
+        """Query audit log entries
+        
+        Args:
+            data_name: Filter by data name (optional)
+            action: Filter by action type (optional)
+            limit: Limit number of results (optional)
+        
+        Returns:
+            List of matching audit entries
+        """
+        results = self.entries
+        
+        if data_name:
+            results = [e for e in results if e['data_name'] == data_name]
+        
+        if action:
+            results = [e for e in results if e['action'] == action]
+        
+        if limit:
+            results = results[-limit:]
+        
+        return results
+    
+    def clear(self):
+        """Clear in-memory audit log"""
+        self.entries = []
+    
+    def export_to_file(self, filename):
+        """Export entire audit log to file"""
+        try:
+            with open(filename, 'w') as f:
+                json.dump(self.entries, f, indent=2)
+            return True
+        except IOError as e:
+            print(f"Warning: Could not export audit log: {e}")
+            return False
+    
+    def __repr__(self):
+        return f"AuditLog(entries={len(self.entries)}, max={self.max_entries})"
+
 
 class SecurityContext:
     """Global security context for enforcement"""
@@ -46,6 +153,22 @@ class SecurityContext:
         self.middlewares = {}        # Registered middleware
         self.auth_config = None      # Global auth configuration
         self.cache_store = {}        # Caching store
+        self.audit_log = AuditLog()  # Audit logging system
+    
+    def log_audit(self, data_name, action, data_type, timestamp=None, context=None):
+        """Log an audit entry through the security context
+        
+        Args:
+            data_name: Name of data being audited
+            action: Action type (access, modification, deletion, etc.)
+            data_type: Type of data
+            timestamp: Optional ISO 8601 timestamp
+            context: Optional additional audit context
+        
+        Returns:
+            Audit entry dict
+        """
+        return self.audit_log.log(data_name, action, data_type, timestamp, context)
 
     def register_verify_check(self, name, check_func):
         """Register a verification check function"""

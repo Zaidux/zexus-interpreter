@@ -33,7 +33,7 @@ class StructuralAnalyzer:
         # Statement starters (keywords that begin a new statement)
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
-              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT
+              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT
         }
 
         while i < n:
@@ -479,7 +479,7 @@ class StructuralAnalyzer:
         stop_types = {SEMICOLON, RBRACE}
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
-              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL
+              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT
         }
 
         cur = []
