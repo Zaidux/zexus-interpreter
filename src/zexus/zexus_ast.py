@@ -215,6 +215,20 @@ class ExternalDeclaration(Statement):
     def __repr__(self):
         return f"ExternalDeclaration(name={self.name}, module={self.module_path})"
 
+class AuditStatement(Statement):
+    """Audit statement - Log data access for compliance
+    
+    audit user_data, "access", timestamp;
+    audit CONFIG, "modification", current_time;
+    """
+    def __init__(self, data_name, action_type, timestamp=None):
+        self.data_name = data_name      # Variable/identifier to audit
+        self.action_type = action_type  # String: "access", "modification", "deletion", etc.
+        self.timestamp = timestamp      # Optional timestamp expression
+
+    def __repr__(self):
+        return f"AuditStatement(data={self.data_name}, action={self.action_type}, timestamp={self.timestamp})"
+
 # Expression Nodes
 class Identifier(Expression):
     def __init__(self, value): 

@@ -453,6 +453,62 @@ class StatementEvaluatorMixin:
         
         return EvaluationError("seal: unsupported target")
     
+    def eval_audit_statement(self, node, env, stack_trace):
+        """Evaluate audit statement for compliance logging.
+        
+        Syntax: audit data_name, "action_type", [optional_timestamp];
+        
+        Returns a log entry dictionary with the audited data reference.
+        """
+        from datetime import datetime
+        from ..object import String, Map
+        
+        # Get the data identifier
+        if not isinstance(node.data_name, Identifier):
+            return EvaluationError(f"audit: expected identifier, got {type(node.data_name).__name__}")
+        
+        data_name = node.data_name.value
+        
+        # Evaluate the action type string
+        if isinstance(node.action_type, StringLiteral):
+            action_type = node.action_type.value
+        else:
+            action_type_result = self.eval_node(node.action_type, env, stack_trace)
+            if is_error(action_type_result):
+                return action_type_result
+            action_type = to_string(action_type_result)
+        
+        # Get optional timestamp
+        timestamp = None
+        if node.timestamp:
+            if isinstance(node.timestamp, Identifier):
+                timestamp = env.get(node.timestamp.value)
+            else:
+                timestamp = self.eval_node(node.timestamp, env, stack_trace)
+                if is_error(timestamp):
+                    return timestamp
+        
+        # If no timestamp provided, use current time
+        if timestamp is None:
+            timestamp = datetime.now().isoformat()
+        else:
+            timestamp = to_string(timestamp)
+        
+        # Get reference to the audited data
+        audited_data = env.get(data_name)
+        if audited_data is None:
+            return EvaluationError(f"audit: identifier '{data_name}' not found")
+        
+        # Create audit log entry as a Map object
+        audit_log_pairs = {
+            "data_name": String(data_name),
+            "action": String(action_type),
+            "timestamp": String(timestamp),
+            "data_type": String(type(audited_data).__name__),
+        }
+        
+        return Map(audit_log_pairs)
+    
     def eval_contract_statement(self, node, env, stack_trace):
         storage = {}
         for sv in node.storage_vars:

@@ -94,6 +94,7 @@ VERIFY = "VERIFY"              # Verify checks: verify(action_name, ...condition
 CONTRACT = "CONTRACT"          # Smart contracts: contract Token { ... }
 PROTECT = "PROTECT"            # Protection guardrails: protect(action, rules)
 SEAL = "SEAL"                  # Seal objects: seal identifier
+AUDIT = "AUDIT"                # Audit log: audit data_name, action_type, timestamp
 
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
