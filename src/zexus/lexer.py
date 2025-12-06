@@ -387,6 +387,7 @@ class Lexer:
             "contract": CONTRACT,
             "protect": PROTECT,
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
+            "audit": AUDIT,             # NEW: Audit keyword for compliance logging
             # Advanced features
             "middleware": MIDDLEWARE,
             "auth": AUTH,

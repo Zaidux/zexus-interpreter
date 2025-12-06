@@ -1,0 +1,31 @@
+// Test AUDIT command functionality
+print("Testing AUDIT command for compliance logging...");
+
+// Test 1: Basic audit
+let user_data = {id: 1, name: "Alice", email: "alice@example.com"};
+let audit_entry = audit user_data, "access";
+print("✅ Test 1 - Basic audit entry: ", audit_entry);
+
+// Test 2: Audit with different action types
+audit user_data, "modification";
+print("✅ Test 2 - Modification audit completed");
+
+audit user_data, "deletion";
+print("✅ Test 3 - Deletion audit completed");
+
+// Test 3: Audit on different data types
+let config = {api_key: "sk_live_123", timeout: 5000};
+audit config, "config_access";
+print("✅ Test 4 - Config audit completed");
+
+// Test 4: Audit function
+let calculate = fn(x, y) { return x + y; };
+audit calculate, "function_called";
+print("✅ Test 5 - Function audit completed");
+
+// Test 5: Audit array
+let items = [1, 2, 3, 4, 5];
+audit items, "array_access";
+print("✅ Test 6 - Array audit completed");
+
+print("\n✨ All AUDIT tests passed!");

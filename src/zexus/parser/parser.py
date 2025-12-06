@@ -325,6 +325,8 @@ class UltimateParser:
                 return self.parse_protect_statement()
             elif self.cur_token_is(SEAL):
                 return self.parse_seal_statement()
+            elif self.cur_token_is(AUDIT):
+                return self.parse_audit_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -878,6 +880,50 @@ class UltimateParser:
 
         target = Identifier(self.cur_token.literal)
         return SealStatement(target=target)
+
+    def parse_audit_statement(self):
+        """Parse audit statement for compliance logging.
+        
+        Syntax: audit data_name, "action_type", [optional_timestamp];
+        Examples:
+            audit user_data, "access", timestamp;
+            audit CONFIG, "modification", now;
+        """
+        token = self.cur_token
+
+        # Expect identifier (data to audit)
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'audit'")
+            return None
+
+        data_name = Identifier(self.cur_token.literal)
+
+        # Expect comma
+        if not self.expect_peek(COMMA):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ',' after data identifier in audit statement")
+            return None
+
+        # Expect action type (string literal)
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected action type string in audit statement")
+            return None
+
+        action_type = StringLiteral(self.cur_token.literal)
+
+        # Optional: timestamp
+        timestamp = None
+        if self.peek_token_is(COMMA):
+            self.next_token()  # consume comma
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected timestamp identifier after comma in audit statement")
+                return None
+            timestamp = Identifier(self.cur_token.literal)
+
+        # Expect semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return AuditStatement(data_name=data_name, action_type=action_type, timestamp=timestamp)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):
