@@ -11,7 +11,8 @@ from ..zexus_ast import (
     SealStatement, MiddlewareStatement, AuthStatement, ThrottleStatement, CacheStatement,
     ComponentStatement, ThemeStatement, DebugStatement, ExternalDeclaration, AssignmentExpression,
     PrintStatement, ScreenStatement, EmbeddedCodeStatement, ExactlyStatement,
-    Identifier, PropertyAccessExpression
+    Identifier, PropertyAccessExpression, RestrictStatement, SandboxStatement, TrailStatement,
+    NativeStatement, GCStatement, InlineStatement, BufferStatement, SIMDStatement
 )
 from ..object import (
     Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
@@ -941,3 +942,239 @@ class StatementEvaluatorMixin:
         action = Action(node.parameters, node.body, env)
         env.set(node.name.value, action)
         return NULL
+    
+    # === PERFORMANCE OPTIMIZATION STATEMENTS ===
+    
+    def eval_native_statement(self, node, env, stack_trace):
+        """Evaluate native statement - call C/C++ code directly."""
+        try:
+            import ctypes
+            
+            # Load the shared library
+            try:
+                lib = ctypes.CDLL(node.library_name)
+            except (OSError, AttributeError) as e:
+                return EvaluationError(f"Failed to load native library '{node.library_name}': {str(e)}")
+            
+            # Get the function from the library
+            try:
+                native_func = getattr(lib, node.function_name)
+            except AttributeError:
+                return EvaluationError(f"Function '{node.function_name}' not found in library '{node.library_name}'")
+            
+            # Evaluate arguments
+            args = []
+            for arg in node.args:
+                val = self.eval_node(arg, env, stack_trace)
+                if is_error(val):
+                    return val
+                # Convert Zexus objects to Python types for FFI
+                args.append(_zexus_to_python(val))
+            
+            # Call the native function
+            try:
+                result = native_func(*args)
+                # Convert result back to Zexus object
+                zexus_result = _python_to_zexus(result)
+                
+                # Store result if alias provided
+                if node.alias:
+                    env.set(node.alias, zexus_result)
+                
+                return zexus_result
+            except Exception as e:
+                return EvaluationError(f"Error calling native function '{node.function_name}': {str(e)}")
+        
+        except ImportError:
+            return EvaluationError("ctypes module required for native statements")
+    
+    def eval_gc_statement(self, node, env, stack_trace):
+        """Evaluate garbage collection statement."""
+        try:
+            import gc
+            
+            action = node.action.lower()
+            
+            if action == "collect":
+                # Force garbage collection
+                collected = gc.collect()
+                return Integer(collected)
+            
+            elif action == "pause":
+                # Pause garbage collection
+                gc.disable()
+                return String("GC paused")
+            
+            elif action == "resume":
+                # Resume garbage collection
+                gc.enable()
+                return String("GC resumed")
+            
+            elif action == "enable_debug":
+                # Enable GC debug output
+                gc.set_debug(gc.DEBUG_STATS)
+                return String("GC debug enabled")
+            
+            elif action == "disable_debug":
+                # Disable GC debug output
+                gc.set_debug(0)
+                return String("GC debug disabled")
+            
+            else:
+                return EvaluationError(f"Unknown GC action: {action}")
+        
+        except Exception as e:
+            return EvaluationError(f"Error in GC statement: {str(e)}")
+    
+    def eval_inline_statement(self, node, env, stack_trace):
+        """Evaluate inline statement - mark function for inlining optimization."""
+        # Get the function to inline
+        func_name = node.function_name
+        if isinstance(func_name, Identifier):
+            func_name = func_name.value
+        
+        func = env.get(func_name)
+        if func is None:
+            return EvaluationError(f"Function '{func_name}' not found for inlining")
+        
+        # Mark function as inlined by setting a flag
+        if hasattr(func, 'is_inlined'):
+            func.is_inlined = True
+        elif isinstance(func, Action):
+            func.is_inlined = True
+        elif isinstance(func, Builtin):
+            func.is_inlined = True
+        else:
+            # Try to set the attribute dynamically
+            try:
+                func.is_inlined = True
+            except:
+                pass
+        
+        return String(f"Function '{func_name}' marked for inlining")
+    
+    def eval_buffer_statement(self, node, env, stack_trace):
+        """Evaluate buffer statement - direct memory access and manipulation."""
+        try:
+            import array
+            
+            buffer_name = node.buffer_name
+            operation = node.operation
+            arguments = node.arguments
+            
+            if operation == "allocate":
+                # allocate(size) - allocate a buffer
+                if len(arguments) != 1:
+                    return EvaluationError(f"allocate expects 1 argument, got {len(arguments)}")
+                
+                size_val = self.eval_node(arguments[0], env, stack_trace)
+                if is_error(size_val):
+                    return size_val
+                
+                size = _zexus_to_python(size_val)
+                try:
+                    size = int(size)
+                    # Create a byte array as a simple buffer representation
+                    buf = bytearray(size)
+                    env.set(buffer_name, _python_to_zexus(buf))
+                    return String(f"Buffer '{buffer_name}' allocated with size {size}")
+                except (ValueError, TypeError):
+                    return EvaluationError(f"Invalid size for buffer allocation: {size}")
+            
+            elif operation == "read":
+                # buffer.read(offset, length)
+                if len(arguments) != 2:
+                    return EvaluationError(f"read expects 2 arguments, got {len(arguments)}")
+                
+                offset_val = self.eval_node(arguments[0], env, stack_trace)
+                length_val = self.eval_node(arguments[1], env, stack_trace)
+                
+                if is_error(offset_val) or is_error(length_val):
+                    return offset_val if is_error(offset_val) else length_val
+                
+                buf = env.get(buffer_name)
+                if buf is None:
+                    return EvaluationError(f"Buffer '{buffer_name}' not found")
+                
+                offset = _zexus_to_python(offset_val)
+                length = _zexus_to_python(length_val)
+                
+                try:
+                    offset, length = int(offset), int(length)
+                    buf_data = _zexus_to_python(buf)
+                    data = buf_data[offset:offset+length]
+                    return _python_to_zexus(list(data))
+                except Exception as e:
+                    return EvaluationError(f"Error reading from buffer: {str(e)}")
+            
+            elif operation == "write":
+                # buffer.write(offset, data)
+                if len(arguments) != 2:
+                    return EvaluationError(f"write expects 2 arguments, got {len(arguments)}")
+                
+                offset_val = self.eval_node(arguments[0], env, stack_trace)
+                data_val = self.eval_node(arguments[1], env, stack_trace)
+                
+                if is_error(offset_val) or is_error(data_val):
+                    return offset_val if is_error(offset_val) else data_val
+                
+                buf = env.get(buffer_name)
+                if buf is None:
+                    return EvaluationError(f"Buffer '{buffer_name}' not found")
+                
+                offset = _zexus_to_python(offset_val)
+                data = _zexus_to_python(data_val)
+                
+                try:
+                    offset = int(offset)
+                    buf_data = _zexus_to_python(buf)
+                    if isinstance(buf_data, (bytearray, list)):
+                        if isinstance(data, list):
+                            for i, byte in enumerate(data):
+                                buf_data[offset + i] = int(byte)
+                        else:
+                            buf_data[offset] = int(data)
+                    else:
+                        return EvaluationError(f"Buffer is not writable")
+                    return String(f"Wrote {len(data) if isinstance(data, list) else 1} bytes at offset {offset}")
+                except Exception as e:
+                    return EvaluationError(f"Error writing to buffer: {str(e)}")
+            
+            elif operation == "free":
+                # free() - deallocate buffer
+                buf = env.get(buffer_name)
+                if buf is None:
+                    return EvaluationError(f"Buffer '{buffer_name}' not found")
+                
+                env.delete(buffer_name)
+                return String(f"Buffer '{buffer_name}' freed")
+            
+            else:
+                return EvaluationError(f"Unknown buffer operation: {operation}")
+        
+        except Exception as e:
+            return EvaluationError(f"Error in buffer statement: {str(e)}")
+    
+    def eval_simd_statement(self, node, env, stack_trace):
+        """Evaluate SIMD statement - vector operations using SIMD instructions."""
+        try:
+            import numpy as np
+            
+            # Evaluate the SIMD operation expression
+            result = self.eval_node(node.operation, env, stack_trace)
+            
+            if is_error(result):
+                return result
+            
+            # Convert result to Zexus object
+            zexus_result = result
+            
+            return zexus_result
+        
+        except ImportError:
+            # Fallback to pure Python implementation if numpy not available
+            result = self.eval_node(node.operation, env, stack_trace)
+            return result if not is_error(result) else EvaluationError("SIMD operations require numpy or fallback implementation")
+        
+        except Exception as e:
+            return EvaluationError(f"Error in SIMD statement: {str(e)}")

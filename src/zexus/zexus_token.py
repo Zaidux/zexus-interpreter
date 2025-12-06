@@ -128,6 +128,13 @@ PERSISTENT = "PERSISTENT"
 STORAGE = "STORAGE"
 REQUIRE = "REQUIRE"
 
+# PERFORMANCE OPTIMIZATION TOKENS
+NATIVE = "NATIVE"            # Call C/C++ code: native { "func_name", arg1, arg2 }
+GC = "GC"                    # Control garbage collection: gc "collect" or gc "pause"
+INLINE = "INLINE"            # Function inlining: inline func_name
+BUFFER = "BUFFER"            # Direct memory access: buffer(ptr, size)
+SIMD = "SIMD"                # Vector operations: simd(operation, vector1, vector2)
+
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):
         self.type = token_type

@@ -346,7 +346,7 @@ class ContextStackParser:
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
         value_tokens = []
         stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD}
         j = 2
         while j < len(tokens):
             t = tokens[j]
@@ -855,7 +855,7 @@ class ContextStackParser:
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL}
+        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD}
         while i < len(tokens):
             token = tokens[i]
 
@@ -1211,7 +1211,7 @@ class ContextStackParser:
         # Collect tokens up to a statement boundary
         inner_tokens = []
         statement_terminators = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD}
         nesting_level = 0
 
         for token in tokens[1:]:  # Skip the PRINT token

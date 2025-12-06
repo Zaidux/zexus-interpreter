@@ -333,6 +333,16 @@ class UltimateParser:
                 return self.parse_sandbox_statement()
             elif self.cur_token_is(TRAIL):
                 return self.parse_trail_statement()
+            elif self.cur_token_is(NATIVE):
+                return self.parse_native_statement()
+            elif self.cur_token_is(GC):
+                return self.parse_gc_statement()
+            elif self.cur_token_is(INLINE):
+                return self.parse_inline_statement()
+            elif self.cur_token_is(BUFFER):
+                return self.parse_buffer_statement()
+            elif self.cur_token_is(SIMD):
+                return self.parse_simd_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -1068,6 +1078,214 @@ class UltimateParser:
             self.next_token()
 
         return TrailStatement(trail_type=trail_type, filter_key=filter_key)
+
+    def parse_native_statement(self):
+        """Parse native statement for calling C/C++ code.
+        
+        Syntax:
+            native "libmath.so", "add_numbers"(x, y);
+            native "libcrypto.so", "sha256"(data) as hash;
+        """
+        token = self.cur_token
+
+        # Expect library name (string)
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected library name string after 'native'")
+            return None
+        library_name = self.cur_token.literal
+
+        # Expect comma
+        if not self.expect_peek(COMMA):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ',' after library name in native statement")
+            return None
+
+        # Expect function name (string)
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected function name string after comma in native statement")
+            return None
+        function_name = self.cur_token.literal
+
+        # Expect opening paren for arguments
+        if not self.expect_peek(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after function name in native statement")
+            return None
+
+        # Parse arguments
+        args = []
+        if not self.peek_token_is(RPAREN):
+            self.next_token()
+            args.append(self.parse_expression(LOWEST))
+            while self.peek_token_is(COMMA):
+                self.next_token()
+                self.next_token()
+                args.append(self.parse_expression(LOWEST))
+
+        # Expect closing paren
+        if not self.expect_peek(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after arguments in native statement")
+            return None
+
+        # Optional: as alias
+        alias = None
+        if self.peek_token_is(AS):
+            self.next_token()
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'as' in native statement")
+                return None
+            alias = self.cur_token.literal
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return NativeStatement(library_name, function_name, args, alias)
+
+    def parse_gc_statement(self):
+        """Parse garbage collection statement.
+        
+        Syntax:
+            gc "collect";
+            gc "pause";
+            gc "resume";
+        """
+        token = self.cur_token
+
+        # Expect GC action (string)
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected GC action string after 'gc'")
+            return None
+        action = self.cur_token.literal
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return GCStatement(action)
+
+    def parse_inline_statement(self):
+        """Parse inline statement for function inlining optimization.
+        
+        Syntax:
+            inline my_function;
+            inline critical_func;
+        """
+        token = self.cur_token
+
+        # Expect function name (identifier)
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected function name after 'inline'")
+            return None
+        function_name = self.cur_token.literal
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return InlineStatement(function_name)
+
+    def parse_buffer_statement(self):
+        """Parse buffer statement for direct memory access.
+        
+        Syntax:
+            buffer my_mem = allocate(1024);
+            buffer my_mem.write(0, [1, 2, 3]);
+            buffer my_mem.read(0, 4);
+        """
+        token = self.cur_token
+
+        # Expect buffer name (identifier)
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected buffer name after 'buffer'")
+            return None
+        buffer_name = self.cur_token.literal
+
+        # Optional operation (= allocate, .write, .read, etc.)
+        operation = None
+        arguments = []
+
+        if self.peek_token_is(ASSIGN):
+            self.next_token()
+            # Expect allocate(...) or other operation
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected operation after '=' in buffer statement")
+                return None
+            operation = self.cur_token.literal
+
+            # Expect opening paren
+            if not self.expect_peek(LPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after operation in buffer statement")
+                return None
+
+            # Parse arguments
+            if not self.peek_token_is(RPAREN):
+                self.next_token()
+                arguments.append(self.parse_expression(LOWEST))
+                while self.peek_token_is(COMMA):
+                    self.next_token()
+                    self.next_token()
+                    arguments.append(self.parse_expression(LOWEST))
+
+            # Expect closing paren
+            if not self.expect_peek(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after arguments in buffer statement")
+                return None
+
+        elif self.peek_token_is(DOT):
+            self.next_token()
+            # Expect method name (read, write, free, etc.)
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected method name after '.' in buffer statement")
+                return None
+            operation = self.cur_token.literal
+
+            # Expect opening paren
+            if not self.expect_peek(LPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after method in buffer statement")
+                return None
+
+            # Parse arguments
+            if not self.peek_token_is(RPAREN):
+                self.next_token()
+                arguments.append(self.parse_expression(LOWEST))
+                while self.peek_token_is(COMMA):
+                    self.next_token()
+                    self.next_token()
+                    arguments.append(self.parse_expression(LOWEST))
+
+            # Expect closing paren
+            if not self.expect_peek(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after arguments in buffer statement")
+                return None
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return BufferStatement(buffer_name, operation, arguments)
+
+    def parse_simd_statement(self):
+        """Parse SIMD statement for vector operations.
+        
+        Syntax:
+            simd vector1 + vector2;
+            simd matrix_mul(A, B);
+            simd dot_product([1,2,3], [4,5,6]);
+        """
+        token = self.cur_token
+
+        # Parse SIMD operation expression
+        self.next_token()
+        operation = self.parse_expression(LOWEST)
+
+        if operation is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression in SIMD statement")
+            return None
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return SIMDStatement(operation)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):

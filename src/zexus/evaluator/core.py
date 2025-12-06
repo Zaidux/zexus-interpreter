@@ -154,6 +154,26 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  ActionStatement node", f"action {node.name.value}")
                 return self.eval_action_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.NativeStatement:
+                debug_log("  NativeStatement node", f"native {node.function_name}")
+                return self.eval_native_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.GCStatement:
+                debug_log("  GCStatement node", f"gc {node.action}")
+                return self.eval_gc_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.InlineStatement:
+                debug_log("  InlineStatement node", f"inline {node.function_name}")
+                return self.eval_inline_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.BufferStatement:
+                debug_log("  BufferStatement node", f"buffer {node.buffer_name}")
+                return self.eval_buffer_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.SIMDStatement:
+                debug_log("  SIMDStatement node")
+                return self.eval_simd_statement(node, env, stack_trace)
+            
             # === EXPRESSIONS ===
             elif node_type == zexus_ast.Identifier:
                 debug_log("  Identifier node", node.value)

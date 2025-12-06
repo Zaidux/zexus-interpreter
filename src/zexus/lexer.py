@@ -400,6 +400,12 @@ class Lexer:
             "persistent": PERSISTENT,   # NEW: Persistent keyword
             "storage": STORAGE,         # NEW: Storage keyword
             "require": REQUIRE,         # Already defined in zexus_token.py
+            # Performance optimization keywords
+            "native": NATIVE,           # Performance: call C/C++ code
+            "gc": GC,                   # Performance: control garbage collection
+            "inline": INLINE,           # Performance: function inlining
+            "buffer": BUFFER,           # Performance: direct memory access
+            "simd": SIMD,               # Performance: vector operations
         }
         return keywords.get(ident, IDENT)
 

@@ -582,3 +582,80 @@ class SealStatement(Statement):
 
     def __repr__(self):
         return f"SealStatement(target={self.target})"
+
+
+# PERFORMANCE OPTIMIZATION STATEMENT NODES
+
+class NativeStatement(Statement):
+    """Native statement - Call C/C++ code directly
+    
+    native "libmath.so", "add_numbers"(x, y);
+    native "libcrypto.so", "sha256"(data) as hash;
+    """
+    def __init__(self, library_name, function_name, args=None, alias=None):
+        self.library_name = library_name  # String: path to .so/.dll file
+        self.function_name = function_name  # String: function name in library
+        self.args = args or []  # List[Expression]: arguments to function
+        self.alias = alias  # Optional: variable name to store result
+
+    def __repr__(self):
+        return f"NativeStatement(lib={self.library_name}, func={self.function_name}, args={self.args}, alias={self.alias})"
+
+
+class GCStatement(Statement):
+    """Garbage Collection statement - Control garbage collection behavior
+    
+    gc "collect";       // Force garbage collection
+    gc "pause";         // Pause garbage collection
+    gc "resume";        // Resume garbage collection
+    gc "enable_debug";  // Enable GC debug output
+    """
+    def __init__(self, action):
+        self.action = action  # String: "collect", "pause", "resume", "enable_debug", "disable_debug"
+
+    def __repr__(self):
+        return f"GCStatement(action={self.action})"
+
+
+class InlineStatement(Statement):
+    """Inline statement - Mark function for inlining optimization
+    
+    inline my_function;
+    inline critical_path_func;
+    """
+    def __init__(self, function_name):
+        self.function_name = function_name  # String or Identifier: function to inline
+
+    def __repr__(self):
+        return f"InlineStatement(func={self.function_name})"
+
+
+class BufferStatement(Statement):
+    """Buffer statement - Direct memory access and manipulation
+    
+    buffer my_mem = allocate(1024);
+    buffer my_mem.write(0, [1, 2, 3, 4]);
+    buffer my_mem.read(0, 4);
+    """
+    def __init__(self, buffer_name, operation=None, arguments=None):
+        self.buffer_name = buffer_name  # String: buffer name
+        self.operation = operation  # String: "allocate", "write", "read", "free"
+        self.arguments = arguments or []  # List[Expression]: operation arguments
+
+    def __repr__(self):
+        return f"BufferStatement(name={self.buffer_name}, op={self.operation}, args={self.arguments})"
+
+
+class SIMDStatement(Statement):
+    """SIMD statement - Vector operations using SIMD instructions
+    
+    simd vector1 + vector2;
+    simd matrix_mul(A, B);
+    simd dot_product([1,2,3], [4,5,6]);
+    """
+    def __init__(self, operation, operands=None):
+        self.operation = operation  # Expression: SIMD operation (binary op or function call)
+        self.operands = operands or []  # List[Expression]: operands for SIMD
+
+    def __repr__(self):
+        return f"SIMDStatement(op={self.operation}, operands={self.operands})"
