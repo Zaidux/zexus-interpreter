@@ -251,11 +251,12 @@ class SandboxStatement(Statement):
       let x = unsafe_operation();
     }
     """
-    def __init__(self, body):
+    def __init__(self, body, policy=None):
         self.body = body  # BlockStatement containing sandboxed code
+        self.policy = policy  # Optional policy name (string)
 
     def __repr__(self):
-        return f"SandboxStatement(body={self.body})"
+        return f"SandboxStatement(body={self.body}, policy={self.policy})"
 
 class TrailStatement(Statement):
     """Trail statement - Real-time audit/debug/print tracking

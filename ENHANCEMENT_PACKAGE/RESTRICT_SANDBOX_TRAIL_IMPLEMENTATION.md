@@ -154,6 +154,42 @@ Behavioral notes:
 - Trail sinks are best-effort: failures to write to sinks are caught and ignored to avoid interrupting program execution.
 - Sandbox enforcement is applied only to builtin functions; user-defined functions and methods still run normally in the sandboxed environment but can be restricted by limiting available builtins and environment bindings.
 
+Richer trail selectors & durable storage
+---------------------------------------
+- Trail filters now support three forms:
+    - Substring match (default): `"module:payment"` matches if that substring appears in event payload.
+    - Key:value match: `"user:42"` or `"module:payment"` will try to parse event payload JSON and match key/value.
+    - Regex match: prefix the filter with `re:` to provide a regular expression, e.g. `re:^payment_.*$`.
+
+- Durable sinks: in addition to stdout and JSONL file sink, you can now register a `sqlite` sink which persists trail events to a local SQLite DB for long-term storage and querying.
+
+Inline sandbox policy selection
+--------------------------------
+You can now choose a sandbox policy inline when declaring a sandbox block:
+
+```
+sandbox("read-only-sandbox") {
+    // code runs with the 'read-only-sandbox' policy applied
+}
+
+# or using key syntax
+sandbox(policy = "read-only-sandbox") {
+    // same
+}
+```
+
+The parser recognizes both forms and the evaluator will set the sandbox environment's `__sandbox_policy__` accordingly.
+
+Examples:
+
+```py
+ctx.register_trail_sink('stdout')
+ctx.register_trail_sink('file', path='chain_data/trails.jsonl')
+ctx.register_trail_sink('sqlite', db_path='chain_data/trails.db')
+```
+
+These sinks are best-effort; failures to write are ignored to avoid interrupting program execution.
+
 
 Testing recommendations
 -----------------------

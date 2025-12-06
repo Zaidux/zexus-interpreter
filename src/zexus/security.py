@@ -307,7 +307,7 @@ class SecurityContext:
     def register_trail_sink(self, sink_type, **kwargs):
         """Register a trail sink.
 
-        sink_type: 'stdout' | 'file' | 'callback'
+        sink_type: 'stdout' | 'file' | 'callback' | 'sqlite'
         kwargs: for 'file' provide `path`; for 'callback' provide `callback` callable.
         """
         sink = {'type': sink_type}
@@ -342,9 +342,34 @@ class SecurityContext:
             if ttype != '*' and ttype != event_type:
                 continue
 
-            # filter match if provided
-            if flt and flt != '*' and flt not in payload_str:
-                continue
+            # filter match if provided — support substring, key:value, and regex (prefix 're:')
+            if flt and flt != '*':
+                matched = False
+                try:
+                    if isinstance(flt, str) and flt.startswith('re:'):
+                        import re
+                        pattern = flt[3:]
+                        if re.search(pattern, payload_str):
+                            matched = True
+                    elif isinstance(flt, str) and ':' in flt:
+                        # key:value pattern
+                        k, v = flt.split(':', 1)
+                        try:
+                            # if payload is JSON object, check key
+                            p_obj = json.loads(payload_str)
+                            if isinstance(p_obj, dict) and k in p_obj and v in str(p_obj.get(k)):
+                                matched = True
+                        except Exception:
+                            if k in payload_str and v in payload_str:
+                                matched = True
+                    else:
+                        if flt in payload_str:
+                            matched = True
+                except Exception:
+                    matched = False
+
+                if not matched:
+                    continue
 
             # Create audit-like entry for the trail event
             entry = {
@@ -371,6 +396,25 @@ class SecurityContext:
                         try:
                             with open(path, 'a', encoding='utf-8') as sf:
                                 sf.write(json.dumps(entry) + '\n')
+                        except Exception:
+                            pass
+                    elif stype == 'sqlite':
+                        db_path = sink.get('db_path') or os.path.join(STORAGE_DIR, 'trails.db')
+                        try:
+                            conn = sqlite3.connect(db_path, check_same_thread=False)
+                            cur = conn.cursor()
+                            cur.execute('''CREATE TABLE IF NOT EXISTS trails (
+                                id TEXT PRIMARY KEY,
+                                trail_id TEXT,
+                                event_type TEXT,
+                                payload TEXT,
+                                timestamp REAL
+                            )''')
+                            cur.execute('INSERT OR REPLACE INTO trails (id, trail_id, event_type, payload, timestamp) VALUES (?,?,?,?,?)', (
+                                entry['id'], entry['trail_id'], entry['event_type'], entry['payload'], entry['timestamp']
+                            ))
+                            conn.commit()
+                            conn.close()
                         except Exception:
                             pass
                     elif stype == 'callback':

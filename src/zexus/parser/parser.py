@@ -992,6 +992,36 @@ class UltimateParser:
         """
         token = self.cur_token
 
+        policy_name = None
+
+        # Optional policy in parentheses: sandbox (policy = "name") { ... } or sandbox ("name") { ... }
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume LPAREN
+            # Accept either IDENT ASSIGN STRING or just STRING
+            if self.peek_token_is(IDENT):
+                self.next_token()
+                if self.cur_token_is(IDENT) and self.peek_token_is(ASSIGN):
+                    # consume ASSIGN
+                    self.next_token()
+                    if not self.expect_peek(STRING):
+                        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected policy string in sandbox()")
+                        return None
+                    policy_name = self.cur_token.literal
+                else:
+                    # treat the identifier as policy name
+                    policy_name = self.cur_token.literal
+            elif self.peek_token_is(STRING):
+                self.next_token()
+                policy_name = self.cur_token.literal
+            else:
+                # tolerate empty or unexpected
+                pass
+
+            # expect closing paren
+            if not self.expect_peek(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after sandbox policy")
+                return None
+
         # Expect opening brace
         if not self.expect_peek(LBRACE):
             self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after 'sandbox'")
@@ -1002,7 +1032,7 @@ class UltimateParser:
         if body is None:
             return None
 
-        return SandboxStatement(body=body)
+        return SandboxStatement(body=body, policy=policy_name)
 
     def parse_trail_statement(self):
         """Parse trail statement for real-time audit/debug/print tracking.
