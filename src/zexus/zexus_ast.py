@@ -229,6 +229,49 @@ class AuditStatement(Statement):
     def __repr__(self):
         return f"AuditStatement(data={self.data_name}, action={self.action_type}, timestamp={self.timestamp})"
 
+class RestrictStatement(Statement):
+    """Restrict statement - Field-level access control
+    
+    restrict obj.field = "read-only";
+    restrict user.password = "deny";
+    restrict config.api_key = "admin-only";
+    """
+    def __init__(self, target, restriction_type):
+        self.target = target              # PropertyAccessExpression for obj.field
+        self.restriction_type = restriction_type  # String: "read-only", "deny", "admin-only", etc.
+
+    def __repr__(self):
+        return f"RestrictStatement(target={self.target}, restriction={self.restriction_type})"
+
+class SandboxStatement(Statement):
+    """Sandbox statement - Isolated execution environment
+    
+    sandbox {
+      // code runs in isolated context
+      let x = unsafe_operation();
+    }
+    """
+    def __init__(self, body):
+        self.body = body  # BlockStatement containing sandboxed code
+
+    def __repr__(self):
+        return f"SandboxStatement(body={self.body})"
+
+class TrailStatement(Statement):
+    """Trail statement - Real-time audit/debug/print tracking
+    
+    trail audit;       // follow all audit events
+    trail print;       // follow all print statements
+    trail debug;       // follow all debug output
+    trail *, "resource_access";  // trail all events for resource_access
+    """
+    def __init__(self, trail_type, filter_key=None):
+        self.trail_type = trail_type    # String: "audit", "print", "debug", "*"
+        self.filter_key = filter_key    # Optional filter/pattern
+
+    def __repr__(self):
+        return f"TrailStatement(type={self.trail_type}, filter={self.filter_key})"
+
 # Expression Nodes
 class Identifier(Expression):
     def __init__(self, value): 

@@ -74,6 +74,15 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.SealStatement:
                 return self.eval_seal_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.RestrictStatement:
+                return self.eval_restrict_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.SandboxStatement:
+                return self.eval_sandbox_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.TrailStatement:
+                return self.eval_trail_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.EntityStatement:
                 return self.eval_entity_statement(node, env, stack_trace)
             

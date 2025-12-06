@@ -388,6 +388,9 @@ class Lexer:
             "protect": PROTECT,
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             "audit": AUDIT,             # NEW: Audit keyword for compliance logging
+            "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control
+            "sandbox": SANDBOX,         # NEW: Sandbox keyword for isolated execution
+            "trail": TRAIL,             # NEW: Trail keyword for real-time logging
             # Advanced features
             "middleware": MIDDLEWARE,
             "auth": AUTH,

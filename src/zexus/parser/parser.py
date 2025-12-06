@@ -327,6 +327,12 @@ class UltimateParser:
                 return self.parse_seal_statement()
             elif self.cur_token_is(AUDIT):
                 return self.parse_audit_statement()
+            elif self.cur_token_is(RESTRICT):
+                return self.parse_restrict_statement()
+            elif self.cur_token_is(SANDBOX):
+                return self.parse_sandbox_statement()
+            elif self.cur_token_is(TRAIL):
+                return self.parse_trail_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -924,6 +930,114 @@ class UltimateParser:
             self.next_token()
 
         return AuditStatement(data_name=data_name, action_type=action_type, timestamp=timestamp)
+
+    def parse_restrict_statement(self):
+        """Parse restrict statement for field-level access control.
+        
+        Syntax: restrict obj.field = "restriction_type";
+        Examples:
+            restrict user.password = "deny";
+            restrict config.api_key = "admin-only";
+            restrict data.sensitive = "read-only";
+        """
+        token = self.cur_token
+
+        # Expect identifier.field pattern
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'restrict'")
+            return None
+
+        obj_name = Identifier(self.cur_token.literal)
+
+        # Expect dot
+        if not self.expect_peek(DOT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '.' after identifier in restrict statement")
+            return None
+
+        # Expect field name
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected field name after '.' in restrict statement")
+            return None
+
+        field_name = Identifier(self.cur_token.literal)
+        target = PropertyAccessExpression(obj_name, field_name)
+
+        # Expect assignment
+        if not self.expect_peek(ASSIGN):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=' in restrict statement")
+            return None
+
+        # Expect restriction type (string literal)
+        if not self.expect_peek(STRING):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected restriction type string in restrict statement")
+            return None
+
+        restriction_type = StringLiteral(self.cur_token.literal)
+
+        # Expect semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return RestrictStatement(target=target, restriction_type=restriction_type)
+
+    def parse_sandbox_statement(self):
+        """Parse sandbox statement for isolated execution environments.
+        
+        Syntax: sandbox { code }
+        Example:
+            sandbox {
+              let result = unsafe_operation();
+              let data = risky_function();
+            }
+        """
+        token = self.cur_token
+
+        # Expect opening brace
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after 'sandbox'")
+            return None
+
+        # Parse block body
+        body = self.parse_block("sandbox")
+        if body is None:
+            return None
+
+        return SandboxStatement(body=body)
+
+    def parse_trail_statement(self):
+        """Parse trail statement for real-time audit/debug/print tracking.
+        
+        Syntax:
+            trail audit;           // follow all audit events
+            trail print;           // follow all print statements
+            trail debug;           // follow all debug output
+            trail *, "pattern";    // trail all with filter
+        """
+        token = self.cur_token
+
+        # Expect trail type (audit, print, debug, or *)
+        if not self.expect_peek(IDENT):
+            if not self.cur_token_is(STAR):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected trail type (audit, print, debug, or *)")
+                return None
+            trail_type = "*"
+        else:
+            trail_type = self.cur_token.literal
+
+        # Optional filter
+        filter_key = None
+        if self.peek_token_is(COMMA):
+            self.next_token()  # consume comma
+            if not self.expect_peek(STRING):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected filter string after comma in trail statement")
+                return None
+            filter_key = StringLiteral(self.cur_token.literal)
+
+        # Expect semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return TrailStatement(trail_type=trail_type, filter_key=filter_key)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):

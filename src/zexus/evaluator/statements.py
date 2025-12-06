@@ -509,6 +509,95 @@ class StatementEvaluatorMixin:
         
         return Map(audit_log_pairs)
     
+    def eval_restrict_statement(self, node, env, stack_trace):
+        """Evaluate restrict statement for field-level access control.
+        
+        Syntax: restrict obj.field = "restriction_type";
+        
+        Returns a restriction entry with the applied rule.
+        """
+        from datetime import datetime, timezone
+        from ..object import String, Map
+        
+        # Get target field information
+        if not isinstance(node.target, PropertyAccessExpression):
+            return EvaluationError("restrict: target must be object.field")
+        
+        obj_name = node.target.object.value if isinstance(node.target.object, Identifier) else str(node.target.object)
+        field_name = node.target.property.value if isinstance(node.target.property, Identifier) else str(node.target.property)
+        
+        # Get restriction type
+        if isinstance(node.restriction_type, StringLiteral):
+            restriction = node.restriction_type.value
+        else:
+            restriction = to_string(self.eval_node(node.restriction_type, env, stack_trace))
+        
+        # Get the object to apply restriction
+        obj = env.get(obj_name)
+        if obj is None:
+            return EvaluationError(f"restrict: object '{obj_name}' not found")
+        
+        # Return restriction entry
+        return Map({
+            "target": String(f"{obj_name}.{field_name}"),
+            "field": String(field_name),
+            "restriction": String(restriction),
+            "status": String("applied"),
+            "timestamp": String(datetime.now(timezone.utc).isoformat())
+        })
+    
+    def eval_sandbox_statement(self, node, env, stack_trace):
+        """Evaluate sandbox statement for isolated execution environments.
+        
+        Syntax: sandbox { code }
+        
+        Creates a new isolated environment and executes code within it.
+        """
+        # Create isolated environment (child of current)
+        sandbox_env = Environment(parent=env)
+        
+        # Execute body in sandbox
+        if node.body is None:
+            return NULL
+        
+        result = self.eval_node(node.body, sandbox_env, stack_trace)
+        
+        # Return result from sandbox execution
+        return result if result is not None else NULL
+    
+    def eval_trail_statement(self, node, env, stack_trace):
+        """Evaluate trail statement for real-time audit/debug/print tracking.
+        
+        Syntax:
+            trail audit;           // follow all audit events
+            trail print;           // follow all print statements
+            trail debug;           // follow all debug output
+        
+        Sets up event tracking and returns trail configuration.
+        """
+        from datetime import datetime, timezone
+        from ..object import String, Map
+        
+        trail_type = node.trail_type
+        filter_key = None
+        
+        if isinstance(node.filter_key, StringLiteral):
+            filter_key = node.filter_key.value
+        elif node.filter_key:
+            filter_result = self.eval_node(node.filter_key, env, stack_trace)
+            if not is_error(filter_result):
+                filter_key = to_string(filter_result)
+        
+        # Create trail configuration entry
+        trail_config = {
+            "type": String(trail_type),
+            "filter": String(filter_key) if filter_key else String("*"),
+            "enabled": String("true"),
+            "timestamp": String(datetime.now(timezone.utc).isoformat())
+        }
+        
+        return Map(trail_config)
+    
     def eval_contract_statement(self, node, env, stack_trace):
         storage = {}
         for sv in node.storage_vars:

@@ -95,6 +95,9 @@ CONTRACT = "CONTRACT"          # Smart contracts: contract Token { ... }
 PROTECT = "PROTECT"            # Protection guardrails: protect(action, rules)
 SEAL = "SEAL"                  # Seal objects: seal identifier
 AUDIT = "AUDIT"                # Audit log: audit data_name, action_type, timestamp
+RESTRICT = "RESTRICT"          # Field-level access control: restrict obj.field = "rule"
+SANDBOX = "SANDBOX"            # Isolated execution environment: sandbox { code }
+TRAIL = "TRAIL"                # Real-time audit/debug/print trail: trail audit_or_print_or_debug
 
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
