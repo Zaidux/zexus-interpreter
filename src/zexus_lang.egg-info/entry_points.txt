@@ -1,0 +1,3 @@
+[console_scripts]
+zexus = zexus.cli.main:cli
+zx = zexus.cli.main:cli

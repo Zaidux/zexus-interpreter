@@ -46,8 +46,10 @@ ASTERISK = STAR
 
 # Keywords
 LET = "LET"
+CONST = "CONST"                # NEW: Const immutable variables
 PRINT = "PRINT"
 IF = "IF"
+ELIF = "ELIF"                  # NEW: Elif else-if conditionals
 ELSE = "ELSE"
 RETURN = "RETURN"
 TRUE = "TRUE"

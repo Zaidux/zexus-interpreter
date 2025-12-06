@@ -287,6 +287,8 @@ class UltimateParser:
         try:
             if self.cur_token_is(LET):
                 return self.parse_let_statement()
+            elif self.cur_token_is(CONST):
+                return self.parse_const_statement()
             elif self.cur_token_is(RETURN):
                 return self.parse_return_statement()
             elif self.cur_token_is(PRINT):
@@ -396,7 +398,7 @@ class UltimateParser:
         return block
 
     def parse_if_statement(self):
-        """Tolerant if statement parser"""
+        """Tolerant if statement parser with elif support"""
         # Skip IF token
         self.next_token()
 
@@ -419,12 +421,39 @@ class UltimateParser:
         if not consequence:
             return None
 
+        # Parse elif clauses
+        elif_parts = []
+        while self.cur_token_is(ELIF):
+            self.next_token()  # Move past elif
+            
+            # Parse elif condition (with or without parentheses)
+            if self.cur_token_is(LPAREN):
+                self.next_token()  # Skip (
+                elif_condition = self.parse_expression(LOWEST)
+                if self.cur_token_is(RPAREN):
+                    self.next_token()  # Skip )
+            else:
+                # No parentheses - parse expression directly
+                elif_condition = self.parse_expression(LOWEST)
+            
+            if not elif_condition:
+                self.errors.append("Expected condition after 'elif'")
+                return None
+            
+            # Parse elif consequence block
+            elif_consequence = self.parse_block("elif")
+            if not elif_consequence:
+                return None
+            
+            elif_parts.append((elif_condition, elif_consequence))
+
+        # Parse else clause
         alternative = None
         if self.cur_token_is(ELSE):
             self.next_token()
             alternative = self.parse_block("else")
 
-        return IfStatement(condition=condition, consequence=consequence, alternative=alternative)
+        return IfStatement(condition=condition, consequence=consequence, elif_parts=elif_parts, alternative=alternative)
 
     def parse_action_statement(self):
         """Tolerant action parser supporting both syntax styles"""
@@ -469,6 +498,35 @@ class UltimateParser:
             self.next_token()
         else:
             self.errors.append("Expected '=' or ':' after variable name")
+            return None
+
+        self.next_token()
+        stmt.value = self.parse_expression(LOWEST)
+
+        # TOLERANT: Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return stmt
+
+    def parse_const_statement(self):
+        """Tolerant const statement parser - immutable variable declaration
+        
+        Syntax: const NAME = value;
+        """
+        stmt = ConstStatement(name=None, value=None)
+
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected variable name after 'const'")
+            return None
+
+        stmt.name = Identifier(value=self.cur_token.literal)
+
+        # TOLERANT: Allow both = and : for assignment
+        if self.peek_token_is(ASSIGN) or (self.peek_token_is(COLON) and self.peek_token.literal == ":"):
+            self.next_token()
+        else:
+            self.errors.append("Expected '=' or ':' after variable name in const declaration")
             return None
 
         self.next_token()

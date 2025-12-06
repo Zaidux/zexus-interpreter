@@ -40,6 +40,7 @@ class ContextStackParser:
             'bracket_block': self._parse_brace_block_context,
             # DIRECT handlers for specific statement types
             'let_statement': self._parse_let_statement_block,
+            'const_statement': self._parse_const_statement_block,
             'print_statement': self._parse_print_statement_block,
             'assignment_statement': self._parse_assignment_statement,
             'function_call_statement': self._parse_function_call_statement,
@@ -238,6 +239,84 @@ class ContextStackParser:
             value=value_expression
         )
 
+    def _parse_const_statement_block(self, block_info, all_tokens):
+        """Parse const statement block with robust method chain handling (mirrors let)"""
+        print("🔧 [Context] Parsing const statement")
+        tokens = block_info['tokens']
+
+        if len(tokens) < 4:
+            print("  ❌ Invalid const statement: too few tokens")
+            return None
+
+        if tokens[1].type != IDENT:
+            print("  ❌ Invalid const statement: expected identifier after 'const'")
+            return None
+
+        variable_name = tokens[1].literal
+        print(f"  📝 Variable: {variable_name}")
+
+        equals_index = -1
+        for i, token in enumerate(tokens):
+            if token.type == ASSIGN:
+                equals_index = i
+                break
+
+        if equals_index == -1:
+            print("  ❌ Invalid const statement: no assignment operator")
+            return None
+
+        # Collect RHS tokens with proper nesting support
+        value_tokens = []
+        nesting = 0
+        j = equals_index + 1
+
+        while j < len(tokens):
+            t = tokens[j]
+
+            # Track nested structures
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+
+            # Only check statement boundaries when not in nested structure
+            if nesting == 0:
+                # Stop at explicit terminators
+                if t.type == SEMICOLON:
+                    break
+                # Allow method chains but stop at other statement starters
+                if t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                    prev = tokens[j-1] if j > 0 else None
+                    if not (prev and prev.type == DOT):  # Allow if part of method chain
+                        break
+
+            value_tokens.append(t)
+            j += 1
+
+        print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
+
+        # Parse the value expression
+        if not value_tokens:
+            print("  ❌ No value tokens found")
+            return None
+
+        # Special case: map literal
+        if value_tokens[0].type == LBRACE:
+            print("  🗺️ Detected map literal")
+            value_expression = self._parse_map_literal(value_tokens)
+        else:
+            value_expression = self._parse_expression(value_tokens)
+
+        if value_expression is None:
+            print("  ❌ Could not parse value expression")
+            return None
+
+        print(f"  ✅ Const statement: {variable_name} = {type(value_expression).__name__}")
+        return ConstStatement(
+            name=Identifier(variable_name),
+            value=value_expression
+        )
+
     def _parse_print_statement_block(self, block_info, all_tokens):
         """Parse print statement block - RETURNS PrintStatement"""
         print("🔧 [Context] Parsing print statement")
@@ -267,7 +346,7 @@ class ContextStackParser:
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
         value_tokens = []
         stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}
         j = 2
         while j < len(tokens):
             t = tokens[j]
@@ -654,6 +733,8 @@ class ContextStackParser:
         # Use the direct parser methods
         if subtype == 'let_statement':
             return self._parse_let_statement_block(block_info, all_tokens)
+        elif subtype == 'const_statement':
+            return self._parse_const_statement_block(block_info, all_tokens)
         elif subtype == 'print_statement':
             return self._parse_print_statement_block(block_info, all_tokens)
         elif subtype == 'function_call_statement':
@@ -774,7 +855,7 @@ class ContextStackParser:
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE}
+        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE}
         while i < len(tokens):
             token = tokens[i]
 
@@ -1130,7 +1211,7 @@ class ContextStackParser:
         # Collect tokens up to a statement boundary
         inner_tokens = []
         statement_terminators = {SEMICOLON, RBRACE}
-        statement_starters = {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY}
         nesting_level = 0
 
         for token in tokens[1:]:  # Skip the PRINT token
@@ -1604,10 +1685,114 @@ class ContextStackParser:
         """Parse if/else blocks with context awareness"""
         print("🔧 [Context] Parsing conditional block")
         condition = self._extract_condition(block_info, all_tokens)
+
+        # Collect following `elif` parts and `else` alternative by scanning tokens
+        elif_parts = []
+        alternative = None
+
+        end_idx = block_info.get('end_index', block_info.get('start_index', 0))
+        i = end_idx + 1
+        n = len(all_tokens)
+
+        # Helper to collect a brace-delimited block starting at index `start` (pointing at LBRACE)
+        def collect_brace_inner(start_index):
+            j = start_index
+            if j >= n or all_tokens[j].type != LBRACE:
+                # find next LBRACE
+                while j < n and all_tokens[j].type != LBRACE:
+                    j += 1
+                if j >= n:
+                    return [], j
+
+            depth = 0
+            inner = []
+            while j < n:
+                tok = all_tokens[j]
+                if tok.type == LBRACE:
+                    depth += 1
+                    if depth > 1:
+                        inner.append(tok)
+                elif tok.type == RBRACE:
+                    depth -= 1
+                    if depth == 0:
+                        return inner, j + 1
+                    inner.append(tok)
+                else:
+                    if depth >= 1:
+                        inner.append(tok)
+                j += 1
+
+            return inner, j
+
+        while i < n:
+            t = all_tokens[i]
+
+            # Skip non-significant tokens
+            if t.type in {SEMICOLON}:
+                i += 1
+                continue
+
+            # Handle ELIF
+            if t.type == ELIF:
+                # Collect condition tokens until the following LBRACE
+                cond_tokens = []
+                j = i + 1
+                while j < n and all_tokens[j].type != LBRACE:
+                    # stop if we hit another control keyword
+                    if all_tokens[j].type in {ELIF, ELSE, IF}:
+                        break
+                    cond_tokens.append(all_tokens[j])
+                    j += 1
+
+                cond_expr = self._parse_expression(cond_tokens) if cond_tokens else Identifier("true")
+
+                # Collect the block inner tokens and parse into statements
+                inner_tokens, next_idx = collect_brace_inner(j)
+                block_stmt = BlockStatement()
+                block_stmt.statements = self._parse_block_statements(inner_tokens)
+
+                elif_parts.append((cond_expr, block_stmt))
+
+                i = next_idx
+                continue
+
+            # Handle ELSE
+            if t.type == ELSE:
+                # Collect block following else
+                j = i + 1
+                inner_tokens, next_idx = collect_brace_inner(j)
+                alt_block = BlockStatement()
+                alt_block.statements = self._parse_block_statements(inner_tokens)
+                alternative = alt_block
+                i = next_idx
+                break
+
+            # If we hit a top-level closing brace or another unrelated statement starter, stop
+            if t.type == RBRACE or t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL}:
+                break
+
+            i += 1
+
+        # Build the IfStatement with parsed block statements
+        consequence_block = BlockStatement()
+        # Parse the main consequence block tokens from block_info if available
+        main_inner = []
+        # The block_info may include tokens for the if-block; try to extract inner tokens
+        b_tokens = block_info.get('tokens', [])
+        if b_tokens and b_tokens[0].type == LBRACE:
+            # tokens include braces; extract inner slice
+            main_inner = b_tokens[1:-1]
+        elif b_tokens:
+            # If not braced, attempt to parse as statements directly
+            main_inner = b_tokens
+
+        consequence_block.statements = self._parse_block_statements(main_inner)
+
         return IfStatement(
             condition=condition,
-            consequence=BlockStatement(),
-            alternative=None
+            consequence=consequence_block,
+            elif_parts=elif_parts,
+            alternative=alternative
         )
 
     def _parse_brace_block_context(self, block_info, all_tokens):

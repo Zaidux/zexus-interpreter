@@ -26,6 +26,18 @@ class LetStatement(Statement):
     def __repr__(self):
         return f"LetStatement(name={self.name}, value={self.value})"
 
+class ConstStatement(Statement):
+    """Const statement - immutable variable declaration
+    
+    const MAX_VALUE = 100;
+    """
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def __repr__(self):
+        return f"ConstStatement(name={self.name}, value={self.value})"
+
 class ReturnStatement(Statement):
     def __init__(self, return_value):
         self.return_value = return_value
@@ -103,13 +115,14 @@ class FromStatement(Statement):
         return f"FromStatement(file_path={self.file_path}, imports={len(self.imports)})"
 
 class IfStatement(Statement):
-    def __init__(self, condition, consequence, alternative=None):
+    def __init__(self, condition, consequence, elif_parts=None, alternative=None):
         self.condition = condition
         self.consequence = consequence
+        self.elif_parts = elif_parts or []  # List of (condition, consequence) tuples for elif chains
         self.alternative = alternative
 
     def __repr__(self):
-        return f"IfStatement(condition={self.condition})"
+        return f"IfStatement(condition={self.condition}, elif_parts={len(self.elif_parts)})"
 
 class WhileStatement(Statement):
     def __init__(self, condition, body):
@@ -331,13 +344,14 @@ class InfixExpression(Expression):
         return f"InfixExpression(left={self.left}, operator='{self.operator}', right={self.right})"
 
 class IfExpression(Expression):
-    def __init__(self, condition, consequence, alternative=None):
+    def __init__(self, condition, consequence, elif_parts=None, alternative=None):
         self.condition = condition
         self.consequence = consequence
+        self.elif_parts = elif_parts or []  # List of (condition, consequence) tuples for elif chains
         self.alternative = alternative
 
     def __repr__(self):
-        return f"IfExpression(condition={self.condition})"
+        return f"IfExpression(condition={self.condition}, elif_parts={len(self.elif_parts)})"
 
 
 # =====================================================

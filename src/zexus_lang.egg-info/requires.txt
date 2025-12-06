@@ -1,0 +1,5 @@
+
+[dev]
+pytest>=6.0
+black>=21.0
+flake8>=4.0

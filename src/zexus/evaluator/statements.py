@@ -4,7 +4,7 @@ import sys
 
 from .. import zexus_ast
 from ..zexus_ast import (
-    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement,
+    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, ConstStatement,
     ActionStatement, IfStatement, WhileStatement, ForEachStatement,
     TryCatchStatement, UseStatement, FromStatement, ExportStatement,
     ContractStatement, EntityStatement, VerifyStatement, ProtectStatement,
@@ -99,6 +99,18 @@ class StatementEvaluatorMixin:
         env.set(node.name.value, value)
         return NULL
     
+    def eval_const_statement(self, node, env, stack_trace):
+        debug_log("eval_const_statement", f"const {node.name.value}")
+        
+        # Evaluate value FIRST
+        value = self.eval_node(node.value, env, stack_trace)
+        if is_error(value): 
+            return value
+        
+        # Set as const in environment
+        env.set_const(node.name.value, value)
+        return NULL
+    
     def eval_return_statement(self, node, env, stack_trace):
         val = self.eval_node(node.return_value, env, stack_trace)
         if is_error(val): 
@@ -143,8 +155,20 @@ class StatementEvaluatorMixin:
         
         if is_truthy(cond):
             return self.eval_node(node.consequence, env, stack_trace)
-        elif node.alternative:
+        
+        # Check elif conditions
+        if hasattr(node, 'elif_parts') and node.elif_parts:
+            for elif_condition, elif_consequence in node.elif_parts:
+                elif_cond = self.eval_node(elif_condition, env, stack_trace)
+                if is_error(elif_cond):
+                    return elif_cond
+                if is_truthy(elif_cond):
+                    return self.eval_node(elif_consequence, env, stack_trace)
+        
+        # Check else clause
+        if node.alternative:
             return self.eval_node(node.alternative, env, stack_trace)
+        
         return NULL
     
     def eval_while_statement(self, node, env, stack_trace):

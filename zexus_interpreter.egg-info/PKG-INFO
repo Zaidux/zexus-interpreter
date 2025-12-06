@@ -1,0 +1,30 @@
+Metadata-Version: 2.4
+Name: zexus-interpreter
+Version: 0.1.0
+Summary: Zexus language interpreter and hybrid compiler
+Home-page: https://zexus.lang
+Author: Ziver-opensource
+Author-email: dev@ziver.io
+License: Apache-2.0
+Classifier: Programming Language :: Python :: 3
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: click>=7.0
+Requires-Dist: rich>=9.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: black>=21.0; extra == "dev"
+Requires-Dist: flake8>=4.0; extra == "dev"
+Dynamic: author
+Dynamic: classifier
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
+
+# README moved
+
+The main developer documentation has been moved to:
+
+  src/README.md
+
+Please open and edit that file for project documentation and developer guidance.

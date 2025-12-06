@@ -452,6 +452,7 @@ class Debug(Object):
 class Environment:
     def __init__(self, outer=None):
         self.store = {}
+        self.const_vars = set()  # Track const variables
         self.outer = outer
         self.exports = {}
         # Debug tracking
@@ -464,7 +465,20 @@ class Environment:
         return val
 
     def set(self, name, val):
+        # Check if trying to reassign a const variable
+        if name in self.const_vars:
+            from .object import EvaluationError
+            raise ValueError(f"Cannot reassign const variable '{name}'")
         self.store[name] = val
+        return val
+    
+    def set_const(self, name, val):
+        """Set a constant (immutable) variable"""
+        if name in self.store and name in self.const_vars:
+            from .object import EvaluationError
+            raise ValueError(f"Cannot reassign const variable '{name}'")
+        self.store[name] = val
+        self.const_vars.add(name)
         return val
 
     def export(self, name, value):

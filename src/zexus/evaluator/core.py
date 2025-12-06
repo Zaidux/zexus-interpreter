@@ -49,6 +49,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.LetStatement:
                 return self.eval_let_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.ConstStatement:
+                return self.eval_const_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.AssignmentExpression:
                 debug_log("  AssignmentExpression node")
                 return self.eval_assignment_expression(node, env, stack_trace)

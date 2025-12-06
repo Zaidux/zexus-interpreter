@@ -344,8 +344,10 @@ class Lexer:
         # keyword lookup mapping (string -> token constant)
         keywords = {
             "let": LET,
+            "const": CONST,             # NEW: Const keyword for immutable variables
             "print": PRINT,
             "if": IF,
+            "elif": ELIF,               # NEW: Elif keyword for else-if conditionals
             "else": ELSE,
             "true": TRUE,
             "false": FALSE,

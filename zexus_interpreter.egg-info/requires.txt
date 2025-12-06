@@ -1,0 +1,7 @@
+click>=7.0
+rich>=9.0
+
+[dev]
+pytest>=6.0
+black>=21.0
+flake8>=4.0
