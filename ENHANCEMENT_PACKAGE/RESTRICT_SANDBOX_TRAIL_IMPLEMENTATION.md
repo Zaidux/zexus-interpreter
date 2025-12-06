@@ -123,6 +123,38 @@ Next enforcement steps (optional):
 - Wire builtins and external APIs to consult sandbox policies before performing I/O.
 - Add richer filter expressions and event sinks (file, network, push to observability backends).
 
+Added in this change:
+- Sandbox policy registry (`register_sandbox_policy`, `get_sandbox_policy`) in `src/zexus/security.py`.
+    - A conservative default policy named `default` is registered automatically by the evaluator when running a `sandbox {}` block; it disallows file I/O builtins by default.
+- Builtin enforcement in `src/zexus/evaluator/functions.py`: when a call happens inside a sandbox (`env.__in_sandbox__`), the evaluator consults the sandbox policy and blocks disallowed builtins with an `EvaluationError`.
+- Trail sinks and persistence:
+    - `register_trail_sink(type='file', path=...)`, `register_trail_sink(type='stdout')`, and `register_trail_sink(type='callback', callback=callable)` added to `SecurityContext`.
+    - `emit_event()` now writes matching trail events to configured sinks and persists them to file (`AUDIT_DIR/trails.jsonl` by default) in JSONL format.
+
+How to configure (examples):
+
+```py
+from src.zexus.security import get_security_context
+ctx = get_security_context()
+# Add a file sink
+ctx.register_trail_sink('file', path='chain_data/trails.jsonl')
+# Add stdout sink
+ctx.register_trail_sink('stdout')
+# Add custom callback sink
+def push_to_remote(entry):
+        # send entry to observability backend
+        pass
+ctx.register_trail_sink('callback', callback=push_to_remote)
+
+# Register a sandbox policy that allows only safe builtins
+ctx.register_sandbox_policy('read-only-sandbox', allowed_builtins=['now','timestamp','string','len'])
+```
+
+Behavioral notes:
+- Trail sinks are best-effort: failures to write to sinks are caught and ignored to avoid interrupting program execution.
+- Sandbox enforcement is applied only to builtin functions; user-defined functions and methods still run normally in the sandboxed environment but can be restricted by limiting available builtins and environment bindings.
+
+
 Testing recommendations
 -----------------------
 - Add unit tests for `security.register_restriction` and `get_restriction`.

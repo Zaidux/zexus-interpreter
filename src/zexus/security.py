@@ -159,6 +159,10 @@ class SecurityContext:
         self._restrictions_index = {}# target.field -> id
         self.trails = {}             # id -> trail config
         self.sandbox_runs = {}       # id -> sandbox run metadata
+        # Sandbox policy store: name -> {allowed_builtins: set(...)}
+        self.sandbox_policies = {}
+        # Trail sinks: list of sink configs (type: 'file'|'stdout'|'callback')
+        self.trail_sinks = []
     
     def log_audit(self, data_name, action, data_type, timestamp=None, context=None):
         """Log an audit entry through the security context
@@ -280,6 +284,39 @@ class SecurityContext:
         return list(self.sandbox_runs.values())
 
     # -------------------------------
+    # Sandbox policy management
+    # -------------------------------
+    def register_sandbox_policy(self, name, allowed_builtins=None):
+        """Register a sandbox policy by name. `allowed_builtins` is an iterable of builtin names allowed inside the sandbox.
+
+        If `allowed_builtins` is None, the policy is permissive (allows all).
+        """
+        if allowed_builtins is None:
+            allowed_set = None
+        else:
+            allowed_set = set(allowed_builtins)
+        self.sandbox_policies[name] = {'allowed_builtins': allowed_set}
+        return self.sandbox_policies[name]
+
+    def get_sandbox_policy(self, name):
+        return self.sandbox_policies.get(name)
+
+    # -------------------------------
+    # Trail sink management
+    # -------------------------------
+    def register_trail_sink(self, sink_type, **kwargs):
+        """Register a trail sink.
+
+        sink_type: 'stdout' | 'file' | 'callback'
+        kwargs: for 'file' provide `path`; for 'callback' provide `callback` callable.
+        """
+        sink = {'type': sink_type}
+        sink.update(kwargs)
+        self.trail_sinks.append(sink)
+        return sink
+
+
+    # -------------------------------
     # Event dispatcher (Trail integration)
     # -------------------------------
     def emit_event(self, event_type, payload):
@@ -317,18 +354,35 @@ class SecurityContext:
                 'payload': payload_str,
                 'timestamp': time.time()
             }
-
             # Persist to audit log if enabled
             try:
                 self.audit_log.entries.append(entry)
             except Exception:
                 pass
 
-            # Emit to console for live debugging
-            try:
-                print(f"[TRAIL:{tid}] {event_type} -> {payload_str}")
-            except Exception:
-                pass
+            # Deliver to configured sinks
+            for sink in list(self.trail_sinks):
+                try:
+                    stype = sink.get('type')
+                    if stype == 'stdout':
+                        print(f"[TRAIL:{tid}] {event_type} -> {payload_str}")
+                    elif stype == 'file':
+                        path = sink.get('path') or os.path.join(AUDIT_DIR, 'trails.jsonl')
+                        try:
+                            with open(path, 'a', encoding='utf-8') as sf:
+                                sf.write(json.dumps(entry) + '\n')
+                        except Exception:
+                            pass
+                    elif stype == 'callback':
+                        cb = sink.get('callback')
+                        try:
+                            if callable(cb):
+                                cb(entry)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
 
     def register_verify_check(self, name, check_func):
         """Register a verification check function"""

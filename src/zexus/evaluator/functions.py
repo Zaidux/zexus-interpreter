@@ -58,9 +58,9 @@ class FunctionEvaluatorMixin:
         if isinstance(fn, SmartContract):
             return fn.instantiate(args)
         
-        return self.apply_function(fn, args)
+        return self.apply_function(fn, args, env)
     
-    def apply_function(self, fn, args):
+    def apply_function(self, fn, args, env=None):
         debug_log("apply_function", f"Calling {fn}")
         
         if isinstance(fn, (Action, LambdaFunction)):
@@ -81,6 +81,29 @@ class FunctionEvaluatorMixin:
         
         elif isinstance(fn, Builtin):
             debug_log("  Calling builtin function", f"{fn.name}")
+            # Sandbox enforcement: if current env is sandboxed, consult policy
+            try:
+                in_sandbox = False
+                policy_name = None
+                if env is not None:
+                    try:
+                        in_sandbox = bool(env.get('__in_sandbox__'))
+                        policy_name = env.get('__sandbox_policy__')
+                    except Exception:
+                        in_sandbox = False
+
+                if in_sandbox:
+                    from ..security import get_security_context
+                    ctx = get_security_context()
+                    policy = ctx.get_sandbox_policy(policy_name or 'default')
+                    allowed = None if policy is None else policy.get('allowed_builtins')
+                    # If allowed set exists and builtin not in it -> block
+                    if allowed is not None and fn.name not in allowed:
+                        return EvaluationError(f"Builtin '{fn.name}' not allowed inside sandbox policy '{policy_name or 'default'}'")
+            except Exception:
+                # If enforcement fails unexpectedly, proceed to call but log nothing
+                pass
+
             try:
                 res = fn.fn(*args)
                 return _resolve_awaitable(res)

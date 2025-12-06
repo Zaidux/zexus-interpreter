@@ -637,8 +637,26 @@ class StatementEvaluatorMixin:
         
         Creates a new isolated environment and executes code within it.
         """
+
         # Create isolated environment (child of current)
         sandbox_env = Environment(parent=env)
+        # Mark as running inside a sandbox and attach a default policy name
+        sandbox_env.set('__in_sandbox__', True)
+        # Allow caller to specify a policy on the node (future enhancement)
+        sandbox_policy = getattr(node, 'policy', None) or 'default'
+        sandbox_env.set('__sandbox_policy__', sandbox_policy)
+        # Ensure default sandbox policy exists
+        try:
+            sec = get_security_context()
+            if 'default' not in sec.sandbox_policies:
+                # conservative default: disallow file I/O builtins
+                sec.register_sandbox_policy('default', allowed_builtins=[
+                    'now','timestamp','random','to_hex','from_hex','sqrt',
+                    'string','len','first','rest','push','reduce','map','filter',
+                    'debug_log','debug_trace'
+                ])
+        except Exception:
+            pass
 
         # Execute body in sandbox
         if node.body is None:
