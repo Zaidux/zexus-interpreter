@@ -119,17 +119,81 @@ class StatementEvaluatorMixin:
     
     def eval_assignment_expression(self, node, env, stack_trace):
         debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
-        
-        target_obj = env.get(node.name.value)
-        if isinstance(target_obj, SealedObject):
-            return EvaluationError(f"Cannot assign to sealed object: {node.name.value}")
-        
-        value = self.eval_node(node.value, env, stack_trace)
-        if is_error(value): 
+        # Support assigning to identifiers or property access targets
+        from ..object import EvaluationError, NULL
+
+        # If target is a property access expression
+        if isinstance(node.name, PropertyAccessExpression):
+            # Evaluate object and property
+            obj = self.eval_node(node.name.object, env, stack_trace)
+            if is_error(obj):
+                return obj
+
+            prop_key = node.name.property.value
+
+            # Evaluate value first
+            value = self.eval_node(node.value, env, stack_trace)
+            if is_error(value):
+                return value
+
+            # Check for seal on property
+            try:
+                if isinstance(obj, Map):
+                    existing = obj.pairs.get(prop_key)
+                    if existing is not None and existing.__class__.__name__ == 'SealedObject':
+                        return EvaluationError(f"Cannot modify sealed property: {prop_key}")
+                elif hasattr(obj, 'get') and hasattr(obj, 'set'):
+                    existing = obj.get(prop_key)
+                    if existing is not None and getattr(existing, '__class__', None) and existing.__class__.__name__ == 'SealedObject':
+                        return EvaluationError(f"Cannot modify sealed property: {prop_key}")
+            except Exception:
+                pass
+
+            # Enforcement: consult security restrictions for writes
+            try:
+                ctx = get_security_context()
+                target = f"{getattr(node.name.object, 'value', str(node.name.object))}.{prop_key}"
+                restriction = ctx.get_restriction(target)
+            except Exception:
+                restriction = None
+
+            if restriction:
+                rule = restriction.get('restriction')
+                if rule == 'read-only':
+                    return EvaluationError(f"Write prohibited by restriction: {target}")
+                if rule == 'admin-only':
+                    is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
+                    if not is_admin:
+                        return EvaluationError('Admin privileges required to modify this field')
+
+            # Perform set
+            try:
+                if isinstance(obj, Map):
+                    obj.pairs[prop_key] = value
+                    return value
+                elif hasattr(obj, 'set'):
+                    obj.set(prop_key, value)
+                    return value
+            except Exception as e:
+                return EvaluationError(str(e))
+
+            return EvaluationError('Assignment to property failed')
+
+        # Otherwise it's an identifier assignment
+        if isinstance(node.name, Identifier):
+            name = node.name.value
+            target_obj = env.get(name)
+            if isinstance(target_obj, SealedObject):
+                return EvaluationError(f"Cannot assign to sealed object: {name}")
+
+            value = self.eval_node(node.value, env, stack_trace)
+            if is_error(value):
+                return value
+
+            env.set(name, value)
             return value
-        
-        env.set(node.name.value, value)
-        return value
+
+        return EvaluationError('Invalid assignment target')
     
     def eval_try_catch_statement(self, node, env, stack_trace):
         debug_log("eval_try_catch", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
@@ -499,14 +563,23 @@ class StatementEvaluatorMixin:
         if audited_data is None:
             return EvaluationError(f"audit: identifier '{data_name}' not found")
         
-        # Create audit log entry as a Map object
+        # Create audit log entry as a Map object and record via security context
         audit_log_pairs = {
             "data_name": String(data_name),
             "action": String(action_type),
             "timestamp": String(timestamp),
             "data_type": String(type(audited_data).__name__),
         }
-        
+
+        # Register to AuditLog via SecurityContext for persistence/inspection
+        try:
+            ctx = get_security_context()
+            ctx.log_audit(data_name, action_type, type(audited_data).__name__, timestamp, {'source': 'audit_statement'})
+            # Also emit a trail event so live traces can capture it
+            ctx.emit_event('audit', {'data_name': data_name, 'action': action_type})
+        except Exception:
+            pass
+
         return Map(audit_log_pairs)
     
     def eval_restrict_statement(self, node, env, stack_trace):
@@ -536,15 +609,26 @@ class StatementEvaluatorMixin:
         obj = env.get(obj_name)
         if obj is None:
             return EvaluationError(f"restrict: object '{obj_name}' not found")
-        
-        # Return restriction entry
-        return Map({
+
+        # Register restriction with security context so enforcement can consult it
+        try:
+            ctx = get_security_context()
+            entry = ctx.register_restriction(f"{obj_name}.{field_name}", field_name, restriction)
+        except Exception:
+            entry = None
+
+        # Return restriction entry (include id if available)
+        result_map = {
             "target": String(f"{obj_name}.{field_name}"),
             "field": String(field_name),
             "restriction": String(restriction),
             "status": String("applied"),
             "timestamp": String(datetime.now(timezone.utc).isoformat())
-        })
+        }
+        if entry and entry.get('id'):
+            result_map['id'] = String(entry.get('id'))
+
+        return Map(result_map)
     
     def eval_sandbox_statement(self, node, env, stack_trace):
         """Evaluate sandbox statement for isolated execution environments.
@@ -555,13 +639,26 @@ class StatementEvaluatorMixin:
         """
         # Create isolated environment (child of current)
         sandbox_env = Environment(parent=env)
-        
+
         # Execute body in sandbox
         if node.body is None:
             return NULL
-        
+
         result = self.eval_node(node.body, sandbox_env, stack_trace)
-        
+
+        # Register sandbox run for observability
+        try:
+            ctx = get_security_context()
+            # store a minimal summary (stringified result) for now
+            result_summary = None
+            try:
+                result_summary = str(result)
+            except Exception:
+                result_summary = None
+            ctx.register_sandbox_run(parent_context=getattr(env, 'name', None), policy=None, result_summary=result_summary)
+        except Exception:
+            pass
+
         # Return result from sandbox execution
         return result if result is not None else NULL
     
@@ -588,14 +685,23 @@ class StatementEvaluatorMixin:
             if not is_error(filter_result):
                 filter_key = to_string(filter_result)
         
-        # Create trail configuration entry
+        # Register trail with security context so runtime can wire event sinks
+        try:
+            ctx = get_security_context()
+            entry = ctx.register_trail(trail_type, filter_key)
+        except Exception:
+            entry = None
+
+        # Create trail configuration entry (include id if available)
         trail_config = {
             "type": String(trail_type),
             "filter": String(filter_key) if filter_key else String("*"),
             "enabled": String("true"),
             "timestamp": String(datetime.now(timezone.utc).isoformat())
         }
-        
+        if entry and entry.get('id'):
+            trail_config['id'] = String(entry.get('id'))
+
         return Map(trail_config)
     
     def eval_contract_statement(self, node, env, stack_trace):
@@ -746,8 +852,14 @@ class StatementEvaluatorMixin:
         if is_error(val):
             print(f"❌ Error: {val}", file=sys.stderr)
             return NULL
-        
-        print(val.inspect())
+        # Emit print output and trail events
+        output = val.inspect() if hasattr(val, 'inspect') else str(val)
+        print(output)
+        try:
+            ctx = get_security_context()
+            ctx.emit_event('print', {'value': output})
+        except Exception:
+            pass
         return NULL
     
     def eval_screen_statement(self, node, env, stack_trace):
@@ -788,7 +900,13 @@ class StatementEvaluatorMixin:
             return val
         
         from ..object import Debug
-        Debug.log(String(str(val)))
+        s = String(str(val))
+        Debug.log(s)
+        try:
+            ctx = get_security_context()
+            ctx.emit_event('debug', {'value': s.value})
+        except Exception:
+            pass
         return NULL
     
     def eval_external_declaration(self, node, env, stack_trace):

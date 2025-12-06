@@ -257,12 +257,46 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                         from ..object import String
                         return String(obj.language)
                 
+                # Enforcement: consult security restrictions before returning
+                try:
+                    from ..security import get_security_context
+                    ctx = get_security_context()
+                    target = f"{getattr(node.object, 'value', str(node.object))}.{property_name}"
+                    restriction = ctx.get_restriction(target)
+                except Exception:
+                    restriction = None
+
+                # Handle Map objects
                 if isinstance(obj, Map):
-                    return obj.pairs.get(property_name, NULL)
-                
+                    val = obj.pairs.get(property_name, NULL)
+                    # apply restriction if present
+                    if restriction:
+                        rule = restriction.get('restriction')
+                        if rule == 'redact':
+                            from ..object import String
+                            return String('***REDACTED***')
+                        if rule == 'admin-only':
+                            # check environment flag for admin
+                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
+                            if not is_admin:
+                                from ..object import EvaluationError
+                                return EvaluationError('Access denied: admin required')
+                    return val
+
                 if hasattr(obj, 'get') and callable(obj.get):
-                    return obj.get(property_name)
-                
+                    val = obj.get(property_name)
+                    if restriction:
+                        rule = restriction.get('restriction')
+                        if rule == 'redact':
+                            from ..object import String
+                            return String('***REDACTED***')
+                        if rule == 'admin-only':
+                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
+                            if not is_admin:
+                                from ..object import EvaluationError
+                                return EvaluationError('Access denied: admin required')
+                    return val
+
                 return NULL
             
             # Fallback

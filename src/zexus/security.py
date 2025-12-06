@@ -154,6 +154,11 @@ class SecurityContext:
         self.auth_config = None      # Global auth configuration
         self.cache_store = {}        # Caching store
         self.audit_log = AuditLog()  # Audit logging system
+        # Registries for new commands/integration
+        self.restrictions = {}       # id -> restriction entry
+        self._restrictions_index = {}# target.field -> id
+        self.trails = {}             # id -> trail config
+        self.sandbox_runs = {}       # id -> sandbox run metadata
     
     def log_audit(self, data_name, action, data_type, timestamp=None, context=None):
         """Log an audit entry through the security context
@@ -169,6 +174,161 @@ class SecurityContext:
             Audit entry dict
         """
         return self.audit_log.log(data_name, action, data_type, timestamp, context)
+
+    # -------------------------------
+    # Restriction registry
+    # -------------------------------
+    def register_restriction(self, target, field, restriction_type, author=None, timestamp=None):
+        """Register a field-level restriction.
+
+        Args:
+            target: full target string (e.g. 'user.email')
+            field: property name (e.g. 'email')
+            restriction_type: string describing rule (e.g. 'read-only')
+            author: optional actor applying the restriction
+            timestamp: ISO timestamp (auto-generated if None)
+
+        Returns:
+            restriction entry dict
+        """
+        import datetime
+        rid = str(uuid.uuid4())
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        entry = {
+            'id': rid,
+            'target': target,
+            'field': field,
+            'restriction': restriction_type,
+            'author': author,
+            'timestamp': timestamp
+        }
+
+        self.restrictions[rid] = entry
+        # index by full path for quick lookup (store latest)
+        self._restrictions_index[f"{target}"] = rid
+        return entry
+
+    def get_restriction(self, target, field=None):
+        """Lookup a restriction by target (and optional field). Returns entry or None."""
+        key = f"{target}"
+        rid = self._restrictions_index.get(key)
+        if not rid:
+            return None
+        return self.restrictions.get(rid)
+
+    def list_restrictions(self):
+        return list(self.restrictions.values())
+
+    def remove_restriction(self, rid):
+        entry = self.restrictions.pop(rid, None)
+        if entry:
+            k = entry.get('target')
+            if k and self._restrictions_index.get(k) == rid:
+                del self._restrictions_index[k]
+            return True
+        return False
+
+    # -------------------------------
+    # Trail registry
+    # -------------------------------
+    def register_trail(self, event_type, filter_key=None, author=None, timestamp=None):
+        import datetime
+        tid = str(uuid.uuid4())
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        entry = {
+            'id': tid,
+            'type': event_type,
+            'filter': filter_key,
+            'author': author,
+            'timestamp': timestamp,
+            'enabled': True
+        }
+        self.trails[tid] = entry
+        return entry
+
+    def list_trails(self):
+        return list(self.trails.values())
+
+    def remove_trail(self, tid):
+        if tid in self.trails:
+            del self.trails[tid]
+            return True
+        return False
+
+    # -------------------------------
+    # Sandbox run registry
+    # -------------------------------
+    def register_sandbox_run(self, parent_context=None, policy=None, result_summary=None, timestamp=None):
+        import datetime
+        sid = str(uuid.uuid4())
+        if timestamp is None:
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        entry = {
+            'id': sid,
+            'parent': parent_context,
+            'policy': policy,
+            'result': result_summary,
+            'timestamp': timestamp
+        }
+        self.sandbox_runs[sid] = entry
+        return entry
+
+    def list_sandbox_runs(self):
+        return list(self.sandbox_runs.values())
+
+    # -------------------------------
+    # Event dispatcher (Trail integration)
+    # -------------------------------
+    def emit_event(self, event_type, payload):
+        """Emit an event through the trail registry.
+
+        - Matches active trails by `type` or `*`.
+        - Applies simple substring filter matching against stringified payload.
+        - For matching trails, record a derived audit entry and also print to stdout.
+        """
+        try:
+            # simple stringify payload for filtering
+            payload_str = json.dumps(payload) if not isinstance(payload, str) else payload
+        except Exception:
+            try:
+                payload_str = str(payload)
+            except Exception:
+                payload_str = "<unserializable>"
+
+        for tid, trail in list(self.trails.items()):
+            ttype = trail.get('type')
+            flt = trail.get('filter')
+            # type match or wildcard
+            if ttype != '*' and ttype != event_type:
+                continue
+
+            # filter match if provided
+            if flt and flt != '*' and flt not in payload_str:
+                continue
+
+            # Create audit-like entry for the trail event
+            entry = {
+                'id': str(uuid.uuid4()),
+                'trail_id': tid,
+                'event_type': event_type,
+                'payload': payload_str,
+                'timestamp': time.time()
+            }
+
+            # Persist to audit log if enabled
+            try:
+                self.audit_log.entries.append(entry)
+            except Exception:
+                pass
+
+            # Emit to console for live debugging
+            try:
+                print(f"[TRAIL:{tid}] {event_type} -> {payload_str}")
+            except Exception:
+                pass
 
     def register_verify_check(self, name, check_func):
         """Register a verification check function"""
