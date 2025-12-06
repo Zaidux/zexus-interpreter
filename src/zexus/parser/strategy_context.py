@@ -890,7 +890,7 @@ class ContextStackParser:
                 while k < len(export_tokens):
                     tk = export_tokens[k]
                     # stop at 'to' or 'with' clause
-                    if tk.type == IDENT and tk.literal not in ('to', 'with'):
+                    if tk.type == IDENT and tk.literal not in ('to', 'with', 'default'):
                         names.append(Identifier(tk.literal))
                     k += 1
 
