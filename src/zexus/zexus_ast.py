@@ -778,3 +778,19 @@ class WatchStatement(Statement):
 
     def __repr__(self):
         return f"WatchStatement(watch={self.watched_expr})"
+
+
+def attach_modifiers(node, modifiers):
+    """Attach modifiers to an AST node (best-effort).
+
+    Many AST constructors do not accept modifiers; this helper sets
+    a `modifiers` attribute on the node for downstream passes.
+    """
+    try:
+        if modifiers:
+            setattr(node, 'modifiers', list(modifiers))
+        else:
+            setattr(node, 'modifiers', [])
+    except Exception:
+        pass
+    return node

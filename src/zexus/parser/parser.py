@@ -284,77 +284,86 @@ class UltimateParser:
 
     def parse_statement(self):
         """Parse statement with maximum tolerance"""
+        # Support optional leading modifiers: e.g. `secure async action foo {}`
+        modifiers = []
+        if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE}:
+            modifiers = self._parse_modifiers()
         try:
+            node = None
             if self.cur_token_is(LET):
-                return self.parse_let_statement()
+                node = self.parse_let_statement()
             elif self.cur_token_is(CONST):
-                return self.parse_const_statement()
+                node = self.parse_const_statement()
             elif self.cur_token_is(RETURN):
-                return self.parse_return_statement()
+                node = self.parse_return_statement()
             elif self.cur_token_is(PRINT):
-                return self.parse_print_statement()
+                node = self.parse_print_statement()
             elif self.cur_token_is(FOR):
-                return self.parse_for_each_statement()
+                node = self.parse_for_each_statement()
             elif self.cur_token_is(SCREEN):
-                return self.parse_screen_statement()
+                node = self.parse_screen_statement()
             elif self.cur_token_is(ACTION):
-                return self.parse_action_statement()
+                node = self.parse_action_statement()
             elif self.cur_token_is(IF):
-                return self.parse_if_statement()
+                node = self.parse_if_statement()
             elif self.cur_token_is(WHILE):
-                return self.parse_while_statement()
+                node = self.parse_while_statement()
             elif self.cur_token_is(USE):
-                return self.parse_use_statement()
+                node = self.parse_use_statement()
             elif self.cur_token_is(EXACTLY):
-                return self.parse_exactly_statement()
+                node = self.parse_exactly_statement()
             elif self.cur_token_is(EXPORT):
-                return self.parse_export_statement()
+                node = self.parse_export_statement()
             elif self.cur_token_is(DEBUG):
-                return self.parse_debug_statement()
+                node = self.parse_debug_statement()
             elif self.cur_token_is(TRY):
-                return self.parse_try_catch_statement()
+                node = self.parse_try_catch_statement()
             elif self.cur_token_is(EXTERNAL):
-                return self.parse_external_declaration()
+                node = self.parse_external_declaration()
             elif self.cur_token_is(ENTITY):
-                return self.parse_entity_statement()
+                node = self.parse_entity_statement()
             elif self.cur_token_is(VERIFY):
-                return self.parse_verify_statement()
+                node = self.parse_verify_statement()
             elif self.cur_token_is(CONTRACT):
-                return self.parse_contract_statement()
+                node = self.parse_contract_statement()
             elif self.cur_token_is(PROTECT):
-                return self.parse_protect_statement()
+                node = self.parse_protect_statement()
             elif self.cur_token_is(SEAL):
-                return self.parse_seal_statement()
+                node = self.parse_seal_statement()
             elif self.cur_token_is(AUDIT):
-                return self.parse_audit_statement()
+                node = self.parse_audit_statement()
             elif self.cur_token_is(RESTRICT):
-                return self.parse_restrict_statement()
+                node = self.parse_restrict_statement()
             elif self.cur_token_is(SANDBOX):
-                return self.parse_sandbox_statement()
+                node = self.parse_sandbox_statement()
             elif self.cur_token_is(TRAIL):
-                return self.parse_trail_statement()
+                node = self.parse_trail_statement()
             elif self.cur_token_is(NATIVE):
-                return self.parse_native_statement()
+                node = self.parse_native_statement()
             elif self.cur_token_is(GC):
-                return self.parse_gc_statement()
+                node = self.parse_gc_statement()
             elif self.cur_token_is(INLINE):
-                return self.parse_inline_statement()
+                node = self.parse_inline_statement()
             elif self.cur_token_is(BUFFER):
-                return self.parse_buffer_statement()
+                node = self.parse_buffer_statement()
             elif self.cur_token_is(SIMD):
-                return self.parse_simd_statement()
+                node = self.parse_simd_statement()
             elif self.cur_token_is(DEFER):
-                return self.parse_defer_statement()
+                node = self.parse_defer_statement()
             elif self.cur_token_is(PATTERN):
-                return self.parse_pattern_statement()
+                node = self.parse_pattern_statement()
             elif self.cur_token_is(ENUM):
-                return self.parse_enum_statement()
+                node = self.parse_enum_statement()
             elif self.cur_token_is(STREAM):
-                return self.parse_stream_statement()
+                node = self.parse_stream_statement()
             elif self.cur_token_is(WATCH):
-                return self.parse_watch_statement()
+                node = self.parse_watch_statement()
             else:
-                return self.parse_expression_statement()
+                node = self.parse_expression_statement()
+
+            if node is not None:
+                return attach_modifiers(node, modifiers)
+            return None
         except Exception as e:
             # TOLERANT: Don't stop execution for parse errors, just log and continue
             error_msg = f"Line {self.cur_token.line}:{self.cur_token.column} - Parse error: {str(e)}"
@@ -364,6 +373,16 @@ class UltimateParser:
             # Try to recover and continue
             self.recover_to_next_statement()
             return None
+
+    def _parse_modifiers(self):
+        """Consume consecutive modifier tokens and return a list of modifier names."""
+        mods = []
+        # Accept modifiers in any order until we hit a non-modifier token
+        while self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE}:
+            # store the literal (e.g. 'secure') for readability
+            mods.append(self.cur_token.literal if getattr(self.cur_token, 'literal', None) else self.cur_token.type)
+            self.next_token()
+        return mods
 
     def parse_block(self, block_type=""):
         """Unified block parser with maximum tolerance for both syntax styles"""
@@ -1622,11 +1641,19 @@ class UltimateParser:
 
     def parse_action_parameters(self):
         params = []
-        if self.peek_token_is(RPAREN):
+
+        # Normalize several possible entry points: caller may call this
+        # with cur_token at LPAREN, at the first parameter, or at RPAREN.
+        if self.cur_token_is(LPAREN):
+            # advance to the token after '('
+            self.next_token()
+
+        # If we are immediately at ')' then it's an empty parameter list
+        if self.cur_token_is(RPAREN):
             self.next_token()
             return params
 
-        self.next_token()
+        # Now expect an identifier for the first parameter
         if not self.cur_token_is(IDENT):
             self.errors.append("Expected parameter name")
             return None

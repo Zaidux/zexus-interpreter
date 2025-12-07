@@ -144,6 +144,16 @@ ENUM = "ENUM"                # Type-safe enumerations: enum Color { Red, Green, 
 STREAM = "STREAM"            # Event streaming: stream name as event => handler;
 WATCH = "WATCH"              # Reactive state management: watch variable => reaction;
 
+# Modifiers (single keyword to extend declarations)
+PUBLIC = "PUBLIC"
+PRIVATE = "PRIVATE"
+SEALED = "SEALED"
+ASYNC = "ASYNC"
+NATIVE = "NATIVE"
+INLINE = "INLINE"
+SECURE = "SECURE"
+PURE = "PURE"
+
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):
         self.type = token_type

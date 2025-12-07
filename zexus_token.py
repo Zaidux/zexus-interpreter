@@ -57,6 +57,16 @@ FROM = "from"
 AS = "as"
 EXPORT = "export"
 
+# Modifiers (used to extend declarations without new keywords)
+PUBLIC = "public"
+PRIVATE = "private"
+SEALED = "sealed"
+ASYNC = "async"
+NATIVE = "native"
+INLINE = "inline"
+SECURE = "secure"
+PURE = "pure"
+
 class Token:
     def __init__(self, type_, literal):
         self.type = type_
@@ -79,4 +89,13 @@ keywords = {
     "from": FROM,
     "as": AS,
     "export": EXPORT,
+    # Modifiers
+    "public": PUBLIC,
+    "private": PRIVATE,
+    "sealed": SEALED,
+    "async": ASYNC,
+    "native": NATIVE,
+    "inline": INLINE,
+    "secure": SECURE,
+    "pure": PURE,
 }

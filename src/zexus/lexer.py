@@ -381,6 +381,12 @@ class Lexer:
             "enum": ENUM,
             "protocol": PROTOCOL,
             "import": IMPORT,
+            # Modifiers
+            "public": PUBLIC,
+            "private": PRIVATE,
+            "sealed": SEALED,
+            "secure": SECURE,
+            "pure": PURE,
             # NEW: Entity, Verify, Contract, Protect
             "entity": ENTITY,
             "verify": VERIFY,
