@@ -941,6 +941,29 @@ class StatementEvaluatorMixin:
     
     def eval_action_statement(self, node, env, stack_trace):
         action = Action(node.parameters, node.body, env)
+        
+        # Apply modifiers if present
+        modifiers = getattr(node, 'modifiers', [])
+        if modifiers:
+            # Set modifier flags on the action object
+            if 'inline' in modifiers:
+                action.is_inlined = True
+            if 'async' in modifiers:
+                action.is_async = True
+            if 'secure' in modifiers:
+                action.is_secure = True
+            if 'pure' in modifiers:
+                action.is_pure = True
+            if 'native' in modifiers:
+                action.is_native = True
+            
+            # 'public' modifier: automatically export the action
+            if 'public' in modifiers:
+                try:
+                    env.export(node.name.value, action)
+                except Exception:
+                    pass
+        
         env.set(node.name.value, action)
         return NULL
     

@@ -268,3 +268,22 @@ class ExportStatement(Statement):
         
     def string(self):
         return f"export {self.declaration.string()}"
+
+
+def attach_modifiers(node, modifiers):
+    """Attach a list of modifier strings to an AST node.
+
+    This is a lightweight, non-invasive helper so existing AST classes
+    do not need to accept modifiers in their constructors. Use after
+    creating a Statement node in the parser.
+    """
+    try:
+        if modifiers:
+            setattr(node, 'modifiers', list(modifiers))
+        else:
+            # Ensure attribute exists for consistency
+            setattr(node, 'modifiers', [])
+    except Exception:
+        # Best-effort: ignore if node cannot be modified
+        pass
+    return node
