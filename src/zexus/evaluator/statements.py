@@ -12,7 +12,8 @@ from ..zexus_ast import (
     ComponentStatement, ThemeStatement, DebugStatement, ExternalDeclaration, AssignmentExpression,
     PrintStatement, ScreenStatement, EmbeddedCodeStatement, ExactlyStatement,
     Identifier, PropertyAccessExpression, RestrictStatement, SandboxStatement, TrailStatement,
-    NativeStatement, GCStatement, InlineStatement, BufferStatement, SIMDStatement
+    NativeStatement, GCStatement, InlineStatement, BufferStatement, SIMDStatement,
+    DeferStatement, PatternStatement, PatternCase, EnumStatement, EnumMember, StreamStatement, WatchStatement
 )
 from ..object import (
     Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
@@ -1178,3 +1179,82 @@ class StatementEvaluatorMixin:
         
         except Exception as e:
             return EvaluationError(f"Error in SIMD statement: {str(e)}")
+    
+    def eval_defer_statement(self, node, env, stack_trace):
+        """Evaluate defer statement - cleanup code execution."""
+        # Store the deferred code for later execution (at end of scope/function)
+        if not hasattr(env, '_deferred'):
+            env._deferred = []
+        
+        env._deferred.append(node.code_block)
+        return String(f"Deferred cleanup code registered")
+    
+    def eval_pattern_statement(self, node, env, stack_trace):
+        """Evaluate pattern statement - pattern matching."""
+        # Evaluate the expression to match
+        value = self.eval_node(node.expression, env, stack_trace)
+        if is_error(value):
+            return value
+        
+        # Convert to comparable form
+        match_value = _zexus_to_python(value)
+        
+        # Try each pattern case
+        for case in node.cases:
+            case_pattern = _zexus_to_python(case.pattern)
+            
+            # Match logic
+            if case_pattern == "default" or case_pattern == match_value:
+                # Execute action
+                action_result = self.eval_node(case.action, env, stack_trace)
+                return action_result
+        
+        # No match found
+        return NULL
+    
+    def eval_enum_statement(self, node, env, stack_trace):
+        """Evaluate enum statement - type-safe enumerations."""
+        # Create an enum object
+        enum_obj = Map()
+        
+        for i, member in enumerate(node.members):
+            # Use provided value or auto-increment
+            if member.value is not None:
+                value = member.value
+            else:
+                value = i
+            
+            enum_obj.set(member.name, Integer(value) if isinstance(value, int) else String(value))
+        
+        # Store enum in environment
+        env.set(node.name, enum_obj)
+        return String(f"Enum '{node.name}' defined with {len(node.members)} members")
+    
+    def eval_stream_statement(self, node, env, stack_trace):
+        """Evaluate stream statement - event streaming."""
+        # Register stream handler
+        if not hasattr(env, '_streams'):
+            env._streams = {}
+        
+        # Store handler for stream
+        env._streams[node.stream_name] = {
+            'event_var': node.event_var,
+            'handler': node.handler
+        }
+        
+        return String(f"Stream '{node.stream_name}' handler registered")
+    
+    def eval_watch_statement(self, node, env, stack_trace):
+        """Evaluate watch statement - reactive state management."""
+        # Register watched expression and reaction
+        if not hasattr(env, '_watches'):
+            env._watches = []
+        
+        # Store watch configuration
+        env._watches.append({
+            'expression': node.watched_expr,
+            'reaction': node.reaction,
+            'last_value': None
+        })
+        
+        return String(f"Watch registered for expression")

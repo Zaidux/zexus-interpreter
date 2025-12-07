@@ -659,3 +659,122 @@ class SIMDStatement(Statement):
 
     def __repr__(self):
         return f"SIMDStatement(op={self.operation}, operands={self.operands})"
+
+
+# CONVENIENCE FEATURE STATEMENT NODES
+
+class DeferStatement(Statement):
+    """Defer statement - Cleanup code execution (LIFO order)
+    
+    defer file.close();
+    defer cleanup();
+    defer release_lock();
+    """
+    def __init__(self, code_block):
+        self.code_block = code_block  # Expression or BlockStatement: code to execute on defer
+
+    def __repr__(self):
+        return f"DeferStatement(code={self.code_block})"
+
+
+class PatternStatement(Statement):
+    """Pattern matching statement - Match expression against patterns
+    
+    pattern value {
+      case 1 => print "one";
+      case 2 => print "two";
+      default => print "other";
+    }
+    """
+    def __init__(self, expression, cases):
+        self.expression = expression  # Expression: value to match
+        self.cases = cases  # List[PatternCase]: pattern cases
+
+    def __repr__(self):
+        return f"PatternStatement(expr={self.expression}, cases={len(self.cases)} patterns)"
+
+
+class PatternCase:
+    """A single pattern case
+    
+    case pattern => action;
+    """
+    def __init__(self, pattern, action):
+        self.pattern = pattern  # String or Expression: pattern to match
+        self.action = action  # Expression or BlockStatement: action if matched
+
+    def __repr__(self):
+        return f"PatternCase(pattern={self.pattern}, action={self.action})"
+
+
+# ADVANCED FEATURE STATEMENT NODES
+
+class EnumStatement(Statement):
+    """Enum statement - Type-safe enumerations
+    
+    enum Color {
+      Red,
+      Green,
+      Blue
+    }
+    
+    enum Status {
+      Active = 1,
+      Inactive = 2,
+      Pending = 3
+    }
+    """
+    def __init__(self, name, members):
+        self.name = name  # String: enum name
+        self.members = members  # List[EnumMember]: enum values
+
+    def __repr__(self):
+        return f"EnumStatement(name={self.name}, members={len(self.members)})"
+
+
+class EnumMember:
+    """A single enum member"""
+    def __init__(self, name, value=None):
+        self.name = name  # String: member name
+        self.value = value  # Optional value (integer or string)
+
+    def __repr__(self):
+        return f"EnumMember({self.name}={self.value})"
+
+
+class StreamStatement(Statement):
+    """Stream statement - Event streaming and handling
+    
+    stream clicks as event => {
+      print "Clicked: " + event.x + ", " + event.y;
+    }
+    
+    stream api_responses as response => {
+      handle_response(response);
+    }
+    """
+    def __init__(self, stream_name, event_var, handler):
+        self.stream_name = stream_name  # String: stream name
+        self.event_var = event_var  # Identifier: event variable name
+        self.handler = handler  # BlockStatement: event handler code
+
+    def __repr__(self):
+        return f"StreamStatement(stream={self.stream_name}, var={self.event_var})"
+
+
+class WatchStatement(Statement):
+    """Watch statement - Reactive state management
+    
+    watch user_name => {
+      update_ui();
+      log_change("user_name changed to: " + user_name);
+    }
+    
+    watch count => print "Count is now: " + count;
+    """
+    def __init__(self, watched_expr, reaction):
+        self.watched_expr = watched_expr  # Expression: variable or expression to watch
+        self.reaction = reaction  # BlockStatement or Expression: code to execute on change
+
+    def __repr__(self):
+        return f"WatchStatement(watch={self.watched_expr})"

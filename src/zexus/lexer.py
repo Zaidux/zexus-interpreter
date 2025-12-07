@@ -406,6 +406,11 @@ class Lexer:
             "inline": INLINE,           # Performance: function inlining
             "buffer": BUFFER,           # Performance: direct memory access
             "simd": SIMD,               # Performance: vector operations
+            "defer": DEFER,             # Convenience: cleanup code execution
+            "pattern": PATTERN,         # Convenience: pattern matching
+            "enum": ENUM,               # Advanced: type-safe enumerations
+            "stream": STREAM,           # Advanced: event streaming
+            "watch": WATCH,             # Advanced: reactive state management
         }
         return keywords.get(ident, IDENT)
 

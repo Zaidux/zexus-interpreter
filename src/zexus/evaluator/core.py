@@ -174,6 +174,26 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  SIMDStatement node")
                 return self.eval_simd_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.DeferStatement:
+                debug_log("  DeferStatement node")
+                return self.eval_defer_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.PatternStatement:
+                debug_log("  PatternStatement node")
+                return self.eval_pattern_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.EnumStatement:
+                debug_log("  EnumStatement node", f"enum {node.name}")
+                return self.eval_enum_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.StreamStatement:
+                debug_log("  StreamStatement node", f"stream {node.stream_name}")
+                return self.eval_stream_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.WatchStatement:
+                debug_log("  WatchStatement node")
+                return self.eval_watch_statement(node, env, stack_trace)
+            
             # === EXPRESSIONS ===
             elif node_type == zexus_ast.Identifier:
                 debug_log("  Identifier node", node.value)

@@ -135,6 +135,15 @@ INLINE = "INLINE"            # Function inlining: inline func_name
 BUFFER = "BUFFER"            # Direct memory access: buffer(ptr, size)
 SIMD = "SIMD"                # Vector operations: simd(operation, vector1, vector2)
 
+# CONVENIENCE FEATURES TOKENS
+DEFER = "DEFER"              # Cleanup code execution: defer cleanup_code;
+PATTERN = "PATTERN"          # Pattern matching: pattern value { case x => ...; }
+
+# ADVANCED FEATURES TOKENS
+ENUM = "ENUM"                # Type-safe enumerations: enum Color { Red, Green, Blue }
+STREAM = "STREAM"            # Event streaming: stream name as event => handler;
+WATCH = "WATCH"              # Reactive state management: watch variable => reaction;
+
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):
         self.type = token_type

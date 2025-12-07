@@ -34,7 +34,8 @@ class StructuralAnalyzer:
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
-              RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD
+              RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
+              DEFER, PATTERN, ENUM, STREAM, WATCH
         }
 
         while i < n:
@@ -481,7 +482,8 @@ class StructuralAnalyzer:
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
-              RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD
+              RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
+              DEFER, PATTERN, ENUM, STREAM, WATCH
         }
 
         cur = []

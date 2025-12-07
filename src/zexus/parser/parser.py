@@ -343,6 +343,16 @@ class UltimateParser:
                 return self.parse_buffer_statement()
             elif self.cur_token_is(SIMD):
                 return self.parse_simd_statement()
+            elif self.cur_token_is(DEFER):
+                return self.parse_defer_statement()
+            elif self.cur_token_is(PATTERN):
+                return self.parse_pattern_statement()
+            elif self.cur_token_is(ENUM):
+                return self.parse_enum_statement()
+            elif self.cur_token_is(STREAM):
+                return self.parse_stream_statement()
+            elif self.cur_token_is(WATCH):
+                return self.parse_watch_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -1286,6 +1296,252 @@ class UltimateParser:
             self.next_token()
 
         return SIMDStatement(operation)
+
+    def parse_defer_statement(self):
+        """Parse defer statement - cleanup code execution.
+        
+        Syntax:
+            defer close_file();
+            defer cleanup();
+            defer { cleanup1(); cleanup2(); }
+        """
+        token = self.cur_token
+
+        # Parse deferred code (expression or block)
+        if self.peek_token_is(LBRACE):
+            self.next_token()
+            code_block = self.parse_block("defer")
+        else:
+            self.next_token()
+            code_block = self.parse_expression(LOWEST)
+
+        if code_block is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected code after 'defer'")
+            return None
+
+        # Optional semicolon
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return DeferStatement(code_block)
+
+    def parse_pattern_statement(self):
+        """Parse pattern statement - pattern matching.
+        
+        Syntax:
+            pattern value {
+              case 1 => print "one";
+              case 2 => print "two";
+              default => print "other";
+            }
+        """
+        token = self.cur_token
+
+        # Parse expression to match against
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'pattern'")
+            return None
+        expression = Identifier(self.cur_token.literal)
+
+        # Expect opening brace
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after pattern expression")
+            return None
+
+        # Parse pattern cases
+        cases = []
+        self.next_token()
+
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            # Expect 'case' or 'default'
+            if self.cur_token.literal == "case":
+                self.next_token()
+                pattern = self.parse_expression(LOWEST)
+                
+                # Expect '=>'
+                if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in pattern case")
+                    return None
+                
+                self.next_token()
+                action = self.parse_expression(LOWEST)
+                
+                cases.append(PatternCase(pattern, action))
+                
+                # Optional semicolon
+                if self.peek_token_is(SEMICOLON):
+                    self.next_token()
+            
+            elif self.cur_token.literal == "default":
+                self.next_token()
+                
+                # Expect '=>'
+                if not self.expect_peek(ASSIGN):
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in default case")
+                    return None
+                
+                self.next_token()
+                action = self.parse_expression(LOWEST)
+                
+                cases.append(PatternCase("default", action))
+                
+                # Optional semicolon
+                if self.peek_token_is(SEMICOLON):
+                    self.next_token()
+                
+                break  # Default should be last
+            
+            self.next_token()
+
+        # Expect closing brace
+        if not self.cur_token_is(RBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' after pattern cases")
+            return None
+
+        return PatternStatement(expression, cases)
+
+    def parse_enum_statement(self):
+        """Parse enum statement - type-safe enumerations.
+        
+        Syntax:
+            enum Color {
+              Red,
+              Green,
+              Blue
+            }
+            
+            enum Status {
+              Active = 1,
+              Inactive = 2
+            }
+        """
+        token = self.cur_token
+
+        # Expect enum name
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected enum name after 'enum'")
+            return None
+        enum_name = self.cur_token.literal
+
+        # Expect opening brace
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after enum name")
+            return None
+
+        # Parse enum members
+        members = []
+        self.next_token()
+
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT):
+                member_name = self.cur_token.literal
+                member_value = None
+
+                # Optional: = value
+                if self.peek_token_is(ASSIGN):
+                    self.next_token()
+                    self.next_token()
+                    if self.cur_token_is(INT):
+                        member_value = int(self.cur_token.literal)
+                    elif self.cur_token_is(STRING):
+                        member_value = self.cur_token.literal
+
+                members.append(EnumMember(member_name, member_value))
+
+                # Skip comma and continue
+                if self.peek_token_is(COMMA):
+                    self.next_token()
+
+            self.next_token()
+
+        # Expect closing brace
+        if not self.cur_token_is(RBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' after enum members")
+            return None
+
+        return EnumStatement(enum_name, members)
+
+    def parse_stream_statement(self):
+        """Parse stream statement - event streaming.
+        
+        Syntax:
+            stream clicks as event => {
+              print "Clicked: " + event.x;
+            }
+        """
+        token = self.cur_token
+
+        # Expect stream name
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected stream name after 'stream'")
+            return None
+        stream_name = self.cur_token.literal
+
+        # Expect 'as'
+        if not self.expect_peek(AS):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected 'as' after stream name")
+            return None
+
+        # Expect event variable name
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected event variable name")
+            return None
+        event_var = Identifier(self.cur_token.literal)
+
+        # Expect '=>'
+        if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' after event variable")
+            return None
+
+        # Expect block
+        if not self.expect_peek(LBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' for stream handler")
+            return None
+
+        handler = self.parse_block("stream")
+        if handler is None:
+            return None
+
+        return StreamStatement(stream_name, event_var, handler)
+
+    def parse_watch_statement(self):
+        """Parse watch statement - reactive state management.
+        
+        Syntax:
+            watch user_name => {
+              update_ui();
+            }
+            
+            watch count => print "Count: " + count;
+        """
+        token = self.cur_token
+
+        # Parse watched expression
+        self.next_token()
+        watched_expr = self.parse_expression(LOWEST)
+
+        if watched_expr is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'watch'")
+            return None
+
+        # Expect '=>'
+        if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in watch statement")
+            return None
+
+        # Parse reaction (block or expression)
+        if self.peek_token_is(LBRACE):
+            self.next_token()
+            reaction = self.parse_block("watch")
+        else:
+            self.next_token()
+            reaction = self.parse_expression(LOWEST)
+
+        if reaction is None:
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
+            return None
+
+        return WatchStatement(watched_expr, reaction)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):
