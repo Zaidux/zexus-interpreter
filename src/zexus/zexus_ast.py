@@ -166,6 +166,15 @@ class ActionStatement(Statement):
     def __repr__(self):
         return f"ActionStatement(name={self.name}, parameters={len(self.parameters)})"
 
+class FunctionStatement(Statement):
+    def __init__(self, name, parameters, body):
+        self.name = name
+        self.parameters = parameters
+        self.body = body
+
+    def __repr__(self):
+        return f"FunctionStatement(name={self.name}, parameters={len(self.parameters)})"
+
 class ExactlyStatement(Statement):
     def __init__(self, name, body):
         self.name = name

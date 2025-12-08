@@ -304,6 +304,8 @@ class UltimateParser:
                 node = self.parse_screen_statement()
             elif self.cur_token_is(ACTION):
                 node = self.parse_action_statement()
+            elif self.cur_token_is(FUNCTION):
+                node = self.parse_function_statement()
             elif self.cur_token_is(IF):
                 node = self.parse_if_statement()
             elif self.cur_token_is(WHILE):
@@ -529,6 +531,34 @@ class UltimateParser:
             return None
 
         return ActionStatement(name=name, parameters=parameters, body=body)
+
+    def parse_function_statement(self):
+        """Tolerant function parser supporting both syntax styles"""
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected function name after 'function'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+
+        # Parse parameters (with or without parentheses)
+        parameters = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # Skip to (
+            self.next_token()  # Skip (
+            parameters = self.parse_action_parameters()
+            if parameters is None:
+                return None
+        elif self.peek_token_is(IDENT):
+            # Single parameter without parentheses
+            self.next_token()
+            parameters = [Identifier(self.cur_token.literal)]
+
+        # Parse body (flexible style)
+        body = self.parse_block("function")
+        if not body:
+            return None
+
+        return FunctionStatement(name=name, parameters=parameters, body=body)
 
     def parse_let_statement(self):
         """Tolerant let statement parser"""

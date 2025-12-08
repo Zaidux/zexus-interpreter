@@ -164,6 +164,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  ActionStatement node", f"action {node.name.value}")
                 return self.eval_action_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.FunctionStatement:
+                debug_log("  FunctionStatement node", f"function {node.name.value}")
+                return self.eval_function_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.NativeStatement:
                 debug_log("  NativeStatement node", f"native {node.function_name}")
                 return self.eval_native_statement(node, env, stack_trace)

@@ -356,6 +356,7 @@ class Lexer:
             "each": EACH,
             "in": IN,
             "action": ACTION,
+            "function": FUNCTION,
             "while": WHILE,
             "use": USE,
             "exactly": EXACTLY,
