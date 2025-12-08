@@ -82,7 +82,9 @@ class FunctionEvaluatorMixin:
             
             for i, param in enumerate(fn.parameters):
                 if i < len(args):
-                    new_env.set(param.value, args[i])
+                    # Handle both Identifier objects and strings
+                    param_name = param.value if hasattr(param, 'value') else str(param)
+                    new_env.set(param_name, args[i])
             
             res = self.eval_node(fn.body, new_env)
             res = _resolve_awaitable(res)
