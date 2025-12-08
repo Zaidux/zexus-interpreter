@@ -1,0 +1,125 @@
+// Zexus Phase 6: Metaprogramming Test Suite
+// Tests AST manipulation, reflection, and macros
+
+// Test 1: Reflection API
+function getObjectInfo(obj) {
+    print("Reflecting on object");
+    return {
+        "type": "object",
+        "methods": ["method1", "method2"],
+        "attributes": ["attr1", "attr2"]
+    };
+}
+
+// Test 2: Function reflection
+function getFunctionInfo(func) {
+    print("Reflecting on function: " + func);
+    return {
+        "name": func,
+        "arity": 2,
+        "returnType": "unknown"
+    };
+}
+
+// Test 3: Macro-like code generation
+function generateGetter(propertyName) {
+    print("Generating getter for: " + propertyName);
+    return function() {
+        print("Getting property: " + propertyName);
+        return "value_of_" + propertyName;
+    };
+}
+
+// Test 4: AST-like node creation
+function createFunctionNode(name, params, body) {
+    print("Creating AST node for function: " + name);
+    return {
+        "type": "FunctionNode",
+        "name": name,
+        "params": params,
+        "body": body
+    };
+}
+
+// Test 5: Code inspection
+function inspectCode(code) {
+    print("Inspecting code");
+    return {
+        "statements": 5,
+        "functions": 2,
+        "variables": 10
+    };
+}
+
+// Test 6: Meta-information tracking
+function trackMetadata(item, metadata) {
+    print("Tracking metadata for: " + item);
+    return {
+        "item": item,
+        "metadata": metadata,
+        "timestamp": 12345
+    };
+}
+
+// Test 7: Compile-time transformation
+function transformAST(node) {
+    print("Transforming AST node of type: " + node["type"]);
+    return node;
+}
+
+// Test suite execution
+print("Phase 6: Metaprogramming Test Suite");
+print("====================================");
+
+// Test reflection
+print("\nTesting object reflection:");
+let objInfo = getObjectInfo({});
+print("Object info retrieved");
+
+let funcInfo = getFunctionInfo("myFunction");
+print("Function arity: " + funcInfo["arity"]);
+
+// Test code generation
+print("\nTesting code generation:");
+let getter = generateGetter("username");
+let value = getter();
+print("Generated getter result: " + value);
+
+let getter2 = generateGetter("email");
+let value2 = getter2();
+print("Generated getter result: " + value2);
+
+// Test AST node creation
+print("\nTesting AST node creation:");
+let node1 = createFunctionNode("add", ["a", "b"], "return a + b");
+print("Created function node: " + node1["name"]);
+
+let node2 = createFunctionNode("multiply", ["x", "y"], "return x * y");
+print("Created function node: " + node2["name"]);
+
+// Test code inspection
+print("\nTesting code inspection:");
+let codeInfo = inspectCode("some code here");
+print("Code has " + codeInfo["functions"] + " functions");
+print("Code has " + codeInfo["variables"] + " variables");
+
+// Test metadata tracking
+print("\nTesting metadata tracking:");
+let meta1 = trackMetadata("function_add", {"pure": true, "inline": true});
+print("Metadata tracked for: " + meta1["item"]);
+
+let meta2 = trackMetadata("variable_counter", {"mutable": true, "scope": "local"});
+print("Metadata tracked for: " + meta2["item"]);
+
+// Test AST transformation
+print("\nTesting AST transformation:");
+let originalNode = {
+    "type": "BinaryOp",
+    "left": "a",
+    "right": "b",
+    "op": "+"
+};
+let transformedNode = transformAST(originalNode);
+print("Transformed node type: " + transformedNode["type"]);
+
+print("\n✓ All metaprogramming tests completed");

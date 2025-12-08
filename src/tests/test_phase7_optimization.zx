@@ -1,0 +1,132 @@
+// Zexus Phase 7: Optimization Test Suite
+// Tests bytecode compilation, profiling, and optimization passes
+
+// Test 1: Constant folding
+function testConstantFolding() {
+    let x = 5 + 3;  // Should be optimized to 8
+    let y = 10 * 2; // Should be optimized to 20
+    let z = x + y;  // Should be optimized to 28
+    return z;
+}
+
+// Test 2: Dead code elimination
+function testDeadCodeElimination() {
+    let used = 42;
+    let unused = 99;  // Dead code - not used
+    return used;
+}
+
+// Test 3: Function inlining
+inline function inlineableFunction(a, b) {
+    return a + b;
+}
+
+function testInlining() {
+    let result = inlineableFunction(5, 3);
+    return result;
+}
+
+// Test 4: Loop unrolling
+function testLoopUnrolling() {
+    let sum = 0;
+    let i = 0;
+    while (i < 4) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum; // Could be unrolled: 0+1+2+3=6
+}
+
+// Test 5: Strength reduction
+function testStrengthReduction() {
+    let x = 10;
+    let y = x * 2;  // Could be optimized to x + x
+    let z = x * 4;  // Could be optimized to x << 2
+    return y + z;
+}
+
+// Test 6: Function profiling
+function profiledFunction(n) {
+    let result = 0;
+    let i = 0;
+    while (i < n) {
+        result = result + i;
+        i = i + 1;
+    }
+    return result;
+}
+
+// Test 7: Hot path optimization
+pure function hotPathFunction(x) {
+    if (x > 0) {
+        return x * 2;  // Hot path - executed frequently
+    } else {
+        return x * 3;  // Cold path - rarely executed
+    }
+}
+
+// Test 8: Bytecode representation
+function testBytecodeGeneration() {
+    let a = 10;
+    let b = 20;
+    let c = a + b;
+    return c;
+}
+
+// Test suite execution
+print("Phase 7: Optimization Test Suite");
+print("=================================");
+
+// Test constant folding
+print("\nTesting constant folding:");
+let cf_result = testConstantFolding();
+print("Constant folding result: " + cf_result);
+
+// Test dead code elimination
+print("\nTesting dead code elimination:");
+let dce_result = testDeadCodeElimination();
+print("Dead code elimination result: " + dce_result);
+
+// Test inlining
+print("\nTesting function inlining:");
+let inline_result = testInlining();
+print("Inlining result: " + inline_result);
+
+// Test loop unrolling
+print("\nTesting loop unrolling:");
+let unroll_result = testLoopUnrolling();
+print("Loop unrolling result: " + unroll_result);
+
+// Test strength reduction
+print("\nTesting strength reduction:");
+let sr_result = testStrengthReduction();
+print("Strength reduction result: " + sr_result);
+
+// Test profiling
+print("\nTesting function profiling:");
+let prof_result1 = profiledFunction(5);
+print("Profiled function(5) = " + prof_result1);
+
+let prof_result2 = profiledFunction(10);
+print("Profiled function(10) = " + prof_result2);
+
+let prof_result3 = profiledFunction(100);
+print("Profiled function(100) = " + prof_result3);
+
+// Test hot path
+print("\nTesting hot path optimization:");
+let hot1 = hotPathFunction(5);
+print("Hot path result (x=5): " + hot1);
+
+let hot2 = hotPathFunction(-3);
+print("Cold path result (x=-3): " + hot2);
+
+let hot3 = hotPathFunction(7);
+print("Hot path result (x=7): " + hot3);
+
+// Test bytecode generation
+print("\nTesting bytecode generation:");
+let bc_result = testBytecodeGeneration();
+print("Bytecode test result: " + bc_result);
+
+print("\n✓ All optimization tests completed");

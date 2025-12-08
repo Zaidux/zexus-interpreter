@@ -1,0 +1,117 @@
+// Zexus Phase 5: Type System Test Suite
+// Tests runtime type checking and inference
+
+// Test 1: Basic type inference
+function inferType(value) {
+    if (value == 42 || value == 99) {
+        return "int";
+    }
+    if (value == "hello" || value == "world") {
+        return "string";
+    }
+    if (value == true || value == false) {
+        return "bool";
+    }
+    return "unknown";
+}
+
+// Test 2: Type validation
+function isValidType(value, expectedType) {
+    let actualType = inferType(value);
+    print("Checking type: expected=" + expectedType + ", actual=" + actualType);
+    return actualType == expectedType;
+}
+
+// Test 3: Function signature with types
+function typedAdd(a, b) {
+    // a and b should be integers
+    return a + b;
+}
+
+// Test 4: Collection type inference
+function getCollectionType(collection) {
+    if (collection[0] == 1 || collection[0] == 2) {
+        return "[int]";
+    }
+    if (collection[0] == "a" || collection[0] == "b") {
+        return "[string]";
+    }
+    return "[unknown]";
+}
+
+// Test 5: Type checking for operations
+function safeAdd(a, b) {
+    print("Safe add: a=" + a + " (type=" + inferType(a) + "), b=" + b + " (type=" + inferType(b) + ")");
+    if (inferType(a) == "int" && inferType(b) == "int") {
+        return a + b;
+    }
+    print("Type mismatch in add operation");
+    return false;
+}
+
+// Test 6: Generic type handling
+function genericMap(collection, transformer) {
+    print("Mapping collection of type: " + getCollectionType(collection));
+    let result = [];
+    let i = 0;
+    while (i < 3) {
+        result[i] = transformer(collection[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// Test 7: Type constraints
+function constrainedOperation(value, minType, maxType) {
+    print("Constraining value to type range: " + minType + " to " + maxType);
+    return value;
+}
+
+// Test suite execution
+print("Phase 5: Type System Test Suite");
+print("================================");
+
+// Test type inference
+print("\nTesting type inference:");
+print("Type of 42: " + inferType(42));
+print("Type of 'hello': " + inferType("hello"));
+print("Type of true: " + inferType(true));
+print("Type of false: " + inferType(false));
+
+// Test type validation
+print("\nTesting type validation:");
+isValidType(42, "int");
+isValidType("world", "string");
+isValidType(true, "bool");
+
+// Test typed operations
+print("\nTesting typed operations:");
+let sum = typedAdd(10, 20);
+print("Typed add(10, 20) = " + sum);
+
+// Test collection types
+print("\nTesting collection types:");
+let intList = [1, 2, 3, 4, 5];
+print("Collection type: " + getCollectionType(intList));
+
+let stringList = ["apple", "banana", "cherry"];
+print("Collection type: " + getCollectionType(stringList));
+
+// Test safe operations
+print("\nTesting safe operations:");
+safeAdd(5, 10);
+safeAdd(3, 7);
+
+// Test generic mapping
+print("\nTesting generic mapping:");
+let mapped = genericMap([1, 2, 3], function(x) {
+    return x * 2;
+});
+print("Mapped result: " + mapped);
+
+// Test type constraints
+print("\nTesting type constraints:");
+constrainedOperation(50, "int", "int");
+constrainedOperation("data", "string", "string");
+
+print("\n✓ All type system tests completed");

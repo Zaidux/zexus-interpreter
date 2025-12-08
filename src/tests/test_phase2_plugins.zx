@@ -1,0 +1,80 @@
+// Zexus Phase 2: Plugin System Test Suite
+// Tests plugin hooks and extensibility
+
+// Test 1: Hook-like function definitions
+function hookListener(eventName) {
+    print("Hook: " + eventName + " triggered");
+}
+
+// Test 2: Event emitter simulation
+function emitEvent(eventName, data) {
+    print("Emitting event: " + eventName + " with data: " + data);
+    hookListener(eventName);
+    return true;
+}
+
+// Test 3: Plugin system with callbacks
+function registerPlugin(pluginName, callback) {
+    print("Plugin registered: " + pluginName);
+    return callback();
+}
+
+// Test 4: Before/After hooks
+function beforeHook(functionName) {
+    print("Before hook: executing " + functionName);
+}
+
+function afterHook(functionName, result) {
+    print("After hook: " + functionName + " returned " + result);
+}
+
+function executeWithHooks(name, operation) {
+    beforeHook(name);
+    let result = operation();
+    afterHook(name, result);
+    return result;
+}
+
+// Test 5: Plugin capability checks
+function checkCapability(capability) {
+    print("Checking capability: " + capability);
+    return true;
+}
+
+// Test suite execution
+print("Phase 2: Plugin System Test Suite");
+print("=================================");
+
+// Test event emission
+print("\nTesting event emission:");
+emitEvent("init", 42);
+emitEvent("process", "data");
+
+// Test plugin registration
+print("\nTesting plugin registration:");
+registerPlugin("logging", function() {
+    print("Logging plugin initialized");
+    return 1;
+});
+
+registerPlugin("caching", function() {
+    print("Caching plugin initialized");
+    return 2;
+});
+
+// Test hooks
+print("\nTesting before/after hooks:");
+let hookResult = executeWithHooks("testFunc", function() {
+    print("Executing main function");
+    return 99;
+});
+
+print("Hook execution result: " + hookResult);
+
+// Test capability checks
+print("\nTesting capability checks:");
+checkCapability("io.read");
+checkCapability("io.write");
+checkCapability("network.access");
+
+print("\n✓ All plugin system tests completed");

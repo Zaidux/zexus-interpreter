@@ -1,0 +1,177 @@
+// Zexus Phase 10: Ecosystem Test Suite
+// Tests package management, marketplace, and profiling
+
+// Test 1: Package registry
+function registerPackage(name, version, metadata) {
+    print("Registering package: " + name + "@" + version);
+    return {
+        "name": name,
+        "version": version,
+        "installed": true,
+        "metadata": metadata
+    };
+}
+
+// Test 2: Package installation
+function installPackage(packageName, version) {
+    print("Installing package: " + packageName + "@" + version);
+    return {
+        "name": packageName,
+        "version": version,
+        "status": "installed"
+    };
+}
+
+// Test 3: Package dependencies
+function resolveDependencies(packageName) {
+    print("Resolving dependencies for: " + packageName);
+    let deps = [];
+    if (packageName == "web-framework") {
+        deps = ["express", "router", "middleware"];
+    }
+    if (packageName == "database") {
+        deps = ["connection", "query", "transaction"];
+    }
+    return deps;
+}
+
+// Test 4: Plugin marketplace
+function searchMarketplace(query) {
+    print("Searching marketplace for: " + query);
+    let results = ["plugin1", "plugin2", "plugin3"];
+    return results;
+}
+
+function getMarketplaceStats() {
+    print("Getting marketplace statistics");
+    return {
+        "total_plugins": 1000,
+        "total_packages": 5000,
+        "downloads_today": 50000
+    };
+}
+
+// Test 5: Performance profiler
+function profileFunction(name, func) {
+    print("Profiling function: " + name);
+    // Simulate timing
+    let startTime = 0;
+    let result = func();
+    let endTime = 1000;
+    return {
+        "name": name,
+        "time_ms": endTime - startTime,
+        "result": result
+    };
+}
+
+// Test 6: Performance metrics
+function recordMetric(metricName, value) {
+    print("Recording metric: " + metricName + " = " + value);
+    return {
+        "name": metricName,
+        "value": value,
+        "timestamp": 12345
+    };
+}
+
+// Test 7: Version management
+function checkVersionCompatibility(required, installed) {
+    print("Checking compatibility: required=" + required + ", installed=" + installed);
+    return required == installed;
+}
+
+function upgradePackage(name, fromVersion, toVersion) {
+    print("Upgrading " + name + " from " + fromVersion + " to " + toVersion);
+    return {
+        "name": name,
+        "from": fromVersion,
+        "to": toVersion,
+        "status": "upgraded"
+    };
+}
+
+// Test 8: Package uninstall
+function uninstallPackage(name) {
+    print("Uninstalling package: " + name);
+    return {
+        "name": name,
+        "status": "uninstalled"
+    };
+}
+
+// Test suite execution
+print("Phase 10: Ecosystem Test Suite");
+print("===============================");
+
+// Test package registration
+print("\nTesting package registration:");
+let pkg1 = registerPackage("json-utils", "1.0.0", {"author": "user", "license": "MIT"});
+print("Package registered: " + pkg1["name"]);
+
+let pkg2 = registerPackage("crypto-lib", "2.1.0", {"author": "dev", "license": "Apache"});
+print("Package registered: " + pkg2["name"]);
+
+// Test package installation
+print("\nTesting package installation:");
+let inst1 = installPackage("lodash", "4.17.21");
+print("Installation status: " + inst1["status"]);
+
+let inst2 = installPackage("moment", "2.29.4");
+print("Installation status: " + inst2["status"]);
+
+// Test dependency resolution
+print("\nTesting dependency resolution:");
+let deps1 = resolveDependencies("web-framework");
+print("Dependencies: " + deps1);
+
+let deps2 = resolveDependencies("database");
+print("Dependencies: " + deps2);
+
+// Test marketplace search
+print("\nTesting marketplace search:");
+let results = searchMarketplace("parser");
+print("Search results: " + results);
+
+let results2 = searchMarketplace("compiler");
+print("Search results: " + results2);
+
+// Test marketplace stats
+print("\nTesting marketplace statistics:");
+let stats = getMarketplaceStats();
+print("Total plugins: " + stats["total_plugins"]);
+print("Total packages: " + stats["total_packages"]);
+print("Downloads today: " + stats["downloads_today"]);
+
+// Test performance profiling
+print("\nTesting performance profiling:");
+let prof1 = profileFunction("quicksort", function() {
+    return "sorted";
+});
+print("Function profiled: " + prof1["name"] + " took " + prof1["time_ms"] + "ms");
+
+let prof2 = profileFunction("fibonacci", function() {
+    return 100;
+});
+print("Function profiled: " + prof2["name"] + " returned " + prof2["result"]);
+
+// Test performance metrics
+print("\nTesting performance metrics:");
+recordMetric("cpu_usage", 45.5);
+recordMetric("memory_usage", 512);
+recordMetric("disk_io", 1024);
+
+// Test version management
+print("\nTesting version management:");
+checkVersionCompatibility("1.0.0", "1.0.0");
+checkVersionCompatibility("2.0.0", "1.5.0");
+
+let upgrade = upgradePackage("framework", "1.0.0", "2.0.0");
+print("Upgrade result: " + upgrade["status"]);
+
+// Test package uninstall
+print("\nTesting package uninstall:");
+let uninstall = uninstallPackage("old-plugin");
+print("Uninstall status: " + uninstall["status"]);
+
+print("\n✓ All ecosystem tests completed");

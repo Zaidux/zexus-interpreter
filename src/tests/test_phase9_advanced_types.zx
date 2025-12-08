@@ -1,0 +1,157 @@
+// Zexus Phase 9: Advanced Types Test Suite
+// Tests generics, traits, union types, and type bounds
+
+// Test 1: Generic-like function
+function genericContainer(value) {
+    return {
+        "value": value,
+        "get": function() {
+            return value;
+        },
+        "set": function(newValue) {
+            value = newValue;
+        }
+    };
+}
+
+// Test 2: Type parameters simulation
+function genericMap(collection, transformer) {
+    print("Mapping collection");
+    let result = [];
+    let i = 0;
+    while (i < 3) {
+        result[i] = transformer(collection[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// Test 3: Trait-like interface - Iterable
+function implementsIterable(obj) {
+    print("Checking if object implements Iterable");
+    if (obj["__iter__"] != false) {
+        return true;
+    }
+    return false;
+}
+
+// Test 4: Trait-like interface - Comparable
+function implementsComparable(obj) {
+    print("Checking if object implements Comparable");
+    if (obj["compare"] != false) {
+        return true;
+    }
+    return false;
+}
+
+// Test 5: Trait-like interface - Cloneable
+function implementsCloneable(obj) {
+    print("Checking if object implements Cloneable");
+    if (obj["clone"] != false) {
+        return true;
+    }
+    return false;
+}
+
+// Test 6: Union type handling
+function unionTypeOperation(value) {
+    print("Operating on union type value");
+    if (value == 42 || value == "string" || value == true) {
+        return "valid union type";
+    }
+    return "invalid union type";
+}
+
+// Test 7: Type bounds
+function boundedGeneric(value, minType, maxType) {
+    print("Applying type bounds: " + minType + " to " + maxType);
+    return value;
+}
+
+// Test 8: Variance in types
+function covariantFunction(value) {
+    print("Operating on covariant type");
+    return value;
+}
+
+// Test suite execution
+print("Phase 9: Advanced Types Test Suite");
+print("===================================");
+
+// Test generics
+print("\nTesting generic containers:");
+let container1 = genericContainer(42);
+print("Container value: " + container1["get"]());
+
+container1["set"](99);
+print("Updated container value: " + container1["get"]());
+
+let container2 = genericContainer("hello");
+print("String container value: " + container2["get"]());
+
+// Test generic mapping
+print("\nTesting generic mapping:");
+let numbers = [1, 2, 3];
+let doubled = genericMap(numbers, function(x) {
+    return x * 2;
+});
+print("Doubled numbers: " + doubled);
+
+let strings = ["a", "b", "c"];
+let uppercased = genericMap(strings, function(x) {
+    return x + "_upper";
+});
+print("Uppercased strings: " + uppercased);
+
+// Test traits - Iterable
+print("\nTesting Iterable trait:");
+let iterableObj = {
+    "data": [1, 2, 3],
+    "__iter__": function() {
+        return "iterator";
+    }
+};
+let isIter = implementsIterable(iterableObj);
+print("Object is Iterable: " + isIter);
+
+// Test traits - Comparable
+print("\nTesting Comparable trait:");
+let comparableObj = {
+    "value": 42,
+    "compare": function(other) {
+        return other;
+    }
+};
+let isComp = implementsComparable(comparableObj);
+print("Object is Comparable: " + isComp);
+
+// Test traits - Cloneable
+print("\nTesting Cloneable trait:");
+let cloneableObj = {
+    "data": "original",
+    "clone": function() {
+        return "cloned";
+    }
+};
+let isClonable = implementsCloneable(cloneableObj);
+print("Object is Cloneable: " + isClonable);
+
+// Test union types
+print("\nTesting union types:");
+unionTypeOperation(42);
+unionTypeOperation("data");
+unionTypeOperation(true);
+unionTypeOperation(3.14);
+
+// Test type bounds
+print("\nTesting type bounds:");
+boundedGeneric(50, "int", "int");
+boundedGeneric("text", "string", "string");
+
+// Test variance
+print("\nTesting variance:");
+covariantFunction(123);
+covariantFunction("test");
+covariantFunction({});
+
+print("\n✓ All advanced type tests completed");

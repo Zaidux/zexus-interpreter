@@ -1,0 +1,87 @@
+// Zexus Phase 1: Modifiers Test Suite
+// Tests semantic tagging of code elements
+
+// Test 1: Basic modifier attachment
+inline function add(a, b) {
+    return a + b;
+}
+
+// Test 2: Multiple modifiers
+pure function fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// Test 3: Async modifier (simulated)
+// In real execution, would run in background
+async function slowComputation() {
+    let result = 0;
+    let i = 0;
+    while (i < 100000) {
+        result = result + i;
+        i = i + 1;
+    }
+    return result;
+}
+
+// Test 4: Secure modifier for sensitive operations
+secure function encryptData(data) {
+    // Simulated encryption
+    return data + "_encrypted";
+}
+
+// Test 5: Native modifier (system-level operation)
+native function systemCall() {
+    // This would call native code
+    return "system_result";
+}
+
+// Test 6: Sealed modifier (cannot be overridden)
+sealed function baseImplementation() {
+    return 42;
+}
+
+// Test 7: Public modifier (default visibility)
+public function publicAPI() {
+    return "public";
+}
+
+// Test 8: Private modifier (not exported)
+private function privateHelper() {
+    return "private";
+}
+
+// Test suite execution
+print("Phase 1: Modifiers Test Suite");
+print("==============================");
+
+// Test inline function
+let result1 = add(5, 3);
+print("Inline add(5, 3) = " + result1);
+
+// Test pure function
+let result2 = fibonacci(5);
+print("Pure fibonacci(5) = " + result2);
+
+// Test async function
+let result3 = slowComputation();
+print("Async computation result = " + result3);
+
+// Test secure function
+let result4 = encryptData("secret");
+print("Secure encrypt = " + result4);
+
+// Test sealed function
+let result5 = baseImplementation();
+print("Sealed base = " + result5);
+
+// Test public/private functions
+let result6 = publicAPI();
+print("Public API = " + result6);
+
+let result7 = privateHelper();
+print("Private helper = " + result7);
+
+print("✓ All modifier tests completed");

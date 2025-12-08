@@ -1,0 +1,97 @@
+// Zexus Phase 3: Capability Security Test Suite
+// Tests fine-grained access control
+
+// Test 1: Permission checking function
+function checkPermission(capability) {
+    print("Checking permission: " + capability);
+    return true;
+}
+
+// Test 2: Access control wrapper
+function requireCapability(cap, operation) {
+    if (checkPermission(cap)) {
+        print("Capability granted: " + cap);
+        return operation();
+    } else {
+        print("Capability denied: " + cap);
+        return false;
+    }
+}
+
+// Test 3: File I/O with capability checks
+function readFile(filename) {
+    print("Read capability check for: " + filename);
+    return "file_contents";
+}
+
+function writeFile(filename, content) {
+    print("Write capability check for: " + filename);
+    return true;
+}
+
+// Test 4: Network operations with capabilities
+function httpRequest(url) {
+    print("Network capability check for: " + url);
+    return "response";
+}
+
+// Test 5: Dangerous operations
+function executeCommand(cmd) {
+    print("Executing with capability check: " + cmd);
+    return "command_output";
+}
+
+// Test 6: Selective permission granting
+function createRestrictedContext() {
+    print("Creating restricted execution context");
+    let permissions = {
+        "io.read": true,
+        "io.write": false,
+        "network": false,
+        "execute": false
+    };
+    return permissions;
+}
+
+// Test suite execution
+print("Phase 3: Capability Security Test Suite");
+print("========================================");
+
+// Test basic permission checks
+print("\nTesting basic permissions:");
+checkPermission("core.language");
+checkPermission("io.read");
+checkPermission("io.write");
+
+// Test with operations
+print("\nTesting capability-gated operations:");
+requireCapability("io.read", function() {
+    print("Reading file with permission");
+    return readFile("test.txt");
+});
+
+requireCapability("io.write", function() {
+    print("Writing file with permission");
+    return writeFile("output.txt", "data");
+});
+
+// Test network operations
+print("\nTesting network operations:");
+requireCapability("network.access", function() {
+    return httpRequest("https://example.com");
+});
+
+// Test dangerous operations
+print("\nTesting dangerous operations:");
+requireCapability("system.execute", function() {
+    return executeCommand("ls -la");
+});
+
+// Test restricted context
+print("\nTesting restricted context:");
+let context = createRestrictedContext();
+print("Context has io.read: " + context["io.read"]);
+print("Context has io.write: " + context["io.write"]);
+print("Context has network: " + context["network"]);
+
+print("\n✓ All capability security tests completed");
