@@ -29,6 +29,8 @@ class ContextStackParser:
         self.current_context = ['global']
         self.context_rules = {
             'function': self._parse_function_context,
+            FUNCTION: self._parse_function_statement_context,
+            ACTION: self._parse_action_statement_context,
             'try_catch': self._parse_try_catch_context,
             'try_catch_statement': self._parse_try_catch_statement,
             'conditional': self._parse_conditional_context,
@@ -1238,6 +1240,25 @@ class ContextStackParser:
         print(f"  ✅ Parsed print expression: {type(expression).__name__ if expression else 'None'}")
         return PrintStatement(expression if expression is not None else StringLiteral(""))
 
+    def _parse_return_statement(self, block_info, all_tokens):
+        """Parse return statement"""
+        print("🔧 [Context] Parsing return statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != RETURN:
+            return None
+        
+        # If only return token, return None
+        if len(tokens) <= 1:
+            return ReturnStatement(Identifier("null"))
+        
+        # Parse the return value expression
+        value_tokens = tokens[1:]
+        print(f"  📝 Return value tokens: {[t.literal for t in value_tokens]}")
+        
+        value_expr = self._parse_expression(value_tokens)
+        return ReturnStatement(value_expr if value_expr else Identifier("null"))
+
     def _parse_expression(self, tokens):
         """Parse a full expression with robust method chaining and property access"""
         if not tokens:
@@ -1252,6 +1273,8 @@ class ContextStackParser:
             return self._parse_list_literal(tokens)
         if tokens[0].type == LAMBDA:
             return self._parse_lambda(tokens)
+        if tokens[0].type == FUNCTION:
+            return self._parse_function_literal(tokens)
 
         # Main expression parser with chaining
         i = 0
@@ -1586,6 +1609,55 @@ class ContextStackParser:
         body = self._parse_expression(body_tokens) if body_tokens else StringLiteral("")
         return LambdaExpression(parameters=params, body=body)
 
+    def _parse_function_literal(self, tokens):
+        """Parse a function literal expression (anonymous function)
+        
+        Supports forms:
+          function(x) { return x * 2; }
+          function(x, y) { return x + y; }
+          function() { return 42; }
+        """
+        print("  🔧 [Function Literal] Parsing function literal")
+        if not tokens or tokens[0].type != FUNCTION:
+            return None
+        
+        i = 1
+        params = []
+        
+        # Collect parameters from parentheses
+        if i < len(tokens) and tokens[i].type == LPAREN:
+            i += 1
+            while i < len(tokens) and tokens[i].type != RPAREN:
+                if tokens[i].type == IDENT:
+                    params.append(Identifier(tokens[i].literal))
+                i += 1
+            if i < len(tokens) and tokens[i].type == RPAREN:
+                i += 1
+        
+        # Extract body tokens (from { to })
+        body = BlockStatement()
+        if i < len(tokens) and tokens[i].type == LBRACE:
+            # Collect all tokens until matching closing brace
+            brace_count = 0
+            start = i
+            while i < len(tokens):
+                if tokens[i].type == LBRACE:
+                    brace_count += 1
+                elif tokens[i].type == RBRACE:
+                    brace_count -= 1
+                i += 1
+                if brace_count == 0:
+                    break
+            
+            # Parse body statements
+            body_tokens = tokens[start+1:i-1]  # Exclude braces
+            if body_tokens:
+                parsed_stmts = self._parse_block_statements(body_tokens)
+                body.statements = parsed_stmts
+        
+        # Return as ActionLiteral (same as lambda for function expressions)
+        return ActionLiteral(parameters=params, body=body)
+
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
         print("  🔍 Parsing argument list")
@@ -1679,6 +1751,120 @@ class ContextStackParser:
             name=Identifier(block_info.get('name', 'anonymous')),
             parameters=params,
             body=BlockStatement()
+        )
+
+    def _parse_action_statement_context(self, block_info, all_tokens):
+        """Parse action statement: action name(params) { body }"""
+        tokens = block_info.get('tokens', [])
+        if not tokens or tokens[0].type != ACTION:
+            return None
+        
+        # Extract action name (next IDENT after ACTION)
+        name = None
+        params = []
+        body_tokens = []
+        
+        i = 1
+        while i < len(tokens):
+            if tokens[i].type == IDENT:
+                name = Identifier(tokens[i].literal)
+                break
+            i += 1
+        
+        # Extract parameters from parentheses
+        if name and i < len(tokens):
+            i += 1
+            if i < len(tokens) and tokens[i].type == LPAREN:
+                # Collect tokens until RPAREN
+                i += 1
+                while i < len(tokens) and tokens[i].type != RPAREN:
+                    if tokens[i].type == IDENT:
+                        params.append(Identifier(tokens[i].literal))
+                    i += 1
+                i += 1  # Skip RPAREN
+        
+        # Extract body tokens (everything from { to })
+        if i < len(tokens):
+            body_tokens = tokens[i:]
+        
+        # Parse body as a block statement
+        body = BlockStatement()
+        if body_tokens:
+            # Skip opening brace if present
+            start = 0
+            if body_tokens and body_tokens[0].type == LBRACE:
+                start = 1
+            if start < len(body_tokens) and body_tokens[-1].type == RBRACE:
+                body_tokens = body_tokens[start:-1]
+            else:
+                body_tokens = body_tokens[start:]
+            
+            # Parse statements from body tokens
+            if body_tokens:
+                parsed_stmts = self._parse_block_statements(body_tokens)
+                body.statements = parsed_stmts
+        
+        return ActionStatement(
+            name=name or Identifier('anonymous'),
+            parameters=params,
+            body=body
+        )
+
+    def _parse_function_statement_context(self, block_info, all_tokens):
+        """Parse function statement: function name(params) { body }"""
+        tokens = block_info.get('tokens', [])
+        if not tokens or tokens[0].type != FUNCTION:
+            return None
+        
+        # Extract function name (next IDENT after FUNCTION)
+        name = None
+        params = []
+        body_tokens = []
+        
+        i = 1
+        while i < len(tokens):
+            if tokens[i].type == IDENT:
+                name = Identifier(tokens[i].literal)
+                break
+            i += 1
+        
+        # Extract parameters from parentheses
+        if name and i < len(tokens):
+            i += 1
+            if i < len(tokens) and tokens[i].type == LPAREN:
+                # Collect tokens until RPAREN
+                i += 1
+                while i < len(tokens) and tokens[i].type != RPAREN:
+                    if tokens[i].type == IDENT:
+                        params.append(Identifier(tokens[i].literal))
+                    i += 1
+                i += 1  # Skip RPAREN
+        
+        # Extract body tokens (everything from { to })
+        if i < len(tokens):
+            body_tokens = tokens[i:]
+        
+        # Parse body as a block statement
+        body = BlockStatement()
+        if body_tokens:
+            # Skip opening brace if present
+            start = 0
+            if body_tokens and body_tokens[0].type == LBRACE:
+                start = 1
+            if start < len(body_tokens) and body_tokens[-1].type == RBRACE:
+                body_tokens = body_tokens[start:-1]
+            else:
+                body_tokens = body_tokens[start:]
+            
+            # Parse statements from body tokens
+            if body_tokens:
+                parsed_stmts = self._parse_block_statements(body_tokens)
+                body.statements = parsed_stmts
+        
+        return FunctionStatement(
+            name=name or Identifier('anonymous'),
+            parameters=params,
+            body=body
         )
 
     def _parse_conditional_context(self, block_info, all_tokens):
@@ -1801,7 +1987,54 @@ class ContextStackParser:
         return BlockStatement()
 
     def _parse_generic_block(self, block_info, all_tokens):
-        """Fallback parser for unknown block types"""
+        """Fallback parser for unknown block types - intelligently detects statement type"""
+        tokens = block_info.get('tokens', [])
+        if not tokens:
+            return BlockStatement()
+        
+        # Debug: log what we're trying to parse
+        print(f"  🔍 [Generic] Parsing generic block with tokens: {[t.literal for t in tokens]}")
+        
+        # Check if this is a LET statement
+        if tokens[0].type == LET:
+            print(f"  🎯 [Generic] Detected let statement")
+            return self._parse_let_statement_block(block_info, all_tokens)
+        
+        # Check if this is a CONST statement
+        if tokens[0].type == CONST:
+            print(f"  🎯 [Generic] Detected const statement")
+            return self._parse_const_statement_block(block_info, all_tokens)
+        
+        # Check if this is an assignment statement (identifier = value)
+        if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == ASSIGN:
+            print(f"  🎯 [Generic] Detected assignment statement")
+            return self._parse_assignment_statement(block_info, all_tokens)
+        
+        # Check if this is a print statement
+        if tokens[0].type == PRINT:
+            print(f"  🎯 [Generic] Detected print statement")
+            return self._parse_print_statement(block_info, all_tokens)
+        
+        # Check if this is a return statement
+        if tokens[0].type == RETURN:
+            print(f"  🎯 [Generic] Detected return statement")
+            return self._parse_return_statement(block_info, all_tokens)
+        
+        # Check if it's a function call (identifier followed by parentheses)
+        if tokens[0].type == IDENT and len(tokens) >= 2 and tokens[1].type == LPAREN:
+            print(f"  🎯 [Generic] Detected function call")
+            # Parse as expression and wrap in ExpressionStatement
+            expr = self._parse_expression(tokens)
+            if expr:
+                return ExpressionStatement(expr)
+        
+        # Try to parse as a simple expression
+        print(f"  🎯 [Generic] Attempting to parse as expression")
+        expr = self._parse_expression(tokens)
+        if expr:
+            return ExpressionStatement(expr)
+        
+        # Fallback: return empty block
         return BlockStatement()
 
     # Helper methods

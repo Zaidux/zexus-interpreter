@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""
+Direct Zexus file executor - no dependencies, just runs .zx files directly
+"""
+import sys
+import os
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from zexus.lexer import Lexer
+from zexus.parser.parser import UltimateParser
+from zexus.evaluator.core import Evaluator
+from zexus.object import Environment
+from zexus import config
+
+# Disable debug logging for cleaner output
+config.config.enable_debug_logs = False
+
+def run_zexus_file(filename):
+    """Execute a Zexus file directly"""
+    
+    if not os.path.exists(filename):
+        print(f"❌ Error: File not found: {filename}", file=sys.stderr)
+        sys.exit(1)
+    
+    with open(filename, 'r') as f:
+        code = f.read()
+    
+    try:
+        # Tokenize
+        lexer = Lexer(code)
+        
+        # Parse with advanced parsing enabled
+        parser = UltimateParser(lexer, enable_advanced_strategies=True)
+        ast = parser.parse_program()
+        
+        if parser.errors:
+            print(f"⚠️ Parse errors: {len(parser.errors)}", file=sys.stderr)
+            for error in parser.errors[:10]:  # Show first 10 errors
+                print(f"  - {error}", file=sys.stderr)
+        
+        # Evaluate
+        evaluator = Evaluator()
+        env = Environment()
+        result = evaluator.eval_node(ast, env)
+        
+        # Check if result is an error
+        from zexus.object import Null, EvaluationError
+        if isinstance(result, EvaluationError):
+            print(f"❌ Runtime Error: {result.message}", file=sys.stderr)
+            sys.exit(1)
+        
+        # Print final result if not NULL
+        if result and not isinstance(result, Null):
+            print(f"Result: {result}")
+        
+    except Exception as e:
+        print(f"\n❌ Error: {str(e)}", file=sys.stderr)
+        import traceback
+        print("\nFull traceback:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: zx-run <file.zx>", file=sys.stderr)
+        sys.exit(1)
+    
+    run_zexus_file(sys.argv[1])

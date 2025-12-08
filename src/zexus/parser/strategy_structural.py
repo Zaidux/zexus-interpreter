@@ -32,7 +32,7 @@ class StructuralAnalyzer:
         
         # Statement starters (keywords that begin a new statement)
         statement_starters = {
-              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
+              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH
@@ -368,31 +368,44 @@ class StructuralAnalyzer:
                 stmt_tokens = [t]  # Start with the statement starter token
                 j = i + 1
                 nesting = 0  # Track nesting level for (), [], {}
+                found_brace_block = False  # Did we encounter a { ... } block?
+                in_assignment = (t.type in {LET, CONST})  # Are we in an assignment RHS?
 
                 while j < n:
                     tj = tokens[j]
 
+                    # Check if this is a statement terminator at nesting 0 BEFORE updating nesting
+                    if nesting == 0 and tj.type in stop_types:
+                        break
+                    
                     # Track nesting level
                     if tj.type in {LPAREN, LBRACE, LBRACKET}:
+                        if tj.type == LBRACE:
+                            found_brace_block = True
                         nesting += 1
                     elif tj.type in {RPAREN, RBRACE, RBRACKET}:
                         nesting -= 1
 
-                    # Only consider statement boundaries when not in nested structure
-                    if nesting == 0:
-                        # Stop at explicit terminators
-                        if tj.type in stop_types:
-                            stmt_tokens.append(tj)  # Include the terminator
-                            break
-                        # Stop at new statement starters only if we're done with current
-                        if tj.type in statement_starters:
-                            # Exception: allow chained method calls
-                            prev = tokens[j-1] if j > 0 else None
-                            if not (prev and prev.type == DOT):
+                    # Stop at new statement starters only if we're at nesting 0
+                    # BUT: for LET/CONST, allow function expressions in the RHS
+                    if nesting == 0 and tj.type in statement_starters:
+                        # Exception: allow chained method calls
+                        prev = tokens[j-1] if j > 0 else None
+                        if not (prev and prev.type == DOT):
+                            # For LET/CONST, allow FUNCTION as RHS (function expression)
+                            if not (in_assignment and tj.type == FUNCTION):
                                 break
 
-                    # Always collect tokens while in nested structures
+                    # Always collect tokens
                     stmt_tokens.append(tj)
+                    j += 1
+                    
+                    # If we just closed a brace block and are back at nesting 0, stop
+                    if found_brace_block and nesting == 0:
+                        break
+
+                # Skip any trailing semicolons
+                while j < n and tokens[j].type == SEMICOLON:
                     j += 1
 
                 # Create block for the collected statement
@@ -422,18 +435,24 @@ class StructuralAnalyzer:
                     break
                 run_tokens.append(tj)
                 j += 1
+            
+            # Skip trailing semicolons (they're statement terminators, not part of the statement)
+            while j < n and tokens[j].type == SEMICOLON:
+                j += 1
+            
             filtered_run_tokens = [tk for tk in run_tokens if not _is_empty_token(tk)]
-            self.blocks[block_id] = {
-                'id': block_id,
-                'type': 'statement',
-                'subtype': (filtered_run_tokens[0].type if filtered_run_tokens else (run_tokens[0].type if run_tokens else 'token_run')),
-                'tokens': filtered_run_tokens,
-                'start_token': (filtered_run_tokens[0] if filtered_run_tokens else (run_tokens[0] if run_tokens else t)),
-                'start_index': start_idx,
-                'end_index': j - 1,
-                'parent': None
-            }
-            block_id += 1
+            if filtered_run_tokens:  # Only create block if we have meaningful tokens
+                self.blocks[block_id] = {
+                    'id': block_id,
+                    'type': 'statement',
+                    'subtype': (filtered_run_tokens[0].type if filtered_run_tokens else (run_tokens[0].type if run_tokens else 'token_run')),
+                    'tokens': filtered_run_tokens,
+                    'start_token': (filtered_run_tokens[0] if filtered_run_tokens else (run_tokens[0] if run_tokens else t)),
+                    'start_index': start_idx,
+                    'end_index': j - 1,
+                    'parent': None
+                }
+                block_id += 1
             i = j
 
         return self.blocks
@@ -480,7 +499,7 @@ class StructuralAnalyzer:
 
         stop_types = {SEMICOLON, RBRACE}
         statement_starters = {
-              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, 
+              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH

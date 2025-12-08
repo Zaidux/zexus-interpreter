@@ -60,6 +60,7 @@ class UltimateParser:
             LBRACKET: self.parse_list_literal,
             LBRACE: self.parse_map_literal,  # CRITICAL: This handles { } objects
             ACTION: self.parse_action_literal,
+            FUNCTION: self.parse_function_literal,
             EMBEDDED: self.parse_embedded_literal,
             LAMBDA: self.parse_lambda_expression,
             DEBUG: self.parse_debug_statement,
@@ -1722,6 +1723,43 @@ class UltimateParser:
             body.statements.append(stmt)
 
         return ActionLiteral(parameters=parameters, body=body)
+
+    def parse_function_literal(self):
+        """Parse function literal expression: function(params) { body } or function(params) : stmt
+        Returns an ActionLiteral which is compatible with function execution"""
+        if not self.expect_peek(LPAREN):
+            return None
+
+        parameters = self.parse_action_parameters()
+        if parameters is None:
+            return None
+
+        # Check for colon (traditional action-style) or curly brace (function-style)
+        if self.peek_token_is(COLON):
+            # Traditional action style: function(x) : stmt
+            if not self.expect_peek(COLON):
+                return None
+
+            body = BlockStatement()
+            self.next_token()
+            stmt = self.parse_statement()
+            if stmt:
+                body.statements.append(stmt)
+
+            return ActionLiteral(parameters=parameters, body=body)
+        
+        elif self.peek_token_is(LBRACE):
+            # Function-style with braces: function(x) { stmts }
+            # Parse the brace block
+            self.next_token()  # Move to {
+            body = self.parse_brace_block()
+            if not body:
+                return None
+            return ActionLiteral(parameters=parameters, body=body)
+        
+        else:
+            self.errors.append("Expected ':' or '{' after function parameters")
+            return None
 
     def parse_while_statement(self):
         if not self.expect_peek(LPAREN):
