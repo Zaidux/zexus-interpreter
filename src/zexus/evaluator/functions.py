@@ -63,6 +63,19 @@ class FunctionEvaluatorMixin:
     def apply_function(self, fn, args, env=None):
         debug_log("apply_function", f"Calling {fn}")
         
+        # Phase 2 & 3: Trigger plugin hooks and check capabilities
+        if hasattr(self, 'integration_context'):
+            if isinstance(fn, (Action, LambdaFunction)):
+                func_name = fn.name if hasattr(fn, 'name') else str(fn)
+                # Trigger before-call hook
+                self.integration_context.plugins.before_action_call(func_name, {})
+                
+                # Check required capabilities
+                try:
+                    self.integration_context.capabilities.require_capability("core.language")
+                except PermissionError:
+                    return EvaluationError(f"Permission denied: insufficient capabilities for {func_name}")
+        
         if isinstance(fn, (Action, LambdaFunction)):
             debug_log("  Calling user-defined function")
             new_env = Environment(outer=fn.env)
@@ -76,8 +89,16 @@ class FunctionEvaluatorMixin:
             
             # Unwrap ReturnValue if needed
             if isinstance(res, ReturnValue):
-                return res.value
-            return res
+                result = res.value
+            else:
+                result = res
+            
+            # Phase 2: Trigger after-call hook
+            if hasattr(self, 'integration_context'):
+                func_name = fn.name if hasattr(fn, 'name') else str(fn)
+                self.integration_context.plugins.after_action_call(func_name, result)
+            
+            return result
         
         elif isinstance(fn, Builtin):
             debug_log("  Calling builtin function", f"{fn.name}")

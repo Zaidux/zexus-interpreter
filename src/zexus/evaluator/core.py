@@ -6,11 +6,21 @@ from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
 from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
 from .functions import FunctionEvaluatorMixin
+from .integration import EvaluationContext, get_integration
 
 class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvaluatorMixin):
-    def __init__(self):
+    def __init__(self, trusted: bool = False):
         # Initialize mixins (FunctionEvaluatorMixin sets up builtins)
         FunctionEvaluatorMixin.__init__(self)
+        
+        # Initialize 10-phase integration
+        self.integration_context = EvaluationContext("evaluator")
+        
+        # Setup security context
+        if trusted:
+            self.integration_context.setup_for_trusted_code()
+        else:
+            self.integration_context.setup_for_untrusted_code()
     
     def eval_node(self, node, env, stack_trace=None):
         if node is None: 
