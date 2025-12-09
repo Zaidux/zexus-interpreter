@@ -393,6 +393,7 @@ class Lexer:
             "verify": VERIFY,
             "contract": CONTRACT,
             "protect": PROTECT,
+            "interface": INTERFACE,
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             "audit": AUDIT,             # NEW: Audit keyword for compliance logging
             "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control
