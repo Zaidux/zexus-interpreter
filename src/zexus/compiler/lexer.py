@@ -51,11 +51,17 @@ class Lexer:
         current_column = self.column
 
         if self.ch == '=':
+            # Support '==' and arrow '=>' for compiler lexer as in interpreter
             if self.peek_char() == '=':
                 ch = self.ch
                 self.read_char()
                 literal = ch + self.ch
                 tok = Token(EQ, literal, current_line, current_column)
+            elif self.peek_char() == '>':
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(LAMBDA, literal, current_line, current_column)
             else:
                 tok = Token(ASSIGN, self.ch, current_line, current_column)
         elif self.ch == '!':
@@ -203,6 +209,11 @@ class Lexer:
             "each": EACH,
             "in": IN,
             "action": ACTION,
+            "async": ASYNC,
+            "await": AWAIT,
+            "enum": ENUM,
+            "protocol": PROTOCOL,
+            "interface": INTERFACE,
             "while": WHILE,
             "use": USE,
             "exactly": EXACTLY,

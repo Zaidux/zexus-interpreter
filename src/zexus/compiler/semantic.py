@@ -57,6 +57,15 @@ class SemanticAnalyzer:
 			# Run new checks: await usage and protocol/event validation
 			# Walk AST with context
 			def walk(node, in_async=False):
+				# Protect against cycles by tracking visited node ids
+				if not hasattr(walk, '_visited'):
+					walk._visited = set()
+				if node is None:
+					return
+				node_id = id(node)
+				if node_id in walk._visited:
+					return
+				walk._visited.add(node_id)
 				# Quick type checks for relevant nodes
 				if isinstance(node, AwaitExpression):
 					if not in_async:

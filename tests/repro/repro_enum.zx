@@ -1,0 +1,1 @@
+enum ChainType { ZIVER, ETHEREUM, BSC }

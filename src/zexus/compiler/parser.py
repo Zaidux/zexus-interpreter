@@ -65,6 +65,7 @@ class ProductionParser:
             ASSIGN: self.parse_assignment_expression,
             LPAREN: self.parse_call_expression,
             DOT: self.parse_method_call_expression,
+            LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
         }
         
         self.next_token()
@@ -453,8 +454,19 @@ class ProductionParser:
 
         parameters = []
         if self.peek_token_is(LPAREN):
-            self.next_token()
+            # Advance into the parameter list: consume '(' then move to first inner token
+            self.next_token()  # move to LPAREN
+            self.next_token()  # move to token after '('
             parameters = self.parse_parameter_list()
+            # If current token is ')' (empty params case), advance past it.
+            if self.cur_token_is(RPAREN):
+                self.next_token()
+            else:
+                # Otherwise expect a closing paren next and consume it
+                if not self.expect_peek(RPAREN):
+                    return None
+                # consume the ')'
+                self.next_token()
 
         body = self.parse_block()
         # Create ActionStatement with is_async flag (add attribute)
@@ -571,6 +583,35 @@ class ProductionParser:
 
         body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)
+
+    def parse_lambda_infix(self, left):
+        """Parse arrow-style lambda when encountering leftside 'params' followed by =>
+
+        Examples:
+            x => x + 1
+            (a, b) => a + b
+        """
+        # Build parameter list from `left` expression
+        params = []
+        if isinstance(left, Identifier):
+            params = [left]
+        else:
+            try:
+                if hasattr(left, 'elements'):
+                    for el in left.elements:
+                        if isinstance(el, Identifier):
+                            params.append(el)
+            except Exception:
+                pass
+
+        # Current token is LAMBDA; advance to body
+        self.next_token()
+
+        if self.cur_token_is(COLON):
+            self.next_token()
+
+        body = self.parse_expression(LOWEST)
+        return LambdaExpression(parameters=params, body=body)
 
     def parse_action_literal(self):
         """Parse action literal: action (params) { body } or action (params) => expr"""

@@ -1,0 +1,4 @@
+protocol Wallet {
+    transfer
+    get_balance
+}
