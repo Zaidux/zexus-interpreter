@@ -10,7 +10,7 @@ This document tracks runtime errors, bugs, and issues encountered during develop
 ### Issue #1: Undefined Interface Identifier
 **Severity:** HIGH  
 **Component:** Evaluator - Complexity System  
-**Status:** OPEN  
+**Status:** FIXED (2025-12-09)  
 **Found In:** test_complexity_features.zx, test_security_features.zx  
 
 **Error:**
@@ -33,6 +33,11 @@ The `eval_interface_statement` handler in `statements.py` needs to properly regi
 1. Update handler to store interface in environment after creation
 2. Ensure the handler returns the interface object
 3. Test with: `python3 zx-run src/tests/test_verification_simple.zx`
+
+**Resolution:**
+- Implemented: the lexer now recognizes the `interface` keyword and emits the `INTERFACE` token so the structural/context parsers create a proper `InterfaceStatement` node. The evaluator's `eval_interface_statement` registers the interface and stores it in the environment. 
+- Verified: reproduced the scenario locally; interface identifier is now present in the environment after evaluation.
+- Commit: `2e395f8` ("Fix: recognize 'interface' keyword in lexer (resolves Undefined Interface Identifier) and remove debug prints")
 
 ---
 
