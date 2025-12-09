@@ -80,11 +80,24 @@ class FunctionEvaluatorMixin:
             debug_log("  Calling user-defined function")
             new_env = Environment(outer=fn.env)
             
+            param_names = []
             for i, param in enumerate(fn.parameters):
                 if i < len(args):
                     # Handle both Identifier objects and strings
                     param_name = param.value if hasattr(param, 'value') else str(param)
+                    param_names.append(param_name)
                     new_env.set(param_name, args[i])
+                    # Lightweight debug: show what is being bound
+                    try:
+                        debug_log("    Set parameter", f"{param_name} = {type(args[i]).__name__}")
+                    except Exception:
+                        pass
+
+            try:
+                if param_names:
+                    debug_log("  Function parameters bound", f"{param_names}")
+            except Exception:
+                pass
             
             res = self.eval_node(fn.body, new_env)
             res = _resolve_awaitable(res)

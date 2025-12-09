@@ -17,6 +17,7 @@ precedences = {
     SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
     AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
+    LBRACKET: CALL,
     DOT: CALL,
     ASSIGN: ASSIGN_PREC,
 }
@@ -84,6 +85,7 @@ class UltimateParser:
             ASSIGN: self.parse_assignment_expression,
             LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
             LPAREN: self.parse_call_expression,
+            LBRACKET: self.parse_index_expression,
             DOT: self.parse_method_call_expression,
         }
         self.next_token()
@@ -285,6 +287,9 @@ class UltimateParser:
 
     def parse_statement(self):
         """Parse statement with maximum tolerance"""
+        import sys
+        print(f"[PARSE_STMT] Current token: {self.cur_token.type if self.cur_token else 'None'}={repr(self.cur_token.literal if self.cur_token else None)}", file=sys.stderr, flush=True)
+        
         # Support optional leading modifiers: e.g. `secure async action foo {}`
         modifiers = []
         if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE}:
@@ -292,76 +297,112 @@ class UltimateParser:
         try:
             node = None
             if self.cur_token_is(LET):
+                print(f"[PARSE_STMT] Matched LET", file=sys.stderr, flush=True)
                 node = self.parse_let_statement()
             elif self.cur_token_is(CONST):
+                print(f"[PARSE_STMT] Matched CONST", file=sys.stderr, flush=True)
                 node = self.parse_const_statement()
             elif self.cur_token_is(RETURN):
+                print(f"[PARSE_STMT] Matched RETURN", file=sys.stderr, flush=True)
                 node = self.parse_return_statement()
             elif self.cur_token_is(PRINT):
+                print(f"[PARSE_STMT] Matched PRINT", file=sys.stderr, flush=True)
                 node = self.parse_print_statement()
             elif self.cur_token_is(FOR):
+                print(f"[PARSE_STMT] Matched FOR", file=sys.stderr, flush=True)
                 node = self.parse_for_each_statement()
             elif self.cur_token_is(SCREEN):
+                print(f"[PARSE_STMT] Matched SCREEN", file=sys.stderr, flush=True)
                 node = self.parse_screen_statement()
             elif self.cur_token_is(ACTION):
+                print(f"[PARSE_STMT] Matched ACTION", file=sys.stderr, flush=True)
                 node = self.parse_action_statement()
             elif self.cur_token_is(FUNCTION):
+                print(f"[PARSE_STMT] Matched FUNCTION", file=sys.stderr, flush=True)
                 node = self.parse_function_statement()
             elif self.cur_token_is(IF):
+                print(f"[PARSE_STMT] Matched IF", file=sys.stderr, flush=True)
                 node = self.parse_if_statement()
             elif self.cur_token_is(WHILE):
+                print(f"[PARSE_STMT] Matched WHILE", file=sys.stderr, flush=True)
                 node = self.parse_while_statement()
             elif self.cur_token_is(USE):
+                print(f"[PARSE_STMT] Matched USE", file=sys.stderr, flush=True)
                 node = self.parse_use_statement()
             elif self.cur_token_is(EXACTLY):
+                print(f"[PARSE_STMT] Matched EXACTLY", file=sys.stderr, flush=True)
                 node = self.parse_exactly_statement()
             elif self.cur_token_is(EXPORT):
+                print(f"[PARSE_STMT] Matched EXPORT", file=sys.stderr, flush=True)
                 node = self.parse_export_statement()
             elif self.cur_token_is(DEBUG):
+                print(f"[PARSE_STMT] Matched DEBUG", file=sys.stderr, flush=True)
                 node = self.parse_debug_statement()
             elif self.cur_token_is(TRY):
+                print(f"[PARSE_STMT] Matched TRY", file=sys.stderr, flush=True)
                 node = self.parse_try_catch_statement()
             elif self.cur_token_is(EXTERNAL):
+                print(f"[PARSE_STMT] Matched EXTERNAL", file=sys.stderr, flush=True)
                 node = self.parse_external_declaration()
             elif self.cur_token_is(ENTITY):
+                print(f"[PARSE_STMT] Matched ENTITY", file=sys.stderr, flush=True)
                 node = self.parse_entity_statement()
             elif self.cur_token_is(VERIFY):
+                print(f"[PARSE_STMT] Matched VERIFY", file=sys.stderr, flush=True)
                 node = self.parse_verify_statement()
             elif self.cur_token_is(CONTRACT):
+                print(f"[PARSE_STMT] Matched CONTRACT", file=sys.stderr, flush=True)
                 node = self.parse_contract_statement()
             elif self.cur_token_is(PROTECT):
+                print(f"[PARSE_STMT] Matched PROTECT", file=sys.stderr, flush=True)
                 node = self.parse_protect_statement()
             elif self.cur_token_is(SEAL):
+                print(f"[PARSE_STMT] Matched SEAL", file=sys.stderr, flush=True)
                 node = self.parse_seal_statement()
             elif self.cur_token_is(AUDIT):
+                print(f"[PARSE_STMT] Matched AUDIT", file=sys.stderr, flush=True)
                 node = self.parse_audit_statement()
             elif self.cur_token_is(RESTRICT):
+                print(f"[PARSE_STMT] Matched RESTRICT", file=sys.stderr, flush=True)
                 node = self.parse_restrict_statement()
             elif self.cur_token_is(SANDBOX):
+                print(f"[PARSE_STMT] Matched SANDBOX", file=sys.stderr, flush=True)
                 node = self.parse_sandbox_statement()
             elif self.cur_token_is(TRAIL):
+                print(f"[PARSE_STMT] Matched TRAIL", file=sys.stderr, flush=True)
                 node = self.parse_trail_statement()
             elif self.cur_token_is(NATIVE):
+                print(f"[PARSE_STMT] Matched NATIVE", file=sys.stderr, flush=True)
                 node = self.parse_native_statement()
             elif self.cur_token_is(GC):
+                print(f"[PARSE_STMT] Matched GC", file=sys.stderr, flush=True)
                 node = self.parse_gc_statement()
             elif self.cur_token_is(INLINE):
+                print(f"[PARSE_STMT] Matched INLINE", file=sys.stderr, flush=True)
                 node = self.parse_inline_statement()
             elif self.cur_token_is(BUFFER):
+                print(f"[PARSE_STMT] Matched BUFFER", file=sys.stderr, flush=True)
                 node = self.parse_buffer_statement()
             elif self.cur_token_is(SIMD):
+                print(f"[PARSE_STMT] Matched SIMD", file=sys.stderr, flush=True)
                 node = self.parse_simd_statement()
             elif self.cur_token_is(DEFER):
+                print(f"[PARSE_STMT] Matched DEFER", file=sys.stderr, flush=True)
                 node = self.parse_defer_statement()
             elif self.cur_token_is(PATTERN):
+                print(f"[PARSE_STMT] Matched PATTERN", file=sys.stderr, flush=True)
                 node = self.parse_pattern_statement()
             elif self.cur_token_is(ENUM):
+                print(f"[PARSE_STMT] Matched ENUM", file=sys.stderr, flush=True)
                 node = self.parse_enum_statement()
             elif self.cur_token_is(STREAM):
+                print(f"[PARSE_STMT] Matched STREAM", file=sys.stderr, flush=True)
                 node = self.parse_stream_statement()
             elif self.cur_token_is(WATCH):
+                print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
                 node = self.parse_watch_statement()
             else:
+                print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
                 node = self.parse_expression_statement()
 
             if node is not None:
@@ -416,8 +457,11 @@ class UltimateParser:
         """Parse { } block with tolerance for missing closing brace"""
         block = BlockStatement()
         self.next_token()
+        import sys
+        print(f"[BLOCK_START] Entering brace block, first token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
 
         brace_count = 1
+        stmt_count = 0
         while brace_count > 0 and not self.cur_token_is(EOF):
             if self.cur_token_is(LBRACE):
                 brace_count += 1
@@ -426,11 +470,15 @@ class UltimateParser:
                 if brace_count == 0:
                     break
 
+            print(f"[BLOCK_STMT] About to parse statement {stmt_count}, token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
             stmt = self.parse_statement()
+            print(f"[BLOCK_STMT] Parsed statement {stmt_count}: {type(stmt).__name__ if stmt else 'None'}", file=sys.stderr, flush=True)
             if stmt is not None:
                 block.statements.append(stmt)
             self.next_token()
+            stmt_count += 1
 
+        print(f"[BLOCK_END] Finished block with {len(block.statements)} statements", file=sys.stderr, flush=True)
         # TOLERANT: Don't error if we hit EOF without closing brace
         if self.cur_token_is(EOF) and brace_count > 0:
             self.errors.append(f"Line {self.cur_token.line}: Unclosed block (reached EOF)")
@@ -449,6 +497,8 @@ class UltimateParser:
 
     def parse_if_statement(self):
         """Tolerant if statement parser with elif support"""
+        import sys
+        print(f"[PARSE_IF] Starting if statement parsing", file=sys.stderr, flush=True)
         # Skip IF token
         self.next_token()
 
@@ -466,8 +516,10 @@ class UltimateParser:
             self.errors.append("Expected condition after 'if'")
             return None
 
+        print(f"[PARSE_IF] Parsed condition, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
         # Parse consequence (flexible block style)
         consequence = self.parse_block("if")
+        print(f"[PARSE_IF] Parsed consequence block, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
         if not consequence:
             return None
 
@@ -1925,7 +1977,17 @@ class UltimateParser:
         return StringLiteral(value=self.cur_token.literal)
 
     def parse_boolean(self):
-        return Boolean(value=self.cur_token_is(TRUE))
+        lit = getattr(self.cur_token, 'literal', '')
+        val = True if isinstance(lit, str) and lit.lower() == 'true' else False
+        # Transient trace to diagnose boolean parsing
+        try:
+            if lit.lower() == 'false':
+                import traceback as _tb
+                stack = ''.join(_tb.format_stack(limit=4)[-2:])
+                print(f"[PARSE_BOOL_TRACE] false token at position {self.lexer.position}: literal={lit}, val={val}\n{stack}")
+        except Exception:
+            pass
+        return Boolean(value=val)
 
     def parse_list_literal(self):
         list_lit = ListLiteral(elements=[])
@@ -1978,12 +2040,7 @@ class UltimateParser:
                     self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
                     break
 
-            # Expect closing paren
-            if not self.expect_peek(RPAREN):
-                return None
-
-            # Return a ListLiteral-like node carrying identifiers for lambda parsing
-            return ListLiteral(elements=params)
+    
 
         # Default grouped expression behavior
         self.next_token()
@@ -1991,6 +2048,17 @@ class UltimateParser:
         if not self.expect_peek(RPAREN):
             return None
         return exp
+
+    def parse_index_expression(self, left):
+        """Parse index expressions like obj[expr] and convert them to PropertyAccessExpression."""
+        # current token is LBRACKET (parser calls this after advancing to that token)
+        # Move to the first token inside the brackets
+        self.next_token()
+        index_expr = self.parse_expression(LOWEST)
+        # Expect closing bracket
+        if not self.expect_peek(RBRACKET):
+            return None
+        return PropertyAccessExpression(object=left, property=index_expr)
 
     def _lookahead_token_after_matching_paren(self):
         """Character-level lookahead: detect if the matching ')' is followed by '=>' (arrow).

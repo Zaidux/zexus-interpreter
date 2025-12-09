@@ -421,18 +421,35 @@ class StructuralAnalyzer:
                         'end_index': j,
                         'parent': None
                     }
+                    # Debug: print a short summary for this block
+                    try:
+                        lit_preview = ' '.join([tk.literal for tk in filtered_stmt_tokens[:8] if getattr(tk, 'literal', None)])
+                    except Exception:
+                        lit_preview = ''
+                    print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[start_idx].type} preview={lit_preview}")
                     block_id += 1
                 i = j
                 continue
 
             # Fallback: collect a run of tokens until a clear statement boundary
+            # Respect nesting so that constructs inside parentheses/braces aren't split
             start_idx = i
             run_tokens = [t]
             j = i + 1
+            nesting = 0
             while j < n:
                 tj = tokens[j]
-                if tj.type in stop_types or tj.type in statement_starters or tj.type == LBRACE or tj.type == TRY:
+                # Update nesting for parentheses/brackets/braces
+                if tj.type in {LPAREN, LBRACE, LBRACKET}:
+                    nesting += 1
+                elif tj.type in {RPAREN, RBRACE, RBRACKET}:
+                    if nesting > 0:
+                        nesting -= 1
+
+                # Only consider these as boundaries when at top-level (nesting == 0)
+                if nesting == 0 and (tj.type in stop_types or tj.type in statement_starters or tj.type == LBRACE or tj.type == TRY):
                     break
+
                 run_tokens.append(tj)
                 j += 1
             

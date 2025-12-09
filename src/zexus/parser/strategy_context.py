@@ -851,8 +851,6 @@ class ContextStackParser:
         if not tokens:
             return []
 
-        print(f"    📝 Parsing {len(tokens)} tokens into statements")
-
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
@@ -871,15 +869,12 @@ class ContextStackParser:
                 print(f"    📝 Found print statement: {[t.literal for t in print_tokens]}")
 
                 if len(print_tokens) > 1:
-                    string_literal = None
-                    for t in print_tokens:
-                        if t.type == STRING:
-                            string_literal = StringLiteral(t.literal)
-                            break
-
-                    if string_literal:
-                        statements.append(PrintStatement(string_literal))
+                    # Fast-path: if the print contains exactly a single string literal
+                    # (e.g. print "hello"; or print("hello");), treat it as a literal.
+                    if len(print_tokens) == 2 and print_tokens[1].type == STRING:
+                        statements.append(PrintStatement(StringLiteral(print_tokens[1].literal)))
                     else:
+                        # Otherwise parse the full expression (handles concatenation and variables)
                         expr = self._parse_expression(print_tokens[1:])
                         if expr:
                             statements.append(PrintStatement(expr))
@@ -1094,11 +1089,155 @@ class ContextStackParser:
 
                 i = j
                 continue
+            
+            elif token.type == IF:
+                # Parse IF statement directly here
+                j = i + 1
+                
+                # Collect condition tokens (between IF and {)
+                cond_tokens = []
+                while j < len(tokens) and tokens[j].type != LBRACE:
+                    if tokens[j].type == LPAREN and len(cond_tokens) == 0:
+                        j += 1
+                        continue
+                    elif tokens[j].type == RPAREN and len(cond_tokens) > 0:
+                        j += 1
+                        break
+                    cond_tokens.append(tokens[j])
+                    j += 1
+                
+                print(f"  [IF_COND] Condition tokens: {[t.literal for t in cond_tokens]}")
+                
+                # Parse condition expression
+                condition = self._parse_expression(cond_tokens) if cond_tokens else Identifier("true")
+                
+                # Collect consequence block tokens (inside { })
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    j += 1  # Skip LBRACE
+                    inner_tokens = []
+                    depth = 1
+                    while j < len(tokens) and depth > 0:
+                        if tokens[j].type == LBRACE:
+                            depth += 1
+                        elif tokens[j].type == RBRACE:
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        inner_tokens.append(tokens[j])
+                        j += 1
+                    
+                    consequence = BlockStatement()
+                    consequence.statements = self._parse_block_statements(inner_tokens)
+                    j += 1  # Skip closing RBRACE
+                else:
+                    consequence = BlockStatement()
+                
+                # Check for elif/else
+                elif_parts = []
+                alternative = None
+                
+                while j < len(tokens) and tokens[j].type in [ELIF, ELSE]:
+                    if tokens[j].type == ELIF:
+                        j += 1
+                        # Parse elif condition
+                        elif_cond_tokens = []
+                        while j < len(tokens) and tokens[j].type != LBRACE:
+                            if tokens[j].type == LPAREN and len(elif_cond_tokens) == 0:
+                                j += 1
+                                continue
+                            elif tokens[j].type == RPAREN and len(elif_cond_tokens) > 0:
+                                j += 1
+                                break
+                            elif_cond_tokens.append(tokens[j])
+                            j += 1
+                        
+                        elif_cond = self._parse_expression(elif_cond_tokens) if elif_cond_tokens else Identifier("true")
+                        
+                        # Collect elif block
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            j += 1
+                            elif_inner = []
+                            depth = 1
+                            while j < len(tokens) and depth > 0:
+                                if tokens[j].type == LBRACE:
+                                    depth += 1
+                                elif tokens[j].type == RBRACE:
+                                    depth -= 1
+                                    if depth == 0:
+                                        break
+                                elif_inner.append(tokens[j])
+                                j += 1
+                            elif_block = BlockStatement()
+                            elif_block.statements = self._parse_block_statements(elif_inner)
+                            j += 1
+                        else:
+                            elif_block = BlockStatement()
+                        
+                        elif_parts.append((elif_cond, elif_block))
+                    
+                    elif tokens[j].type == ELSE:
+                        j += 1
+                        # Collect else block
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            j += 1
+                            else_inner = []
+                            depth = 1
+                            while j < len(tokens) and depth > 0:
+                                if tokens[j].type == LBRACE:
+                                    depth += 1
+                                elif tokens[j].type == RBRACE:
+                                    depth -= 1
+                                    if depth == 0:
+                                        break
+                                else_inner.append(tokens[j])
+                                j += 1
+                            alternative = BlockStatement()
+                            alternative.statements = self._parse_block_statements(else_inner)
+                            j += 1
+                        break
+                
+                stmt = IfStatement(
+                    condition=condition,
+                    consequence=consequence,
+                    elif_parts=elif_parts,
+                    alternative=alternative
+                )
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == RETURN:
+                # Parse RETURN statement directly
+                j = i + 1
+                value_tokens = []
+                
+                # Collect tokens until semicolon, closing brace, or next statement
+                while j < len(tokens) and tokens[j].type not in [SEMICOLON, RBRACE]:
+                    if tokens[j].type in statement_starters and tokens[j].type != RETURN:
+                        break
+                    value_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse the return value
+                value = None
+                if value_tokens:
+                    value = self._parse_expression(value_tokens)
+                
+                stmt = ReturnStatement(value)
+                if stmt:
+                    statements.append(stmt)
+                
+                # Skip trailing semicolon if present
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
+                
+                i = j
+                continue
+
+            # Fallback: attempt to parse as expression
             else:
-                # Fallback: collect a run of tokens until a statement boundary
-                # and attempt to parse them as a single expression. This reduces
-                # token fragmentation caused by the structural analyzer splitting
-                # long expressions into many tiny blocks.
                 j = i
                 run_tokens = []
                 nesting = 0
@@ -1260,11 +1399,55 @@ class ContextStackParser:
         return ReturnStatement(value_expr if value_expr else Identifier("null"))
 
     def _parse_expression(self, tokens):
-        """Parse a full expression with robust method chaining and property access"""
+        """Parse a full expression with operator precedence handling"""
+        if not tokens or len(tokens) == 0:
+            return StringLiteral("")
+        
+        # Handle logical OR (lowest precedence)
+        or_index = -1
+        paren_depth = 0
+        for idx, t in enumerate(tokens):
+            if t.type == LPAREN:
+                paren_depth += 1
+            elif t.type == RPAREN:
+                paren_depth -= 1
+            elif t.type == OR and paren_depth == 0:
+                or_index = idx
+                break  # Take the first OR at depth 0
+        
+        if or_index > 0 and or_index < len(tokens) - 1:  # Valid split point
+            left = self._parse_expression(tokens[:or_index])
+            right = self._parse_expression(tokens[or_index+1:])
+            if left and right:
+                return InfixExpression(left=left, operator="||", right=right)
+            return left or right
+        
+        # Handle logical AND (next lowest precedence)
+        and_index = -1
+        paren_depth = 0
+        for idx, t in enumerate(tokens):
+            if t.type == LPAREN:
+                paren_depth += 1
+            elif t.type == RPAREN:
+                paren_depth -= 1
+            elif t.type == AND and paren_depth == 0:
+                and_index = idx
+                break
+        
+        if and_index > 0 and and_index < len(tokens) - 1:  # Valid split point
+            left = self._parse_expression(tokens[:and_index])
+            right = self._parse_expression(tokens[and_index+1:])
+            if left and right:
+                return InfixExpression(left=left, operator="&&", right=right)
+            return left or right
+        
+        # Continue with rest of expression parsing (comparison, arithmetic, etc)
+        return self._parse_comparison_and_above(tokens)
+
+    def _parse_comparison_and_above(self, tokens):
+        """Parse comparisons and arithmetic operators (higher precedence than AND/OR)"""
         if not tokens:
             return StringLiteral("")
-
-        print(f"  🔍 Parsing expression from tokens: {[t.literal for t in tokens]}")
 
         # Special cases first
         if tokens[0].type == LBRACE:
@@ -1434,11 +1617,35 @@ class ContextStackParser:
                 )
                 continue
 
-            # Binary operators
+            # Bracket-index access: expr[ key ] -> PropertyAccessExpression with parsed key
+            if t.type == LBRACKET:
+                i += 1  # Skip LBRACKET
+                start = i
+                depth = 0
+                while i < n:
+                    if tokens[i].type in {LBRACKET, LPAREN, LBRACE}:
+                        depth += 1
+                    elif tokens[i].type in {RBRACKET, RPAREN, RBRACE}:
+                        if depth == 0:
+                            break
+                        depth -= 1
+                    i += 1
+                inner_tokens = tokens[start:i]
+                # If there's a closing RBRACKET, skip it
+                if i < n and tokens[i].type == RBRACKET:
+                    i += 1
+                prop_expr = self._parse_expression(inner_tokens) if inner_tokens else Identifier('')
+                current_expr = PropertyAccessExpression(
+                    object=current_expr,
+                    property=prop_expr
+                )
+                continue
+
+            # Binary operators (comparisons and arithmetic - but NOT AND/OR which are handled above)
             if t.type in {PLUS, MINUS, ASTERISK, SLASH, 
                          LT, GT, EQ, NOT_EQ, LTE, GTE}:
                 i += 1  # Skip operator
-                right = self._parse_expression(tokens[i:])
+                right = self._parse_comparison_and_above(tokens[i:])
                 if right:
                     current_expr = InfixExpression(
                         left=current_expr,
@@ -1469,9 +1676,15 @@ class ContextStackParser:
         elif token.type == IDENT:
             return Identifier(token.literal)
         elif token.type == TRUE:
-            return Boolean(True)
+            # Derive value from literal text for safety
+            lit = getattr(token, 'literal', 'true')
+            val = True if isinstance(lit, str) and lit.lower() == 'true' else False
+            return Boolean(val)
         elif token.type == FALSE:
-            return Boolean(False)
+            # Derive value from literal text for safety
+            lit = getattr(token, 'literal', 'false')
+            val = False if isinstance(lit, str) and lit.lower() == 'false' else True
+            return Boolean(val)
         else:
             return StringLiteral(token.literal)
 

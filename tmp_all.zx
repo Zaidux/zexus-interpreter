@@ -1,0 +1,6 @@
+print("Hello\nWorld");
+print("Hello" + " " + "World");
+let m = {"key": "value"};
+print(m["key"]);
+function test(x) { print("x = " + x); }
+test("hello");

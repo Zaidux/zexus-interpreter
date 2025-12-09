@@ -28,7 +28,16 @@ class ExpressionEvaluatorMixin:
                 debug_log("  Found builtin", f"{node.value} = {builtin}")
                 return builtin
         
-        debug_log("  Identifier not found", node.value)
+        try:
+            env_keys = []
+            if hasattr(env, 'store'):
+                env_keys = list(env.store.keys())
+            # Use direct print to ensure visibility during debugging
+            import traceback as _tb
+            stack_snip = ''.join(_tb.format_stack(limit=5)[-3:])
+            print(f"[DEBUG] Identifier not found: {node.value}; env_keys={env_keys}\nStack snippet:\n{stack_snip}")
+        except Exception:
+            print(f"[DEBUG] Identifier not found: {node.value}")
         return EvaluationError(f"Identifier '{node.value}' not found")
     
     def eval_integer_infix(self, operator, left, right):
@@ -112,6 +121,8 @@ class ExpressionEvaluatorMixin:
         right = self.eval_node(node.right, env, stack_trace)
         if is_error(right): 
             return right
+
+        # (removed debug instrumentation)
         
         operator = node.operator
         

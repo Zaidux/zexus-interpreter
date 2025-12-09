@@ -1,7 +1,7 @@
 # src/zexus/evaluator/core.py
 import traceback
 from .. import zexus_ast
-from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj
+from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
 from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
@@ -230,7 +230,15 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.StringLiteral:
                 debug_log("  StringLiteral node", node.value)
                 from ..object import String
-                return String(node.value)
+                # Process escape sequences in the string
+                value = node.value
+                value = value.replace('\\n', '\n')
+                value = value.replace('\\t', '\t')
+                value = value.replace('\\r', '\r')
+                value = value.replace('\\\\', '\\')
+                value = value.replace('\\"', '"')
+                value = value.replace("\\'", "'")
+                return String(value)
             
             elif node_type == zexus_ast.Boolean:
                 debug_log("  Boolean node", f"value: {node.value}")
@@ -259,40 +267,40 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif node_type == zexus_ast.ListLiteral:
                 debug_log("  ListLiteral node", f"{len(node.elements)} elements")
-                from ..object import List
                 elems = self.eval_expressions(node.elements, env)
-                if is_error(elems): 
+                if is_error(elems):
                     return elems
                 return List(elems)
             
             elif node_type == zexus_ast.MapLiteral:
                 debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
-                from ..object import Map
                 pairs = {}
                 for k, v in node.pairs:
-                    key = self.eval_node(k, env, stack_trace)
-                    if is_error(key): 
-                        return key
+                    # If the key is a bare identifier (e.g. io.read) treat it as a string key
+                    if type(k) == zexus_ast.Identifier:
+                        key_str = k.value
+                    else:
+                        key = self.eval_node(k, env, stack_trace)
+                        if is_error(key):
+                            return key
+                        key_str = key.inspect()
+
                     val = self.eval_node(v, env, stack_trace)
-                    if is_error(val): 
+                    if is_error(val):
                         return val
-                    key_str = key.inspect()
                     pairs[key_str] = val
                 return Map(pairs)
             
             elif node_type == zexus_ast.ActionLiteral:
                 debug_log("  ActionLiteral node")
-                from ..object import Action
                 return Action(node.parameters, node.body, env)
             
             elif node_type == zexus_ast.LambdaExpression:
                 debug_log("  LambdaExpression node")
-                from ..object import LambdaFunction
                 return LambdaFunction(node.parameters, node.body, env)
             
             elif node_type == zexus_ast.EmbeddedLiteral:
                 debug_log("  EmbeddedLiteral node")
-                from ..object import EmbeddedCode
                 return EmbeddedCode("embedded_block", node.language, node.code)
             
             elif node_type == zexus_ast.PropertyAccessExpression:
@@ -305,10 +313,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 
                 if isinstance(obj, EmbeddedCode):
                     if property_name == "code":
-                        from ..object import String
                         return String(obj.code)
                     elif property_name == "language":
-                        from ..object import String
                         return String(obj.language)
                 
                 # Enforcement: consult security restrictions before returning
