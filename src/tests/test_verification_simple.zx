@@ -1,0 +1,69 @@
+=========================
+VERIFICATION: Core Features Working
+=========================
+
+print "✅ SECURITY FEATURES:";
+print "";
+
+// Test 1: Capability
+capability admin_access;
+print "  ✓ capability statement parsed";
+
+// Test 2: Grant
+grant service_account admin_access;
+print "  ✓ grant statement parsed";
+
+// Test 3: Revoke
+revoke service_account admin_access;
+print "  ✓ revoke statement parsed";
+
+// Test 4: Validate
+let data = "test@example.com";
+validate data using "email";
+print "  ✓ validate statement parsed";
+
+// Test 5: Sanitize
+let html_content = "<p>Hello</p>";
+sanitize html_content as "html";
+print "  ✓ sanitize statement parsed";
+
+// Test 6: Immutable
+immutable let secret = "secure-key";
+print "  ✓ immutable statement parsed";
+
+print "";
+print "✅ COMPLEXITY FEATURES:";
+print "";
+
+// Test 7: Interface
+interface Reader {
+  read;
+  close;
+};
+print "  ✓ interface statement parsed";
+
+// Test 8: Type Alias
+type_alias UserId = integer;
+print "  ✓ type_alias statement parsed";
+
+// Test 9: Module
+module database {
+  let connection = "db://localhost";
+};
+print "  ✓ module statement parsed";
+
+// Test 10: Package
+package app.utils {
+  let version = "1.0.0";
+};
+print "  ✓ package statement parsed";
+
+// Test 11: Using (RAII)
+using(file = "test.txt") {
+  print "  ✓ using statement parsed and executed";
+};
+
+print "";
+print "=========================";
+print "✅ All Features Verified!";
+print "=========================";

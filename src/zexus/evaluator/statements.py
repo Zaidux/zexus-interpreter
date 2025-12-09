@@ -13,7 +13,10 @@ from ..zexus_ast import (
     PrintStatement, ScreenStatement, EmbeddedCodeStatement, ExactlyStatement,
     Identifier, PropertyAccessExpression, RestrictStatement, SandboxStatement, TrailStatement,
     NativeStatement, GCStatement, InlineStatement, BufferStatement, SIMDStatement,
-    DeferStatement, PatternStatement, PatternCase, EnumStatement, EnumMember, StreamStatement, WatchStatement
+    DeferStatement, PatternStatement, PatternCase, EnumStatement, EnumMember, StreamStatement, WatchStatement,
+    CapabilityStatement, GrantStatement, RevokeStatement, ValidateStatement, SanitizeStatement, ImmutableStatement,
+    InterfaceStatement, TypeAliasStatement, ModuleStatement, PackageStatement, UsingStatement,
+    ChannelStatement, SendStatement, ReceiveStatement, AtomicStatement
 )
 from ..object import (
     Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
@@ -1296,6 +1299,7 @@ class StatementEvaluatorMixin:
         
         return String(f"Stream '{node.stream_name}' handler registered")
     
+    
     def eval_watch_statement(self, node, env, stack_trace):
         """Evaluate watch statement - reactive state management."""
         # Register watched expression and reaction
@@ -1310,3 +1314,478 @@ class StatementEvaluatorMixin:
         })
         
         return String(f"Watch registered for expression")
+
+    # === NEW SECURITY STATEMENT HANDLERS ===
+
+    def eval_capability_statement(self, node, env, stack_trace):
+        """Evaluate capability definition statement."""
+        from ..capability_system import Capability, CapabilityLevel
+        
+        # Get capability name
+        cap_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Extract definition details
+        description = ""
+        scope = ""
+        level = CapabilityLevel.ALLOWED
+        
+        if node.definition and isinstance(node.definition, Map):
+            # Extract from map
+            for key, val in node.definition.pairs:
+                if hasattr(key, 'value'):
+                    if key.value == "description" and hasattr(val, 'value'):
+                        description = val.value
+                    elif key.value == "scope" and hasattr(val, 'value'):
+                        scope = val.value
+        
+        # Create capability object
+        cap = Capability(
+            name=cap_name,
+            level=level,
+            reason=f"Defined with scope: {scope}"
+        )
+        
+        # Store in environment
+        if not hasattr(env, '_capabilities'):
+            env._capabilities = {}
+        env._capabilities[cap_name] = cap
+        
+        debug_log("eval_capability_statement", f"Defined capability: {cap_name} ({scope})")
+        return String(f"Capability '{cap_name}' defined")
+
+    def eval_grant_statement(self, node, env, stack_trace):
+        """Evaluate grant statement - grant capabilities to entity."""
+        from ..capability_system import get_capability_manager
+        
+        manager = get_capability_manager()
+        
+        # Get entity name
+        entity_name = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
+        
+        # Extract capability names
+        capability_names = []
+        for cap in node.capabilities:
+            if hasattr(cap, 'value'):
+                capability_names.append(cap.value)
+            elif hasattr(cap, 'function') and hasattr(cap.function, 'value'):
+                # Function call style
+                capability_names.append(cap.function.value)
+            else:
+                capability_names.append(str(cap))
+        
+        # Grant capabilities
+        try:
+            manager.grant_capabilities(entity_name, capability_names)
+            debug_log("eval_grant_statement", f"Granted {len(capability_names)} capabilities to {entity_name}")
+            return String(f"Granted {len(capability_names)} capabilities to '{entity_name}'")
+        except Exception as e:
+            return String(f"Error granting capabilities: {e}")
+
+    def eval_revoke_statement(self, node, env, stack_trace):
+        """Evaluate revoke statement - revoke capabilities from entity."""
+        from ..capability_system import get_capability_manager
+        
+        manager = get_capability_manager()
+        
+        # Get entity name
+        entity_name = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
+        
+        # Extract capability names
+        capability_names = []
+        for cap in node.capabilities:
+            if hasattr(cap, 'value'):
+                capability_names.append(cap.value)
+            elif hasattr(cap, 'function') and hasattr(cap.function, 'value'):
+                capability_names.append(cap.function.value)
+            else:
+                capability_names.append(str(cap))
+        
+        # Revoke by removing from granted set (simple implementation)
+        # In production, this would use a proper revocation mechanism
+        try:
+            # Access the manager's granted_capabilities
+            if entity_name in manager.granted_capabilities:
+                for cap_name in capability_names:
+                    manager.granted_capabilities[entity_name].discard(cap_name)
+            
+            debug_log("eval_revoke_statement", f"Revoked {len(capability_names)} capabilities from {entity_name}")
+            return String(f"Revoked {len(capability_names)} capabilities from '{entity_name}'")
+        except Exception as e:
+            return String(f"Error revoking capabilities: {e}")
+
+    def eval_validate_statement(self, node, env, stack_trace):
+        """Evaluate validate statement - validate data against schema."""
+        from ..validation_system import (
+            get_validation_manager, ValidationError, StandardValidators
+        )
+        
+        manager = get_validation_manager()
+        
+        # Evaluate data expression
+        data = self.eval_node(node.data, env, stack_trace)
+        
+        # Evaluate schema
+        schema = None
+        if node.schema:
+            if isinstance(node.schema, dict):
+                schema = node.schema
+            elif hasattr(node.schema, 'pairs'):  # Map object
+                # Convert Map to dict
+                schema = {}
+                for key, val in node.schema.pairs:
+                    key_str = key.value if hasattr(key, 'value') else str(key)
+                    schema[key_str] = val
+            else:
+                schema = self.eval_node(node.schema, env, stack_trace)
+        
+        # Validate data
+        try:
+            if isinstance(data, String):
+                # Validate string against pattern or standard validator
+                if isinstance(schema, String):
+                    validator_name = schema.value
+                    if hasattr(StandardValidators, validator_name.upper()):
+                        validator = getattr(StandardValidators, validator_name.upper())
+                        if validator.validate(data.value):
+                            return String(f"Validation passed for {validator_name}")
+                        else:
+                            return String(f"Validation failed: {validator.get_error_message()}")
+            
+            # For complex validation, use schema
+            if schema and hasattr(data, '__dict__'):
+                manager.validate_schema(vars(data), str(schema) if not isinstance(schema, dict) else "custom")
+            
+            debug_log("eval_validate_statement", "Validation passed")
+            return String("Validation passed")
+        
+        except ValidationError as e:
+            debug_log("eval_validate_statement", f"Validation error: {e}")
+            return String(f"Validation failed: {e}")
+
+    def eval_sanitize_statement(self, node, env, stack_trace):
+        """Evaluate sanitize statement - sanitize untrusted input."""
+        from ..validation_system import Sanitizer, Encoding, get_validation_manager
+        
+        manager = get_validation_manager()
+        
+        # Evaluate data to sanitize
+        data = self.eval_node(node.data, env, stack_trace)
+        
+        # Convert to string
+        if hasattr(data, 'value'):
+            data_str = str(data.value)
+        else:
+            data_str = str(data)
+        
+        # Determine encoding
+        encoding = Encoding.HTML  # Default
+        if node.encoding:
+            enc_val = self.eval_node(node.encoding, env, stack_trace)
+            if hasattr(enc_val, 'value'):
+                enc_name = enc_val.value.upper()
+                try:
+                    encoding = Encoding[enc_name]
+                except KeyError:
+                    encoding = Encoding.HTML
+        
+        # Sanitize
+        try:
+            sanitized = Sanitizer.sanitize_string(data_str, encoding)
+            debug_log("eval_sanitize_statement", f"Sanitized {len(data_str)} chars with {encoding.value}")
+            return String(sanitized)
+        except Exception as e:
+            debug_log("eval_sanitize_statement", f"Sanitization error: {e}")
+            return String(data_str)  # Return original if sanitization fails
+
+    def eval_immutable_statement(self, node, env, stack_trace):
+        """Evaluate immutable statement - declare variable as immutable."""
+        from ..purity_system import get_immutability_manager
+        
+        manager = get_immutability_manager()
+        
+        # Get variable name
+        var_name = node.target.value if hasattr(node.target, 'value') else str(node.target)
+        
+        # Evaluate and assign value if provided
+        if node.value:
+            value = self.eval_node(node.value, env, stack_trace)
+            env.set(var_name, value)
+            
+            # Mark as immutable
+            manager.mark_immutable(value)
+            debug_log("eval_immutable_statement", f"Created immutable: {var_name}")
+            return String(f"Immutable variable '{var_name}' created")
+        else:
+            # Mark existing variable as immutable
+            try:
+                value = env.get(var_name)
+                manager.mark_immutable(value)
+                debug_log("eval_immutable_statement", f"Marked immutable: {var_name}")
+                return String(f"Variable '{var_name}' marked as immutable")
+            except Exception as e:
+                return String(f"Error: Variable '{var_name}' not found")
+
+
+    # === COMPLEXITY & LARGE PROJECT MANAGEMENT STATEMENT EVALUATORS ===
+
+    def eval_interface_statement(self, node, env, stack_trace):
+        """Evaluate interface statement - define a contract/interface."""
+        from ..complexity_system import get_complexity_manager
+        
+        manager = get_complexity_manager()
+        
+        # Get interface name
+        interface_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Create interface from AST node
+        from ..complexity_system import Interface
+        interface = Interface(
+            name=interface_name,
+            methods=node.methods if hasattr(node, 'methods') else [],
+            properties=node.properties if hasattr(node, 'properties') else {}
+        )
+        
+        # Register interface
+        manager.register_interface(interface)
+        debug_log("eval_interface_statement", f"Registered interface: {interface_name}")
+        
+        # Store in environment
+        env.set(interface_name, interface)
+        return String(f"Interface '{interface_name}' defined")
+
+    def eval_type_alias_statement(self, node, env, stack_trace):
+        """Evaluate type alias statement - create type name shortcuts."""
+        from ..complexity_system import get_complexity_manager
+        
+        manager = get_complexity_manager()
+        
+        # Get type alias name
+        alias_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Evaluate base type
+        base_type = self.eval_node(node.base_type, env, stack_trace)
+        
+        # Create type alias
+        from ..complexity_system import TypeAlias
+        alias = TypeAlias(
+            name=alias_name,
+            base_type=base_type
+        )
+        
+        # Register type alias
+        manager.register_type_alias(alias)
+        debug_log("eval_type_alias_statement", f"Registered type alias: {alias_name}")
+        
+        # Store in environment
+        env.set(alias_name, alias)
+        return String(f"Type alias '{alias_name}' defined")
+
+    def eval_module_statement(self, node, env, stack_trace):
+        """Evaluate module statement - create namespaced module."""
+        from ..complexity_system import get_complexity_manager, Module
+        
+        manager = get_complexity_manager()
+        
+        # Get module name
+        module_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Create module
+        module = Module(name=module_name)
+        
+        # Execute module body in new environment
+        module_env = Environment(parent=env)
+        
+        if hasattr(node, 'body') and node.body:
+            body_result = self.eval_node(node.body, module_env, stack_trace)
+        
+        # Collect module members from module environment
+        for key in module_env.store:
+            if not key.startswith('_'):
+                value = module_env.get(key)
+                module.add_member(key, value, visibility='public')
+        
+        # Register module
+        manager.register_module(module)
+        debug_log("eval_module_statement", f"Created module: {module_name}")
+        
+        # Store in environment
+        env.set(module_name, module)
+        return String(f"Module '{module_name}' created")
+
+    def eval_package_statement(self, node, env, stack_trace):
+        """Evaluate package statement - create top-level package."""
+        from ..complexity_system import get_complexity_manager, Package
+        
+        manager = get_complexity_manager()
+        
+        # Get package name
+        package_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Create package
+        package = Package(name=package_name)
+        
+        # Execute package body in new environment
+        package_env = Environment(parent=env)
+        
+        if hasattr(node, 'body') and node.body:
+            body_result = self.eval_node(node.body, package_env, stack_trace)
+        
+        # Collect package members from package environment
+        for key in package_env.store:
+            if not key.startswith('_'):
+                value = package_env.get(key)
+                package.modules[key] = value
+        
+        # Register package
+        manager.register_package(package)
+        debug_log("eval_package_statement", f"Created package: {package_name}")
+        
+        # Store in environment
+        env.set(package_name, package)
+        return String(f"Package '{package_name}' created")
+
+    def eval_using_statement(self, node, env, stack_trace):
+        """Evaluate using statement - RAII pattern for resource management."""
+        from ..complexity_system import get_complexity_manager
+        
+        manager = get_complexity_manager()
+        
+        # Get resource name
+        resource_name = node.resource_name.value if hasattr(node.resource_name, 'value') else str(node.resource_name)
+        
+        # Acquire resource
+        resource = self.eval_node(node.resource_expr, env, stack_trace)
+        
+        # Store resource in environment
+        env.set(resource_name, resource)
+        
+        try:
+            debug_log("eval_using_statement", f"Acquired resource: {resource_name}")
+            
+            # Execute body in using block
+            if hasattr(node, 'body') and node.body:
+                body_result = self.eval_node(node.body, env, stack_trace)
+            
+            return body_result if 'body_result' in locals() else NULL
+        
+        finally:
+            # Cleanup resource (RAII)
+            if hasattr(resource, 'close'):
+                try:
+                    resource.close()
+                    debug_log("eval_using_statement", f"Closed resource: {resource_name}")
+                except Exception as e:
+                    debug_log("eval_using_statement", f"Error closing resource: {e}")
+            elif hasattr(resource, 'cleanup'):
+                try:
+                    resource.cleanup()
+                    debug_log("eval_using_statement", f"Cleaned up resource: {resource_name}")
+                except Exception as e:
+                    debug_log("eval_using_statement", f"Error cleaning up resource: {e}")
+
+    # === CONCURRENCY & PERFORMANCE STATEMENT EVALUATORS ===
+
+    def eval_channel_statement(self, node, env, stack_trace):
+        """Evaluate channel statement - declare a message passing channel."""
+        from ..concurrency_system import get_concurrency_manager
+        
+        manager = get_concurrency_manager()
+        
+        # Get channel name
+        channel_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Get element type if specified
+        element_type = None
+        if hasattr(node, 'element_type') and node.element_type:
+            element_type = str(node.element_type)
+        
+        # Get capacity if specified
+        capacity = 0
+        if hasattr(node, 'capacity') and node.capacity:
+            capacity = self.eval_node(node.capacity, env, stack_trace)
+            if isinstance(capacity, Integer):
+                capacity = capacity.value
+            else:
+                capacity = 0
+        
+        # Create channel
+        channel = manager.create_channel(channel_name, element_type, capacity)
+        debug_log("eval_channel_statement", f"Created channel: {channel_name}")
+        
+        # Store in environment
+        env.set(channel_name, channel)
+        return String(f"Channel '{channel_name}' created")
+
+    def eval_send_statement(self, node, env, stack_trace):
+        """Evaluate send statement - send value to a channel."""
+        from ..concurrency_system import get_concurrency_manager
+        
+        manager = get_concurrency_manager()
+        
+        # Evaluate channel expression
+        channel = self.eval_node(node.channel_expr, env, stack_trace)
+        
+        # Evaluate value to send
+        value = self.eval_node(node.value_expr, env, stack_trace)
+        
+        # Send to channel
+        if hasattr(channel, 'send'):
+            try:
+                channel.send(value, timeout=5.0)
+                debug_log("eval_send_statement", f"Sent to channel: {value}")
+                return String(f"Value sent to channel")
+            except Exception as e:
+                return String(f"Error sending to channel: {e}")
+        else:
+            return String(f"Error: not a valid channel")
+
+    def eval_receive_statement(self, node, env, stack_trace):
+        """Evaluate receive statement - receive value from a channel."""
+        from ..concurrency_system import get_concurrency_manager
+        
+        manager = get_concurrency_manager()
+        
+        # Evaluate channel expression
+        channel = self.eval_node(node.channel_expr, env, stack_trace)
+        
+        # Receive from channel
+        if hasattr(channel, 'receive'):
+            try:
+                value = channel.receive(timeout=5.0)
+                debug_log("eval_receive_statement", f"Received from channel: {value}")
+                
+                # Bind to target if specified
+                if hasattr(node, 'target') and node.target:
+                    target_name = node.target.value if hasattr(node.target, 'value') else str(node.target)
+                    env.set(target_name, value)
+                
+                return value if value is not None else NULL
+            except Exception as e:
+                return String(f"Error receiving from channel: {e}")
+        else:
+            return String(f"Error: not a valid channel")
+
+    def eval_atomic_statement(self, node, env, stack_trace):
+        """Evaluate atomic statement - execute indivisible operation."""
+        from ..concurrency_system import get_concurrency_manager
+        
+        manager = get_concurrency_manager()
+        
+        # Create/get atomic region
+        atomic_id = f"atomic_{id(node)}"
+        atomic = manager.create_atomic(atomic_id)
+        
+        # Execute atomically
+        def execute_block():
+            if hasattr(node, 'body') and node.body:
+                # Atomic block
+                return self.eval_node(node.body, env, stack_trace)
+            elif hasattr(node, 'expr') and node.expr:
+                # Atomic expression
+                return self.eval_node(node.expr, env, stack_trace)
+            return NULL
+        
+        result = atomic.execute(execute_block)
+        debug_log("eval_atomic_statement", "Atomic operation completed")
+        
+        return result if result is not None else NULL

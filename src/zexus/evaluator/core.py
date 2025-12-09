@@ -208,7 +208,70 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  WatchStatement node")
                 return self.eval_watch_statement(node, env, stack_trace)
             
+            # === NEW SECURITY STATEMENTS ===
+            elif node_type == zexus_ast.CapabilityStatement:
+                debug_log("  CapabilityStatement node", f"capability {node.name}")
+                return self.eval_capability_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.GrantStatement:
+                debug_log("  GrantStatement node", f"grant {node.entity_name}")
+                return self.eval_grant_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.RevokeStatement:
+                debug_log("  RevokeStatement node", f"revoke {node.entity_name}")
+                return self.eval_revoke_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ValidateStatement:
+                debug_log("  ValidateStatement node")
+                return self.eval_validate_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.SanitizeStatement:
+                debug_log("  SanitizeStatement node")
+                return self.eval_sanitize_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ImmutableStatement:
+                debug_log("  ImmutableStatement node", f"immutable {node.target}")
+                return self.eval_immutable_statement(node, env, stack_trace)
+            
+            # === COMPLEXITY & LARGE PROJECT MANAGEMENT STATEMENTS ===
+            elif node_type == zexus_ast.InterfaceStatement:
+                debug_log("  InterfaceStatement node", f"interface {node.name.value}")
+                return self.eval_interface_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.TypeAliasStatement:
+                debug_log("  TypeAliasStatement node", f"type_alias {node.name.value}")
+                return self.eval_type_alias_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ModuleStatement:
+                debug_log("  ModuleStatement node", f"module {node.name.value}")
+                return self.eval_module_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.PackageStatement:
+                debug_log("  PackageStatement node", f"package {node.name.value}")
+                return self.eval_package_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.UsingStatement:
+                debug_log("  UsingStatement node", f"using {node.resource_name.value}")
+                return self.eval_using_statement(node, env, stack_trace)
+            
             # === EXPRESSIONS ===
+            # === CONCURRENCY & PERFORMANCE STATEMENTS ===
+            elif node_type == zexus_ast.ChannelStatement:
+                debug_log("  ChannelStatement node", f"channel {node.name.value}")
+                return self.eval_channel_statement(node, env, stack_trace)
+
+            elif node_type == zexus_ast.SendStatement:
+                debug_log("  SendStatement node", "send to channel")
+                return self.eval_send_statement(node, env, stack_trace)
+
+            elif node_type == zexus_ast.ReceiveStatement:
+                debug_log("  ReceiveStatement node", "receive from channel")
+                return self.eval_receive_statement(node, env, stack_trace)
+
+            elif node_type == zexus_ast.AtomicStatement:
+                debug_log("  AtomicStatement node", "atomic operation")
+                return self.eval_atomic_statement(node, env, stack_trace)
+
             elif node_type == zexus_ast.Identifier:
                 debug_log("  Identifier node", node.value)
                 return self.eval_identifier(node, env)
@@ -377,6 +440,14 @@ def evaluate(program, env, debug_mode=False):
     
     # Instantiate the Modular Evaluator
     evaluator = Evaluator()
+
+    # Merge any module-level builtin injections (tests may add async helpers, etc.)
+    try:
+        from . import builtins as injected_builtins
+        if isinstance(injected_builtins, dict):
+            evaluator.builtins.update(injected_builtins)
+    except Exception:
+        pass
     result = evaluator.eval_node(program, env)
     
     if debug_mode: 

@@ -35,8 +35,11 @@ class StructuralAnalyzer:
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
-              DEFER, PATTERN, ENUM, STREAM, WATCH
-        }
+              DEFER, PATTERN, ENUM, STREAM, WATCH,
+              CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
+              INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
+              CHANNEL, SEND, RECEIVE, ATOMIC
+          }
 
         while i < n:
             t = tokens[i]
@@ -519,8 +522,11 @@ class StructuralAnalyzer:
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
-              DEFER, PATTERN, ENUM, STREAM, WATCH
-        }
+              DEFER, PATTERN, ENUM, STREAM, WATCH,
+              CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
+              INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
+              CHANNEL, SEND, RECEIVE, ATOMIC
+          }
 
         cur = []
         i = 0

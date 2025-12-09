@@ -789,6 +789,326 @@ class WatchStatement(Statement):
         return f"WatchStatement(watch={self.watched_expr})"
 
 
+# NEW: Capability-based security statements
+
+class CapabilityStatement(Statement):
+    """Capability definition statement - Define what entities can do
+    
+    capability read_file = {
+      description: "Read file system",
+      scope: "io",
+      level: "restricted"
+    };
+    
+    capability write_network = {
+      description: "Write to network",
+      scope: "io.network",
+      level: "privileged"
+    };
+    """
+    def __init__(self, name, definition=None):
+        self.name = name  # Identifier: capability name
+        self.definition = definition  # Dict with description, scope, level, etc.
+
+    def __repr__(self):
+        return f"CapabilityStatement(name={self.name})"
+
+
+class GrantStatement(Statement):
+    """Grant capabilities to an entity
+    
+    grant user1 {
+      read_file,
+      read_network
+    };
+    
+    grant plugin_trusted capability(read_file);
+    """
+    def __init__(self, entity_name, capabilities):
+        self.entity_name = entity_name  # Identifier: entity to grant to
+        self.capabilities = capabilities  # List of capability names or FunctionCall nodes
+
+    def __repr__(self):
+        return f"GrantStatement(entity={self.entity_name}, capabilities={len(self.capabilities)})"
+
+
+class RevokeStatement(Statement):
+    """Revoke capabilities from an entity
+    
+    revoke user1 {
+      write_file,
+      write_network
+    };
+    
+    revoke plugin_untrusted capability(read_file);
+    """
+    def __init__(self, entity_name, capabilities):
+        self.entity_name = entity_name  # Identifier: entity to revoke from
+        self.capabilities = capabilities  # List of capability names or FunctionCall nodes
+
+    def __repr__(self):
+        return f"RevokeStatement(entity={self.entity_name}, capabilities={len(self.capabilities)})"
+
+
+# NEW: Pure function declarations
+
+class PureFunctionStatement(Statement):
+    """Declare a function as pure (referentially transparent)
+    
+    pure function add(a, b) {
+      return a + b;
+    }
+    
+    function multiply(x, y) {
+      pure {
+        return x * y;
+      }
+    }
+    """
+    def __init__(self, function_decl):
+        self.function_decl = function_decl  # FunctionExpression or FunctionStatement
+
+    def __repr__(self):
+        return f"PureFunctionStatement(function={self.function_decl})"
+
+
+class ImmutableStatement(Statement):
+    """Declare a variable or parameter as immutable
+    
+    immutable const user = { name: "Alice", age: 30 };
+    immutable let config = load_config();
+    
+    function process(immutable data) {
+      // data cannot be modified
+      print data.name;
+    }
+    """
+    def __init__(self, target, value=None):
+        self.target = target  # Identifier: variable to make immutable
+        self.value = value  # Optional Expression: value to assign
+
+    def __repr__(self):
+        return f"ImmutableStatement(target={self.target})"
+
+
+# NEW: Data validation and sanitization
+
+class ValidateStatement(Statement):
+    """Validate data against a schema
+    
+    validate user_input, {
+      name: string,
+      email: email,
+      age: number(18, 120)
+    };
+    
+    validate(request.body, schema_user);
+    """
+    def __init__(self, data, schema, options=None):
+        self.data = data  # Expression: value to validate
+        self.schema = schema  # Dict or Identifier: validation schema
+        self.options = options  # Optional: validation options
+
+    def __repr__(self):
+        return f"ValidateStatement(data={self.data})"
+
+
+class SanitizeStatement(Statement):
+    """Sanitize untrusted input
+    
+    sanitize user_input, {
+      encoding: "html",
+      rules: ["remove_scripts", "remove_events"]
+    };
+    
+    let clean_data = sanitize(request.body, encoding="url");
+    """
+    def __init__(self, data, rules=None, encoding=None):
+        self.data = data  # Expression: value to sanitize
+        self.rules = rules  # Optional: list of sanitization rules
+        self.encoding = encoding  # Optional: encoding type (html, sql, url, javascript)
+
+    def __repr__(self):
+        return f"SanitizeStatement(data={self.data})"
+
+
+# NEW: Complexity & Large Project Management
+
+class InterfaceStatement(Statement):
+    """Formal interface/type class definition
+    
+    interface Drawable {
+        draw(canvas);
+        get_bounds();
+    };
+    
+    interface Serializable {
+        to_string();
+        from_string(str);
+    };
+    """
+    def __init__(self, name, methods=None, properties=None, extends=None):
+        self.name = name  # Identifier: interface name
+        self.methods = methods or []  # List of method declarations
+        self.properties = properties or {}  # Dict of property names -> types
+        self.extends = extends or []  # List of interface names this extends
+
+    def __repr__(self):
+        return f"InterfaceStatement(name={self.name}, methods={len(self.methods)})"
+
+
+class TypeAliasStatement(Statement):
+    """Type alias definition for complex types
+    
+    type_alias UserID = integer;
+    type_alias Point = { x: float, y: float };
+    type_alias Handler = function(request) -> response;
+    """
+    def __init__(self, name, base_type):
+        self.name = name  # Identifier: alias name
+        self.base_type = base_type  # Expression or type name
+
+    def __repr__(self):
+        return f"TypeAliasStatement(name={self.name}, base_type={self.base_type})"
+
+
+class ModuleStatement(Statement):
+    """Module definition for code organization
+    
+    module database {
+        internal function connect_db(path) { ... }
+        public function query(sql) { ... }
+    }
+    
+    module users {
+        public function get_user(id) { ... }
+        internal function validate_user(user) { ... }
+    }
+    """
+    def __init__(self, name, body=None, parent=None):
+        self.name = name  # Identifier: module name
+        self.body = body  # BlockStatement: module body
+        self.parent = parent  # Parent module (if nested)
+
+    def __repr__(self):
+        return f"ModuleStatement(name={self.name})"
+
+
+class PackageStatement(Statement):
+    """Package definition for high-level organization
+    
+    package myapp.database {
+        module connection { ... }
+        module query { ... }
+    }
+    """
+    def __init__(self, name, body=None):
+        self.name = name  # Identifier or dotted name: package name
+        self.body = body  # BlockStatement: package body
+
+    def __repr__(self):
+        return f"PackageStatement(name={self.name})"
+
+
+class UsingStatement(Statement):
+    """Resource management with automatic cleanup (RAII pattern)
+    
+    using(file = open("/path/to/file.txt")) {
+        content = file.read();
+        process(content);
+        // file is automatically closed
+    }
+    
+    using(connection = db.connect()) {
+        result = connection.query("SELECT * FROM users");
+        // connection is automatically closed
+    }
+    """
+    def __init__(self, resource_name, resource_expr, body):
+        self.resource_name = resource_name  # Identifier: name for the resource
+        self.resource_expr = resource_expr  # Expression: acquires the resource
+        self.body = body  # BlockStatement: code using the resource
+
+    def __repr__(self):
+        return f"UsingStatement(resource={self.resource_name})"
+
+
+class VisibilityModifier(Statement):
+    """Visibility modifier for module members
+    
+    public function get_data() { ... }
+    internal function helper() { ... }
+    protected function submodule_only() { ... }
+    """
+    def __init__(self, visibility, statement):
+        self.visibility = visibility  # String: "public", "internal", "protected"
+        self.statement = statement  # The statement being modified
+
+    def __repr__(self):
+        return f"VisibilityModifier({self.visibility}, {self.statement})"
+
+
+class ChannelStatement(Statement):
+    """Channel declaration for message passing between concurrent tasks
+    
+    channel<integer> numbers;
+    channel<string> messages;
+    channel<{"id": integer, "name": string}> user_updates;
+    """
+    def __init__(self, name, element_type=None, capacity=None):
+        self.name = name  # Identifier: channel name
+        self.element_type = element_type  # Expression: type of elements
+        self.capacity = capacity  # Optional: buffer capacity (None = unbuffered)
+
+    def __repr__(self):
+        return f"ChannelStatement({self.name}, type={self.element_type})"
+
+
+class SendStatement(Statement):
+    """Send value to a channel
+    
+    send(channel, value);
+    send(data_channel, {"id": 1, "name": "Alice"});
+    """
+    def __init__(self, channel_expr, value_expr):
+        self.channel_expr = channel_expr  # Expression: channel to send to
+        self.value_expr = value_expr  # Expression: value to send
+
+    def __repr__(self):
+        return f"SendStatement(channel={self.channel_expr}, value={self.value_expr})"
+
+
+class ReceiveStatement(Statement):
+    """Receive value from a channel (blocking)
+    
+    value = receive(channel);
+    user = receive(user_updates);
+    """
+    def __init__(self, channel_expr, target=None):
+        self.channel_expr = channel_expr  # Expression: channel to receive from
+        self.target = target  # Optional Identifier: variable to bind received value
+
+    def __repr__(self):
+        return f"ReceiveStatement(channel={self.channel_expr})"
+
+
+class AtomicStatement(Statement):
+    """Atomic operation - indivisible unit of concurrent code
+    
+    atomic(counter = counter + 1);
+    atomic {
+        x = x + 1;
+        y = y + 1;
+    };
+    """
+    def __init__(self, body=None, expr=None):
+        self.body = body  # BlockStatement: atomic block
+        self.expr = expr  # Expression: atomic expression (single operation)
+        # Note: exactly one of body or expr should be non-None
+
+    def __repr__(self):
+        return f"AtomicStatement(body={self.body}, expr={self.expr})"
+
 def attach_modifiers(node, modifiers):
     """Attach modifiers to an AST node (best-effort).
 

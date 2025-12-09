@@ -50,6 +50,24 @@ class ContextStackParser:
             'USE': self._parse_use_statement_block,
             # Added contract handling
             'contract_statement': self._parse_contract_statement_block,
+            # NEW: Security statement handlers
+            CAPABILITY: self._parse_capability_statement,
+            GRANT: self._parse_grant_statement,
+            REVOKE: self._parse_revoke_statement,
+            VALIDATE: self._parse_validate_statement,
+            SANITIZE: self._parse_sanitize_statement,
+            IMMUTABLE: self._parse_immutable_statement,
+            # NEW: Complexity management handlers
+            INTERFACE: self._parse_interface_statement,
+            TYPE_ALIAS: self._parse_type_alias_statement,
+            MODULE: self._parse_module_statement,
+            PACKAGE: self._parse_package_statement,
+            USING: self._parse_using_statement,
+            # CONCURRENCY handlers
+            CHANNEL: self._parse_channel_statement,
+            SEND: self._parse_send_statement,
+            RECEIVE: self._parse_receive_statement,
+            ATOMIC: self._parse_atomic_statement,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -348,7 +366,7 @@ class ContextStackParser:
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
         value_tokens = []
         stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         j = 2
         while j < len(tokens):
             t = tokens[j]
@@ -855,7 +873,7 @@ class ContextStackParser:
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH}
+        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         while i < len(tokens):
             token = tokens[i]
 
@@ -1352,7 +1370,7 @@ class ContextStackParser:
         # Collect tokens up to a statement boundary
         inner_tokens = []
         statement_terminators = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         nesting_level = 0
 
         for token in tokens[1:]:  # Skip the PRINT token
@@ -2295,3 +2313,700 @@ class ContextStackParser:
                     return cond_expr if cond_expr is not None else Identifier("true")
                 break
         return Identifier("true")
+
+    # === NEW SECURITY STATEMENT HANDLERS ===
+
+    def _parse_capability_statement(self, block_info, all_tokens):
+        """Parse capability definition statement
+        
+        capability read_file = {
+          description: "Read file system",
+          scope: "io"
+        };
+        """
+        print("🔧 [Context] Parsing capability statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid capability statement: expected name")
+            return None
+        
+        if tokens[0].type != CAPABILITY:
+            print("  ❌ Expected CAPABILITY keyword")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected capability name")
+            return None
+        
+        cap_name = tokens[1].literal
+        print(f"  📋 Capability: {cap_name}")
+        
+        # Look for definition block
+        definition = None
+        for i in range(2, len(tokens)):
+            if tokens[i].type == LBRACE:
+                # Extract map/definition
+                definition = self._parse_map_literal(tokens[i:])
+                break
+        
+        return CapabilityStatement(
+            name=Identifier(cap_name),
+            definition=definition
+        )
+
+    def _parse_grant_statement(self, block_info, all_tokens):
+        """Parse grant statement
+        
+        grant user1 {
+          read_file,
+          read_network
+        };
+        """
+        print("🔧 [Context] Parsing grant statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid grant statement")
+            return None
+        
+        if tokens[0].type != GRANT:
+            print("  ❌ Expected GRANT keyword")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected entity name after grant")
+            return None
+        
+        entity_name = tokens[1].literal
+        print(f"  👤 Entity: {entity_name}")
+        
+        # Parse capabilities list
+        capabilities = []
+        i = 2
+        while i < len(tokens):
+            if tokens[i].type == IDENT:
+                capabilities.append(Identifier(tokens[i].literal))
+            elif tokens[i].type == LPAREN:
+                # function call style: capability(name)
+                if i + 2 < len(tokens) and tokens[i + 1].type == IDENT:
+                    capabilities.append(FunctionCall(
+                        Identifier("capability"),
+                        [Identifier(tokens[i + 1].literal)]
+                    ))
+                    i += 2
+            i += 1
+        
+        print(f"  🔑 Capabilities: {len(capabilities)}")
+        
+        return GrantStatement(
+            entity_name=Identifier(entity_name),
+            capabilities=capabilities
+        )
+
+    def _parse_revoke_statement(self, block_info, all_tokens):
+        """Parse revoke statement (mirrors grant)"""
+        print("🔧 [Context] Parsing revoke statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid revoke statement")
+            return None
+        
+        if tokens[0].type != REVOKE:
+            print("  ❌ Expected REVOKE keyword")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected entity name after revoke")
+            return None
+        
+        entity_name = tokens[1].literal
+        print(f"  👤 Entity: {entity_name}")
+        
+        # Parse capabilities list (same as grant)
+        capabilities = []
+        i = 2
+        while i < len(tokens):
+            if tokens[i].type == IDENT:
+                capabilities.append(Identifier(tokens[i].literal))
+            elif tokens[i].type == LPAREN:
+                if i + 2 < len(tokens) and tokens[i + 1].type == IDENT:
+                    capabilities.append(FunctionCall(
+                        Identifier("capability"),
+                        [Identifier(tokens[i + 1].literal)]
+                    ))
+                    i += 2
+            i += 1
+        
+        print(f"  🔑 Capabilities: {len(capabilities)}")
+        
+        return RevokeStatement(
+            entity_name=Identifier(entity_name),
+            capabilities=capabilities
+        )
+
+    def _parse_validate_statement(self, block_info, all_tokens):
+        """Parse validate statement
+        
+        validate user_input, {
+          name: string,
+          email: email,
+          age: number(18, 120)
+        };
+        """
+        print("🔧 [Context] Parsing validate statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid validate statement")
+            return None
+        
+        # Parse: validate <expr>, <schema>
+        comma_idx = -1
+        for i, t in enumerate(tokens):
+            if t.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            print("  ⚠️ No schema provided for validate")
+            # Single argument: validate(expr) with implicit schema
+            data = self._parse_expression(tokens[1:])
+            return ValidateStatement(data, {})
+        
+        # Split into data and schema
+        data_tokens = tokens[1:comma_idx]
+        schema_tokens = tokens[comma_idx + 1:]
+        
+        data = self._parse_expression(data_tokens)
+        schema = self._parse_expression(schema_tokens)
+        
+        print(f"  ✓ Validate: {type(data).__name__} against {type(schema).__name__}")
+        
+        return ValidateStatement(data, schema)
+
+    def _parse_sanitize_statement(self, block_info, all_tokens):
+        """Parse sanitize statement
+        
+        sanitize user_input, {
+          encoding: "html",
+          rules: ["remove_scripts"]
+        };
+        """
+        print("🔧 [Context] Parsing sanitize statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid sanitize statement")
+            return None
+        
+        # Parse: sanitize <expr>, <options>
+        comma_idx = -1
+        for i, t in enumerate(tokens):
+            if t.type == COMMA:
+                comma_idx = i
+                break
+        
+        # Data to sanitize
+        data_tokens = tokens[1:comma_idx if comma_idx != -1 else None]
+        data = self._parse_expression(data_tokens)
+        
+        # Options (if provided)
+        rules = None
+        encoding = None
+        if comma_idx != -1:
+            options_tokens = tokens[comma_idx + 1:]
+            options = self._parse_expression(options_tokens)
+            # Extract encoding and rules from options if it's a map
+            if isinstance(options, Map):
+                for key, val in options.pairs:
+                    if isinstance(key, StringLiteral):
+                        if key.value == "encoding":
+                            encoding = val
+                        elif key.value == "rules":
+                            rules = val
+        
+        print(f"  🧹 Sanitize: {type(data).__name__}")
+        
+        return SanitizeStatement(data, rules, encoding)
+
+    def _parse_immutable_statement(self, block_info, all_tokens):
+        """Parse immutable statement
+        
+        immutable const user = { name: "Alice" };
+        immutable let config = load_config();
+        """
+        print("🔧 [Context] Parsing immutable statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2:
+            print("  ❌ Invalid immutable statement")
+            return None
+        
+        if tokens[0].type != IMMUTABLE:
+            print("  ❌ Expected IMMUTABLE keyword")
+            return None
+        
+        # Check if next is LET, CONST, or IDENT
+        if tokens[1].type in {LET, CONST}:
+            # immutable let/const name = value
+            if len(tokens) < 4 or tokens[2].type != IDENT:
+                print("  ❌ Invalid immutable declaration")
+                return None
+            
+            var_name = tokens[2].literal
+            target = Identifier(var_name)
+            
+            # Extract value if present
+            value = None
+            if len(tokens) > 3 and tokens[3].type == ASSIGN:
+                value_tokens = tokens[4:]
+                value = self._parse_expression(value_tokens)
+            
+            print(f"  🔒 Immutable: {var_name}")
+            return ImmutableStatement(target, value)
+        
+        elif tokens[1].type == IDENT:
+            # immutable identifier
+            var_name = tokens[1].literal
+            target = Identifier(var_name)
+            
+            # Check for assignment
+            value = None
+            if len(tokens) > 2 and tokens[2].type == ASSIGN:
+                value_tokens = tokens[3:]
+                value = self._parse_expression(value_tokens)
+            
+            print(f"  🔒 Immutable: {var_name}")
+            return ImmutableStatement(target, value)
+        
+        else:
+            print("  ❌ Expected LET, CONST, or identifier after IMMUTABLE")
+            return None
+    # === COMPLEXITY & LARGE PROJECT MANAGEMENT HANDLERS ===
+
+    def _parse_interface_statement(self, block_info, all_tokens):
+        """Parse interface definition statement
+        
+        interface Drawable {
+            draw(canvas);
+            get_bounds();
+        };
+        """
+        print("🔧 [Context] Parsing interface statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2 or tokens[0].type != INTERFACE:
+            print("  ❌ Expected INTERFACE keyword")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected interface name")
+            return None
+        
+        interface_name = tokens[1].literal
+        print(f"  📋 Interface: {interface_name}")
+        
+        methods = []
+        properties = {}
+        
+        # Parse interface body
+        for i in range(2, len(tokens)):
+            if tokens[i].type == LBRACE:
+                # Find matching closing brace
+                j = i + 1
+                brace_count = 1
+                method_tokens = []
+                
+                while j < len(tokens) and brace_count > 0:
+                    if tokens[j].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[j].type == RBRACE:
+                        brace_count -= 1
+                        if brace_count == 0:
+                            break
+                    
+                    method_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse method signatures
+                for k, tok in enumerate(method_tokens):
+                    if tok.type == IDENT and k + 1 < len(method_tokens) and method_tokens[k + 1].type == LPAREN:
+                        # Found a method
+                        method_name = tok.literal
+                        methods.append(method_name)
+                        print(f"    📝 Method: {method_name}()")
+                
+                break
+        
+        return InterfaceStatement(
+            name=Identifier(interface_name),
+            methods=methods,
+            properties=properties
+        )
+
+    def _parse_type_alias_statement(self, block_info, all_tokens):
+        """Parse type alias statement
+        
+        type_alias UserID = integer;
+        type_alias Point = { x: float, y: float };
+        """
+        print("🔧 [Context] Parsing type_alias statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 4 or tokens[0].type != TYPE_ALIAS:
+            print("  ❌ Invalid type_alias statement")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected type name")
+            return None
+        
+        type_name = tokens[1].literal
+        
+        if tokens[2].type != ASSIGN:
+            print("  ❌ Expected '=' in type_alias")
+            return None
+        
+        # Parse the base type
+        base_type_tokens = tokens[3:]
+        base_type = self._parse_expression(base_type_tokens)
+        
+        print(f"  📝 Type alias: {type_name}")
+        
+        return TypeAliasStatement(
+            name=Identifier(type_name),
+            base_type=base_type
+        )
+
+    def _parse_module_statement(self, block_info, all_tokens):
+        """Parse module definition statement
+        
+        module database {
+            internal function connect() { ... }
+            public function query(sql) { ... }
+        }
+        """
+        print("🔧 [Context] Parsing module statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2 or tokens[0].type != MODULE:
+            print("  ❌ Expected MODULE keyword")
+            return None
+        
+        if tokens[1].type != IDENT:
+            print("  ❌ Expected module name")
+            return None
+        
+        module_name = tokens[1].literal
+        print(f"  📦 Module: {module_name}")
+        
+        # Parse module body
+        body = None
+        for i in range(2, len(tokens)):
+            if tokens[i].type == LBRACE:
+                # Extract body tokens
+                j = i + 1
+                brace_count = 1
+                body_tokens = []
+                
+                while j < len(tokens) and brace_count > 0:
+                    if tokens[j].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[j].type == RBRACE:
+                        brace_count -= 1
+                        if brace_count == 0:
+                            break
+                    
+                    body_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse body as block statement
+                if body_tokens:
+                    body_block = BlockStatement()
+                    body_block.statements = self._parse_block_statements(body_tokens)
+                    body = body_block
+                
+                break
+        
+        if not body:
+            body = BlockStatement()
+        
+        return ModuleStatement(
+            name=Identifier(module_name),
+            body=body
+        )
+
+    def _parse_package_statement(self, block_info, all_tokens):
+        """Parse package definition statement
+        
+        package myapp.database {
+            module connection { ... }
+            module query { ... }
+        }
+        """
+        print("🔧 [Context] Parsing package statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2 or tokens[0].type != PACKAGE:
+            print("  ❌ Expected PACKAGE keyword")
+            return None
+        
+        # Parse package name (may be dotted)
+        package_name = ""
+        i = 1
+        while i < len(tokens) and tokens[i].type == IDENT:
+            if package_name:
+                package_name += "."
+            package_name += tokens[i].literal
+            i += 1
+            
+            # Check for dot
+            if i < len(tokens) and tokens[i].type == DOT:
+                i += 1
+        
+        print(f"  📦 Package: {package_name}")
+        
+        # Parse package body
+        body = None
+        for j in range(i, len(tokens)):
+            if tokens[j].type == LBRACE:
+                # Extract body tokens
+                k = j + 1
+                brace_count = 1
+                body_tokens = []
+                
+                while k < len(tokens) and brace_count > 0:
+                    if tokens[k].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[k].type == RBRACE:
+                        brace_count -= 1
+                        if brace_count == 0:
+                            break
+                    
+                    body_tokens.append(tokens[k])
+                    k += 1
+                
+                # Parse body
+                if body_tokens:
+                    body_block = BlockStatement()
+                    body_block.statements = self._parse_block_statements(body_tokens)
+                    body = body_block
+                
+                break
+        
+        if not body:
+            body = BlockStatement()
+        
+        return PackageStatement(
+            name=Identifier(package_name),
+            body=body
+        )
+
+    def _parse_using_statement(self, block_info, all_tokens):
+        """Parse using statement for resource management
+        
+        using(file = open("data.txt")) {
+            content = file.read();
+            process(content);
+        }
+        """
+        print("�� [Context] Parsing using statement")
+        tokens = block_info.get('tokens', [])
+        
+        if len(tokens) < 2 or tokens[0].type != USING:
+            print("  ❌ Expected USING keyword")
+            return None
+        
+        # Parse: using(name = expr) { body }
+        if tokens[1].type != LPAREN:
+            print("  ❌ Expected '(' after using")
+            return None
+        
+        # Find closing paren and equals
+        close_paren_idx = -1
+        equals_idx = -1
+        paren_count = 1
+        
+        for i in range(2, len(tokens)):
+            if tokens[i].type == LPAREN:
+                paren_count += 1
+            elif tokens[i].type == RPAREN:
+                paren_count -= 1
+                if paren_count == 0:
+                    close_paren_idx = i
+                    break
+            elif tokens[i].type == ASSIGN and paren_count == 1:
+                equals_idx = i
+        
+        if close_paren_idx == -1 or equals_idx == -1:
+            print("  ❌ Invalid using statement syntax")
+            return None
+        
+        # Extract resource name
+        if tokens[2].type != IDENT:
+            print("  ❌ Expected resource name")
+            return None
+        
+        resource_name = tokens[2].literal
+        
+        # Extract resource expression
+        resource_tokens = tokens[equals_idx + 1:close_paren_idx]
+        resource_expr = self._parse_expression(resource_tokens)
+        
+        # Parse body
+        body = BlockStatement()
+        for i in range(close_paren_idx + 1, len(tokens)):
+            if tokens[i].type == LBRACE:
+                # Extract body tokens
+                j = i + 1
+                brace_count = 1
+                body_tokens = []
+                
+                while j < len(tokens) and brace_count > 0:
+                    if tokens[j].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[j].type == RBRACE:
+                        brace_count -= 1
+                        if brace_count == 0:
+                            break
+                    
+                    body_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse body statements
+                if body_tokens:
+                    body.statements = self._parse_block_statements(body_tokens)
+                
+                break
+        
+        print(f"  🔓 Resource: {resource_name}")
+        
+        return UsingStatement(
+            resource_name=Identifier(resource_name),
+            resource_expr=resource_expr,
+            body=body
+        )
+
+    # === CONCURRENCY & PERFORMANCE HANDLERS ===
+    def _parse_channel_statement(self, block_info, all_tokens):
+        """Parse channel declaration in context-aware mode
+
+        Examples:
+          channel<integer> numbers;
+          channel messages;
+          channel<string>[10] buffered_messages;
+        """
+        print("🔧 [Context] Parsing channel statement")
+        tokens = block_info.get('tokens', [])
+
+        if not tokens or tokens[0].type != CHANNEL:
+            print("  ❌ Expected CHANNEL keyword")
+            return None
+
+        i = 1
+        element_type = None
+        capacity = None
+        name = None
+
+        # Optional generic type: < type_expr >
+        if i < len(tokens) and tokens[i].type == LT:
+            # collect tokens until GT
+            j = i + 1
+            type_tokens = []
+            while j < len(tokens) and tokens[j].type != GT:
+                type_tokens.append(tokens[j])
+                j += 1
+            if j >= len(tokens) or tokens[j].type != GT:
+                print("  ❌ Unterminated generic type for channel")
+                return None
+            element_type = self._parse_expression(type_tokens) if type_tokens else None
+            i = j + 1
+
+        # Optional capacity in brackets after type or before name
+        if i < len(tokens) and tokens[i].type == LBRACKET:
+            # expect INT then RBRACKET
+            if i+1 < len(tokens) and tokens[i+1].type == INT:
+                try:
+                    capacity = int(tokens[i+1].literal)
+                except Exception:
+                    capacity = None
+                i += 2
+                if i < len(tokens) and tokens[i].type == RBRACKET:
+                    i += 1
+                else:
+                    print("  ❌ Expected ']' after channel capacity")
+                    return None
+
+        # Name
+        if i < len(tokens) and tokens[i].type == IDENT:
+            name = Identifier(tokens[i].literal)
+            i += 1
+        else:
+            print("  ❌ Expected channel name")
+            return None
+
+        print(f"  ✅ Channel: {name.value}, type={type(element_type).__name__}, capacity={capacity}")
+        return ChannelStatement(name=name, element_type=element_type, capacity=capacity)
+
+    def _parse_send_statement(self, block_info, all_tokens):
+        """Parse send(channel, value) statements."""
+        print("🔧 [Context] Parsing send statement")
+        tokens = block_info.get('tokens', [])
+        if len(tokens) < 3 or tokens[0].type != SEND or tokens[1].type != LPAREN:
+            print("  ❌ Invalid send statement")
+            return None
+
+        inner = tokens[2:-1] if tokens and tokens[-1].type == RPAREN else tokens[2:]
+        args = self._parse_argument_list(inner)
+        if not args or len(args) < 2:
+            print("  ❌ send requires (channel, value)")
+            return None
+
+        channel_expr = args[0]
+        value_expr = args[1]
+        return SendStatement(channel_expr=channel_expr, value_expr=value_expr)
+
+    def _parse_receive_statement(self, block_info, all_tokens):
+        """Parse receive(channel) statements. Assignment handled elsewhere."""
+        print("🔧 [Context] Parsing receive statement")
+        tokens = block_info.get('tokens', [])
+        if len(tokens) < 3 or tokens[0].type != RECEIVE or tokens[1].type != LPAREN:
+            print("  ❌ Invalid receive statement")
+            return None
+
+        inner = tokens[2:-1] if tokens and tokens[-1].type == RPAREN else tokens[2:]
+        # parse single channel expression
+        channel_expr = self._parse_expression(inner)
+        if channel_expr is None:
+            print("  ❌ Could not parse channel expression for receive")
+            return None
+
+        return ReceiveStatement(channel_expr=channel_expr, target=None)
+
+    def _parse_atomic_statement(self, block_info, all_tokens):
+        """Parse atomic blocks or single-expression atomics."""
+        print("🔧 [Context] Parsing atomic statement")
+        tokens = block_info.get('tokens', [])
+        if not tokens or tokens[0].type != ATOMIC:
+            print("  ❌ Expected ATOMIC keyword")
+            return None
+
+        # atomic { ... }
+        if len(tokens) > 1 and tokens[1].type == LBRACE:
+            # body tokens between braces
+            inner = tokens[2:-1] if tokens and tokens[-1].type == RBRACE else tokens[2:]
+            stmts = self._parse_block_statements(inner)
+            body = BlockStatement()
+            body.statements = stmts
+            return AtomicStatement(body=body)
+
+        # atomic(expr) or atomic expr
+        inner = tokens[1:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[1:]
+        if inner:
+            expr = self._parse_expression(inner)
+            return AtomicStatement(expr=expr)
+
+        print("  ❌ Empty atomic statement")
+        return None

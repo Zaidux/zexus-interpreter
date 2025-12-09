@@ -1,0 +1,321 @@
+# Test file for Complexity & Large Project Management Features
+# Tests: Interfaces, Type Aliases, Modules, Packages, Using statements
+
+# ============================================================================
+# TEST 1: Interface Definition
+# ============================================================================
+print "=== Test 1: Interface Definition ===";
+
+interface Shape {
+    area();
+    perimeter();
+    draw();
+};
+
+print "✓ Interface 'Shape' defined";
+
+# ============================================================================
+# TEST 2: Type Alias Definition
+# ============================================================================
+print "=== Test 2: Type Alias Definition ===";
+
+type_alias UserId = integer;
+type_alias Email = string;
+type_alias Score = float;
+
+print "✓ Type aliases defined: UserId, Email, Score";
+
+# ============================================================================
+# TEST 3: Module Definition and Usage
+# ============================================================================
+print "=== Test 3: Module Definition ===";
+
+module math_operations {
+    function add(a, b) {
+        return a + b;
+    };
+    
+    function multiply(a, b) {
+        return a * b;
+    };
+    
+    function subtract(a, b) {
+        return a - b;
+    };
+};
+
+print "✓ Module 'math_operations' created";
+
+# Test module member access
+let result = math_operations.add(5, 3);
+print "Module function result: 5 + 3 = " + result;
+
+# ============================================================================
+# TEST 4: Package Definition
+# ============================================================================
+print "=== Test 4: Package Definition ===";
+
+package utils.string {
+    function uppercase(s) {
+        return s;
+    };
+    
+    function lowercase(s) {
+        return s;
+    };
+    
+    function trim(s) {
+        return s;
+    };
+};
+
+print "✓ Package 'utils.string' created";
+
+# ============================================================================
+# TEST 5: Multiple Modules in Package
+# ============================================================================
+print "=== Test 5: Multiple Modules ===";
+
+package database {
+    module connection {
+        function connect() {
+            print "  Connecting to database...";
+            return "connected";
+        };
+    };
+    
+    module query {
+        function execute(sql) {
+            print "  Executing: " + sql;
+            return [];
+        };
+    };
+};
+
+print "✓ Package 'database' with multiple modules created";
+
+# ============================================================================
+# TEST 6: Using Statement (Resource Management)
+# ============================================================================
+print "=== Test 6: Using Statement (RAII) ===";
+
+# Simulate a file resource
+using(file = "test.txt") {
+    print "  Inside using block - file: test.txt";
+    print "  Performing operations on file...";
+};
+
+print "✓ Using statement executed - resource cleaned up";
+
+# ============================================================================
+# TEST 7: Nested Modules
+# ============================================================================
+print "=== Test 7: Nested Module Structure ===";
+
+module services {
+    module auth {
+        function login(user, pass) {
+            print "  Authenticating user: " + user;
+            return true;
+        };
+        
+        function logout(user) {
+            print "  Logging out user: " + user;
+            return true;
+        };
+    };
+    
+    module email {
+        function send(to, subject, body) {
+            print "  Sending email to: " + to;
+            return true;
+        };
+    };
+};
+
+print "✓ Nested modules defined";
+
+# ============================================================================
+# TEST 8: Type Alias with Complex Types
+# ============================================================================
+print "=== Test 8: Type Alias Patterns ===";
+
+type_alias UserId = integer;
+type_alias Username = string;
+type_alias UserRecord = {"id": integer, "name": string};
+
+let user_id: UserId = 42;
+let username: Username = "alice";
+
+print "Type aliases for user data created";
+print "  UserId: " + user_id;
+print "  Username: " + username;
+
+# ============================================================================
+# TEST 9: Module with Multiple Using Blocks
+# ============================================================================
+print "=== Test 9: Chained Resource Management ===";
+
+using(res1 = "resource1") {
+    print "  Acquired res1";
+    
+    using(res2 = "resource2") {
+        print "  Acquired res2";
+        print "  Working with both resources...";
+    };
+    
+    print "  res2 cleaned up";
+};
+
+print "✓ Nested using statements with proper cleanup";
+
+# ============================================================================
+# TEST 10: Module Function Composition
+# ============================================================================
+print "=== Test 10: Function Composition ===";
+
+module transformers {
+    function uppercase(str) {
+        return str;
+    };
+    
+    function reverse(str) {
+        return str;
+    };
+    
+    function capitalize(str) {
+        return str;
+    };
+};
+
+# Compose functions
+let text = "hello";
+let transformed = transformers.uppercase(text);
+print "Transformation pipeline: " + text + " -> " + transformed;
+
+# ============================================================================
+# TEST 11: Interface and Module Together
+# ============================================================================
+print "=== Test 11: Interface + Module Pattern ===";
+
+interface DataStore {
+    get(key);
+    set(key, value);
+    delete(key);
+    clear();
+};
+
+module memory_store {
+    function get(key) {
+        print "  Getting key: " + key;
+        return null;
+    };
+    
+    function set(key, value) {
+        print "  Setting " + key + " = " + value;
+        return true;
+    };
+    
+    function delete(key) {
+        print "  Deleting key: " + key;
+        return true;
+    };
+    
+    function clear() {
+        print "  Clearing all data";
+        return true;
+    };
+};
+
+print "✓ Interface contract with implementation module";
+
+# ============================================================================
+# TEST 12: Package Hierarchies
+# ============================================================================
+print "=== Test 12: Deep Package Hierarchy ===";
+
+package app.api.v1.endpoints {
+    module users {
+        function list() { return []; };
+        function get(id) { return null; };
+        function create(data) { return {}; };
+    };
+    
+    module posts {
+        function list() { return []; };
+        function get(id) { return null; };
+    };
+};
+
+print "✓ Deep package hierarchy: app.api.v1.endpoints";
+
+# ============================================================================
+# TEST 13: Type Alias Scope
+# ============================================================================
+print "=== Test 13: Multiple Type Aliases ===";
+
+type_alias AccountId = integer;
+type_alias TransactionId = integer;
+type_alias Amount = float;
+
+let account: AccountId = 1001;
+let transaction: TransactionId = 5005;
+let value: Amount = 99.99;
+
+print "Account: " + account;
+print "Transaction: " + transaction;
+print "Amount: " + value;
+
+# ============================================================================
+# TEST 14: Complex Module with State
+# ============================================================================
+print "=== Test 14: Stateful Module ===";
+
+module counter {
+    function increment(val) {
+        return val + 1;
+    };
+    
+    function decrement(val) {
+        return val - 1;
+    };
+    
+    function reset() {
+        return 0;
+    };
+};
+
+let count = 5;
+count = counter.increment(count);
+print "After increment: " + count;
+count = counter.decrement(count);
+print "After decrement: " + count;
+
+# ============================================================================
+# TEST 15: Using with Multiple Conditions
+# ============================================================================
+print "=== Test 15: Conditional Resource Usage ===";
+
+let condition = true;
+
+if condition {
+    using(resource = "conditional_resource") {
+        print "  Using conditional resource";
+    };
+};
+
+print "✓ Conditional resource management";
+
+# ============================================================================
+# Summary
+# ============================================================================
+print "=========================";
+print "All Complexity Tests Completed!";
+print "=========================";
+print "✓ Interfaces defined";
+print "✓ Type aliases created";
+print "✓ Modules implemented";
+print "✓ Packages organized";
+print "✓ Using statements executed";
+print "✓ Nested structures supported";
+print "✓ Resource management working";

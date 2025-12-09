@@ -100,6 +100,29 @@ RESTRICT = "RESTRICT"          # Field-level access control: restrict obj.field 
 SANDBOX = "SANDBOX"            # Isolated execution environment: sandbox { code }
 TRAIL = "TRAIL"                # Real-time audit/debug/print trail: trail audit_or_print_or_debug
 
+# CAPABILITY-BASED SECURITY (NEW)
+CAPABILITY = "CAPABILITY"      # Define capabilities: capability(name, description, scope)
+GRANT = "GRANT"                # Grant capabilities: grant entity_name capability(name)
+REVOKE = "REVOKE"              # Revoke capabilities: revoke entity_name capability(name)
+IMMUTABLE = "IMMUTABLE"        # Enforce immutability: immutable identifier
+
+# DATA VALIDATION & SANITIZATION (NEW)
+VALIDATE = "VALIDATE"          # Validate data: validate(value, schema, options)
+SANITIZE = "SANITIZE"          # Sanitize input: sanitize(value, rules, encoding)
+
+# COMPLEXITY & LARGE PROJECT MANAGEMENT (NEW)
+INTERFACE = "INTERFACE"        # Define formal interface: interface Drawable { ... }
+TYPE_ALIAS = "TYPE_ALIAS"      # Type alias: type_alias UserID = integer;
+MODULE = "MODULE"              # Module definition: module database { ... }
+USING = "USING"                # Resource management: using(file) { ... }
+PACKAGE = "PACKAGE"            # Package/namespace: package myapp.utils { ... }
+
+# CONCURRENCY & PERFORMANCE (NEW)
+CHANNEL = "CHANNEL"            # Channel definition: channel<integer> data;
+SEND = "SEND"                  # Send to channel: send(channel, value);
+RECEIVE = "RECEIVE"            # Receive from channel: receive(channel);
+ATOMIC = "ATOMIC"              # Atomic operations: atomic(counter++);
+
 # RENDERER OPERATIONS (ADD THESE)
 MIX = "MIX"                    # Color mixing: mix("blue", "red", 0.5)
 RENDER = "RENDER"              # Render screen: render_screen("login")

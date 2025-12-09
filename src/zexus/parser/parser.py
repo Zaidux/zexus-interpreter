@@ -132,66 +132,69 @@ class UltimateParser:
             return self._parse_traditional()
 
     def parse_map_literal(self):
-        """FIXED: Proper map literal parsing"""
-        token = self.cur_token  # Current token is LBRACE
-        pairs = []
-
-        self._log(f"🔧 Parsing map literal at line {getattr(token, 'line', 'unknown')}", "verbose")
-
-        # Skip the opening brace (current token)
+        """Parse a map/object literal: { key: value, ... }"""
+        token = self.cur_token
+        # consume '{'
         self.next_token()
 
-        # Handle empty map: {}
+        pairs = []
+
+        # Empty map
         if self.cur_token_is(RBRACE):
-            self.next_token()  # Skip }
+            self.next_token()
             return MapLiteral(pairs=pairs)
 
-        # Parse key-value pairs
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+        # Collect key:value pairs with nesting support
+        while not self.cur_token_is(EOF) and not self.cur_token_is(RBRACE):
             # Parse key
             if self.cur_token_is(STRING):
                 key = StringLiteral(self.cur_token.literal)
+                self.next_token()
             elif self.cur_token_is(IDENT):
                 key = Identifier(self.cur_token.literal)
+                self.next_token()
             else:
-                self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Object key must be string or identifier, got {getattr(self.cur_token, 'type', 'UNKNOWN')}")
-                return None
-
-            # Expect colon
-            if not self.expect_peek(COLON):
-                return None
-
-            # Move to value token and parse value
-            self.next_token()
-            value = self.parse_expression(LOWEST)
-            if value is None:
-                return None
-
-            pairs.append((key, value))
-
-            # If there's a comma, consume it and advance to next key/value
-            if self.peek_token_is(COMMA):
-                self.next_token()  # consume comma
-                self.next_token()  # move to next key (or closing brace)
+                # Tolerant: skip unexpected tokens until colon or next pair
+                self.next_token()
                 continue
 
-            # If next is closing brace, consume it and break
-            if self.peek_token_is(RBRACE):
-                self.next_token()  # consume RBRACE
-                break
+            # Expect colon
+            if not self.cur_token_is(COLON):
+                # Tolerant: try to recover by searching forward
+                while not self.cur_token_is(COLON) and not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                    self.next_token()
+                if not self.cur_token_is(COLON):
+                    break
 
-            # Tolerant: advance to next token to try to continue parsing
+            # consume ':'
             self.next_token()
 
-        # Final check: ensure we ended on a closing brace (tolerant)
+            # Parse value expression until comma or closing brace
+            value_tokens = []
+            nesting = 0
+            while not self.cur_token_is(EOF) and not (self.cur_token_is(COMMA) and nesting == 0) and not (self.cur_token_is(RBRACE) and nesting == 0):
+                if self.cur_token_is(LPAREN) or self.cur_token_is(LBRACE) or self.cur_token_is(LBRACKET):
+                    nesting += 1
+                elif self.cur_token_is(RPAREN) or self.cur_token_is(RBRACE) or self.cur_token_is(RBRACKET):
+                    nesting -= 1
+                value_tokens.append(self.cur_token)
+                self.next_token()
+
+            value_expr = self.parse_expression(LOWEST) if value_tokens else None
+            pairs.append((key, value_expr))
+
+            # If current token is comma, consume it and continue
+            if self.cur_token_is(COMMA):
+                self.next_token()
+
+        # Expect closing brace
         if not self.cur_token_is(RBRACE):
-            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected '}}'")
+            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected '}}' to close map literal")
             return None
 
-        # Move past closing brace
+        # consume '}'
         self.next_token()
 
-        self._log(f"✅ Successfully parsed map literal with {len(pairs)} pairs", "verbose")
         return MapLiteral(pairs=pairs)
 
     def _collect_all_tokens(self):
@@ -401,6 +404,53 @@ class UltimateParser:
             elif self.cur_token_is(WATCH):
                 print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
                 node = self.parse_watch_statement()
+            # === SECURITY STATEMENT HANDLERS ===
+            elif self.cur_token_is(CAPABILITY):
+                print(f"[PARSE_STMT] Matched CAPABILITY", file=sys.stderr, flush=True)
+                node = self.parse_capability_statement()
+            elif self.cur_token_is(GRANT):
+                print(f"[PARSE_STMT] Matched GRANT", file=sys.stderr, flush=True)
+                node = self.parse_grant_statement()
+            elif self.cur_token_is(REVOKE):
+                print(f"[PARSE_STMT] Matched REVOKE", file=sys.stderr, flush=True)
+                node = self.parse_revoke_statement()
+            elif self.cur_token_is(VALIDATE):
+                print(f"[PARSE_STMT] Matched VALIDATE", file=sys.stderr, flush=True)
+                node = self.parse_validate_statement()
+            elif self.cur_token_is(SANITIZE):
+                print(f"[PARSE_STMT] Matched SANITIZE", file=sys.stderr, flush=True)
+                node = self.parse_sanitize_statement()
+            elif self.cur_token_is(IMMUTABLE):
+                print(f"[PARSE_STMT] Matched IMMUTABLE", file=sys.stderr, flush=True)
+                node = self.parse_immutable_statement()
+            # === COMPLEXITY STATEMENT HANDLERS ===
+            elif self.cur_token_is(INTERFACE):
+                print(f"[PARSE_STMT] Matched INTERFACE", file=sys.stderr, flush=True)
+                node = self.parse_interface_statement()
+            elif self.cur_token_is(TYPE_ALIAS):
+                print(f"[PARSE_STMT] Matched TYPE_ALIAS", file=sys.stderr, flush=True)
+                node = self.parse_type_alias_statement()
+            elif self.cur_token_is(MODULE):
+                print(f"[PARSE_STMT] Matched MODULE", file=sys.stderr, flush=True)
+                node = self.parse_module_statement()
+            elif self.cur_token_is(PACKAGE):
+                print(f"[PARSE_STMT] Matched PACKAGE", file=sys.stderr, flush=True)
+                node = self.parse_package_statement()
+            elif self.cur_token_is(USING):
+                print(f"[PARSE_STMT] Matched USING", file=sys.stderr, flush=True)
+                node = self.parse_using_statement()
+            elif self.cur_token_is(CHANNEL):
+                print(f"[PARSE_STMT] Matched CHANNEL", file=sys.stderr, flush=True)
+                node = self.parse_channel_statement()
+            elif self.cur_token_is(SEND):
+                print(f"[PARSE_STMT] Matched SEND", file=sys.stderr, flush=True)
+                node = self.parse_send_statement()
+            elif self.cur_token_is(RECEIVE):
+                print(f"[PARSE_STMT] Matched RECEIVE", file=sys.stderr, flush=True)
+                node = self.parse_receive_statement()
+            elif self.cur_token_is(ATOMIC):
+                print(f"[PARSE_STMT] Matched ATOMIC", file=sys.stderr, flush=True)
+                node = self.parse_atomic_statement()
             else:
                 print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
                 node = self.parse_expression_statement()
@@ -2349,6 +2399,411 @@ class UltimateParser:
 
     def cur_precedence(self):
         return precedences.get(self.cur_token.type, LOWEST)
+
+    # === SECURITY STATEMENT PARSERS ===
+
+    def parse_capability_statement(self):
+        """Parse capability statement - grant/check capabilities"""
+        token = self.cur_token
+        self.next_token()
+        
+        # capability name { ... }
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected capability name")
+            return None
+        
+        cap_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        # Simple capability registration
+        return CapabilityStatement(name=cap_name)
+
+    def parse_grant_statement(self):
+        """Parse grant statement - grant capability to entity"""
+        token = self.cur_token
+        self.next_token()
+        
+        # grant entity capability
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected entity name")
+            return None
+        
+        entity_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        # Expect capability
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected capability name")
+            return None
+        
+        capability = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        return GrantStatement(entity_name=entity_name, capability=capability)
+
+    def parse_revoke_statement(self):
+        """Parse revoke statement - revoke capability from entity"""
+        token = self.cur_token
+        self.next_token()
+        
+        # revoke entity capability
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected entity name")
+            return None
+        
+        entity_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        # Expect capability
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected capability name")
+            return None
+        
+        capability = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        return RevokeStatement(entity_name=entity_name, capability=capability)
+
+    def parse_validate_statement(self):
+        """Parse validate statement - validate data"""
+        token = self.cur_token
+        self.next_token()
+        
+        # validate data_expr using schema_expr
+        data_expr = self.parse_expression(LOWEST)
+        if data_expr is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression to validate")
+            return None
+        
+        # Expect 'using'
+        if not (self.cur_token_is(IDENT) and self.cur_token.literal == 'using'):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected 'using' after validate")
+        else:
+            self.next_token()
+        
+        schema_expr = self.parse_expression(LOWEST)
+        
+        return ValidateStatement(data=data_expr, schema=schema_expr)
+
+    def parse_sanitize_statement(self):
+        """Parse sanitize statement - sanitize data"""
+        token = self.cur_token
+        self.next_token()
+        
+        # sanitize data_expr as encoding_type
+        data_expr = self.parse_expression(LOWEST)
+        if data_expr is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression to sanitize")
+            return None
+        
+        # Expect 'as'
+        encoding_type = None
+        if self.cur_token_is(IDENT) and self.cur_token.literal == 'as':
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                encoding_type = self.cur_token.literal
+                self.next_token()
+        
+        return SanitizeStatement(data=data_expr, encoding_type=encoding_type)
+
+    def parse_immutable_statement(self):
+        """Parse immutable statement - declare immutable variables"""
+        token = self.cur_token
+        self.next_token()
+        
+        # immutable let/const name = value
+        target = None
+        if self.cur_token_is(LET):
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                target = Identifier(self.cur_token.literal)
+                self.next_token()
+        elif self.cur_token_is(CONST):
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                target = Identifier(self.cur_token.literal)
+                self.next_token()
+        elif self.cur_token_is(IDENT):
+            target = Identifier(self.cur_token.literal)
+            self.next_token()
+        
+        if target is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected variable after immutable")
+            return None
+        
+        value = None
+        if self.cur_token_is(ASSIGN):
+            self.next_token()
+            value = self.parse_expression(LOWEST)
+        
+        return ImmutableStatement(target=target, value=value)
+
+    # === COMPLEXITY STATEMENT PARSERS ===
+
+    def parse_interface_statement(self):
+        """Parse interface definition statement"""
+        token = self.cur_token
+        self.next_token()
+        
+        # interface Name { method1; method2; }
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected interface name")
+            return None
+        
+        interface_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        methods = []
+        properties = {}
+        
+        if self.cur_token_is(LBRACE):
+            self.next_token()
+            while not self.cur_token_is(RBRACE) and self.cur_token.type != EOF:
+                if self.cur_token_is(IDENT):
+                    methods.append(self.cur_token.literal)
+                    self.next_token()
+                    # Skip to next method
+                    while not self.cur_token_is(SEMICOLON) and not self.cur_token_is(RBRACE):
+                        self.next_token()
+                    if self.cur_token_is(SEMICOLON):
+                        self.next_token()
+                else:
+                    self.next_token()
+        
+        return InterfaceStatement(name=interface_name, methods=methods, properties=properties)
+
+    def parse_type_alias_statement(self):
+        """Parse type alias statement"""
+        token = self.cur_token
+        self.next_token()
+        
+        # type_alias Name = type_expr
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected type alias name")
+            return None
+        
+        alias_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        if not self.cur_token_is(ASSIGN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '=' in type alias")
+            return None
+        
+        self.next_token()
+        base_type = self.parse_expression(LOWEST)
+        
+        return TypeAliasStatement(name=alias_name, base_type=base_type)
+
+    def parse_module_statement(self):
+        """Parse module definition statement"""
+        token = self.cur_token
+        self.next_token()
+        
+        # module Name { body }
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected module name")
+            return None
+        
+        module_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        body = self.parse_block()
+        
+        return ModuleStatement(name=module_name, body=body)
+
+    def parse_package_statement(self):
+        """Parse package definition statement"""
+        token = self.cur_token
+        self.next_token()
+        
+        # package name.path { body }
+        package_parts = []
+        while self.cur_token_is(IDENT):
+            package_parts.append(self.cur_token.literal)
+            self.next_token()
+            if self.cur_token_is(DOT):
+                self.next_token()
+            else:
+                break
+        
+        if not package_parts:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected package name")
+            return None
+        
+        package_name = Identifier('.'.join(package_parts))
+        
+        body = self.parse_block()
+        
+        return PackageStatement(name=package_name, body=body)
+
+    def parse_using_statement(self):
+        """Parse using statement for resource management"""
+        token = self.cur_token
+        self.next_token()
+        
+        # using(resource = expr) { body }
+        if not self.cur_token_is(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after using")
+            return None
+        
+        self.next_token()
+        
+        # Parse resource assignment
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected resource name")
+            return None
+        
+        resource_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        if not self.cur_token_is(ASSIGN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '=' in using clause")
+            return None
+        
+        self.next_token()
+        resource_expr = self.parse_expression(LOWEST)
+        
+        if not self.cur_token_is(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after using clause")
+            return None
+        
+        self.next_token()
+        body = self.parse_block()
+        
+        return UsingStatement(resource_name=resource_name, resource_expr=resource_expr, body=body)
+
+    def parse_channel_statement(self):
+        """Parse channel declaration: channel<type> name; or channel<type> name = expr;"""
+        token = self.cur_token
+        self.next_token()  # consume CHANNEL
+        
+        # Parse channel<type>
+        if not self.cur_token_is(LT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '<' after channel")
+            return None
+        
+        self.next_token()
+        element_type = self.parse_type_expression()
+        
+        if not self.cur_token_is(GT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '>' in channel type")
+            return None
+        
+        self.next_token()
+        
+        # Parse channel name
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected channel name")
+            return None
+        
+        name = self.cur_token.literal
+        self.next_token()
+        
+        # Optional capacity specification
+        capacity = None
+        if self.cur_token_is(ASSIGN):
+            self.next_token()
+            capacity = self.parse_expression(LOWEST)
+        
+        if not self.cur_token_is(SEMICOLON):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after channel declaration")
+            return None
+        
+        self.next_token()
+        return ChannelStatement(name=name, element_type=element_type, capacity=capacity)
+
+    def parse_send_statement(self):
+        """Parse send statement: send(channel, value);"""
+        token = self.cur_token
+        self.next_token()  # consume SEND
+        
+        if not self.cur_token_is(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after send")
+            return None
+        
+        self.next_token()
+        channel_expr = self.parse_expression(LOWEST)
+        
+        if not self.cur_token_is(COMMA):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ',' after channel in send")
+            return None
+        
+        self.next_token()
+        value_expr = self.parse_expression(LOWEST)
+        
+        if not self.cur_token_is(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after send arguments")
+            return None
+        
+        self.next_token()
+        
+        if not self.cur_token_is(SEMICOLON):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after send statement")
+            return None
+        
+        self.next_token()
+        return SendStatement(channel_expr=channel_expr, value_expr=value_expr)
+
+    def parse_receive_statement(self):
+        """Parse receive statement: receive(channel); or var = receive(channel);"""
+        token = self.cur_token
+        self.next_token()  # consume RECEIVE
+        
+        if not self.cur_token_is(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after receive")
+            return None
+        
+        self.next_token()
+        channel_expr = self.parse_expression(LOWEST)
+        
+        if not self.cur_token_is(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after receive argument")
+            return None
+        
+        self.next_token()
+        
+        # Optional target assignment
+        target = None
+        
+        if not self.cur_token_is(SEMICOLON):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after receive statement")
+            return None
+        
+        self.next_token()
+        return ReceiveStatement(channel_expr=channel_expr, target=target)
+
+    def parse_atomic_statement(self):
+        """Parse atomic statement: atomic { body } or atomic(expr)"""
+        token = self.cur_token
+        self.next_token()  # consume ATOMIC
+        
+        body = None
+        expr = None
+        
+        if self.cur_token_is(LBRACE):
+            # atomic { body }
+            body = self.parse_block()
+        elif self.cur_token_is(LPAREN):
+            # atomic(expr)
+            self.next_token()
+            expr = self.parse_expression(LOWEST)
+            
+            if not self.cur_token_is(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after atomic expression")
+                return None
+            
+            self.next_token()
+            
+            if not self.cur_token_is(SEMICOLON):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after atomic expression")
+                return None
+            
+            self.next_token()
+        else:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' or '(' after atomic")
+            return None
+        
+        return AtomicStatement(body=body, expr=expr)
 
 # Backward compatibility
 Parser = UltimateParser

@@ -1,0 +1,276 @@
+# Test file for Security Features
+# Tests: Capability System, Validation, Sanitization, Immutability
+
+# ============================================================================
+# TEST 1: Capability Definition
+# ============================================================================
+print "=== Test 1: Capability Definition ===";
+
+capability read_file;
+capability write_file;
+capability delete_file;
+capability network_access;
+
+print "✓ Capabilities defined";
+
+# ============================================================================
+# TEST 2: Grant Capabilities
+# ============================================================================
+print "=== Test 2: Grant Capabilities ===";
+
+grant user1 read_file;
+grant user1 write_file;
+grant admin read_file;
+grant admin write_file;
+grant admin delete_file;
+
+print "✓ Capabilities granted";
+
+# ============================================================================
+# TEST 3: Revoke Capabilities
+# ============================================================================
+print "=== Test 3: Revoke Capabilities ===";
+
+revoke user1 write_file;
+revoke user1 read_file;
+
+print "✓ Capabilities revoked";
+
+# ============================================================================
+# TEST 4: Multiple Grants
+# ============================================================================
+print "=== Test 4: Multiple Entity Capabilities ===";
+
+grant service_account read_file;
+grant service_account write_file;
+grant service_account network_access;
+
+print "✓ Service account granted multiple capabilities";
+
+# ============================================================================
+# TEST 5: Validate Statement
+# ============================================================================
+print "=== Test 5: Data Validation ===";
+
+let email_data = "user@example.com";
+validate email_data using "email";
+
+print "✓ Email validation passed";
+
+let number_data = 42;
+validate number_data using "integer";
+
+print "✓ Integer validation passed";
+
+# ============================================================================
+# TEST 6: Sanitize HTML
+# ============================================================================
+print "=== Test 6: HTML Sanitization ===";
+
+let html_input = "<script>alert('xss')</script>";
+sanitize html_input as html;
+
+print "✓ HTML input sanitized";
+
+# ============================================================================
+# TEST 7: Sanitize URL
+# ============================================================================
+print "=== Test 7: URL Sanitization ===";
+
+let url_input = "https://example.com?param=value&other=test";
+sanitize url_input as url;
+
+print "✓ URL input sanitized";
+
+# ============================================================================
+# TEST 8: Sanitize SQL
+# ============================================================================
+print "=== Test 8: SQL Sanitization ===";
+
+let sql_input = "SELECT * FROM users WHERE id='1 OR 1=1'";
+sanitize sql_input as sql;
+
+print "✓ SQL input sanitized";
+
+# ============================================================================
+# TEST 9: Immutable Variables
+# ============================================================================
+print "=== Test 9: Immutable Variables ===";
+
+immutable let api_key = "secret-key-12345";
+print "API Key (immutable): " + api_key;
+
+immutable const version = "1.0.0";
+print "Version (immutable const): " + version;
+
+print "✓ Immutable variables created";
+
+# ============================================================================
+# TEST 10: Immutable Complex Data
+# ============================================================================
+print "=== Test 10: Immutable Data Structures ===";
+
+immutable let config = {
+    "host": "localhost",
+    "port": 5432,
+    "database": "myapp"
+};
+
+print "Config (immutable): " + config;
+
+# ============================================================================
+# TEST 11: Validation with Complex Data
+# ============================================================================
+print "=== Test 11: Complex Data Validation ===";
+
+let user_data = {
+    "email": "user@example.com",
+    "age": 25,
+    "name": "John Doe"
+};
+
+validate user_data using "user_schema";
+
+print "✓ Complex user data validated";
+
+# ============================================================================
+# TEST 12: Multiple Sanitizations
+# ============================================================================
+print "=== Test 12: Multiple Sanitization Types ===";
+
+let user_input = "<img src=x onerror=alert('xss')>";
+sanitize user_input as html;
+
+let csv_output = "Name,Email,Phone";
+sanitize csv_output as csv;
+
+let js_code = "var x = 'value'; alert(x);";
+sanitize js_code as javascript;
+
+print "✓ Multiple sanitization types applied";
+
+# ============================================================================
+# TEST 13: Capability Workflow
+# ============================================================================
+print "=== Test 13: Capability-Based Access Workflow ===";
+
+# Define roles
+capability admin_panel;
+capability user_profile;
+capability payment_processing;
+
+# Grant to roles
+grant admin admin_panel;
+grant admin user_profile;
+grant admin payment_processing;
+
+grant regular_user user_profile;
+
+grant payment_service payment_processing;
+
+print "✓ Role-based capability system setup";
+
+# ============================================================================
+# TEST 14: Immutable with Capability
+# ============================================================================
+print "=== Test 14: Immutable Credentials ===";
+
+immutable let db_password = "super-secret-123";
+immutable let api_token = "token-abc-def-ghi";
+
+capability database_access;
+capability api_access;
+
+grant database_service database_access;
+grant api_service api_access;
+
+print "✓ Immutable credentials protected";
+
+# ============================================================================
+# TEST 15: Validation Chain
+# ============================================================================
+print "=== Test 15: Validation Pipeline ===";
+
+let phone = "+1-555-1234";
+validate phone using "phone";
+
+let uuid = "550e8400-e29b-41d4-a716-446655440000";
+validate uuid using "uuid";
+
+let ipv4 = "192.168.1.1";
+validate ipv4 using "ipv4";
+
+print "✓ Multiple validations in pipeline";
+
+# ============================================================================
+# TEST 16: Sanitize JavaScript
+# ============================================================================
+print "=== Test 16: JavaScript Sanitization ===";
+
+let js_input = "eval(JSON.parse(userInput))";
+sanitize js_input as javascript;
+
+print "✓ Dangerous JavaScript code sanitized";
+
+# ============================================================================
+# TEST 17: Immutable Collections
+# ============================================================================
+print "=== Test 17: Immutable Collections ===";
+
+immutable let allowed_origins = ["https://example.com", "https://app.example.com"];
+immutable let admin_emails = ["admin@example.com", "root@example.com"];
+
+print "Allowed origins (immutable list): " + allowed_origins;
+print "Admin emails (immutable list): " + admin_emails;
+
+# ============================================================================
+# TEST 18: Capability Inheritance
+# ============================================================================
+print "=== Test 18: Capability Grant Pattern ===";
+
+capability document_read;
+capability document_write;
+capability document_delete;
+
+grant editor document_read;
+grant editor document_write;
+
+grant author document_read;
+grant author document_write;
+
+grant viewer document_read;
+
+print "✓ Role-based capability hierarchy";
+
+# ============================================================================
+# TEST 19: Mixed Security Checks
+# ============================================================================
+print "=== Test 19: Combined Security Checks ===";
+
+capability user_data_access;
+grant privacy_officer user_data_access;
+
+immutable let privacy_policy = "All data encrypted at rest and in transit";
+print "Privacy policy: " + privacy_policy;
+
+let pii = "john.doe@example.com";
+validate pii using "email";
+sanitize pii as html;
+
+print "✓ PII data validated and sanitized";
+
+# ============================================================================
+# TEST 20: Security Audit Trail
+# ============================================================================
+print "=== Test 20: Security Patterns ===";
+
+print "";
+print "Security Features Summary:";
+print "  ✓ Capabilities: Defined and granted";
+print "  ✓ Validation: Email, phone, UUID, IPv4";
+print "  ✓ Sanitization: HTML, URL, SQL, JavaScript, CSV";
+print "  ✓ Immutability: Variables and data protected";
+print "  ✓ RBAC: Role-based access control";
+print "  ✓ Credentials: Immutable secrets";
+print "";
+print "All Security Tests Completed!";

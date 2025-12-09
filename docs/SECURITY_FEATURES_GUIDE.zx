@@ -1,0 +1,564 @@
+"""
+Zexus Security Features - Usage Examples and Documentation
+
+This file demonstrates the new security features added to Zexus:
+1. Capability-Based Access Control
+2. Pure Function Enforcement
+3. Data Validation & Sanitization
+"""
+
+# ============================================================================
+# 1. CAPABILITY-BASED ACCESS CONTROL
+# ============================================================================
+
+"""
+CAPABILITY system defines what entities (users, modules, functions) can do.
+
+Example 1: Define a capability
+capability read_file = {
+    description: "Read file system",
+    scope: "io.file",
+    level: "restricted"
+};
+
+Example 2: Grant capabilities to a user/module
+grant user1 {
+    read_file,
+    write_network,
+    crypto.sign
+};
+
+Example 3: Grant specific capabilities
+grant plugin_trusted capability(read_file);
+grant plugin_trusted capability(write_network);
+
+Example 4: Revoke capabilities
+revoke user_untrusted {
+    write_file,
+    exec.shell
+};
+
+Example 5: Enforce capability check in code
+function process_file(path) {
+    // Check that caller has read_file capability
+    grant current_caller capability(read_file);
+    
+    let content = read_file(path);
+    return process(content);
+}
+
+Built-in Capabilities:
+    Core:
+    - core.language       // Core language features
+    - core.control        // Control flow (if, while, for)
+    - core.math           // Math operations
+    - core.strings        // String operations
+    - core.arrays         // Array operations
+    - core.objects        // Object operations
+    
+    I/O:
+    - io.read             // File reading
+    - io.write            // File writing
+    - io.delete           // File deletion
+    
+    Network:
+    - network.tcp         // TCP connections
+    - network.http        // HTTP requests
+    
+    Cryptography:
+    - crypto.keygen       // Key generation
+    - crypto.sign         // Signing
+    
+    System:
+    - sys.env             // Environment variables
+    - sys.time            // System time
+    - sys.exit            // Process exit
+    
+    Privileged:
+    - exec.shell          // Shell execution
+    - exec.spawn          // Process spawning
+"""
+
+# Example: Sandboxed untrusted code with minimal capabilities
+"""
+// Create plugin with restricted capabilities
+let untrusted_plugin = {
+    code: load_plugin("untrusted.zx"),
+    
+    // Only grant read capability
+    grant untrusted_plugin.runner {
+        core.language,
+        core.math,
+        io.read
+    }
+};
+
+// Plugin can do math and read files, but cannot write or access network
+"""
+
+
+# ============================================================================
+# 2. PURE FUNCTION ENFORCEMENT
+# ============================================================================
+
+"""
+PURE functions are referentially transparent - they:
+- Depend only on input parameters
+- Produce no side effects
+- Return same output for same input (deterministic)
+
+Benefits:
+- Easier to reason about
+- Can be cached/memoized
+- Can be parallelized safely
+- Better security analysis
+
+Syntax: Use 'pure' modifier or IMMUTABLE
+"""
+
+# Example 1: Pure function declaration
+"""
+pure function add(a, b) {
+    return a + b;
+}
+
+pure function sqrt(x) {
+    // Pure computation, no side effects
+    if x < 0:
+        return null;
+    return x ** 0.5;
+}
+
+pure function filter_even(numbers) {
+    // Pure transformation
+    return [n for n in numbers if n % 2 == 0];
+}
+"""
+
+# Example 2: Immutable variables
+"""
+immutable const PI = 3.14159;
+immutable let config = {
+    api_key: "...",
+    timeout: 5000,
+    retries: 3
+};
+
+// Cannot be modified
+// PI = 3.14;           // ERROR: PI is immutable
+// config.api_key = ""; // ERROR: config is immutable
+
+// Functions with immutable parameters
+function calculate(immutable data) {
+    // data cannot be modified, enforced at runtime
+    print data.value;
+    // data.value = 0;  // ERROR: parameter is immutable
+}
+"""
+
+# Example 3: Pure function with validation
+"""
+pure function process_user(user_data) {
+    // Validate input is pure
+    if not is_pure(user_data):
+        return error("Input contains side-effectful operations");
+    
+    return {
+        id: user_data.id,
+        name: user_data.name.upper(),
+        age: user_data.age + 1  // Pure computation
+    };
+}
+"""
+
+
+# ============================================================================
+# 3. DATA VALIDATION & SANITIZATION
+# ============================================================================
+
+"""
+VALIDATE statement ensures data matches expected schema.
+SANITIZE statement cleans untrusted input.
+
+Purpose:
+- Prevent injection attacks (SQL, XSS, command injection)
+- Enforce data types and formats
+- Protect against malformed input
+"""
+
+# Example 1: Basic validation
+"""
+let user_input = get_form_input();
+
+// Validate against schema
+validate user_input, {
+    name: string,
+    email: email,
+    age: number(18, 120),
+    phone: phone
+};
+
+// If validation fails, error is raised
+// If validation passes, execution continues
+"""
+
+# Example 2: Sanitization for different contexts
+"""
+// HTML context (web output)
+let html_safe = sanitize(user_input, {
+    encoding: "html",
+    rules: ["remove_scripts", "remove_events"]
+});
+print html_safe;
+
+// URL context (query parameters)
+let url_safe = sanitize(user_input, {
+    encoding: "url"
+});
+let api_call = "/api/search?q=" + url_safe;
+
+// SQL context (database query)
+let sql_safe = sanitize(user_input, {
+    encoding: "sql"
+});
+let query = "SELECT * FROM users WHERE email = '" + sql_safe + "'";
+
+// JavaScript context (JSON/JS output)
+let js_safe = sanitize(user_input, {
+    encoding: "javascript"
+});
+"""
+
+# Example 3: Common validators
+"""
+// Email validation
+validate email_field, email;
+
+// URL validation
+validate website_field, url;
+
+// IPv4 address
+validate ip_field, ipv4;
+
+// Phone number
+validate phone_field, phone;
+
+// UUID
+validate id_field, uuid;
+
+// Range validation
+validate age_field, number(0, 150);
+
+// Length validation
+validate password_field, string(8, 128);  // 8-128 chars
+
+// Alphanumeric only
+validate username_field, alphanumeric;
+"""
+
+# Example 4: Comprehensive input processing
+"""
+action handle_user_registration() {
+    let form_data = get_request_body();
+    
+    // Step 1: Validate structure
+    validate form_data, {
+        username: alphanumeric,
+        email: email,
+        password: string(8, 128),
+        phone: phone
+    };
+    
+    // Step 2: Sanitize for database
+    let safe_data = {
+        username: sanitize(form_data.username, encoding: "sql"),
+        email: sanitize(form_data.email, encoding: "sql"),
+        password: hash_password(form_data.password),
+        phone: sanitize(form_data.phone, encoding: "sql")
+    };
+    
+    // Step 3: Store safely
+    store_user(safe_data);
+    
+    // Step 4: Sanitize for response (HTML)
+    let response = {
+        username: sanitize(form_data.username, encoding: "html"),
+        email: sanitize(form_data.email, encoding: "html")
+    };
+    
+    return response;
+}
+"""
+
+
+# ============================================================================
+# 4. REAL-WORLD SECURITY PATTERNS
+# ============================================================================
+
+# Pattern 1: Secure API handler
+"""
+// Define API capabilities
+capability api.read = {
+    description: "Read API data",
+    scope: "io.network",
+    level: "allowed"
+};
+
+capability api.write = {
+    description: "Modify API data",
+    scope: "io.network",
+    level: "restricted"
+};
+
+// Grant based on user role
+action setup_api_handler(user_role) {
+    if user_role == "admin":
+        grant user_handler {
+            api.read,
+            api.write,
+            crypto.sign,
+            sys.env
+        };
+    elif user_role == "user":
+        grant user_handler {
+            api.read
+        };
+    else:
+        grant user_handler { };  // No capabilities
+}
+
+// Pure handler function
+pure function handle_get_request(request, user_context) {
+    // Validate request
+    validate request, {
+        path: alphanumeric,
+        headers: object,
+        query: object
+    };
+    
+    // Check capability
+    grant user_context capability(api.read);
+    
+    // Process safely
+    let endpoint = request.path;
+    return fetch_data(endpoint);
+}
+"""
+
+# Pattern 2: Untrusted plugin system
+"""
+// Load and execute untrusted plugin safely
+function load_untrusted_plugin(plugin_path) {
+    // Validate plugin path
+    validate plugin_path, alphanumeric;
+    
+    // Load plugin
+    let plugin = load_module(plugin_path);
+    
+    // Grant minimal capabilities
+    grant plugin {
+        core.language,
+        core.math,
+        core.strings,
+        core.arrays
+    };
+    
+    // Restrict I/O and network
+    revoke plugin {
+        io.read,
+        io.write,
+        network.tcp,
+        network.http,
+        exec.shell
+    };
+    
+    // Execute in sandbox
+    sandbox {
+        plugin.main();
+    }
+}
+"""
+
+# Pattern 3: Data pipeline with validation
+"""
+pure function process_csv_data(csv_content) {
+    // Sanitize raw input
+    let clean_content = sanitize(csv_content, encoding: "csv");
+    
+    // Parse
+    let rows = parse_csv(clean_content);
+    
+    // Validate each row
+    let validated_rows = [];
+    for row in rows:
+        validate row, {
+            id: alphanumeric,
+            name: string,
+            email: email,
+            age: number(0, 150)
+        };
+        validated_rows.append(row);
+    
+    // Return validated data
+    return validated_rows;
+}
+"""
+
+# Pattern 4: Database access control
+"""
+// Define DB capabilities by table
+capability db.users.read = {
+    description: "Read from users table",
+    scope: "database.users"
+};
+
+capability db.users.write = {
+    description: "Write to users table",
+    scope: "database.users"
+};
+
+capability db.audit.read = {
+    description: "Read audit logs",
+    scope: "database.audit"
+};
+
+// Setup user access
+function grant_user_access(user, tables) {
+    for table in tables:
+        if table == "users":
+            grant user capability(db.users.read);
+        elif table == "users.write":
+            grant user capability(db.users.write);
+        elif table == "audit":
+            grant user capability(db.audit.read);
+}
+
+// Database query wrapper
+function query_database(query, user_context) {
+    // Validate query structure
+    validate query, {
+        statement: string,
+        params: array,
+        table: alphanumeric
+    };
+    
+    // Check capabilities
+    if query.table == "users":
+        grant user_context capability(db.users.read);
+    elif query.table == "audit":
+        grant user_context capability(db.audit.read);
+    
+    // Sanitize query parameters
+    let safe_params = [];
+    for param in query.params:
+        safe_params.append(sanitize(param, encoding: "sql"));
+    
+    // Execute safely
+    return execute_query(query.statement, safe_params);
+}
+"""
+
+
+# ============================================================================
+# 5. SECURITY BEST PRACTICES
+# ============================================================================
+
+"""
+Best Practices for Using Zexus Security Features:
+
+1. CAPABILITY-BASED SECURITY:
+   - Always define explicit capabilities for sensitive operations
+   - Use DenyAllPolicy by default, explicitly grant needed capabilities
+   - Audit capability usage for security monitoring
+   - Regularly review and revoke unnecessary capabilities
+
+2. PURE FUNCTIONS:
+   - Mark mathematical/algorithmic functions as pure
+   - Use immutable for configuration data
+   - Avoid side effects in data processing functions
+   - Combine pure functions for composability
+
+3. DATA VALIDATION:
+   - Validate ALL external input (forms, APIs, files, network)
+   - Use schema validation for complex structures
+   - Validate before processing, not after
+   - Fail securely (reject invalid input)
+
+4. INPUT SANITIZATION:
+   - Sanitize before output in relevant context (HTML, SQL, URL, JS)
+   - Use appropriate encoding for each context
+   - Don't rely solely on sanitization for security
+   - Combine validation + sanitization for defense in depth
+
+5. DEFENSE IN DEPTH:
+   - Use capabilities to limit what code can access
+   - Use validation to check input structure
+   - Use sanitization to clean untrusted data
+   - Use pure functions to simplify reasoning
+   - Combine multiple security layers
+
+6. AUDIT AND MONITORING:
+   - Enable capability audit logging
+   - Monitor validation failures
+   - Track security-sensitive operations
+   - Regular security reviews
+"""
+
+
+# ============================================================================
+# 6. MIGRATION GUIDE: FROM EXISTING CODE
+# ============================================================================
+
+"""
+Migrating existing Zexus code to use security features:
+
+Before:
+function process_user(data) {
+    // No validation, no capability checks
+    let email = data.email;
+    let age = data.age;
+    
+    // Directly store
+    store_user({
+        email: email,
+        age: age
+    });
+}
+
+After:
+capability db.write = {
+    description: "Write to database",
+    scope: "io.database"
+};
+
+pure function process_user(data) {
+    // Validate input
+    validate data, {
+        email: email,
+        age: number(0, 150)
+    };
+    
+    // Check capability
+    grant current_context capability(db.write);
+    
+    // Sanitize for storage
+    let safe_data = {
+        email: sanitize(data.email, encoding: "sql"),
+        age: data.age
+    };
+    
+    return safe_data;
+}
+
+// In caller:
+grant handler {
+    core.language,
+    db.write
+};
+
+let result = process_user(form_data);
+"""
+
+print("✅ Security Features Documentation Loaded")
+print("📖 Review the examples above for implementation patterns")
+print("🛡️  Use capabilities, validation, and sanitization together")
