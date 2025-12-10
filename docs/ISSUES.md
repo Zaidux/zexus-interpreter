@@ -110,7 +110,7 @@ The binary expression evaluator for `+` operator doesn't validate operand types 
 ### Issue #4: Module Member Access Not Working
 **Severity:** HIGH  
 **Component:** Evaluator - Complexity System  
-**Status:** OPEN  
+**Status:** PARTIAL (2025-12-10)  
 **Found In:** test_complexity_features.zx (lines 44-48)  
 
 **Code:**
@@ -122,21 +122,34 @@ let result = math_operations.add(5, 3);
 ```
 
 **Problem:**
-Module definitions parse correctly, but accessing module members via dot notation (`module.member`) doesn't work. The module is created but property access fails.
+Module definitions parse but function definitions inside modules are not being stored as module members. The module is created, module keyword is recognized, but the member collection fails.
 
 **Root Cause:**
-The `eval_module_statement` handler creates a Module object, but the evaluator's property access expression (PropertyAccessExpression) doesn't know how to handle Module objects.
+The module body is being parsed as an empty MapLiteral instead of properly parsing the function statements inside. The structural/traditional parser treats the braces as a map literal rather than executing statements within the module block.
 
 **Location:**
-- File: `src/zexus/evaluator/expressions.py`
-- Method: `eval_property_access_expression`
-- Also: `src/zexus/evaluator/statements.py` - `eval_module_statement`
+- File: `src/zexus/evaluator/statements.py` - `eval_module_statement` (lines ~1584-1620)
+- File: `src/zexus/evaluator/core.py` - PropertyAccessExpression handler (lines ~369+)
+- File: `src/zexus/evaluator/functions.py` - eval_method_call_expression (lines ~151+)
 
-**Fix Strategy:**
-1. Ensure Module objects support property access
-2. Implement `__getattr__` or similar in Module class
-3. Update property access evaluator to handle Module types
-4. Test with: `python3 zx-run src/tests/test_verification_simple.zx`
+**Partial Fix Applied:**
+1. ✅ Added "module", "package", "using" keywords to both lexers
+2. ✅ Implemented Module.get() method for property access
+3. ✅ Added Module.type() method for evaluator compatibility
+4. ✅ Added explicit Module handling in PropertyAccessExpression evaluator
+5. ✅ Added Module method call support in eval_method_call_expression
+6. ✅ Fixed ModuleMember object creation in eval_module_statement
+- Commit: `df0c2c5`
+
+**Remaining Issue:**
+- Module body parser needs to execute function/action statements, not treat braces as map literal
+- Parser needs fix in structural or traditional parser to handle module body content
+
+**Fix Strategy for Completion:**
+1. Debug module body parsing to ensure statements are recognized
+2. May need to adjust parser to handle module block differently
+3. Ensure function definitions in modules are added to module environment
+4. Test with module function call execution
 
 ---
 
