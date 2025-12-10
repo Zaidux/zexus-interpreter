@@ -482,18 +482,23 @@ class UltimateParser:
         """Unified block parser with maximum tolerance for both syntax styles"""
         # For universal syntax, require braces
         if self.syntax_style == "universal":
-            if self.peek_token_is(LBRACE):
-                if not self.expect_peek(LBRACE):
-                    return None
+            # Accept a brace either as the current token or the peek token
+            if self.cur_token_is(LBRACE) or self.peek_token_is(LBRACE):
+                # If the current token is not the brace, advance to it
+                if not self.cur_token_is(LBRACE):
+                    if not self.expect_peek(LBRACE):
+                        return None
                 return self.parse_brace_block()
             else:
                 # In universal mode, if no brace, treat as single statement
                 return self.parse_single_statement_block()
 
         # For tolerable/auto mode, accept both styles
-        if self.peek_token_is(LBRACE):
-            if not self.expect_peek(LBRACE):
-                return None
+        # Accept a brace either as the current token or the peek token
+        if self.cur_token_is(LBRACE) or self.peek_token_is(LBRACE):
+            if not self.cur_token_is(LBRACE):
+                if not self.expect_peek(LBRACE):
+                    return None
             return self.parse_brace_block()
         elif self.peek_token_is(COLON):
             if not self.expect_peek(COLON):

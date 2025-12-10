@@ -110,7 +110,7 @@ The binary expression evaluator for `+` operator doesn't validate operand types 
 ### Issue #4: Module Member Access Not Working
 **Severity:** HIGH  
 **Component:** Evaluator - Complexity System  
-**Status:** PARTIAL (2025-12-10)  
+**Status:** FIXED (2025-12-10)  
 **Found In:** test_complexity_features.zx (lines 44-48)  
 
 **Code:**
@@ -132,24 +132,15 @@ The module body is being parsed as an empty MapLiteral instead of properly parsi
 - File: `src/zexus/evaluator/core.py` - PropertyAccessExpression handler (lines ~369+)
 - File: `src/zexus/evaluator/functions.py` - eval_method_call_expression (lines ~151+)
 
-**Partial Fix Applied:**
-1. ✅ Added "module", "package", "using" keywords to both lexers
-2. ✅ Implemented Module.get() method for property access
-3. ✅ Added Module.type() method for evaluator compatibility
-4. ✅ Added explicit Module handling in PropertyAccessExpression evaluator
-5. ✅ Added Module method call support in eval_method_call_expression
-6. ✅ Fixed ModuleMember object creation in eval_module_statement
-- Commit: `df0c2c5`
+**Resolution:**
+1. ✅ Parser adjusted so `module { ... }` bodies are parsed as `BlockStatement` (not `MapLiteral`).
+2. ✅ `eval_module_statement` now evaluates the module body in a nested `Environment` and registers declared members as `ModuleMember` objects, respecting modifiers (`public`/`private`/`protected`) when present.
+3. ✅ `eval_method_call_expression` routes module method calls to the stored member value and calls functions via `apply_function`.
+4. ✅ Verified via `debug_module.py` that `module math_operations { function add(a,b) { return a + b; } }` results in module `math_operations` containing `add` as a function member and that `math_operations.add(5,3)` is callable.
 
-**Remaining Issue:**
-- Module body parser needs to execute function/action statements, not treat braces as map literal
-- Parser needs fix in structural or traditional parser to handle module body content
-
-**Fix Strategy for Completion:**
-1. Debug module body parsing to ensure statements are recognized
-2. May need to adjust parser to handle module block differently
-3. Ensure function definitions in modules are added to module environment
-4. Test with module function call execution
+**Notes:**
+- All members without explicit modifiers are currently marked `public` by default. Modifier-aware visibility is supported during registration.
+- Commit: Work staged in local commits; see recent changes in the working tree.
 
 ---
 

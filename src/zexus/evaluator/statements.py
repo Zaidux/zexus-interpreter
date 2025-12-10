@@ -1599,17 +1599,77 @@ class StatementEvaluatorMixin:
         if hasattr(node, 'body') and node.body:
             body_result = self.eval_node(node.body, module_env, stack_trace)
         
-        # Collect module members from module environment
+        # Collect module members using AST modifiers when available
+        seen = set()
+        if hasattr(node, 'body') and getattr(node.body, 'statements', None):
+            for stmt in node.body.statements:
+                # Determine declared name and modifiers if present
+                declared_name = None
+                modifiers = getattr(stmt, 'modifiers', []) or []
+
+                # Function / Action declarations
+                if type(stmt).__name__ in ('FunctionStatement', 'ActionStatement'):
+                    if hasattr(stmt.name, 'value'):
+                        declared_name = stmt.name.value
+                    else:
+                        declared_name = str(stmt.name)
+                    member_type = 'function'
+
+                # Let / Const declarations
+                elif type(stmt).__name__ in ('LetStatement', 'ConstStatement'):
+                    if hasattr(stmt.name, 'value'):
+                        declared_name = stmt.name.value
+                    else:
+                        declared_name = str(stmt.name)
+                    member_type = 'variable'
+
+                else:
+                    # Not a direct declaration we can extract; skip to env-scan fallback
+                    continue
+
+                if declared_name:
+                    seen.add(declared_name)
+                    try:
+                        value = module_env.get(declared_name)
+                    except Exception:
+                        value = None
+
+                    # Map modifiers to visibility
+                    vis = Visibility.PUBLIC
+                    lower_mods = [m.lower() for m in modifiers]
+                    if 'private' in lower_mods or 'internal' in lower_mods:
+                        vis = Visibility.INTERNAL
+                    elif 'protected' in lower_mods:
+                        vis = Visibility.PROTECTED
+
+                    member = ModuleMember(
+                        name=declared_name,
+                        member_type=member_type,
+                        visibility=vis,
+                        value=value
+                    )
+                    module.add_member(member)
+
+        # Fallback: include any remaining env keys not discovered via AST
         for key in module_env.store:
-            if not key.startswith('_'):
+            if key.startswith('_') or key in seen:
+                continue
+            try:
                 value = module_env.get(key)
-                # Create a ModuleMember wrapper for each value
-                member = ModuleMember(
-                    name=key,
-                    value=value,
-                    visibility=Visibility.PUBLIC
-                )
-                module.add_member(member)
+            except Exception:
+                value = None
+            try:
+                is_callable = callable(value)
+            except Exception:
+                is_callable = False
+            member_type = 'function' if is_callable else 'variable'
+            member = ModuleMember(
+                name=key,
+                member_type=member_type,
+                visibility=Visibility.PUBLIC,
+                value=value
+            )
+            module.add_member(member)
         
         # Note: Module is stored directly in environment; manager integration can be enhanced later
         debug_log("eval_module_statement", f"Created module: {module_name}")
