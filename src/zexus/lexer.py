@@ -397,6 +397,9 @@ class Lexer:
             "capability": CAPABILITY,  # NEW: Capability keyword for security
             "grant": GRANT,             # NEW: Grant keyword for capability grants
             "revoke": REVOKE,           # NEW: Revoke keyword for capability revocation
+            "module": MODULE,           # NEW: Module keyword for code organization
+            "package": PACKAGE,         # NEW: Package keyword for package definition
+            "using": USING,             # NEW: Using keyword for resource management
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             "audit": AUDIT,             # NEW: Audit keyword for compliance logging
             "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control

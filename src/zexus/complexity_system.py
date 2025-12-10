@@ -165,6 +165,18 @@ class Module:
         """Get a member by name."""
         return self.members.get(name)
     
+    def get(self, name: str):
+        """Get a member's value by name (for compatibility with property access).
+        Returns the value directly, not the ModuleMember wrapper."""
+        member = self.get_member(name)
+        if member:
+            return member.value
+        return None
+    
+    def type(self):
+        """Return the type name for this object (for compatibility with evaluator)."""
+        return f"Module[{self.name}]"
+    
     def get_public_members(self) -> List[ModuleMember]:
         """Get all public members."""
         return [m for m in self.members.values() if m.visibility == Visibility.PUBLIC]

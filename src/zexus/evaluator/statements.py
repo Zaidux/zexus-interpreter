@@ -1583,7 +1583,7 @@ class StatementEvaluatorMixin:
 
     def eval_module_statement(self, node, env, stack_trace):
         """Evaluate module statement - create namespaced module."""
-        from ..complexity_system import get_complexity_manager, Module
+        from ..complexity_system import get_complexity_manager, Module, ModuleMember, Visibility
         
         manager = get_complexity_manager()
         
@@ -1594,7 +1594,7 @@ class StatementEvaluatorMixin:
         module = Module(name=module_name)
         
         # Execute module body in new environment
-        module_env = Environment(parent=env)
+        module_env = Environment(outer=env)
         
         if hasattr(node, 'body') and node.body:
             body_result = self.eval_node(node.body, module_env, stack_trace)
@@ -1603,10 +1603,15 @@ class StatementEvaluatorMixin:
         for key in module_env.store:
             if not key.startswith('_'):
                 value = module_env.get(key)
-                module.add_member(key, value, visibility='public')
+                # Create a ModuleMember wrapper for each value
+                member = ModuleMember(
+                    name=key,
+                    value=value,
+                    visibility=Visibility.PUBLIC
+                )
+                module.add_member(member)
         
-        # Register module
-        manager.register_module(module)
+        # Note: Module is stored directly in environment; manager integration can be enhanced later
         debug_log("eval_module_statement", f"Created module: {module_name}")
         
         # Store in environment

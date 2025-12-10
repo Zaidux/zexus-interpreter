@@ -212,6 +212,22 @@ class FunctionEvaluatorMixin:
                 default = args[1] if len(args) > 1 else NULL
                 return obj.pairs.get(key, default)
         
+        # === Module Methods ===
+        from ..complexity_system import Module
+        if isinstance(obj, Module):
+            # For module methods, get the member and call it if it's a function
+            member_value = obj.get(method_name)
+            if member_value is None:
+                return EvaluationError(f"Method '{method_name}' not found in module '{obj.name}'")
+            
+            # Evaluate arguments
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            
+            # Call the function/action using apply_function
+            return self.apply_function(member_value, args, env)
+        
         # === Contract Instance Methods ===
         if hasattr(obj, 'call_method'):
             args = self.eval_expressions(node.arguments, env)
