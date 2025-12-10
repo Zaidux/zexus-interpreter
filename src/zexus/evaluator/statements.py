@@ -1345,13 +1345,14 @@ class StatementEvaluatorMixin:
             reason=f"Defined with scope: {scope}"
         )
         
-        # Store in environment
+        # Store in environment both as identifier and in _capabilities
         if not hasattr(env, '_capabilities'):
             env._capabilities = {}
         env._capabilities[cap_name] = cap
+        env.set(cap_name, cap)  # Also store as identifier so it can be referenced
         
         debug_log("eval_capability_statement", f"Defined capability: {cap_name} ({scope})")
-        return String(f"Capability '{cap_name}' defined")
+        return cap  # Return the capability object instead of just a string
 
     def eval_grant_statement(self, node, env, stack_trace):
         """Evaluate grant statement - grant capabilities to entity."""

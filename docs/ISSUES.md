@@ -44,7 +44,7 @@ The `eval_interface_statement` handler in `statements.py` needs to properly regi
 ### Issue #2: Undefined Capability Identifier
 **Severity:** HIGH  
 **Component:** Evaluator - Security System  
-**Status:** OPEN  
+**Status:** FIXED (2025-12-10)  
 **Found In:** test_security_features.zx  
 
 **Error:**
@@ -57,16 +57,23 @@ The `eval_interface_statement` handler in `statements.py` needs to properly regi
 When defining `capability admin_access;` statements and then trying to reference them (even in string context), the identifier is not found. The capability statement parses but doesn't register the capability name in the environment.
 
 **Root Cause:**
-The `eval_capability_statement` handler in `statements.py` creates the capability but may not be storing it properly or returning a value that gets bound to the identifier.
+The `eval_capability_statement` handler in `statements.py` creates the capability but was not storing it properly as an identifier in the environment.
 
 **Location:**
-- File: `src/zexus/evaluator/statements.py` (lines ~1430+)
+- File: `src/zexus/evaluator/statements.py` (lines ~1320-1353)
 - Method: `eval_capability_statement`
 
 **Fix Strategy:**
-1. Verify CapabilityManager registration is working
-2. Store capability result in environment with proper identifier binding
-3. Ensure handler returns appropriate value
+1. Store capability in environment as identifier using env.set(cap_name, cap)
+2. Add capability keyword to both lexers (interpreter and compiler)
+3. Ensure handler returns the capability object for proper referencing
+
+**Resolution:**
+- Added "capability", "grant", "revoke" keywords to lexer keyword mappings in both src/zexus/lexer.py and src/zexus/compiler/lexer.py
+- Modified eval_capability_statement to call env.set(cap_name, cap) so the capability object is stored as an identifier
+- Modified return value to return the cap object instead of a message string
+- Verified: capability identifiers are now accessible after definition and can be referenced in expressions
+- Commit: TBD
 
 ---
 

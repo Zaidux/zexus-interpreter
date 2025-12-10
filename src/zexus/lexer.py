@@ -394,6 +394,9 @@ class Lexer:
             "contract": CONTRACT,
             "protect": PROTECT,
             "interface": INTERFACE,
+            "capability": CAPABILITY,  # NEW: Capability keyword for security
+            "grant": GRANT,             # NEW: Grant keyword for capability grants
+            "revoke": REVOKE,           # NEW: Revoke keyword for capability revocation
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             "audit": AUDIT,             # NEW: Audit keyword for compliance logging
             "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control
