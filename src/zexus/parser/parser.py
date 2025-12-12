@@ -451,6 +451,22 @@ class UltimateParser:
             elif self.cur_token_is(ATOMIC):
                 print(f"[PARSE_STMT] Matched ATOMIC", file=sys.stderr, flush=True)
                 node = self.parse_atomic_statement()
+            # === BLOCKCHAIN STATEMENT HANDLERS ===
+            elif self.cur_token_is(LEDGER):
+                print(f"[PARSE_STMT] Matched LEDGER", file=sys.stderr, flush=True)
+                node = self.parse_ledger_statement()
+            elif self.cur_token_is(STATE):
+                print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
+                node = self.parse_state_statement()
+            elif self.cur_token_is(REQUIRE):
+                print(f"[PARSE_STMT] Matched REQUIRE", file=sys.stderr, flush=True)
+                node = self.parse_require_statement()
+            elif self.cur_token_is(REVERT):
+                print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
+                node = self.parse_revert_statement()
+            elif self.cur_token_is(LIMIT):
+                print(f"[PARSE_STMT] Matched LIMIT", file=sys.stderr, flush=True)
+                node = self.parse_limit_statement()
             else:
                 print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
                 node = self.parse_expression_statement()
@@ -2809,6 +2825,266 @@ class UltimateParser:
             return None
         
         return AtomicStatement(body=body, expr=expr)
+
+    # === BLOCKCHAIN STATEMENT PARSING ===
+    
+    def parse_ledger_statement(self):
+        """Parse ledger statement: ledger NAME = value;
+        
+        Declares immutable ledger variable with version tracking.
+        """
+        token = self.cur_token
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'ledger'")
+            return None
+        
+        name = Identifier(value=self.cur_token.literal)
+        
+        if not self.expect_peek(ASSIGN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '=' after ledger name")
+            return None
+        
+        self.next_token()
+        initial_value = self.parse_expression(LOWEST)
+        
+        # Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        
+        return LedgerStatement(name=name, initial_value=initial_value)
+    
+    def parse_state_statement(self):
+        """Parse state statement: state NAME = value;
+        
+        Declares mutable contract state variable.
+        """
+        token = self.cur_token
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'state'")
+            return None
+        
+        name = Identifier(value=self.cur_token.literal)
+        
+        if not self.expect_peek(ASSIGN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '=' after state name")
+            return None
+        
+        self.next_token()
+        initial_value = self.parse_expression(LOWEST)
+        
+        # Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        
+        return StateStatement(name=name, initial_value=initial_value)
+    
+    def parse_require_statement(self):
+        """Parse require statement: require(condition, message);
+        
+        Asserts condition, reverts transaction if false.
+        """
+        token = self.cur_token
+        
+        if not self.expect_peek(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after 'require'")
+            return None
+        
+        self.next_token()
+        condition = self.parse_expression(LOWEST)
+        
+        message = None
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            message = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after require arguments")
+            return None
+        
+        # Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        
+        return RequireStatement(condition=condition, message=message)
+    
+    def parse_revert_statement(self):
+        """Parse revert statement: revert(reason);
+        
+        Reverts transaction with optional reason.
+        """
+        token = self.cur_token
+        
+        reason = None
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            self.next_token()
+            reason = self.parse_expression(LOWEST)
+            
+            if not self.expect_peek(RPAREN):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after revert reason")
+                return None
+        
+        # Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        
+        return RevertStatement(reason=reason)
+    
+    def parse_limit_statement(self):
+        """Parse limit statement: limit(gas_amount);
+        
+        Sets gas limit for operation.
+        """
+        token = self.cur_token
+        
+        if not self.expect_peek(LPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after 'limit'")
+            return None
+        
+        self.next_token()
+        gas_limit = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(RPAREN):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after limit amount")
+            return None
+        
+        # Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        
+        return LimitStatement(gas_limit=gas_limit)
+    
+    # === BLOCKCHAIN EXPRESSION PARSING ===
+    
+    def parse_tx_expression(self):
+        """Parse TX expression: tx.caller, tx.timestamp, tx.gas_used, etc.
+        
+        Access transaction context properties.
+        """
+        if not self.expect_peek(DOT):
+            # Just 'tx' by itself returns the TX object
+            return TXExpression(property_name=None)
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected property name after 'tx.'")
+            return None
+        
+        property_name = self.cur_token.literal
+        return TXExpression(property_name=property_name)
+    
+    def parse_hash_expression(self):
+        """Parse hash expression: hash(data, algorithm)
+        
+        Cryptographic hash function.
+        """
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'hash'")
+            return None
+        
+        self.next_token()
+        data = self.parse_expression(LOWEST)
+        
+        algorithm = StringLiteral(value="SHA256")  # Default algorithm
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            algorithm = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after hash arguments")
+            return None
+        
+        return HashExpression(data=data, algorithm=algorithm)
+    
+    def parse_signature_expression(self):
+        """Parse signature expression: signature(data, private_key, algorithm)
+        
+        Creates digital signature.
+        """
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'signature'")
+            return None
+        
+        self.next_token()
+        data = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(COMMA):
+            self.errors.append("Expected ',' after data in signature")
+            return None
+        
+        self.next_token()
+        private_key = self.parse_expression(LOWEST)
+        
+        algorithm = StringLiteral(value="ECDSA")  # Default algorithm
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            algorithm = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after signature arguments")
+            return None
+        
+        return SignatureExpression(data=data, private_key=private_key, algorithm=algorithm)
+    
+    def parse_verify_sig_expression(self):
+        """Parse verify_sig expression: verify_sig(data, signature, public_key, algorithm)
+        
+        Verifies digital signature.
+        """
+        if not self.expect_peek(LPAREN):
+            self.errors.append("Expected '(' after 'verify_sig'")
+            return None
+        
+        self.next_token()
+        data = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(COMMA):
+            self.errors.append("Expected ',' after data in verify_sig")
+            return None
+        
+        self.next_token()
+        signature = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(COMMA):
+            self.errors.append("Expected ',' after signature in verify_sig")
+            return None
+        
+        self.next_token()
+        public_key = self.parse_expression(LOWEST)
+        
+        algorithm = StringLiteral(value="ECDSA")  # Default algorithm
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            algorithm = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(RPAREN):
+            self.errors.append("Expected ')' after verify_sig arguments")
+            return None
+        
+        return VerifySignatureExpression(data=data, signature=signature, public_key=public_key, algorithm=algorithm)
+    
+    def parse_gas_expression(self):
+        """Parse gas expression: gas or gas.used or gas.remaining
+        
+        Access gas tracking information.
+        """
+        if not self.peek_token_is(DOT):
+            # Just 'gas' by itself - returns GasExpression with no property
+            return GasExpression(property_name=None)
+        
+        self.next_token()  # consume DOT
+        
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected property name after 'gas.'")
+            return None
+        
+        property_name = self.cur_token.literal
+        return GasExpression(property_name=property_name)
 
 # Backward compatibility
 Parser = UltimateParser

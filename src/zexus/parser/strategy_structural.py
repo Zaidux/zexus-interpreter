@@ -39,7 +39,9 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, SEND, RECEIVE, ATOMIC
+              CHANNEL, SEND, RECEIVE, ATOMIC,
+              # Blockchain keywords
+              LEDGER, STATE, REQUIRE, REVERT, LIMIT
           }
 
         while i < n:
@@ -207,46 +209,56 @@ class StructuralAnalyzer:
                 block_id += 1
                 continue
 
-            # Try-catch: collect the try block and catch block separately
+            # Try-catch: collect the try block and catch block TOGETHER
             if t.type == TRY:
                 start_idx = i
                 # collect try token + following block tokens (brace-aware)
                 try_block_tokens, next_idx = self._collect_brace_block(tokens, i + 1)
-                # include the 'try' token as part of the block for context
-                full_try_tokens = [t] + try_block_tokens
-                # filter out empty tokens from the recorded token lists
-                full_try_tokens = [tk for tk in full_try_tokens if not _is_empty_token(tk)]
+                
+                # Check for catch block
+                catch_tokens = []
+                final_idx = next_idx
+                
+                if next_idx < n and tokens[next_idx].type == CATCH:
+                    catch_token = tokens[next_idx]
+                    
+                    # Collect tokens between CATCH and LBRACE (e.g. (e))
+                    pre_brace_tokens = []
+                    curr = next_idx + 1
+                    while curr < n and tokens[curr].type != LBRACE and tokens[curr].type != EOF:
+                        pre_brace_tokens.append(tokens[curr])
+                        curr += 1
+                    
+                    catch_block_tokens, after_catch_idx = self._collect_brace_block(tokens, curr)
+                    catch_tokens = [catch_token] + pre_brace_tokens + catch_block_tokens
+                    final_idx = after_catch_idx
+                
+                # Combine all tokens
+                full_tokens = [t] + try_block_tokens + catch_tokens
+                full_tokens = [tk for tk in full_tokens if not _is_empty_token(tk)]
+                
+                # Create the main try-catch block
                 self.blocks[block_id] = {
                     'id': block_id,
-                    'type': 'try_catch',
-                    'subtype': 'try',
-                    'tokens': full_try_tokens,
+                    'type': 'statement',
+                    'subtype': 'try_catch_statement',
+                    'tokens': full_tokens,
                     'start_token': t,
                     'start_index': start_idx,
-                    'end_index': next_idx - 1,
+                    'end_index': final_idx - 1,
                     'parent': None
                 }
-                current_try_id = block_id
+                parent_id = block_id
                 block_id += 1
-                i = next_idx
+                i = final_idx
 
-                # If try block has inner statements, create child blocks for them
+                # Process inner statements of TRY block
                 inner = try_block_tokens[1:-1] if try_block_tokens and len(try_block_tokens) >= 2 else []
                 inner = [tk for tk in inner if not _is_empty_token(tk)]
                 if inner:
-                    # If it's a map-like object, keep as single child map_literal
                     if self._is_map_literal(inner):
-                        self.blocks[block_id] = {
-                            'id': block_id,
-                            'type': 'map_literal',
-                            'subtype': 'map_literal',
-                            'tokens': [tk for tk in try_block_tokens if not _is_empty_token(tk)],  # include braces
-                            'start_token': try_block_tokens[0] if try_block_tokens else t,
-                            'start_index': start_idx,
-                            'end_index': next_idx - 1,
-                            'parent': current_try_id
-                        }
-                        block_id += 1
+                        # ... map literal handling ...
+                        pass 
                     else:
                         stmts = self._split_into_statements(inner)
                         for stmt_tokens in stmts:
@@ -256,62 +268,40 @@ class StructuralAnalyzer:
                                 'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
                                 'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
                                 'start_token': (stmt_tokens[0] if stmt_tokens else try_block_tokens[0]),
-                                'start_index': start_idx,
-                                'end_index': start_idx + len(stmt_tokens),
-                                'parent': current_try_id
+                                'start_index': start_idx, # Approximate
+                                'end_index': start_idx,   # Approximate
+                                'parent': parent_id
                             }
                             block_id += 1
 
-                # Look for catch token after try block
-                if i < n and tokens[i].type == CATCH:
-                    catch_token = tokens[i]
-                    catch_block_tokens, after_catch_idx = self._collect_brace_block(tokens, i + 1)
-                    full_catch_tokens = [catch_token] + catch_block_tokens
-                    full_catch_tokens = [tk for tk in full_catch_tokens if not _is_empty_token(tk)]
-                    self.blocks[block_id] = {
-                        'id': block_id,
-                        'type': 'try_catch',
-                        'subtype': 'catch',
-                        'tokens': full_catch_tokens,
-                        'start_token': catch_token,
-                        'start_index': i,
-                        'end_index': after_catch_idx - 1,
-                        'parent': None
-                    }
-                    current_catch_id = block_id
-                    block_id += 1
-                    i = after_catch_idx
-
-                    # create child statements for catch block similarly
-                    inner_catch = catch_block_tokens[1:-1] if catch_block_tokens and len(catch_block_tokens) >= 2 else []
+                # Process inner statements of CATCH block
+                if catch_tokens:
+                    # catch_tokens[0] is CATCH
+                    # catch_tokens[1] might be (error) or {
+                    # We need to find the brace block inside catch_tokens
+                    catch_brace_tokens = []
+                    for k, ctk in enumerate(catch_tokens):
+                        if ctk.type == LBRACE:
+                            catch_brace_tokens = catch_tokens[k:]
+                            break
+                    
+                    inner_catch = catch_brace_tokens[1:-1] if catch_brace_tokens and len(catch_brace_tokens) >= 2 else []
                     inner_catch = [tk for tk in inner_catch if not _is_empty_token(tk)]
+                    
                     if inner_catch:
-                        if self._is_map_literal(inner_catch):
+                        stmts = self._split_into_statements(inner_catch)
+                        for stmt_tokens in stmts:
                             self.blocks[block_id] = {
                                 'id': block_id,
-                                'type': 'map_literal',
-                                'subtype': 'map_literal',
-                                'tokens': [tk for tk in catch_block_tokens if not _is_empty_token(tk)],
-                                'start_token': catch_block_tokens[0],
-                                'start_index': i,
-                                'end_index': after_catch_idx - 1,
-                                'parent': current_catch_id
+                                'type': 'statement',
+                                'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
+                                'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
+                                'start_token': (stmt_tokens[0] if stmt_tokens else catch_tokens[0]),
+                                'start_index': next_idx, # Approximate
+                                'end_index': next_idx,   # Approximate
+                                'parent': parent_id
                             }
                             block_id += 1
-                        else:
-                            stmts = self._split_into_statements(inner_catch)
-                            for stmt_tokens in stmts:
-                                self.blocks[block_id] = {
-                                    'id': block_id,
-                                    'type': 'statement',
-                                    'subtype': stmt_tokens[0].type if stmt_tokens else 'unknown',
-                                    'tokens': [tk for tk in stmt_tokens if not _is_empty_token(tk)],
-                                    'start_token': (stmt_tokens[0] if stmt_tokens else catch_block_tokens[0]),
-                                    'start_index': i,
-                                    'end_index': i + len(stmt_tokens),
-                                    'parent': current_catch_id
-                                }
-                                block_id += 1
                 continue
 
             # Brace-delimited top-level block

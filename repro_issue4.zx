@@ -1,0 +1,22 @@
+print("Testing Map with Function values");
+
+function createMap() {
+    return {
+        "val": 42,
+        "func": function() {
+            return "Hello from map function";
+        }
+    };
+}
+
+let m = createMap();
+print("Map created: " + m);
+print("Type of m['func']: " + type(m["func"]));
+
+if (m["func"] == null) {
+    print("FAIL: m['func'] is null");
+} else {
+    print("Calling m['func']()...");
+    let res = m["func"]();
+    print("Result: " + res);
+}

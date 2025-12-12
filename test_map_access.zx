@@ -1,0 +1,3 @@
+let obj = {"key": "value"};
+print("Direct: " + obj);
+print("Has get: " + obj.get("key"));

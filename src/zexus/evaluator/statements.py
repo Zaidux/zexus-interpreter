@@ -16,7 +16,10 @@ from ..zexus_ast import (
     DeferStatement, PatternStatement, PatternCase, EnumStatement, EnumMember, StreamStatement, WatchStatement,
     CapabilityStatement, GrantStatement, RevokeStatement, ValidateStatement, SanitizeStatement, ImmutableStatement,
     InterfaceStatement, TypeAliasStatement, ModuleStatement, PackageStatement, UsingStatement,
-    ChannelStatement, SendStatement, ReceiveStatement, AtomicStatement
+    ChannelStatement, SendStatement, ReceiveStatement, AtomicStatement,
+    # Blockchain statements and expressions
+    LedgerStatement, StateStatement, RequireStatement, RevertStatement, LimitStatement,
+    TXExpression, HashExpression, SignatureExpression, VerifySignatureExpression, GasExpression
 )
 from ..object import (
     Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
@@ -61,7 +64,7 @@ class StatementEvaluatorMixin:
         debug_log("eval_program completed", result)
         return result
     
-    def eval_block_statement(self, block, env):
+    def eval_block_statement(self, block, env, stack_trace=None):
         debug_log("eval_block_statement", f"len={len(block.statements)}")
         
         try:
@@ -69,9 +72,12 @@ class StatementEvaluatorMixin:
         except Exception:
             pass
         
+        if stack_trace is None:
+            stack_trace = []
+        
         result = NULL
         for stmt in block.statements:
-            res = self.eval_node(stmt, env)
+            res = self.eval_node(stmt, env, stack_trace)
             res = _resolve_awaitable(res)
             EVAL_SUMMARY['evaluated_statements'] += 1
             
@@ -1934,4 +1940,324 @@ class StatementEvaluatorMixin:
         result = atomic.execute(execute_block)
         debug_log("eval_atomic_statement", "Atomic operation completed")
         
-        return result if result is not None else NULL
+        return result if result is not NULL else NULL
+
+    # === BLOCKCHAIN STATEMENT EVALUATION ===
+    
+    def eval_ledger_statement(self, node, env, stack_trace):
+        """Evaluate ledger statement - create immutable ledger variable.
+        
+        ledger balances = {};
+        ledger state_root;
+        """
+        from ..blockchain import Ledger
+        from ..blockchain.transaction import get_current_tx, create_tx_context
+        
+        debug_log("eval_ledger_statement", f"ledger {node.name.value}")
+        
+        # Ensure TX context exists
+        tx = get_current_tx()
+        if tx is None:
+            tx = create_tx_context(caller="system", gas_limit=1000000)
+        
+        # Evaluate initial value if provided
+        initial_value = NULL
+        if node.initial_value:
+            initial_value = self.eval_node(node.initial_value, env, stack_trace)
+            if is_error(initial_value):
+                return initial_value
+        
+        # Create ledger instance
+        ledger_name = node.name.value
+        ledger = Ledger(ledger_name)
+        
+        # Write initial value if provided
+        if initial_value != NULL:
+            # Convert Zexus object to Python value for storage
+            py_value = _zexus_to_python(initial_value)
+            ledger.write(ledger_name, py_value, tx.block_hash)
+        
+        # Store the value directly in environment (ledger is for tracking history)
+        env.set(node.name.value, initial_value)
+        
+        debug_log("eval_ledger_statement", f"Created ledger: {node.name.value}")
+        return NULL
+    
+    def eval_state_statement(self, node, env, stack_trace):
+        """Evaluate state statement - create mutable state variable.
+        
+        state counter = 0;
+        state owner = TX.caller;
+        """
+        debug_log("eval_state_statement", f"state {node.name.value}")
+        
+        # Evaluate initial value
+        value = NULL
+        if node.initial_value:
+            value = self.eval_node(node.initial_value, env, stack_trace)
+            if is_error(value):
+                return value
+        
+        # Store in environment (regular mutable variable)
+        env.set(node.name.value, value)
+        
+        debug_log("eval_state_statement", f"Created state: {node.name.value}")
+        return NULL
+    
+    def eval_require_statement(self, node, env, stack_trace):
+        """Evaluate require statement - assert condition or revert.
+        
+        require(balance >= amount);
+        require(TX.caller == owner, "Only owner");
+        """
+        debug_log("eval_require_statement", "Checking condition")
+        
+        # Evaluate condition
+        condition = self.eval_node(node.condition, env, stack_trace)
+        if is_error(condition):
+            return condition
+        
+        # Check if condition is true
+        if not is_truthy(condition):
+            # Evaluate error message if provided
+            message = "Requirement failed"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if isinstance(msg_val, String):
+                    message = msg_val.value
+                elif not is_error(msg_val):
+                    message = str(msg_val.inspect() if hasattr(msg_val, 'inspect') else msg_val)
+            
+            # Trigger revert
+            debug_log("eval_require_statement", f"REVERT: {message}")
+            return EvaluationError(f"Transaction reverted: {message}", stack_trace=stack_trace)
+        
+        debug_log("eval_require_statement", "Requirement passed")
+        return NULL
+    
+    def eval_revert_statement(self, node, env, stack_trace):
+        """Evaluate revert statement - rollback transaction.
+        
+        revert();
+        revert("Unauthorized");
+        """
+        debug_log("eval_revert_statement", "Reverting transaction")
+        
+        # Evaluate revert reason if provided
+        reason = "Transaction reverted"
+        if node.reason:
+            reason_val = self.eval_node(node.reason, env, stack_trace)
+            if isinstance(reason_val, String):
+                reason = reason_val.value
+            elif not is_error(reason_val):
+                reason = str(reason_val.inspect() if hasattr(reason_val, 'inspect') else reason_val)
+        
+        debug_log("eval_revert_statement", f"REVERT: {reason}")
+        return EvaluationError(f"Transaction reverted: {reason}", stack_trace=stack_trace)
+    
+    def eval_limit_statement(self, node, env, stack_trace):
+        """Evaluate limit statement - set gas limit.
+        
+        limit(5000);
+        """
+        from ..blockchain import get_current_tx
+        
+        debug_log("eval_limit_statement", "Setting gas limit")
+        
+        # Evaluate gas limit amount
+        limit_val = self.eval_node(node.gas_limit, env, stack_trace)
+        if is_error(limit_val):
+            return limit_val
+        
+        # Extract numeric value
+        if isinstance(limit_val, Integer):
+            limit_amount = limit_val.value
+        else:
+            return EvaluationError(f"Gas limit must be an integer, got {type(limit_val).__name__}")
+        
+        # Get current transaction context
+        tx = get_current_tx()
+        if tx:
+            tx.gas_limit = limit_amount
+            debug_log("eval_limit_statement", f"Set gas limit to {limit_amount}")
+        else:
+            debug_log("eval_limit_statement", "No active TX context, limit statement ignored")
+        
+        return NULL
+    
+    # === BLOCKCHAIN EXPRESSION EVALUATION ===
+    
+    def eval_tx_expression(self, node, env, stack_trace):
+        """Evaluate TX expression - access transaction context.
+        
+        TX.caller
+        TX.timestamp
+        TX.gas_remaining
+        """
+        from ..blockchain import get_current_tx
+        
+        tx = get_current_tx()
+        if not tx:
+            debug_log("eval_tx_expression", "No active TX context")
+            return NULL
+        
+        # If no property specified, return the TX object itself
+        if not node.property_name:
+            # Wrap TX context as Zexus object
+            return _python_to_zexus(tx)
+        
+        # Access specific property
+        prop = node.property_name
+        if prop == "caller":
+            return String(tx.caller)
+        elif prop == "timestamp":
+            return Integer(tx.timestamp)
+        elif prop == "block_hash":
+            return String(tx.block_hash)
+        elif prop == "gas_limit":
+            return Integer(tx.gas_limit)
+        elif prop == "gas_used":
+            return Integer(tx.gas_used)
+        elif prop == "gas_remaining":
+            return Integer(tx.gas_remaining)
+        else:
+            return EvaluationError(f"Unknown TX property: {prop}")
+    
+    def eval_hash_expression(self, node, env, stack_trace):
+        """Evaluate hash expression - cryptographic hashing.
+        
+        hash(data, "SHA256")
+        hash(message, "KECCAK256")
+        """
+        from ..blockchain.crypto import CryptoPlugin
+        
+        # Evaluate data to hash
+        data_val = self.eval_node(node.data, env, stack_trace)
+        if is_error(data_val):
+            return data_val
+        
+        # Evaluate algorithm
+        algorithm_val = self.eval_node(node.algorithm, env, stack_trace)
+        if is_error(algorithm_val):
+            return algorithm_val
+        
+        # Convert to string values
+        if isinstance(data_val, String):
+            data = data_val.value
+        else:
+            data = str(data_val.inspect() if hasattr(data_val, 'inspect') else data_val)
+        
+        if isinstance(algorithm_val, String):
+            algorithm = algorithm_val.value
+        else:
+            algorithm = str(algorithm_val)
+        
+        # Perform hashing
+        try:
+            hash_result = CryptoPlugin.hash_data(data, algorithm)
+            return String(hash_result)
+        except Exception as e:
+            return EvaluationError(f"Hash error: {str(e)}")
+    
+    def eval_signature_expression(self, node, env, stack_trace):
+        """Evaluate signature expression - create digital signature.
+        
+        signature(data, private_key, "ECDSA")
+        """
+        from ..blockchain.crypto import CryptoPlugin
+        
+        # Evaluate arguments
+        data_val = self.eval_node(node.data, env, stack_trace)
+        if is_error(data_val):
+            return data_val
+        
+        key_val = self.eval_node(node.private_key, env, stack_trace)
+        if is_error(key_val):
+            return key_val
+        
+        algorithm_val = self.eval_node(node.algorithm, env, stack_trace) if node.algorithm else String("ECDSA")
+        if is_error(algorithm_val):
+            return algorithm_val
+        
+        # Convert to string values
+        data = data_val.value if isinstance(data_val, String) else str(data_val)
+        private_key = key_val.value if isinstance(key_val, String) else str(key_val)
+        algorithm = algorithm_val.value if isinstance(algorithm_val, String) else str(algorithm_val)
+        
+        # Create signature
+        try:
+            signature = CryptoPlugin.sign_data(data, private_key, algorithm)
+            return String(signature)
+        except Exception as e:
+            return EvaluationError(f"Signature error: {str(e)}")
+    
+    def eval_verify_signature_expression(self, node, env, stack_trace):
+        """Evaluate verify_sig expression - verify digital signature.
+        
+        verify_sig(data, signature, public_key, "ECDSA")
+        """
+        from ..blockchain.crypto import CryptoPlugin
+        
+        # Evaluate arguments
+        data_val = self.eval_node(node.data, env, stack_trace)
+        if is_error(data_val):
+            return data_val
+        
+        sig_val = self.eval_node(node.signature, env, stack_trace)
+        if is_error(sig_val):
+            return sig_val
+        
+        key_val = self.eval_node(node.public_key, env, stack_trace)
+        if is_error(key_val):
+            return key_val
+        
+        algorithm_val = self.eval_node(node.algorithm, env, stack_trace) if node.algorithm else String("ECDSA")
+        if is_error(algorithm_val):
+            return algorithm_val
+        
+        # Convert to string values
+        data = data_val.value if isinstance(data_val, String) else str(data_val)
+        signature = sig_val.value if isinstance(sig_val, String) else str(sig_val)
+        public_key = key_val.value if isinstance(key_val, String) else str(key_val)
+        algorithm = algorithm_val.value if isinstance(algorithm_val, String) else str(algorithm_val)
+        
+        # Verify signature
+        try:
+            is_valid = CryptoPlugin.verify_signature(data, signature, public_key, algorithm)
+            return TRUE if is_valid else FALSE
+        except Exception as e:
+            return EvaluationError(f"Signature verification error: {str(e)}")
+    
+    def eval_gas_expression(self, node, env, stack_trace):
+        """Evaluate gas expression - access gas tracking.
+        
+        gas.used
+        gas.remaining
+        gas.limit
+        """
+        from ..blockchain import get_current_tx
+        
+        tx = get_current_tx()
+        if not tx:
+            debug_log("eval_gas_expression", "No active TX context")
+            return NULL
+        
+        # If no property specified, return gas info as object
+        if not node.property_name:
+            gas_info = {
+                "limit": Integer(tx.gas_limit),
+                "used": Integer(tx.gas_used),
+                "remaining": Integer(tx.gas_remaining)
+            }
+            return Map(gas_info)
+        
+        # Access specific property
+        prop = node.property_name
+        if prop == "limit":
+            return Integer(tx.gas_limit)
+        elif prop == "used":
+            return Integer(tx.gas_used)
+        elif prop == "remaining":
+            return Integer(tx.gas_remaining)
+        else:
+            return EvaluationError(f"Unknown gas property: {prop}")

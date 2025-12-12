@@ -1,0 +1,14 @@
+function makeAdder(x) {
+    return function(y) {
+        return x + y;
+    };
+}
+
+let add5 = makeAdder(5);
+print("Value of add5: " + add5);
+
+if (add5 == null) {
+    print("FAIL: add5 is Null");
+} else {
+    print("Result: " + add5(3));
+}

@@ -73,6 +73,12 @@ class ContextStackParser:
             SEND: self._parse_send_statement,
             RECEIVE: self._parse_receive_statement,
             ATOMIC: self._parse_atomic_statement,
+            # BLOCKCHAIN handlers
+            LEDGER: self._parse_ledger_statement,
+            STATE: self._parse_state_statement,
+            REQUIRE: self._parse_require_statement,
+            REVERT: self._parse_revert_statement,
+            LIMIT: self._parse_limit_statement,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -923,7 +929,19 @@ class ContextStackParser:
             # LET statement heuristic
             elif token.type == LET:
                 j = i + 1
-                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
+                nesting = 0
+                while j < len(tokens):
+                    t = tokens[j]
+                    if t.type == LBRACE:
+                        nesting += 1
+                    elif t.type == RBRACE:
+                        nesting -= 1
+                        if nesting < 0:
+                            break
+                    
+                    if nesting == 0 and t.type == SEMICOLON:
+                        break
+                    
                     j += 1
 
                 let_tokens = tokens[i:j]
@@ -1403,8 +1421,22 @@ class ContextStackParser:
                 value_tokens = []
 
                 j = value_start
-                while j < len(tokens) and tokens[j].type not in [COMMA, RBRACE]:
-                    value_tokens.append(tokens[j])
+                nesting = 0
+                while j < len(tokens):
+                    t = tokens[j]
+                    if t.type == LBRACE or t.type == LBRACKET or t.type == LPAREN:
+                        nesting += 1
+                    elif t.type == RBRACE or t.type == RBRACKET or t.type == RPAREN:
+                        if nesting > 0:
+                            nesting -= 1
+                        elif t.type == RBRACE and nesting == 0:
+                            # Found the closing brace of the map (or end of value if comma follows)
+                            break
+                    
+                    if nesting == 0 and t.type == COMMA:
+                        break
+                        
+                    value_tokens.append(t)
                     j += 1
 
                 value_expr = self._parse_expression(value_tokens)
@@ -3104,3 +3136,122 @@ class ContextStackParser:
 
         parser_debug("  ❌ Empty atomic statement")
         return None
+    # === BLOCKCHAIN STATEMENT PARSERS ===
+    
+    def _parse_ledger_statement(self, block_info, all_tokens):
+        """Parse ledger NAME = value; statements."""
+        parser_debug("🔧 [Context] Parsing ledger statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != LEDGER:
+            parser_debug("  ❌ Expected LEDGER keyword")
+            return None
+        
+        # ledger NAME = value
+        if len(tokens) < 4 or tokens[1].type != IDENT or tokens[2].type != ASSIGN:
+            parser_debug("  ❌ Invalid ledger syntax, expected: ledger NAME = value")
+            return None
+        
+        name = Identifier(tokens[1].literal)
+        
+        # Parse value expression (from token 3 onwards, excluding semicolon)
+        value_tokens = tokens[3:]
+        if value_tokens and value_tokens[-1].type == SEMICOLON:
+            value_tokens = value_tokens[:-1]
+        
+        initial_value = self._parse_expression(value_tokens) if value_tokens else None
+        
+        parser_debug(f"  ✅ Ledger: {name.value}")
+        return LedgerStatement(name=name, initial_value=initial_value)
+    
+    def _parse_state_statement(self, block_info, all_tokens):
+        """Parse state NAME = value; statements."""
+        parser_debug("🔧 [Context] Parsing state statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != STATE:
+            parser_debug("  ❌ Expected STATE keyword")
+            return None
+        
+        # state NAME = value
+        if len(tokens) < 4 or tokens[1].type != IDENT or tokens[2].type != ASSIGN:
+            parser_debug("  ❌ Invalid state syntax, expected: state NAME = value")
+            return None
+        
+        name = Identifier(tokens[1].literal)
+        
+        # Parse value expression (from token 3 onwards, excluding semicolon)
+        value_tokens = tokens[3:]
+        if value_tokens and value_tokens[-1].type == SEMICOLON:
+            value_tokens = value_tokens[:-1]
+        
+        initial_value = self._parse_expression(value_tokens) if value_tokens else None
+        
+        parser_debug(f"  ✅ State: {name.value}")
+        return StateStatement(name=name, initial_value=initial_value)
+    
+    def _parse_require_statement(self, block_info, all_tokens):
+        """Parse require(condition, message) statements."""
+        parser_debug("🔧 [Context] Parsing require statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != REQUIRE or (len(tokens) > 1 and tokens[1].type != LPAREN):
+            parser_debug("  ❌ Expected require()")
+            return None
+        
+        # Extract tokens between LPAREN and RPAREN
+        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        
+        # Split by comma to get condition and optional message
+        args = self._parse_argument_list(inner)
+        
+        if not args:
+            parser_debug("  ❌ require needs at least one argument")
+            return None
+        
+        condition = args[0]
+        message = args[1] if len(args) > 1 else None
+        
+        parser_debug(f"  ✅ Require with {len(args)} arguments")
+        return RequireStatement(condition=condition, message=message)
+    
+    def _parse_revert_statement(self, block_info, all_tokens):
+        """Parse revert(reason) statements."""
+        parser_debug("🔧 [Context] Parsing revert statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != REVERT:
+            parser_debug("  ❌ Expected REVERT keyword")
+            return None
+        
+        reason = None
+        
+        # revert() or revert(reason)
+        if len(tokens) > 1 and tokens[1].type == LPAREN:
+            inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+            if inner:
+                reason = self._parse_expression(inner)
+        
+        parser_debug("  ✅ Revert statement")
+        return RevertStatement(reason=reason)
+    
+    def _parse_limit_statement(self, block_info, all_tokens):
+        """Parse limit(amount) statements."""
+        parser_debug("🔧 [Context] Parsing limit statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != LIMIT or (len(tokens) > 1 and tokens[1].type != LPAREN):
+            parser_debug("  ❌ Expected limit()")
+            return None
+        
+        # Extract tokens between LPAREN and RPAREN
+        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        
+        gas_limit = self._parse_expression(inner) if inner else None
+        
+        if gas_limit is None:
+            parser_debug("  ❌ limit needs a gas amount")
+            return None
+        
+        parser_debug("  ✅ Limit statement")
+        return LimitStatement(gas_limit=gas_limit)

@@ -232,6 +232,17 @@ class Lexer:
             "catch": CATCH,
             "external": EXTERNAL,
             "from": FROM,
+            # Blockchain & Smart Contract keywords
+            "ledger": LEDGER,
+            "state": STATE,
+            "tx": TX,
+            "revert": REVERT,
+            "hash": HASH,
+            "signature": SIGNATURE,
+            "verify_sig": VERIFY_SIG,
+            "limit": LIMIT,
+            "gas": GAS,
+            "require": REQUIRE,
         }
         return keywords.get(ident, IDENT)
 

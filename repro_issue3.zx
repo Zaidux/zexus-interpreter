@@ -1,0 +1,20 @@
+print("--- START TEST ---");
+let s = "10";
+let i = 5;
+
+print("1. Testing String > Integer");
+try {
+    let res1 = s > i;
+    print("Result 1: " + res1);
+} catch (e) {
+    print("Caught 1: " + e);
+}
+
+print("2. Testing Integer > String");
+try {
+    let res2 = i > s;
+    print("Result 2: " + res2);
+} catch (e) {
+    print("Caught 2: " + e);
+}
+print("--- END TEST ---");

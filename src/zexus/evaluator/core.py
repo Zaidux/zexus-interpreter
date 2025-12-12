@@ -50,7 +50,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif node_type == zexus_ast.BlockStatement:
                 debug_log("  BlockStatement node", f"{len(node.statements)} statements")
-                return self.eval_block_statement(node, env)
+                return self.eval_block_statement(node, env, stack_trace)
             
             elif node_type == zexus_ast.ReturnStatement:
                 debug_log("  ReturnStatement node")
@@ -272,6 +272,28 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  AtomicStatement node", "atomic operation")
                 return self.eval_atomic_statement(node, env, stack_trace)
 
+            # === BLOCKCHAIN STATEMENTS ===
+            elif node_type == zexus_ast.LedgerStatement:
+                debug_log("  LedgerStatement node", f"ledger {node.name.value}")
+                return self.eval_ledger_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.StateStatement:
+                debug_log("  StateStatement node", f"state {node.name.value}")
+                return self.eval_state_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.RequireStatement:
+                debug_log("  RequireStatement node", "require condition")
+                return self.eval_require_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.RevertStatement:
+                debug_log("  RevertStatement node", "revert transaction")
+                return self.eval_revert_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.LimitStatement:
+                debug_log("  LimitStatement node", "set gas limit")
+                return self.eval_limit_statement(node, env, stack_trace)
+
+            # === EXPRESSIONS ===
             elif node_type == zexus_ast.Identifier:
                 debug_log("  Identifier node", node.value)
                 return self.eval_identifier(node, env)
@@ -436,6 +458,27 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     return val
 
                 return NULL
+            
+            # === BLOCKCHAIN EXPRESSIONS ===
+            elif node_type == zexus_ast.TXExpression:
+                debug_log("  TXExpression node", f"tx.{node.property_name}")
+                return self.eval_tx_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.HashExpression:
+                debug_log("  HashExpression node", "hash()")
+                return self.eval_hash_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.SignatureExpression:
+                debug_log("  SignatureExpression node", "signature()")
+                return self.eval_signature_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.VerifySignatureExpression:
+                debug_log("  VerifySignatureExpression node", "verify_sig()")
+                return self.eval_verify_signature_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.GasExpression:
+                debug_log("  GasExpression node", f"gas.{node.property_name}")
+                return self.eval_gas_expression(node, env, stack_trace)
             
             # Fallback
             debug_log("  Unknown node type", node_type)

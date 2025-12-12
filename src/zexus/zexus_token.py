@@ -148,6 +148,18 @@ MIDDLEWARE = "MIDDLEWARE"
 AUTH = "AUTH"
 THROTTLE = "THROTTLE"
 CACHE = "CACHE"
+
+# BLOCKCHAIN & SMART CONTRACT TOKENS
+LEDGER = "LEDGER"              # Immutable state ledger: ledger balances;
+STATE = "STATE"                # State management: state counter = 0;
+TX = "TX"                      # Transaction context: TX.caller, TX.timestamp
+REVERT = "REVERT"              # Revert transaction: revert("reason");
+REQUIRE = "REQUIRE"            # Require condition: require(condition, "error");
+HASH = "HASH"                  # Hash function: hash(data, "SHA256");
+SIGNATURE = "SIGNATURE"        # Create signature: signature(data, private_key);
+VERIFY_SIG = "VERIFY_SIG"      # Verify signature: verify_sig(data, sig, public_key);
+LIMIT = "LIMIT"                # Gas/resource limit: action transfer() limit 1000 { ... };
+GAS = "GAS"                    # Gas tracking: gas_used(), gas_remaining()
 PERSISTENT = "PERSISTENT"
 STORAGE = "STORAGE"
 REQUIRE = "REQUIRE"

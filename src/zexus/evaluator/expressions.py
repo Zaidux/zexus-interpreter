@@ -173,7 +173,21 @@ class ExpressionEvaluatorMixin:
                 elif operator == ">": return TRUE if l_val > r_val else FALSE
                 elif operator == "<=": return TRUE if l_val <= r_val else FALSE
                 elif operator == ">=": return TRUE if l_val >= r_val else FALSE
-        
+            
+            # Mixed String/Number comparison (Coerce to float)
+            elif (isinstance(left, (Integer, Float)) and isinstance(right, String)) or \
+                 (isinstance(left, String) and isinstance(right, (Integer, Float))):
+                try:
+                    l_val = float(left.value)
+                    r_val = float(right.value)
+                    if operator == "<": return TRUE if l_val < r_val else FALSE
+                    elif operator == ">": return TRUE if l_val > r_val else FALSE
+                    elif operator == "<=": return TRUE if l_val <= r_val else FALSE
+                    elif operator == ">=": return TRUE if l_val >= r_val else FALSE
+                except ValueError:
+                    # If conversion fails, return FALSE (NaN comparison behavior)
+                    return FALSE
+
         return EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
     
     def eval_prefix_expression(self, node, env, stack_trace):

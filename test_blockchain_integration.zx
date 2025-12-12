@@ -1,0 +1,45 @@
+// Blockchain Integration Test
+// Tests parser and evaluator integration for blockchain features
+
+print("=== BLOCKCHAIN INTEGRATION TESTS ===");
+
+// Test 1: Ledger statement
+print("\n1. Testing LEDGER statement:");
+ledger myLedger = "initial value";
+print("✅ Ledger created");
+
+// Test 2: State statement  
+print("\n2. Testing STATE statement:");
+state counter = 0;
+print("✅ State created: " + counter);
+
+// Test 3: Hash expression
+print("\n3. Testing HASH expression:");
+let hashResult = hash("test data", "SHA256");
+print("✅ Hash result: " + hashResult);
+
+// Test 4: Require statement (should pass)
+print("\n4. Testing REQUIRE statement (passing):");
+require(counter == 0, "Counter should be 0");
+print("✅ Require passed");
+
+// Test 5: State modification
+print("\n5. Testing state modification:");
+counter = counter + 1;
+print("✅ Counter incremented: " + counter);
+
+// Test 6: TX expression
+print("\n6. Testing TX expression:");
+let txObj = tx();
+print("TX object: " + txObj);
+let caller = txObj.get("caller");
+print("TX.caller: " + caller);
+
+// Test 7: Gas expression
+print("\n7. Testing GAS expression:");
+let gasObj = gas();
+print("Gas object: " + gasObj);
+let used = gasObj.get("used");
+print("Gas used: " + used);
+
+print("\n=== ALL TESTS COMPLETED ===");

@@ -1,0 +1,306 @@
+// Complete ERC20-style Token Smart Contract in Zexus
+// Demonstrates production-ready blockchain features
+
+print("════════════════════════════════════════════════");
+print("     ZEXUS TOKEN CONTRACT EXAMPLE (ERC20)");
+print("════════════════════════════════════════════════");
+print("");
+
+// ============================================================================
+// TOKEN CONTRACT DEFINITION
+// ============================================================================
+
+contract ZexusToken {
+    // Immutable ledger for balance history
+    ledger balance_history;
+    
+    // Mutable state variables
+    state balances = {};
+    state allowances = {};
+    state total_supply = 0;
+    state token_name = "Zexus Token";
+    state token_symbol = "ZXT";
+    state decimals = 18;
+    state owner;
+    state paused = false;
+    
+    // ========================================================================
+    // CONSTRUCTOR
+    // ========================================================================
+    
+    action init(initial_supply) limit 100000 {
+        print("Initializing Zexus Token...");
+        
+        owner = TX.caller;
+        total_supply = initial_supply;
+        balances[owner] = initial_supply;
+        
+        print("Token created:");
+        print("  Name: " + token_name);
+        print("  Symbol: " + token_symbol);
+        print("  Total Supply: " + total_supply);
+        print("  Owner: " + owner);
+        
+        // Record in ledger
+        balance_history = {
+            account: owner,
+            balance: initial_supply,
+            timestamp: TX.timestamp,
+            tx_hash: TX.block_hash
+        };
+    }
+    
+    // ========================================================================
+    // VIEW FUNCTIONS (Pure - No State Modification)
+    // ========================================================================
+    
+    action pure balanceOf(account) {
+        if (balances[account]) {
+            return balances[account];
+        }
+        return 0;
+    }
+    
+    action pure allowance(token_owner, spender) {
+        let key = token_owner + ":" + spender;
+        if (allowances[key]) {
+            return allowances[key];
+        }
+        return 0;
+    }
+    
+    action pure totalSupply() {
+        return total_supply;
+    }
+    
+    action pure name() {
+        return token_name;
+    }
+    
+    action pure symbol() {
+        return token_symbol;
+    }
+    
+    // ========================================================================
+    // TRANSFER FUNCTION
+    // ========================================================================
+    
+    action transfer(recipient, amount) limit 50000 {
+        let sender = TX.caller;
+        
+        // Security checks
+        require(!paused, "Contract is paused");
+        require(recipient != sender, "Cannot transfer to self");
+        require(amount > 0, "Amount must be positive");
+        require(balances[sender] >= amount, "Insufficient balance");
+        
+        // Execute transfer
+        balances[sender] = balances[sender] - amount;
+        balances[recipient] = balances[recipient] + amount;
+        
+        // Record in ledger
+        balance_history = {
+            from: sender,
+            to: recipient,
+            amount: amount,
+            timestamp: TX.timestamp,
+            tx_hash: TX.block_hash,
+            type: "transfer"
+        };
+        
+        print("Transfer successful:");
+        print("  From: " + sender);
+        print("  To: " + recipient);
+        print("  Amount: " + amount);
+        print("  Gas used: " + (50000 - TX.gas_remaining));
+        
+        return true;
+    }
+    
+    // ========================================================================
+    // APPROVE & TRANSFERFROM (Allowance Pattern)
+    // ========================================================================
+    
+    action approve(spender, amount) limit 30000 {
+        let token_owner = TX.caller;
+        
+        require(!paused, "Contract is paused");
+        require(amount >= 0, "Amount cannot be negative");
+        
+        let key = token_owner + ":" + spender;
+        allowances[key] = amount;
+        
+        print("Approval granted:");
+        print("  Owner: " + token_owner);
+        print("  Spender: " + spender);
+        print("  Amount: " + amount);
+        
+        return true;
+    }
+    
+    action transferFrom(sender, recipient, amount) limit 70000 {
+        let spender = TX.caller;
+        let key = sender + ":" + spender;
+        
+        // Security checks
+        require(!paused, "Contract is paused");
+        require(amount > 0, "Amount must be positive");
+        require(balances[sender] >= amount, "Insufficient balance");
+        require(allowances[key] >= amount, "Insufficient allowance");
+        
+        // Update balances
+        balances[sender] = balances[sender] - amount;
+        balances[recipient] = balances[recipient] + amount;
+        
+        // Update allowance
+        allowances[key] = allowances[key] - amount;
+        
+        // Record in ledger
+        balance_history = {
+            from: sender,
+            to: recipient,
+            amount: amount,
+            spender: spender,
+            timestamp: TX.timestamp,
+            tx_hash: TX.block_hash,
+            type: "transferFrom"
+        };
+        
+        print("TransferFrom successful:");
+        print("  From: " + sender);
+        print("  To: " + recipient);
+        print("  Amount: " + amount);
+        print("  Spender: " + spender);
+        
+        return true;
+    }
+    
+    // ========================================================================
+    // MINT & BURN (Owner Only)
+    // ========================================================================
+    
+    action mint(recipient, amount) limit 60000 {
+        // Access control
+        require(TX.caller == owner, "Only owner can mint");
+        require(!paused, "Contract is paused");
+        require(amount > 0, "Amount must be positive");
+        
+        // Mint new tokens
+        balances[recipient] = balances[recipient] + amount;
+        total_supply = total_supply + amount;
+        
+        // Record in ledger
+        balance_history = {
+            to: recipient,
+            amount: amount,
+            timestamp: TX.timestamp,
+            tx_hash: TX.block_hash,
+            type: "mint"
+        };
+        
+        print("Tokens minted:");
+        print("  Recipient: " + recipient);
+        print("  Amount: " + amount);
+        print("  New Total Supply: " + total_supply);
+        
+        return true;
+    }
+    
+    action burn(amount) limit 50000 {
+        let account = TX.caller;
+        
+        require(!paused, "Contract is paused");
+        require(amount > 0, "Amount must be positive");
+        require(balances[account] >= amount, "Insufficient balance to burn");
+        
+        // Burn tokens
+        balances[account] = balances[account] - amount;
+        total_supply = total_supply - amount;
+        
+        // Record in ledger
+        balance_history = {
+            from: account,
+            amount: amount,
+            timestamp: TX.timestamp,
+            tx_hash: TX.block_hash,
+            type: "burn"
+        };
+        
+        print("Tokens burned:");
+        print("  Account: " + account);
+        print("  Amount: " + amount);
+        print("  New Total Supply: " + total_supply);
+        
+        return true;
+    }
+    
+    // ========================================================================
+    // ADMIN FUNCTIONS
+    // ========================================================================
+    
+    action pause() limit 20000 {
+        require(TX.caller == owner, "Only owner can pause");
+        require(!paused, "Already paused");
+        
+        paused = true;
+        print("Contract paused by: " + TX.caller);
+        return true;
+    }
+    
+    action unpause() limit 20000 {
+        require(TX.caller == owner, "Only owner can unpause");
+        require(paused, "Not paused");
+        
+        paused = false;
+        print("Contract unpaused by: " + TX.caller);
+        return true;
+    }
+    
+    action transferOwnership(new_owner) limit 30000 {
+        require(TX.caller == owner, "Only owner can transfer ownership");
+        require(new_owner != owner, "New owner must be different");
+        
+        let old_owner = owner;
+        owner = new_owner;
+        
+        print("Ownership transferred:");
+        print("  From: " + old_owner);
+        print("  To: " + new_owner);
+        
+        return true;
+    }
+}
+
+// ============================================================================
+// USAGE EXAMPLE
+// ============================================================================
+
+print("");
+print("Contract defined successfully!");
+print("");
+print("Example Usage:");
+print("");
+print("  // Initialize contract");
+print("  token.init(1000000);");
+print("");
+print("  // Check balance");
+print("  let balance = token.balanceOf('0x123...');");
+print("");
+print("  // Transfer tokens");
+print("  token.transfer('0x456...', 1000);");
+print("");
+print("  // Approve spending");
+print("  token.approve('0x789...', 5000);");
+print("");
+print("  // Transfer from approved amount");
+print("  token.transferFrom('0x123...', '0xabc...', 2000);");
+print("");
+print("  // Mint new tokens (owner only)");
+print("  token.mint('0xdef...', 10000);");
+print("");
+print("  // Burn tokens");
+print("  token.burn(500);");
+print("");
+print("════════════════════════════════════════════════");
+print("✓ Token contract ready for deployment!");
+print("════════════════════════════════════════════════");

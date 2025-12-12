@@ -516,6 +516,112 @@ class FunctionEvaluatorMixin:
             "map": Builtin(_map, "map"),
             "filter": Builtin(_filter, "filter"),
         })
+        
+        # Register blockchain builtins
+        self._register_blockchain_builtins()
+    
+    def _register_blockchain_builtins(self):
+        """Register blockchain cryptographic and utility functions"""
+        from ..blockchain.crypto import CryptoPlugin
+        from ..blockchain.transaction import get_current_tx, create_tx_context
+        
+        # hash(data, algorithm?)
+        def _hash(*a):
+            if len(a) < 1:
+                return EvaluationError("hash() requires at least 1 argument: data, [algorithm]")
+            
+            data = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            algorithm = a[1].value if len(a) > 1 and hasattr(a[1], 'value') else 'SHA256'
+            
+            try:
+                result = CryptoPlugin.hash_data(data, algorithm)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"Hash error: {str(e)}")
+        
+        # keccak256(data)
+        def _keccak256(*a):
+            if len(a) != 1:
+                return EvaluationError("keccak256() expects 1 argument: data")
+            
+            data = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            
+            try:
+                result = CryptoPlugin.keccak256(data)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"Keccak256 error: {str(e)}")
+        
+        # signature(data, private_key, algorithm?)
+        def _signature(*a):
+            if len(a) < 2:
+                return EvaluationError("signature() requires at least 2 arguments: data, private_key, [algorithm]")
+            
+            data = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            private_key = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            algorithm = a[2].value if len(a) > 2 and hasattr(a[2], 'value') else 'ECDSA'
+            
+            try:
+                result = CryptoPlugin.sign_data(data, private_key, algorithm)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"Signature error: {str(e)}")
+        
+        # verify_sig(data, signature, public_key, algorithm?)
+        def _verify_sig(*a):
+            if len(a) < 3:
+                return EvaluationError("verify_sig() requires at least 3 arguments: data, signature, public_key, [algorithm]")
+            
+            data = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            signature = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            public_key = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            algorithm = a[3].value if len(a) > 3 and hasattr(a[3], 'value') else 'ECDSA'
+            
+            try:
+                result = CryptoPlugin.verify_signature(data, signature, public_key, algorithm)
+                return TRUE if result else FALSE
+            except Exception as e:
+                return EvaluationError(f"Verification error: {str(e)}")
+        
+        # tx object - returns transaction context
+        def _tx(*a):
+            # Get or create TX context
+            tx = get_current_tx()
+            if tx is None:
+                tx = create_tx_context(caller="system", gas_limit=1000000)
+            
+            # Return as Map object
+            return Map({
+                String("caller"): String(tx.caller),
+                String("timestamp"): Integer(int(tx.timestamp)),
+                String("block_hash"): String(tx.block_hash),
+                String("gas_used"): Integer(tx.gas_used),
+                String("gas_remaining"): Integer(tx.gas_remaining),
+                String("gas_limit"): Integer(tx.gas_limit)
+            })
+        
+        # gas object - returns gas tracking info
+        def _gas(*a):
+            # Get or create TX context
+            tx = get_current_tx()
+            if tx is None:
+                tx = create_tx_context(caller="system", gas_limit=1000000)
+            
+            # Return as Map object
+            return Map({
+                String("used"): Integer(tx.gas_used),
+                String("remaining"): Integer(tx.gas_remaining),
+                String("limit"): Integer(tx.gas_limit)
+            })
+        
+        self.builtins.update({
+            "hash": Builtin(_hash, "hash"),
+            "keccak256": Builtin(_keccak256, "keccak256"),
+            "signature": Builtin(_signature, "signature"),
+            "verify_sig": Builtin(_verify_sig, "verify_sig"),
+            "tx": Builtin(_tx, "tx"),
+            "gas": Builtin(_gas, "gas"),
+        })
     
     def _register_renderer_builtins(self):
         """Logic extracted from the original RENDER_REGISTRY and helper functions."""

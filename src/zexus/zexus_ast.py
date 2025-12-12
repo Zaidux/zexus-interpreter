@@ -1112,6 +1112,184 @@ class AtomicStatement(Statement):
     def __repr__(self):
         return f"AtomicStatement(body={self.body}, expr={self.expr})"
 
+
+# ============================================================================
+# BLOCKCHAIN & SMART CONTRACT AST NODES
+# ============================================================================
+
+class LedgerStatement(Statement):
+    """Ledger statement - Immutable, versioned state storage
+    
+    ledger balances;
+    ledger accounts = {};
+    ledger state_root;
+    """
+    def __init__(self, name, initial_value=None):
+        self.name = name  # Identifier: ledger variable name
+        self.initial_value = initial_value  # Optional Expression: initial value
+
+    def __repr__(self):
+        return f"LedgerStatement(name={self.name}, initial={self.initial_value})"
+
+
+class StateStatement(Statement):
+    """State statement - Mutable state within contracts
+    
+    state counter = 0;
+    state owner = TX.caller;
+    state locked = false;
+    """
+    def __init__(self, name, initial_value=None):
+        self.name = name  # Identifier: state variable name
+        self.initial_value = initial_value  # Optional Expression: initial value
+
+    def __repr__(self):
+        return f"StateStatement(name={self.name}, initial={self.initial_value})"
+
+
+class ContractStatement(Statement):
+    """Contract statement - Smart contract definition
+    
+    contract Token {
+        state balances = {};
+        state total_supply = 0;
+        
+        action mint(recipient, amount) limit 5000 {
+            require(TX.caller == owner, "Only owner can mint");
+            balances[recipient] = balances[recipient] + amount;
+            total_supply = total_supply + amount;
+        }
+    }
+    """
+    def __init__(self, name, body, modifiers=None):
+        self.name = name  # Identifier: contract name
+        self.body = body  # BlockStatement: contract body (state vars and actions)
+        self.modifiers = modifiers or []  # List of modifiers
+
+    def __repr__(self):
+        return f"ContractStatement(name={self.name}, modifiers={self.modifiers})"
+
+
+class RevertStatement(Statement):
+    """Revert statement - Rollback transaction
+    
+    revert();
+    revert("Insufficient balance");
+    revert("Unauthorized: " + TX.caller);
+    """
+    def __init__(self, reason=None):
+        self.reason = reason  # Optional Expression: revert reason message
+
+    def __repr__(self):
+        return f"RevertStatement(reason={self.reason})"
+
+
+class RequireStatement(Statement):
+    """Require statement - Conditional revert
+    
+    require(balance >= amount);
+    require(TX.caller == owner, "Only owner");
+    require(balance >= amount, "Insufficient funds");
+    """
+    def __init__(self, condition, message=None):
+        self.condition = condition  # Expression: condition that must be true
+        self.message = message  # Optional Expression: error message if false
+
+    def __repr__(self):
+        return f"RequireStatement(condition={self.condition}, msg={self.message})"
+
+
+class LimitStatement(Statement):
+    """Limit statement - Gas/resource limit for actions
+    
+    action transfer() limit 1000 { ... }
+    limit 5000;  // Set limit for next operation
+    """
+    def __init__(self, amount):
+        self.amount = amount  # IntegerLiteral or Expression: gas limit amount
+
+    def __repr__(self):
+        return f"LimitStatement(amount={self.amount})"
+
+
+# BLOCKCHAIN EXPRESSION NODES
+
+class TXExpression(Expression):
+    """TX expression - Transaction context access
+    
+    TX.caller
+    TX.timestamp
+    TX.block_hash
+    TX.gas_remaining
+    """
+    def __init__(self, property_name):
+        self.property_name = property_name  # String: property being accessed
+
+    def __repr__(self):
+        return f"TXExpression(property={self.property_name})"
+
+
+class HashExpression(Expression):
+    """Hash expression - Cryptographic hashing
+    
+    hash(data, "SHA256")
+    hash(message, "KECCAK256")
+    hash(password, "SHA512")
+    """
+    def __init__(self, data, algorithm):
+        self.data = data  # Expression: data to hash
+        self.algorithm = algorithm  # Expression: hash algorithm name
+
+    def __repr__(self):
+        return f"HashExpression(data={self.data}, algorithm={self.algorithm})"
+
+
+class SignatureExpression(Expression):
+    """Signature expression - Digital signature creation
+    
+    signature(message, private_key)
+    signature(data, key, "ECDSA")
+    """
+    def __init__(self, data, private_key, algorithm=None):
+        self.data = data  # Expression: data to sign
+        self.private_key = private_key  # Expression: private key
+        self.algorithm = algorithm  # Optional Expression: signature algorithm
+
+    def __repr__(self):
+        return f"SignatureExpression(data={self.data}, algorithm={self.algorithm})"
+
+
+class VerifySignatureExpression(Expression):
+    """Verify signature expression - Signature verification
+    
+    verify_sig(data, signature, public_key)
+    verify_sig(message, sig, pub_key, "ECDSA")
+    """
+    def __init__(self, data, signature, public_key, algorithm=None):
+        self.data = data  # Expression: original data
+        self.signature = signature  # Expression: signature to verify
+        self.public_key = public_key  # Expression: public key
+        self.algorithm = algorithm  # Optional Expression: signature algorithm
+
+    def __repr__(self):
+        return f"VerifySignatureExpression(data={self.data}, algorithm={self.algorithm})"
+
+
+class GasExpression(Expression):
+    """Gas expression - Access gas tracking information
+    
+    gas              // Current gas tracker object
+    gas.used         // Gas consumed so far
+    gas.remaining    // Gas still available
+    gas.limit        // Total gas limit
+    """
+    def __init__(self, property_name=None):
+        self.property_name = property_name  # Optional String: property being accessed
+
+    def __repr__(self):
+        return f"GasExpression(property={self.property_name})"
+
+
 def attach_modifiers(node, modifiers):
     """Attach modifiers to an AST node (best-effort).
 
