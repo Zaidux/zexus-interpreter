@@ -1,0 +1,14 @@
+print "=== Using Statement with File Test ==="
+
+print "Test 1: File object with using statement"
+using(f = file("test_file.txt", "w")) {
+    print "Inside using block - file opened"
+}
+print "✓ Using block completed (file should be closed)"
+
+print ""
+print "Test 2: Verify cleanup"
+print "File object supports RAII pattern"
+
+print ""
+print "=== All Using Tests Passed ==="

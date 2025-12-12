@@ -400,6 +400,7 @@ class Lexer:
             "module": MODULE,           # NEW: Module keyword for code organization
             "package": PACKAGE,         # NEW: Package keyword for package definition
             "using": USING,             # NEW: Using keyword for resource management
+            "type_alias": TYPE_ALIAS,   # NEW: Type alias keyword for type definitions
             "seal": SEAL,               # NEW: Seal keyword for immutable objects
             "audit": AUDIT,             # NEW: Audit keyword for compliance logging
             "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control

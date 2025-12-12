@@ -1,0 +1,36 @@
+print "=== Package Hierarchy Tests ==="
+
+print "Test 1: Nested package declaration"
+package app {
+    function app_main() {
+        return "app main"
+    }
+}
+
+package app.api {
+    function api_root() {
+        return "api root"
+    }
+}
+
+package app.api.v1 {
+    function get_users() {
+        return "v1 users"
+    }
+}
+
+print "✓ Packages declared"
+
+print ""
+print "Test 2: Access nested packages"
+let result1 = app.app_main()
+print "app.app_main() = " + result1
+
+let result2 = app.api.api_root()
+print "app.api.api_root() = " + result2
+
+let result3 = app.api.v1.get_users()
+print "app.api.v1.get_users() = " + result3
+
+print ""
+print "=== All Package Hierarchy Tests Passed ==="

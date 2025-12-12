@@ -248,6 +248,10 @@ class Package:
         """Get a module by name."""
         return self.modules.get(name)
     
+    def get(self, name: str):
+        """Get a module or sub-package by name (for property access)."""
+        return self.modules.get(name)
+    
     def add_dependency(self, package_name: str):
         """Add a package dependency."""
         if package_name not in self.dependencies:

@@ -1,0 +1,10 @@
+# Test Issue #7: Package hierarchies
+print "=== Test Package Hierarchies ===";
+
+package app.api.v1 {
+    function get_users() {
+        return "users";
+    };
+};
+
+print "✓ Package created";

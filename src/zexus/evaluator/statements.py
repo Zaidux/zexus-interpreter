@@ -101,8 +101,51 @@ class StatementEvaluatorMixin:
         if is_error(value): 
             return value
         
+        # Type annotation validation
+        if node.type_annotation:
+            type_name = node.type_annotation.value
+            debug_log("eval_let_statement", f"Validating type: {type_name}")
+            
+            # Resolve type alias
+            type_alias = env.get(type_name)
+            if type_alias and hasattr(type_alias, '__class__') and type_alias.__class__.__name__ == 'TypeAlias':
+                # Get the base type
+                base_type = type_alias.base_type
+                debug_log("eval_let_statement", f"Resolved type alias: {type_name} -> {base_type}")
+                
+                # Validate value type matches the base type
+                if not self._validate_type(value, base_type):
+                    return EvaluationError(f"Type mismatch: cannot assign {type(value).__name__} to {type_name} (expected {base_type})")
+            else:
+                # Direct type validation (for built-in types)
+                if not self._validate_type(value, type_name):
+                    return EvaluationError(f"Type mismatch: cannot assign {type(value).__name__} to {type_name}")
+        
         env.set(node.name.value, value)
         return NULL
+    
+    def _validate_type(self, value, expected_type):
+        """Validate that a value matches an expected type"""
+        # Map Zexus types to Python types
+        type_map = {
+            'int': ('Integer',),
+            'integer': ('Integer',),
+            'str': ('String',),
+            'string': ('String',),
+            'bool': ('Boolean',),
+            'boolean': ('Boolean',),
+            'float': ('Float', 'Integer'),  # int can be used as float
+            'array': ('Array',),
+            'list': ('Array',),
+            'map': ('Map',),
+            'dict': ('Map',),
+            'null': ('Null',),
+        }
+        
+        value_type = type(value).__name__
+        expected_types = type_map.get(expected_type.lower(), (expected_type,))
+        
+        return value_type in expected_types
     
     def eval_const_statement(self, node, env, stack_trace):
         debug_log("eval_const_statement", f"const {node.name.value}")
@@ -871,6 +914,9 @@ class StatementEvaluatorMixin:
     # === MISC STATEMENTS ===
     
     def eval_print_statement(self, node, env, stack_trace):
+        if not hasattr(node, 'value') or node.value is None:
+            return NULL
+        
         val = self.eval_node(node.value, env, stack_trace)
         if is_error(val):
             print(f"❌ Error: {val}", file=sys.stderr)
@@ -1563,8 +1609,8 @@ class StatementEvaluatorMixin:
         # Get type alias name
         alias_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
         
-        # Evaluate base type
-        base_type = self.eval_node(node.base_type, env, stack_trace)
+        # Get base type (just the string name, don't evaluate as expression)
+        base_type = node.base_type.value if hasattr(node.base_type, 'value') else str(node.base_type)
         
         # Create type alias
         from ..complexity_system import TypeAlias
@@ -1575,7 +1621,7 @@ class StatementEvaluatorMixin:
         
         # Register type alias
         manager.register_type_alias(alias)
-        debug_log("eval_type_alias_statement", f"Registered type alias: {alias_name}")
+        debug_log("eval_type_alias_statement", f"Registered type alias: {alias_name} -> {base_type}")
         
         # Store in environment
         env.set(alias_name, alias)
@@ -1673,25 +1719,29 @@ class StatementEvaluatorMixin:
         
         # Note: Module is stored directly in environment; manager integration can be enhanced later
         debug_log("eval_module_statement", f"Created module: {module_name}")
+        debug_log("eval_module_statement", f"Module members: {list(module.members.keys())}")
         
         # Store in environment
         env.set(module_name, module)
         return String(f"Module '{module_name}' created")
 
     def eval_package_statement(self, node, env, stack_trace):
-        """Evaluate package statement - create top-level package."""
+        """Evaluate package statement - create package with hierarchical support."""
         from ..complexity_system import get_complexity_manager, Package
         
         manager = get_complexity_manager()
         
-        # Get package name
+        # Get package name (may be dotted like app.api.v1)
         package_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
         
-        # Create package
-        package = Package(name=package_name)
+        # Parse hierarchical package names
+        name_parts = package_name.split('.')
+        
+        # Create the leaf package with body content
+        leaf_package = Package(name=name_parts[-1])
         
         # Execute package body in new environment
-        package_env = Environment(parent=env)
+        package_env = Environment(outer=env)
         
         if hasattr(node, 'body') and node.body:
             body_result = self.eval_node(node.body, package_env, stack_trace)
@@ -1700,14 +1750,44 @@ class StatementEvaluatorMixin:
         for key in package_env.store:
             if not key.startswith('_'):
                 value = package_env.get(key)
-                package.modules[key] = value
+                leaf_package.modules[key] = value
         
-        # Register package
-        manager.register_package(package)
-        debug_log("eval_package_statement", f"Created package: {package_name}")
+        debug_log("eval_package_statement", f"Created package: {package_name} with members: {list(leaf_package.modules.keys())}")
         
-        # Store in environment
-        env.set(package_name, package)
+        # Handle hierarchical package structure
+        if len(name_parts) == 1:
+            # Simple package (no hierarchy)
+            env.set(package_name, leaf_package)
+        else:
+            # Hierarchical package - ensure all ancestors exist
+            # Start from root and work down to leaf
+            root_name = name_parts[0]
+            root_package = env.get(root_name)
+            
+            if root_package is None or not hasattr(root_package, 'modules'):
+                # Create root package if it doesn't exist
+                root_package = Package(name=root_name)
+                env.set(root_name, root_package)
+                debug_log("eval_package_statement", f"Created root package: {root_name}")
+            
+            # Navigate/create intermediate packages
+            current = root_package
+            for i in range(1, len(name_parts)):
+                part_name = name_parts[i]
+                
+                if i == len(name_parts) - 1:
+                    # This is the leaf - add it
+                    current.modules[part_name] = leaf_package
+                    debug_log("eval_package_statement", f"Added {part_name} to {name_parts[i-1]}")
+                else:
+                    # This is an intermediate package
+                    if part_name not in current.modules:
+                        # Create intermediate package
+                        intermediate = Package(name=part_name)
+                        current.modules[part_name] = intermediate
+                        debug_log("eval_package_statement", f"Created intermediate package: {part_name}")
+                    current = current.modules[part_name]
+        
         return String(f"Package '{package_name}' created")
 
     def eval_using_statement(self, node, env, stack_trace):

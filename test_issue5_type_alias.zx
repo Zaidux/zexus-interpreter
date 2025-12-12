@@ -1,0 +1,9 @@
+# Test Issue #5: Type alias resolution in variable declarations
+type_alias UserId = integer;
+type_alias Username = string;
+
+let user_id: UserId = 42;
+let username: Username = "alice";
+
+print "User ID: " + user_id;
+print "Username: " + username;

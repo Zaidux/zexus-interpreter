@@ -1,0 +1,12 @@
+print "=== Simple Package Test ==="
+
+package app {
+    function test_func() {
+        return "works"
+    }
+}
+
+print "Package created"
+
+# Try to inspect what's in app
+print "Type of app: " + typeof(app)

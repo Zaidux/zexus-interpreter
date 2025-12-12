@@ -1,0 +1,4 @@
+print "Test 1";
+print "Test 2";
+let x = 5;
+print "Value: " + x;

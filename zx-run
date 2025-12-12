@@ -4,6 +4,7 @@ Direct Zexus file executor - no dependencies, just runs .zx files directly
 """
 import sys
 import os
+import argparse
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -14,11 +15,12 @@ from zexus.evaluator.core import Evaluator
 from zexus.object import Environment
 from zexus import config
 
-# Disable debug logging for cleaner output
-config.config.enable_debug_logs = False
-
-def run_zexus_file(filename):
+def run_zexus_file(filename, debug_level='none'):
     """Execute a Zexus file directly"""
+    
+    # Set debug level
+    config.config.debug_level = debug_level
+    config.config.enable_debug_logs = (debug_level != 'none')
     
     if not os.path.exists(filename):
         print(f"❌ Error: File not found: {filename}", file=sys.stderr)
@@ -63,8 +65,19 @@ def run_zexus_file(filename):
         sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: zx-run <file.zx>", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Zexus file executor')
+    parser.add_argument('file', help='Zexus file to execute (.zx)')
+    parser.add_argument('--verbose', '-v', action='store_true', 
+                        help='Enable verbose debug output')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Suppress parser debug output (default)')
     
-    run_zexus_file(sys.argv[1])
+    args = parser.parse_args()
+    
+    # Determine debug level
+    if args.verbose:
+        debug_level = 'full'
+    else:
+        debug_level = 'none'
+    
+    run_zexus_file(args.file, debug_level)

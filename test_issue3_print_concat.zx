@@ -1,0 +1,4 @@
+# Test Issue #3: Print statement concatenation with undefined variables
+# Expected: Should display error about undefined variable
+
+print("Result: " + undefined_var);

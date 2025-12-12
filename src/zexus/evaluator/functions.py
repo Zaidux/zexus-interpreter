@@ -213,12 +213,37 @@ class FunctionEvaluatorMixin:
                 return obj.pairs.get(key, default)
         
         # === Module Methods ===
-        from ..complexity_system import Module
+        from ..complexity_system import Module, Package
         if isinstance(obj, Module):
+            debug_log("  MethodCallExpression", f"Calling method '{method_name}' on module '{obj.name}'")
+            debug_log("  MethodCallExpression", f"Module members: {list(obj.members.keys())}")
+            
             # For module methods, get the member and call it if it's a function
             member_value = obj.get(method_name)
             if member_value is None:
                 return EvaluationError(f"Method '{method_name}' not found in module '{obj.name}'")
+            
+            debug_log("  MethodCallExpression", f"Found member value: {member_value}")
+            
+            # Evaluate arguments
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            
+            # Call the function/action using apply_function
+            return self.apply_function(member_value, args, env)
+        
+        # === Package Methods ===
+        if isinstance(obj, Package):
+            debug_log("  MethodCallExpression", f"Calling method '{method_name}' on package '{obj.name}'")
+            debug_log("  MethodCallExpression", f"Package modules: {list(obj.modules.keys())}")
+            
+            # For package methods, get the module/function and call it
+            member_value = obj.get(method_name)
+            if member_value is None:
+                return EvaluationError(f"Method '{method_name}' not found in package '{obj.name}'")
+            
+            debug_log("  MethodCallExpression", f"Found member value: {member_value}")
             
             # Evaluate arguments
             args = self.eval_expressions(node.arguments, env)
@@ -241,7 +266,8 @@ class FunctionEvaluatorMixin:
             print(f"[EMBED] Executing {obj.language}.{method_name}")
             return Integer(42)  # Placeholder
         
-        return EvaluationError(f"Method '{method_name}' not supported for {obj.type()}")
+        obj_type = obj.type() if hasattr(obj, 'type') and callable(obj.type) else type(obj).__name__
+        return EvaluationError(f"Method '{method_name}' not supported for {obj_type}")
     
     # --- Array Helpers (Internal) ---
     
@@ -445,6 +471,24 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("filter(arr, fn)")
             return self._array_filter(a[0], a[1])
         
+        # File object creation (for RAII using statements)
+        def _file(*a):
+            if len(a) == 0 or len(a) > 2:
+                return EvaluationError("file() takes 1 or 2 arguments: file(path) or file(path, mode)")
+            if not isinstance(a[0], String):
+                return EvaluationError("file() path must be a string")
+            
+            from ..object import File as FileObject
+            path = a[0].value
+            mode = a[1].value if len(a) > 1 and isinstance(a[1], String) else 'r'
+            
+            try:
+                file_obj = FileObject(path, mode)
+                file_obj.open()
+                return file_obj
+            except Exception as e:
+                return EvaluationError(f"file() error: {str(e)}")
+        
         # Register mappings
         self.builtins.update({
             "now": Builtin(_now, "now"),
@@ -453,6 +497,7 @@ class FunctionEvaluatorMixin:
             "to_hex": Builtin(_to_hex, "to_hex"),
             "from_hex": Builtin(_from_hex, "from_hex"),
             "sqrt": Builtin(_sqrt, "sqrt"),
+            "file": Builtin(_file, "file"),
             "file_read_text": Builtin(_read_text, "file_read_text"),
             "file_write_text": Builtin(_write_text, "file_write_text"),
             "file_exists": Builtin(_exists, "file_exists"),

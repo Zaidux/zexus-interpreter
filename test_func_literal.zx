@@ -1,0 +1,6 @@
+# Test function literal at top level
+function test_func(x) {
+    return x + 1;
+};
+
+print "Done";

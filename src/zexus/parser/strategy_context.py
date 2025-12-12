@@ -16,6 +16,11 @@ def ctx_debug(msg, data=None, level='debug'):
     else:
         print(f"🔍 [CTX DEBUG] {msg}")
 
+# Helper function for parser debug output
+def parser_debug(msg):
+    if zexus_config.should_log('debug'):
+        print(msg)
+
 # Helper class to create objects that behave like AST nodes (dot notation access)
 class AstNodeShim:
     def __init__(self, **kwargs):
@@ -117,7 +122,7 @@ class ContextStackParser:
             # CRITICAL: Don't wrap Statement nodes, only wrap Expressions
             if result is not None:
                 if isinstance(result, Statement):
-                    print(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
+                    parser_debug(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                     # If we got a BlockStatement but it has no inner statements,
                     # attempt to populate it from the block tokens (best-effort).
                     if isinstance(result, BlockStatement) and not getattr(result, 'statements', None):
@@ -126,22 +131,22 @@ class ContextStackParser:
                             print(f"  🔧 Populating empty BlockStatement from {len(tokens)} tokens")
                             parsed_stmts = self._parse_block_statements(tokens)
                             result.statements = parsed_stmts
-                            print(f"  ✅ Populated BlockStatement with {len(parsed_stmts)} statements")
+                            parser_debug(f"  ✅ Populated BlockStatement with {len(parsed_stmts)} statements")
                     return result
                 elif isinstance(result, Expression):
-                    print(f"  ✅ Parsed: ExpressionStatement at line {block_info.get('start_token', {}).get('line', 'unknown')}")
+                    parser_debug(f"  ✅ Parsed: ExpressionStatement at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                     return ExpressionStatement(result)
                 else:
                     result = self._ensure_statement_node(result, block_info)
                     if result:
-                        print(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
+                        parser_debug(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                     return result
             else:
-                print(f"  ⚠️ No result for {block_type} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
+                parser_debug(f"  ⚠️ No result for {block_type} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                 return None
 
         except Exception as e:
-            print(f"⚠️ [Context] Error parsing {block_type}: {e}")
+            parser_debug(f"⚠️ [Context] Error parsing {block_type}: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -183,28 +188,40 @@ class ContextStackParser:
 
     def _parse_let_statement_block(self, block_info, all_tokens):
         """Parse let statement block with robust method chain handling"""
-        print("🔧 [Context] Parsing let statement")
+        parser_debug("🔧 [Context] Parsing let statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 4:
-            print("  ❌ Invalid let statement: too few tokens")
+            parser_debug("  ❌ Invalid let statement: too few tokens")
             return None
 
         if tokens[1].type != IDENT:
-            print("  ❌ Invalid let statement: expected identifier after 'let'")
+            parser_debug("  ❌ Invalid let statement: expected identifier after 'let'")
             return None
 
         variable_name = tokens[1].literal
-        print(f"  📝 Variable: {variable_name}")
+        parser_debug(f"  📝 Variable: {variable_name}")
 
+        # Check for type annotation (name: Type = value)
+        type_annotation = None
+        if len(tokens) > 2 and tokens[2].type == COLON:
+            if len(tokens) > 3 and tokens[3].type == IDENT:
+                type_annotation = tokens[3].literal
+                parser_debug(f"  📝 Type annotation: {type_annotation}")
+            else:
+                parser_debug("  ❌ Invalid let statement: expected type after colon")
+                return None
+
+        # Find equals sign (skip type annotation if present)
+        start_index = 4 if type_annotation else 2
         equals_index = -1
-        for i, token in enumerate(tokens):
-            if token.type == ASSIGN:
+        for i in range(start_index, len(tokens)):
+            if tokens[i].type == ASSIGN:
                 equals_index = i
                 break
 
         if equals_index == -1:
-            print("  ❌ Invalid let statement: no assignment operator")
+            parser_debug("  ❌ Invalid let statement: no assignment operator")
             return None
 
         # Collect RHS tokens with proper nesting support
@@ -235,45 +252,47 @@ class ContextStackParser:
             value_tokens.append(t)
             j += 1
 
-        print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
+        parser_debug(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
         # Parse the value expression
         if not value_tokens:
-            print("  ❌ No value tokens found")
+            parser_debug("  ❌ No value tokens found")
             return None
 
         # Special case: map literal
         if value_tokens[0].type == LBRACE:
-            print("  🗺️ Detected map literal")
+            parser_debug("  🗺️ Detected map literal")
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
 
         if value_expression is None:
-            print("  ❌ Could not parse value expression")
+            parser_debug("  ❌ Could not parse value expression")
             return None
 
-        print(f"  ✅ Let statement: {variable_name} = {type(value_expression).__name__}")
+        type_msg = f" : {type_annotation}" if type_annotation else ""
+        parser_debug(f"  ✅ Let statement: {variable_name}{type_msg} = {type(value_expression).__name__}")
         return LetStatement(
             name=Identifier(variable_name),
-            value=value_expression
+            value=value_expression,
+            type_annotation=Identifier(type_annotation) if type_annotation else None
         )
 
     def _parse_const_statement_block(self, block_info, all_tokens):
         """Parse const statement block with robust method chain handling (mirrors let)"""
-        print("🔧 [Context] Parsing const statement")
+        parser_debug("🔧 [Context] Parsing const statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 4:
-            print("  ❌ Invalid const statement: too few tokens")
+            parser_debug("  ❌ Invalid const statement: too few tokens")
             return None
 
         if tokens[1].type != IDENT:
-            print("  ❌ Invalid const statement: expected identifier after 'const'")
+            parser_debug("  ❌ Invalid const statement: expected identifier after 'const'")
             return None
 
         variable_name = tokens[1].literal
-        print(f"  📝 Variable: {variable_name}")
+        parser_debug(f"  📝 Variable: {variable_name}")
 
         equals_index = -1
         for i, token in enumerate(tokens):
@@ -282,7 +301,7 @@ class ContextStackParser:
                 break
 
         if equals_index == -1:
-            print("  ❌ Invalid const statement: no assignment operator")
+            parser_debug("  ❌ Invalid const statement: no assignment operator")
             return None
 
         # Collect RHS tokens with proper nesting support
@@ -313,25 +332,25 @@ class ContextStackParser:
             value_tokens.append(t)
             j += 1
 
-        print(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
+        parser_debug(f"  📝 Value tokens: {[t.literal for t in value_tokens]}")
 
         # Parse the value expression
         if not value_tokens:
-            print("  ❌ No value tokens found")
+            parser_debug("  ❌ No value tokens found")
             return None
 
         # Special case: map literal
         if value_tokens[0].type == LBRACE:
-            print("  🗺️ Detected map literal")
+            parser_debug("  🗺️ Detected map literal")
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
 
         if value_expression is None:
-            print("  ❌ Could not parse value expression")
+            parser_debug("  ❌ Could not parse value expression")
             return None
 
-        print(f"  ✅ Const statement: {variable_name} = {type(value_expression).__name__}")
+        parser_debug(f"  ✅ Const statement: {variable_name} = {type(value_expression).__name__}")
         return ConstStatement(
             name=Identifier(variable_name),
             value=value_expression
@@ -339,7 +358,7 @@ class ContextStackParser:
 
     def _parse_print_statement_block(self, block_info, all_tokens):
         """Parse print statement block - RETURNS PrintStatement"""
-        print("🔧 [Context] Parsing print statement")
+        parser_debug("🔧 [Context] Parsing print statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 2:
@@ -355,11 +374,11 @@ class ContextStackParser:
 
     def _parse_assignment_statement(self, block_info, all_tokens):
         """Parse assignment statement - RETURNS AssignmentExpression"""
-        print("🔧 [Context] Parsing assignment statement")
+        parser_debug("🔧 [Context] Parsing assignment statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 3 or tokens[1].type != ASSIGN:
-            print("  ❌ Invalid assignment: no assignment operator")
+            parser_debug("  ❌ Invalid assignment: no assignment operator")
             return None
 
         variable_name = tokens[0].literal
@@ -377,13 +396,13 @@ class ContextStackParser:
 
         # Check if this is a map literal
         if value_tokens and value_tokens[0].type == LBRACE:
-            print("  🗺️ Detected map literal in assignment")
+            parser_debug("  🗺️ Detected map literal in assignment")
             value_expression = self._parse_map_literal(value_tokens)
         else:
             value_expression = self._parse_expression(value_tokens)
 
         if value_expression is None:
-            print("  ❌ Could not parse assignment value")
+            parser_debug("  ❌ Could not parse assignment value")
             return None
 
         return AssignmentExpression(
@@ -393,11 +412,11 @@ class ContextStackParser:
 
     def _parse_function_call_statement(self, block_info, all_tokens):
         """Parse function call as a statement - RETURNS ExpressionStatement"""
-        print("🔧 [Context] Parsing function call statement")
+        parser_debug("🔧 [Context] Parsing function call statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 3 or tokens[1].type != LPAREN:
-            print("  ❌ Invalid function call: no parentheses")
+            parser_debug("  ❌ Invalid function call: no parentheses")
             return None
 
         function_name = tokens[0].literal
@@ -409,14 +428,14 @@ class ContextStackParser:
 
     def _parse_entity_statement_block(self, block_info, all_tokens):
         """Parse entity declaration block"""
-        print("🔧 [Context] Parsing entity statement")
+        parser_debug("🔧 [Context] Parsing entity statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 4:  # entity Name { ... }
             return None
 
         entity_name = tokens[1].literal if tokens[1].type == IDENT else "Unknown"
-        print(f"  📝 Entity: {entity_name}")
+        parser_debug(f"  📝 Entity: {entity_name}")
 
         # Parse properties between braces
         properties = []
@@ -441,7 +460,7 @@ class ContextStackParser:
             while i < brace_end:
                 if tokens[i].type == IDENT:
                     prop_name = tokens[i].literal
-                    print(f"  📝 Found property name: {prop_name}")
+                    parser_debug(f"  📝 Found property name: {prop_name}")
 
                     # Look for colon and type
                     if i + 1 < brace_end and tokens[i + 1].type == COLON:
@@ -453,7 +472,7 @@ class ContextStackParser:
                                 type=Identifier(prop_type),
                                 default_value=None
                             ))
-                            print(f"  📝 Property: {prop_name}: {prop_type}")
+                            parser_debug(f"  📝 Property: {prop_name}: {prop_type}")
                             i += 3
                             continue
 
@@ -466,7 +485,7 @@ class ContextStackParser:
 
     def _parse_contract_statement_block(self, block_info, all_tokens):
         """Parse contract declaration block - FINAL FIXED VERSION"""
-        print("🔧 [Context] Parsing contract statement")
+        parser_debug("🔧 [Context] Parsing contract statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 3:
@@ -474,7 +493,7 @@ class ContextStackParser:
 
         # 1. Extract Name
         contract_name = tokens[1].literal if tokens[1].type == IDENT else "UnknownContract"
-        print(f"  📝 Contract Name: {contract_name}")
+        parser_debug(f"  📝 Contract Name: {contract_name}")
 
         # 2. Identify Block Boundaries
         brace_start = -1
@@ -786,7 +805,7 @@ class ContextStackParser:
 
     def _parse_try_catch_statement(self, block_info, all_tokens):
         """Parse try-catch statement block - RETURNS TryCatchStatement"""
-        print("🔧 [Context] Parsing try-catch statement block")
+        parser_debug("🔧 [Context] Parsing try-catch statement block")
 
         tokens = block_info['tokens']
 
@@ -829,7 +848,7 @@ class ContextStackParser:
             block.statements = try_block_statements
             return block
 
-        print("  ⚠️ [Try] Could not find try block content")
+        parser_debug("  ⚠️ [Try] Could not find try block content")
         return BlockStatement()
 
     def _parse_catch_block(self, tokens):
@@ -861,7 +880,7 @@ class ContextStackParser:
             block.statements = catch_block_statements
             return block
 
-        print("  ⚠️ [Catch] Could not find catch block content")
+        parser_debug("  ⚠️ [Catch] Could not find catch block content")
         return BlockStatement()
 
     def _parse_block_statements(self, tokens):
@@ -873,7 +892,7 @@ class ContextStackParser:
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT,     FOR, IF, WHILE, RETURN, ACTION, TRY,   EXTERNAL, SCREEN, EXPORT, USE, DEBUG,   ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         while i < len(tokens):
             token = tokens[i]
 
@@ -1108,6 +1127,80 @@ class ContextStackParser:
                 i = j
                 continue
             
+            # FUNCTION statement heuristic (similar to ACTION)
+            elif token.type == FUNCTION:
+                j = i + 1
+                stmt_tokens = [token]
+                brace_nest = 0
+                paren_nest = 0
+                # Collect until the matching closing brace for the function body
+                while j < len(tokens):
+                    tj = tokens[j]
+                    stmt_tokens.append(tj)
+                    if tj.type == LPAREN:
+                        paren_nest += 1
+                    elif tj.type == RPAREN:
+                        if paren_nest > 0:
+                            paren_nest -= 1
+                    elif tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+
+                print(f"    📝 Found function statement: {[t.literal for t in stmt_tokens]}")
+
+                # Extract name, params and body
+                function_name = None
+                params = []
+                body_block = BlockStatement()
+
+                if len(stmt_tokens) >= 2 and stmt_tokens[1].type == IDENT:
+                    function_name = stmt_tokens[1].literal
+
+                # find parameter list
+                paren_start = None
+                paren_end = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LPAREN:
+                        paren_start = k
+                        break
+                if paren_start is not None:
+                    depth = 0
+                    for k in range(paren_start, len(stmt_tokens)):
+                        if stmt_tokens[k].type == LPAREN:
+                            depth += 1
+                        elif stmt_tokens[k].type == RPAREN:
+                            depth -= 1
+                            if depth == 0:
+                                paren_end = k
+                                break
+                    if paren_end is not None:
+                        param_tokens = stmt_tokens[paren_start + 1:paren_end]
+                        params = [Identifier(t.literal) for t in param_tokens if t.type == IDENT]
+
+                # find body
+                brace_start = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LBRACE:
+                        brace_start = k
+                        break
+                if brace_start is not None and brace_start + 1 < len(stmt_tokens):
+                    inner_body = stmt_tokens[brace_start + 1:-1]
+                    body_block.statements = self._parse_block_statements(inner_body)
+
+                statements.append(FunctionStatement(
+                    name=Identifier(function_name if function_name else 'anonymous'),
+                    parameters=params,
+                    body=body_block
+                ))
+
+                i = j
+                continue
+            
             elif token.type == IF:
                 # Parse IF statement directly here
                 j = i + 1
@@ -1292,10 +1385,10 @@ class ContextStackParser:
 
     def _parse_map_literal(self, tokens):
         """Parse a map literal { key: value, ... }"""
-        print("  🗺️ [Map] Parsing map literal")
+        parser_debug("  🗺️ [Map] Parsing map literal")
 
         if not tokens or tokens[0].type != LBRACE:
-            print("  ❌ [Map] Not a map literal - no opening brace")
+            parser_debug("  ❌ [Map] Not a map literal - no opening brace")
             return None
 
         pairs_list = []
@@ -1341,7 +1434,7 @@ class ContextStackParser:
 
     def _parse_paren_block_context(self, block_info, all_tokens):
         """Parse parentheses block - return proper statements where appropriate"""
-        print("🔧 [Context] Parsing parentheses block")
+        parser_debug("🔧 [Context] Parsing parentheses block")
         tokens = block_info['tokens']
         if len(tokens) < 3:
             return None
@@ -1361,10 +1454,11 @@ class ContextStackParser:
 
     def _parse_print_statement(self, block_info, all_tokens):
         """Parse print statement with sophisticated expression parsing and boundary detection"""
-        print("🔧 [Context] Parsing print statement with enhanced expression boundary detection")
+        parser_debug("🔧 [Context] Parsing print statement with enhanced expression boundary detection")
         tokens = block_info['tokens']
 
-        if len(tokens) < 3:
+        # Need at least PRINT token + one value token
+        if len(tokens) < 2:
             return PrintStatement(StringLiteral(""))
 
         # Collect tokens up to a statement boundary
@@ -1392,14 +1486,14 @@ class ContextStackParser:
         if not inner_tokens:
             return PrintStatement(StringLiteral(""))
 
-        print(f"  📝 Print statement tokens: {[t.literal for t in inner_tokens]}")
+        parser_debug(f"  📝 Print statement tokens: {[t.literal for t in inner_tokens]}")
         expression = self._parse_expression(inner_tokens)
-        print(f"  ✅ Parsed print expression: {type(expression).__name__ if expression else 'None'}")
+        parser_debug(f"  ✅ Parsed print expression: {type(expression).__name__ if expression else 'None'}")
         return PrintStatement(expression if expression is not None else StringLiteral(""))
 
     def _parse_return_statement(self, block_info, all_tokens):
         """Parse return statement"""
-        print("🔧 [Context] Parsing return statement")
+        parser_debug("🔧 [Context] Parsing return statement")
         tokens = block_info.get('tokens', [])
         
         if not tokens or tokens[0].type != RETURN:
@@ -1411,7 +1505,7 @@ class ContextStackParser:
         
         # Parse the return value expression
         value_tokens = tokens[1:]
-        print(f"  📝 Return value tokens: {[t.literal for t in value_tokens]}")
+        parser_debug(f"  📝 Return value tokens: {[t.literal for t in value_tokens]}")
         
         value_expr = self._parse_expression(value_tokens)
         return ReturnStatement(value_expr if value_expr else Identifier("null"))
@@ -1756,7 +1850,7 @@ class ContextStackParser:
         """Parse a list literal [a, b, c] from a token list"""
         print("  🔧 [List] Parsing list literal")
         if not tokens or tokens[0].type != LBRACKET:
-            print("  ❌ [List] Not a list literal")
+            parser_debug("  ❌ [List] Not a list literal")
             return None
 
         elements = []
@@ -1792,7 +1886,7 @@ class ContextStackParser:
             elem = self._parse_expression(cur)
             elements.append(elem)
 
-        print(f"  ✅ Parsed list with {len(elements)} elements")
+        parser_debug(f"  ✅ Parsed list with {len(elements)} elements")
         return ListLiteral(elements)
 
     def _parse_lambda(self, tokens):
@@ -1891,7 +1985,7 @@ class ContextStackParser:
 
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
-        print("  🔍 Parsing argument list")
+        parser_debug("  🔍 Parsing argument list")
         arguments = []
         current_arg = []
         nesting_level = 0
@@ -1907,7 +2001,7 @@ class ContextStackParser:
             if token.type == COMMA and nesting_level == 0:
                 if current_arg:
                     arg_expr = self._parse_expression(current_arg)
-                    print(f"  📝 Parsed argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
+                    parser_debug(f"  📝 Parsed argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
                     arguments.append(arg_expr)
                     current_arg = []
             else:
@@ -1916,12 +2010,12 @@ class ContextStackParser:
         # Handle last argument
         if current_arg:
             arg_expr = self._parse_expression(current_arg)
-            print(f"  📝 Parsed final argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
+            parser_debug(f"  📝 Parsed final argument: {type(arg_expr).__name__ if arg_expr else 'None'}")
             arguments.append(arg_expr)
 
         # Filter out None arguments by replacing with empty string literal
         arguments = [arg if arg is not None else StringLiteral("") for arg in arguments]
-        print(f"  ✅ Parsed {len(arguments)} arguments total")
+        parser_debug(f"  ✅ Parsed {len(arguments)} arguments total")
         return arguments
 
     def _parse_function_call(self, block_info, all_tokens):
@@ -1953,7 +2047,7 @@ class ContextStackParser:
 
     def _parse_loop_context(self, block_info, all_tokens):
         """Parse loop blocks (for/while) with context awareness"""
-        print("🔧 [Context] Parsing loop block")
+        parser_debug("🔧 [Context] Parsing loop block")
         return BlockStatement()
 
     def _parse_screen_context(self, block_info, all_tokens):
@@ -1966,7 +2060,7 @@ class ContextStackParser:
 
     def _parse_try_catch_context(self, block_info, all_tokens):
         """Parse try-catch block with full context awareness"""
-        print("🔧 [Context] Parsing try-catch block with context awareness")
+        parser_debug("🔧 [Context] Parsing try-catch block with context awareness")
         error_var = self._extract_catch_variable(block_info['tokens'])
         return TryCatchStatement(
             try_block=BlockStatement(),
@@ -2100,7 +2194,7 @@ class ContextStackParser:
 
     def _parse_conditional_context(self, block_info, all_tokens):
         """Parse if/else blocks with context awareness"""
-        print("🔧 [Context] Parsing conditional block")
+        parser_debug("🔧 [Context] Parsing conditional block")
         condition = self._extract_condition(block_info, all_tokens)
 
         # Collect following `elif` parts and `else` alternative by scanning tokens
@@ -2214,7 +2308,7 @@ class ContextStackParser:
 
     def _parse_brace_block_context(self, block_info, all_tokens):
         """Parse generic brace block with context awareness"""
-        print("🔧 [Context] Parsing brace block")
+        parser_debug("🔧 [Context] Parsing brace block")
         return BlockStatement()
 
     def _parse_generic_block(self, block_info, all_tokens):
@@ -2224,43 +2318,43 @@ class ContextStackParser:
             return BlockStatement()
         
         # Debug: log what we're trying to parse
-        print(f"  🔍 [Generic] Parsing generic block with tokens: {[t.literal for t in tokens]}")
+        parser_debug(f"  🔍 [Generic] Parsing generic block with tokens: {[t.literal for t in tokens]}")
         
         # Check if this is a LET statement
         if tokens[0].type == LET:
-            print(f"  🎯 [Generic] Detected let statement")
+            parser_debug(f"  🎯 [Generic] Detected let statement")
             return self._parse_let_statement_block(block_info, all_tokens)
         
         # Check if this is a CONST statement
         if tokens[0].type == CONST:
-            print(f"  🎯 [Generic] Detected const statement")
+            parser_debug(f"  🎯 [Generic] Detected const statement")
             return self._parse_const_statement_block(block_info, all_tokens)
         
         # Check if this is an assignment statement (identifier = value)
         if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == ASSIGN:
-            print(f"  🎯 [Generic] Detected assignment statement")
+            parser_debug(f"  🎯 [Generic] Detected assignment statement")
             return self._parse_assignment_statement(block_info, all_tokens)
         
         # Check if this is a print statement
         if tokens[0].type == PRINT:
-            print(f"  🎯 [Generic] Detected print statement")
+            parser_debug(f"  🎯 [Generic] Detected print statement")
             return self._parse_print_statement(block_info, all_tokens)
         
         # Check if this is a return statement
         if tokens[0].type == RETURN:
-            print(f"  🎯 [Generic] Detected return statement")
+            parser_debug(f"  🎯 [Generic] Detected return statement")
             return self._parse_return_statement(block_info, all_tokens)
         
         # Check if it's a function call (identifier followed by parentheses)
         if tokens[0].type == IDENT and len(tokens) >= 2 and tokens[1].type == LPAREN:
-            print(f"  🎯 [Generic] Detected function call")
+            parser_debug(f"  🎯 [Generic] Detected function call")
             # Parse as expression and wrap in ExpressionStatement
             expr = self._parse_expression(tokens)
             if expr:
                 return ExpressionStatement(expr)
         
         # Try to parse as a simple expression
-        print(f"  🎯 [Generic] Attempting to parse as expression")
+        parser_debug(f"  🎯 [Generic] Attempting to parse as expression")
         expr = self._parse_expression(tokens)
         if expr:
             return ExpressionStatement(expr)
@@ -2324,19 +2418,19 @@ class ContextStackParser:
           scope: "io"
         };
         """
-        print("🔧 [Context] Parsing capability statement")
+        parser_debug("🔧 [Context] Parsing capability statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid capability statement: expected name")
+            parser_debug("  ❌ Invalid capability statement: expected name")
             return None
         
         if tokens[0].type != CAPABILITY:
-            print("  ❌ Expected CAPABILITY keyword")
+            parser_debug("  ❌ Expected CAPABILITY keyword")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected capability name")
+            parser_debug("  ❌ Expected capability name")
             return None
         
         cap_name = tokens[1].literal
@@ -2363,19 +2457,19 @@ class ContextStackParser:
           read_network
         };
         """
-        print("🔧 [Context] Parsing grant statement")
+        parser_debug("🔧 [Context] Parsing grant statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid grant statement")
+            parser_debug("  ❌ Invalid grant statement")
             return None
         
         if tokens[0].type != GRANT:
-            print("  ❌ Expected GRANT keyword")
+            parser_debug("  ❌ Expected GRANT keyword")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected entity name after grant")
+            parser_debug("  ❌ Expected entity name after grant")
             return None
         
         entity_name = tokens[1].literal
@@ -2406,19 +2500,19 @@ class ContextStackParser:
 
     def _parse_revoke_statement(self, block_info, all_tokens):
         """Parse revoke statement (mirrors grant)"""
-        print("🔧 [Context] Parsing revoke statement")
+        parser_debug("🔧 [Context] Parsing revoke statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid revoke statement")
+            parser_debug("  ❌ Invalid revoke statement")
             return None
         
         if tokens[0].type != REVOKE:
-            print("  ❌ Expected REVOKE keyword")
+            parser_debug("  ❌ Expected REVOKE keyword")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected entity name after revoke")
+            parser_debug("  ❌ Expected entity name after revoke")
             return None
         
         entity_name = tokens[1].literal
@@ -2455,11 +2549,11 @@ class ContextStackParser:
           age: number(18, 120)
         };
         """
-        print("🔧 [Context] Parsing validate statement")
+        parser_debug("🔧 [Context] Parsing validate statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid validate statement")
+            parser_debug("  ❌ Invalid validate statement")
             return None
         
         # Parse: validate <expr>, <schema>
@@ -2470,7 +2564,7 @@ class ContextStackParser:
                 break
         
         if comma_idx == -1:
-            print("  ⚠️ No schema provided for validate")
+            parser_debug("  ⚠️ No schema provided for validate")
             # Single argument: validate(expr) with implicit schema
             data = self._parse_expression(tokens[1:])
             return ValidateStatement(data, {})
@@ -2494,11 +2588,11 @@ class ContextStackParser:
           rules: ["remove_scripts"]
         };
         """
-        print("🔧 [Context] Parsing sanitize statement")
+        parser_debug("🔧 [Context] Parsing sanitize statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid sanitize statement")
+            parser_debug("  ❌ Invalid sanitize statement")
             return None
         
         # Parse: sanitize <expr>, <options>
@@ -2537,22 +2631,22 @@ class ContextStackParser:
         immutable const user = { name: "Alice" };
         immutable let config = load_config();
         """
-        print("🔧 [Context] Parsing immutable statement")
+        parser_debug("🔧 [Context] Parsing immutable statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2:
-            print("  ❌ Invalid immutable statement")
+            parser_debug("  ❌ Invalid immutable statement")
             return None
         
         if tokens[0].type != IMMUTABLE:
-            print("  ❌ Expected IMMUTABLE keyword")
+            parser_debug("  ❌ Expected IMMUTABLE keyword")
             return None
         
         # Check if next is LET, CONST, or IDENT
         if tokens[1].type in {LET, CONST}:
             # immutable let/const name = value
             if len(tokens) < 4 or tokens[2].type != IDENT:
-                print("  ❌ Invalid immutable declaration")
+                parser_debug("  ❌ Invalid immutable declaration")
                 return None
             
             var_name = tokens[2].literal
@@ -2582,7 +2676,7 @@ class ContextStackParser:
             return ImmutableStatement(target, value)
         
         else:
-            print("  ❌ Expected LET, CONST, or identifier after IMMUTABLE")
+            parser_debug("  ❌ Expected LET, CONST, or identifier after IMMUTABLE")
             return None
     # === COMPLEXITY & LARGE PROJECT MANAGEMENT HANDLERS ===
 
@@ -2594,15 +2688,15 @@ class ContextStackParser:
             get_bounds();
         };
         """
-        print("🔧 [Context] Parsing interface statement")
+        parser_debug("🔧 [Context] Parsing interface statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2 or tokens[0].type != INTERFACE:
-            print("  ❌ Expected INTERFACE keyword")
+            parser_debug("  ❌ Expected INTERFACE keyword")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected interface name")
+            parser_debug("  ❌ Expected interface name")
             return None
         
         interface_name = tokens[1].literal
@@ -2652,28 +2746,28 @@ class ContextStackParser:
         type_alias UserID = integer;
         type_alias Point = { x: float, y: float };
         """
-        print("🔧 [Context] Parsing type_alias statement")
+        parser_debug("🔧 [Context] Parsing type_alias statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 4 or tokens[0].type != TYPE_ALIAS:
-            print("  ❌ Invalid type_alias statement")
+            parser_debug("  ❌ Invalid type_alias statement")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected type name")
+            parser_debug("  ❌ Expected type name")
             return None
         
         type_name = tokens[1].literal
         
         if tokens[2].type != ASSIGN:
-            print("  ❌ Expected '=' in type_alias")
+            parser_debug("  ❌ Expected '=' in type_alias")
             return None
         
         # Parse the base type
         base_type_tokens = tokens[3:]
         base_type = self._parse_expression(base_type_tokens)
         
-        print(f"  📝 Type alias: {type_name}")
+        parser_debug(f"  📝 Type alias: {type_name}")
         
         return TypeAliasStatement(
             name=Identifier(type_name),
@@ -2688,15 +2782,15 @@ class ContextStackParser:
             public function query(sql) { ... }
         }
         """
-        print("🔧 [Context] Parsing module statement")
+        parser_debug("🔧 [Context] Parsing module statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2 or tokens[0].type != MODULE:
-            print("  ❌ Expected MODULE keyword")
+            parser_debug("  ❌ Expected MODULE keyword")
             return None
         
         if tokens[1].type != IDENT:
-            print("  ❌ Expected module name")
+            parser_debug("  ❌ Expected module name")
             return None
         
         module_name = tokens[1].literal
@@ -2746,11 +2840,11 @@ class ContextStackParser:
             module query { ... }
         }
         """
-        print("🔧 [Context] Parsing package statement")
+        parser_debug("🔧 [Context] Parsing package statement")
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2 or tokens[0].type != PACKAGE:
-            print("  ❌ Expected PACKAGE keyword")
+            parser_debug("  ❌ Expected PACKAGE keyword")
             return None
         
         # Parse package name (may be dotted)
@@ -2816,12 +2910,12 @@ class ContextStackParser:
         tokens = block_info.get('tokens', [])
         
         if len(tokens) < 2 or tokens[0].type != USING:
-            print("  ❌ Expected USING keyword")
+            parser_debug("  ❌ Expected USING keyword")
             return None
         
         # Parse: using(name = expr) { body }
         if tokens[1].type != LPAREN:
-            print("  ❌ Expected '(' after using")
+            parser_debug("  ❌ Expected '(' after using")
             return None
         
         # Find closing paren and equals
@@ -2841,12 +2935,12 @@ class ContextStackParser:
                 equals_idx = i
         
         if close_paren_idx == -1 or equals_idx == -1:
-            print("  ❌ Invalid using statement syntax")
+            parser_debug("  ❌ Invalid using statement syntax")
             return None
         
         # Extract resource name
         if tokens[2].type != IDENT:
-            print("  ❌ Expected resource name")
+            parser_debug("  ❌ Expected resource name")
             return None
         
         resource_name = tokens[2].literal
@@ -2898,11 +2992,11 @@ class ContextStackParser:
           channel messages;
           channel<string>[10] buffered_messages;
         """
-        print("🔧 [Context] Parsing channel statement")
+        parser_debug("🔧 [Context] Parsing channel statement")
         tokens = block_info.get('tokens', [])
 
         if not tokens or tokens[0].type != CHANNEL:
-            print("  ❌ Expected CHANNEL keyword")
+            parser_debug("  ❌ Expected CHANNEL keyword")
             return None
 
         i = 1
@@ -2919,7 +3013,7 @@ class ContextStackParser:
                 type_tokens.append(tokens[j])
                 j += 1
             if j >= len(tokens) or tokens[j].type != GT:
-                print("  ❌ Unterminated generic type for channel")
+                parser_debug("  ❌ Unterminated generic type for channel")
                 return None
             element_type = self._parse_expression(type_tokens) if type_tokens else None
             i = j + 1
@@ -2936,7 +3030,7 @@ class ContextStackParser:
                 if i < len(tokens) and tokens[i].type == RBRACKET:
                     i += 1
                 else:
-                    print("  ❌ Expected ']' after channel capacity")
+                    parser_debug("  ❌ Expected ']' after channel capacity")
                     return None
 
         # Name
@@ -2944,24 +3038,24 @@ class ContextStackParser:
             name = Identifier(tokens[i].literal)
             i += 1
         else:
-            print("  ❌ Expected channel name")
+            parser_debug("  ❌ Expected channel name")
             return None
 
-        print(f"  ✅ Channel: {name.value}, type={type(element_type).__name__}, capacity={capacity}")
+        parser_debug(f"  ✅ Channel: {name.value}, type={type(element_type).__name__}, capacity={capacity}")
         return ChannelStatement(name=name, element_type=element_type, capacity=capacity)
 
     def _parse_send_statement(self, block_info, all_tokens):
         """Parse send(channel, value) statements."""
-        print("🔧 [Context] Parsing send statement")
+        parser_debug("🔧 [Context] Parsing send statement")
         tokens = block_info.get('tokens', [])
         if len(tokens) < 3 or tokens[0].type != SEND or tokens[1].type != LPAREN:
-            print("  ❌ Invalid send statement")
+            parser_debug("  ❌ Invalid send statement")
             return None
 
         inner = tokens[2:-1] if tokens and tokens[-1].type == RPAREN else tokens[2:]
         args = self._parse_argument_list(inner)
         if not args or len(args) < 2:
-            print("  ❌ send requires (channel, value)")
+            parser_debug("  ❌ send requires (channel, value)")
             return None
 
         channel_expr = args[0]
@@ -2970,27 +3064,27 @@ class ContextStackParser:
 
     def _parse_receive_statement(self, block_info, all_tokens):
         """Parse receive(channel) statements. Assignment handled elsewhere."""
-        print("🔧 [Context] Parsing receive statement")
+        parser_debug("🔧 [Context] Parsing receive statement")
         tokens = block_info.get('tokens', [])
         if len(tokens) < 3 or tokens[0].type != RECEIVE or tokens[1].type != LPAREN:
-            print("  ❌ Invalid receive statement")
+            parser_debug("  ❌ Invalid receive statement")
             return None
 
         inner = tokens[2:-1] if tokens and tokens[-1].type == RPAREN else tokens[2:]
         # parse single channel expression
         channel_expr = self._parse_expression(inner)
         if channel_expr is None:
-            print("  ❌ Could not parse channel expression for receive")
+            parser_debug("  ❌ Could not parse channel expression for receive")
             return None
 
         return ReceiveStatement(channel_expr=channel_expr, target=None)
 
     def _parse_atomic_statement(self, block_info, all_tokens):
         """Parse atomic blocks or single-expression atomics."""
-        print("🔧 [Context] Parsing atomic statement")
+        parser_debug("🔧 [Context] Parsing atomic statement")
         tokens = block_info.get('tokens', [])
         if not tokens or tokens[0].type != ATOMIC:
-            print("  ❌ Expected ATOMIC keyword")
+            parser_debug("  ❌ Expected ATOMIC keyword")
             return None
 
         # atomic { ... }
@@ -3008,5 +3102,5 @@ class ContextStackParser:
             expr = self._parse_expression(inner)
             return AtomicStatement(expr=expr)
 
-        print("  ❌ Empty atomic statement")
+        parser_debug("  ❌ Empty atomic statement")
         return None

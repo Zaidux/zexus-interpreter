@@ -1,0 +1,13 @@
+print "=== Type Alias Error Tests ==="
+
+type_alias UserId = integer
+type_alias Username = string
+
+print "Test 1: Valid assignment"
+let user_id: UserId = 100
+print "✓ UserId = 100"
+
+print ""
+print "Test 2: Type mismatch (should fail)"
+let bad_id: UserId = "not a number"
+print "❌ This should not print"

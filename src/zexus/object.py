@@ -499,6 +499,50 @@ NULL = Null()
 TRUE = Boolean(True)
 FALSE = Boolean(False)
 
+# File object for RAII pattern (using statement)
+class File(Object):
+    """File object that supports cleanup via close() method"""
+    def __init__(self, path, mode='r'):
+        self.path = path
+        self.mode = mode
+        self.handle = None
+        self.closed = False
+        
+    def open(self):
+        """Open the file"""
+        if not self.handle:
+            try:
+                self.handle = open(self.path, self.mode)
+            except Exception as e:
+                raise Exception(f"Failed to open file {self.path}: {e}")
+        return self
+    
+    def close(self):
+        """Close the file (called by using statement cleanup)"""
+        if self.handle and not self.closed:
+            self.handle.close()
+            self.closed = True
+    
+    def read(self):
+        """Read file contents"""
+        if not self.handle:
+            self.open()
+        return String(self.handle.read())
+    
+    def write(self, content):
+        """Write content to file"""
+        if not self.handle:
+            self.open()
+        self.handle.write(content)
+        return NULL
+    
+    def inspect(self):
+        status = "closed" if self.closed else "open"
+        return f"File({self.path}, {status})"
+    
+    def type(self):
+        return "FILE"
+
 # EvaluationError class for error handling
 class EvaluationError(Object):
     def __init__(self, message, line=None, column=None, stack_trace=None):

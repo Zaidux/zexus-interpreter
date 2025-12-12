@@ -1,0 +1,9 @@
+# Test Issue #6: Using statement resource cleanup
+print "=== Test Using Statement ===";
+
+using(file = "test.txt") {
+    print "Inside using block - file: test.txt";
+};
+
+print "After using block";
+print "✓ Using statement completed";

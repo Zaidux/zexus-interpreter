@@ -220,6 +220,7 @@ class Lexer:
             "module": MODULE,
             "package": PACKAGE,
             "using": USING,
+            "type_alias": TYPE_ALIAS,
             "while": WHILE,
             "use": USE,
             "exactly": EXACTLY,

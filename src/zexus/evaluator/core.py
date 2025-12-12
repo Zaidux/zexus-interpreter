@@ -403,7 +403,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                         if rule == 'admin-only':
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
                             if not is_admin:
-                                from ..object import EvaluationError
                                 return EvaluationError('Access denied: admin required')
                     return val
 
@@ -420,7 +419,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                             # check environment flag for admin
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
                             if not is_admin:
-                                from ..object import EvaluationError
                                 return EvaluationError('Access denied: admin required')
                     return val
 
@@ -434,7 +432,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                         if rule == 'admin-only':
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
                             if not is_admin:
-                                from ..object import EvaluationError
                                 return EvaluationError('Access denied: admin required')
                     return val
 

@@ -1,0 +1,10 @@
+# Simple module test - debugging module member access
+module math_operations {
+    function add(a, b) {
+        return a + b;
+    };
+};
+
+print "Calling math_operations.add(5, 3)";
+let result = math_operations.add(5, 3);
+print "Result: " + result;

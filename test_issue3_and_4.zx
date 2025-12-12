@@ -1,0 +1,17 @@
+# Test Issue #3 and #4
+# Testing module member access and concatenation
+
+module math_operations {
+    function add(a, b) {
+        return a + b;
+    };
+};
+
+print "=== Test 1: Module member access ===";
+let result = math_operations.add(5, 3);
+print "Module function result: 5 + 3 = " + result;
+
+print "";
+print "=== Test 2: Concatenation with undefined variable ===";
+# This should throw an error
+print "Result: " + undefined_var;

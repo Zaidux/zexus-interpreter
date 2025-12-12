@@ -1,6 +1,7 @@
 # src/zexus/strategy_structural.py
 from ..zexus_token import *
 from typing import List, Dict
+from ..config import config as zexus_config
 
 class StructuralAnalyzer:
     """Lightweight structural analyzer that splits token stream into top-level blocks.
@@ -425,11 +426,12 @@ class StructuralAnalyzer:
                         'parent': None
                     }
                     # Debug: print a short summary for this block
-                    try:
-                        lit_preview = ' '.join([tk.literal for tk in filtered_stmt_tokens[:8] if getattr(tk, 'literal', None)])
-                    except Exception:
-                        lit_preview = ''
-                    print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[start_idx].type} preview={lit_preview}")
+                    if zexus_config.should_log('debug'):
+                        try:
+                            lit_preview = ' '.join([tk.literal for tk in filtered_stmt_tokens[:8] if getattr(tk, 'literal', None)])
+                        except Exception:
+                            lit_preview = ''
+                        print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[start_idx].type} preview={lit_preview}")
                     block_id += 1
                 i = j
                 continue

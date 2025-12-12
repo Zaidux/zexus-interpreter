@@ -20,11 +20,14 @@ class Program(Node):
 
 # Statement Nodes
 class LetStatement(Statement):
-    def __init__(self, name, value): 
-        self.name = name; self.value = value
+    def __init__(self, name, value, type_annotation=None): 
+        self.name = name
+        self.value = value
+        self.type_annotation = type_annotation
 
     def __repr__(self):
-        return f"LetStatement(name={self.name}, value={self.value})"
+        type_str = f", type={self.type_annotation}" if self.type_annotation else ""
+        return f"LetStatement(name={self.name}, value={self.value}{type_str})"
 
 class ConstStatement(Statement):
     """Const statement - immutable variable declaration
