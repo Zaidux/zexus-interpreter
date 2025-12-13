@@ -117,6 +117,10 @@ pip install zexus
 
 **After installation**, you'll see documentation links pointing to the comprehensive feature guide.
 
+**Includes:**
+- `zx` - Main Zexus CLI
+- `zpm` - Zexus Package Manager
+
 ### From Source
 
 ```bash
@@ -128,7 +132,8 @@ pip install -e .
 ### Verify Installation
 
 ```bash
-zx --version  # Should show: Zexus v0.1.0
+zx --version   # Should show: Zexus v0.1.0
+zpm --version  # Should show: ZPM v0.1.0
 ```
 
 ## 🚀 Quick Start
@@ -305,7 +310,30 @@ mock_dependency("database", MockDB())
 save_user({name: "Test User", email: "test@example.com"})
 ```
 
+### Example 5: Package Management
+
+```bash
+# Initialize project
+zpm init
+
+# Install packages
+zpm install std crypto web
+
+# Use in code
+```
+
+```zexus
+use {map, filter} from "std"
+use {encrypt, decrypt} from "crypto"
+use {Server, Router} from "web"
+
+let app = Server()
+app.listen(8080)
+```
+
 ## 🎮 CLI Commands
+
+### Zexus CLI (`zx`)
 
 ```bash
 # Run a program
@@ -338,6 +366,34 @@ zx debug off
 zx --help
 zx run --help
 ```
+
+### Package Manager (`zpm`)
+
+```bash
+# Initialize project
+zpm init
+
+# Install packages
+zpm install              # Install all from zexus.json
+zpm install std          # Install specific package
+zpm install web@0.2.0    # Install specific version
+zpm install testing -D   # Install as dev dependency
+
+# Manage packages
+zpm list                 # List installed packages
+zpm search <query>       # Search for packages
+zpm uninstall <package>  # Remove a package
+zpm clean                # Remove zpm_modules/
+
+# Publishing
+zpm info                 # Show project info
+zpm publish              # Publish to registry
+
+# Help
+zpm --help
+```
+
+See **[ZPM Guide](docs/ZPM_GUIDE.md)** for complete package manager documentation.
 
 ### Advanced Options
 
