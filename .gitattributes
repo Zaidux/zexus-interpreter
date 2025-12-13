@@ -1,9 +1,12 @@
 # Zexus Language Definition
-*.zx linguist-language=Zexus
+# Map to Python for syntax highlighting on GitHub until Zexus is added to Linguist
+*.zx linguist-language=Python linguist-detectable=true
 
-# Force GitHub to recognize .zx files as Zexus code
-*.zx linguist-detectable=true
-
-# Prevent test files from skewing language stats
+# Mark as documentation/vendored to exclude from language stats
+*.md linguist-documentation
 tests/** linguist-vendored=true
-test_*.zx linguist-vendored=false
+scripts/** linguist-vendored=true
+examples/** linguist-documentation
+
+# Ensure Zexus source files are counted
+src/**/*.zx linguist-vendored=false linguist-detectable=true
