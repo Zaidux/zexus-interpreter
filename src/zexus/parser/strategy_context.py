@@ -85,6 +85,14 @@ class ContextStackParser:
             LIMIT: self._parse_limit_statement,
             # REACTIVE handlers
             WATCH: self._parse_watch_statement,
+            # POLICY-AS-CODE handlers
+            PROTECT: self._parse_protect_statement,
+            VERIFY: self._parse_verify_statement,
+            RESTRICT: self._parse_restrict_statement,
+            # DEPENDENCY INJECTION handlers
+            INJECT: self._parse_inject_statement,
+            VALIDATE: self._parse_validate_statement,
+            SANITIZE: self._parse_sanitize_statement,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -3562,3 +3570,176 @@ class ContextStackParser:
             
         parser_debug("  ❌ Invalid watch syntax")
         return None
+
+    def _parse_protect_statement(self, block_info, all_tokens):
+        """Parse protect statement.
+        
+        Form: protect <target> { <rules> }
+        Example: protect Profile.update_email { verify(...) restrict(...) }
+        """
+        parser_debug("🔧 [Context] Parsing protect statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != PROTECT:
+            parser_debug("  ❌ Expected PROTECT keyword")
+            return None
+        
+        # Find LBRACE to separate target from rules
+        brace_idx = -1
+        for i, t in enumerate(tokens):
+            if t.type == LBRACE:
+                brace_idx = i
+                break
+        
+        if brace_idx == -1:
+            parser_debug("  ❌ Expected { for protect rules")
+            return None
+        
+        # Parse target
+        target_tokens = tokens[1:brace_idx]
+        target = self._parse_expression(target_tokens)
+        
+        # Parse rules (inner block)
+        inner = tokens[brace_idx+1:-1] if tokens[-1].type == RBRACE else tokens[brace_idx+1:]
+        rules = self._parse_block_statements(inner)
+        rules_block = BlockStatement()
+        rules_block.statements = rules
+        
+        parser_debug("  ✅ Protect statement")
+        return ProtectStatement(target=target, rules=rules_block)
+
+    def _parse_verify_statement(self, block_info, all_tokens):
+        """Parse verify statement.
+        
+        Form: verify ( <condition> )
+        Example: verify (TX.caller == self.owner)
+        """
+        parser_debug("🔧 [Context] Parsing verify statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != VERIFY:
+            parser_debug("  ❌ Expected VERIFY keyword")
+            return None
+        
+        # Extract tokens between LPAREN and RPAREN
+        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        
+        condition = self._parse_expression(inner) if inner else None
+        
+        if condition is None:
+            parser_debug("  ❌ verify needs a condition")
+            return None
+        
+        parser_debug("  ✅ Verify statement")
+        return VerifyStatement(condition=condition)
+
+    def _parse_restrict_statement(self, block_info, all_tokens):
+        """Parse restrict statement (already exists in AST).
+        
+        This method is kept for compatibility, but RestrictStatement
+        is already handled in the parser. 
+        """
+        parser_debug("🔧 [Context] Parsing restrict statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != RESTRICT:
+            parser_debug("  ❌ Expected RESTRICT keyword")
+            return None
+        
+        # Let the existing restrict parsing handle this
+        # Just return None to fall through to default handling
+        return None
+
+    def _parse_inject_statement(self, block_info, all_tokens):
+        """Parse inject statement.
+        
+        Form: inject <dependency_name>
+        Example: inject DatabaseAPI
+        """
+        parser_debug("🔧 [Context] Parsing inject statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != INJECT:
+            parser_debug("  ❌ Expected INJECT keyword")
+            return None
+        
+        if len(tokens) < 2 or tokens[1].type != IDENT:
+            parser_debug("  ❌ inject needs a dependency name")
+            return None
+        
+        dependency_name = tokens[1].literal
+        
+        parser_debug(f"  ✅ Inject statement: {dependency_name}")
+        return InjectStatement(dependency=Identifier(value=dependency_name))
+
+    def _parse_validate_statement(self, block_info, all_tokens):
+        """Parse validate statement.
+        
+        Form: validate ( <value>, <schema> )
+        Example: validate (user_input, email_schema)
+        """
+        parser_debug("🔧 [Context] Parsing validate statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != VALIDATE:
+            parser_debug("  ❌ Expected VALIDATE keyword")
+            return None
+        
+        # Extract tokens between LPAREN and RPAREN
+        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        
+        # Split by COMMA to get value and schema
+        comma_idx = -1
+        for i, t in enumerate(inner):
+            if t.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            parser_debug("  ❌ validate needs value and schema")
+            return None
+        
+        value_tokens = inner[:comma_idx]
+        schema_tokens = inner[comma_idx+1:]
+        
+        data = self._parse_expression(value_tokens)
+        schema = self._parse_expression(schema_tokens)
+        
+        parser_debug("  ✅ Validate statement")
+        return ValidateStatement(data=data, schema=schema)
+
+    def _parse_sanitize_statement(self, block_info, all_tokens):
+        """Parse sanitize statement.
+        
+        Form: sanitize ( <value>, <rules> )
+        Example: sanitize (user_input, html_rules)
+        """
+        parser_debug("🔧 [Context] Parsing sanitize statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != SANITIZE:
+            parser_debug("  ❌ Expected SANITIZE keyword")
+            return None
+        
+        # Extract tokens between LPAREN and RPAREN
+        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        
+        # Split by COMMA to get value and rules
+        comma_idx = -1
+        for i, t in enumerate(inner):
+            if t.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            parser_debug("  ❌ sanitize needs value and rules")
+            return None
+        
+        value_tokens = inner[:comma_idx]
+        rules_tokens = inner[comma_idx+1:]
+        
+        data = self._parse_expression(value_tokens)
+        rules = self._parse_expression(rules_tokens)
+        
+        parser_debug("  ✅ Sanitize statement")
+        return SanitizeStatement(data=data, rules=rules)

@@ -939,6 +939,22 @@ class SanitizeStatement(Statement):
         return f"SanitizeStatement(data={self.data})"
 
 
+class InjectStatement(Statement):
+    """Dependency injection statement
+    
+    inject DatabaseAPI;
+    inject max_retries;
+    
+    Used for dependency injection pattern where external
+    dependencies are injected at runtime.
+    """
+    def __init__(self, dependency):
+        self.dependency = dependency  # Identifier: dependency name
+
+    def __repr__(self):
+        return f"InjectStatement(dependency={self.dependency})"
+
+
 # NEW: Complexity & Large Project Management
 
 class InterfaceStatement(Statement):

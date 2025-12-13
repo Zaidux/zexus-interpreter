@@ -622,6 +622,244 @@ class FunctionEvaluatorMixin:
             "tx": Builtin(_tx, "tx"),
             "gas": Builtin(_gas, "gas"),
         })
+        
+        # Register advanced feature builtins
+        self._register_advanced_feature_builtins()
+    
+    def _register_advanced_feature_builtins(self):
+        """Register builtins for persistence, policy, and dependency injection"""
+        
+        # === PERSISTENCE & MEMORY BUILTINS ===
+        
+        def _persistent_set(*a):
+            """Set a persistent variable: persistent_set(name, value)"""
+            if len(a) != 2:
+                return EvaluationError("persistent_set() takes 2 arguments: name, value")
+            if not isinstance(a[0], String):
+                return EvaluationError("persistent_set() name must be a string")
+            
+            # Get current environment from evaluator context
+            env = getattr(self, '_current_env', None)
+            if env and hasattr(env, 'set_persistent'):
+                name = a[0].value
+                value = a[1]
+                env.set_persistent(name, value)
+                return String(f"Persistent variable '{name}' set")
+            return EvaluationError("Persistence not enabled in this environment")
+        
+        def _persistent_get(*a):
+            """Get a persistent variable: persistent_get(name, [default])"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("persistent_get() takes 1 or 2 arguments: name, [default]")
+            if not isinstance(a[0], String):
+                return EvaluationError("persistent_get() name must be a string")
+            
+            env = getattr(self, '_current_env', None)
+            if env and hasattr(env, 'get_persistent'):
+                name = a[0].value
+                default = a[1] if len(a) > 1 else NULL
+                value = env.get_persistent(name, default)
+                return value if value is not None else default
+            return NULL
+        
+        def _persistent_delete(*a):
+            """Delete a persistent variable: persistent_delete(name)"""
+            if len(a) != 1:
+                return EvaluationError("persistent_delete() takes 1 argument: name")
+            if not isinstance(a[0], String):
+                return EvaluationError("persistent_delete() name must be a string")
+            
+            env = getattr(self, '_current_env', None)
+            if env and hasattr(env, 'delete_persistent'):
+                name = a[0].value
+                env.delete_persistent(name)
+                return String(f"Persistent variable '{name}' deleted")
+            return NULL
+        
+        def _memory_stats(*a):
+            """Get memory tracking statistics: memory_stats()"""
+            env = getattr(self, '_current_env', None)
+            if env and hasattr(env, 'get_memory_stats'):
+                stats = env.get_memory_stats()
+                return Map({
+                    String("tracked_objects"): Integer(stats.get("tracked_objects", 0)),
+                    String("message"): String(stats.get("message", ""))
+                })
+            return Map({String("message"): String("Memory tracking not enabled")})
+        
+        # === POLICY & PROTECTION BUILTINS ===
+        
+        def _create_policy(*a):
+            """Create a protection policy: create_policy(name, rules_map)"""
+            if len(a) != 2:
+                return EvaluationError("create_policy() takes 2 arguments: name, rules")
+            if not isinstance(a[0], String):
+                return EvaluationError("create_policy() name must be a string")
+            if not isinstance(a[1], Map):
+                return EvaluationError("create_policy() rules must be a Map")
+            
+            from ..policy_engine import get_policy_registry, PolicyBuilder, EnforcementLevel
+            
+            name = a[0].value
+            rules = a[1].pairs
+            
+            builder = PolicyBuilder(name)
+            builder.set_enforcement(EnforcementLevel.STRICT)
+            
+            # Parse rules from Map
+            for key, value in rules.items():
+                key_str = key.value if hasattr(key, 'value') else str(key)
+                if key_str == "verify" and isinstance(value, List):
+                    for cond in value.elements:
+                        cond_str = cond.value if hasattr(cond, 'value') else str(cond)
+                        builder.add_verify_rule(cond_str)
+                elif key_str == "restrict" and isinstance(value, Map):
+                    for field, constraints in value.pairs.items():
+                        field_str = field.value if hasattr(field, 'value') else str(field)
+                        constraint_list = []
+                        if isinstance(constraints, List):
+                            for c in constraints.elements:
+                                constraint_list.append(c.value if hasattr(c, 'value') else str(c))
+                        builder.add_restrict_rule(field_str, constraint_list)
+            
+            policy = builder.build()
+            registry = get_policy_registry()
+            registry.register(name, policy)
+            
+            return String(f"Policy '{name}' created and registered")
+        
+        def _check_policy(*a):
+            """Check policy enforcement: check_policy(target, context_map)"""
+            if len(a) != 2:
+                return EvaluationError("check_policy() takes 2 arguments: target, context")
+            if not isinstance(a[0], String):
+                return EvaluationError("check_policy() target must be a string")
+            if not isinstance(a[1], Map):
+                return EvaluationError("check_policy() context must be a Map")
+            
+            from ..policy_engine import get_policy_registry
+            
+            target = a[0].value
+            context = {}
+            for k, v in a[1].pairs.items():
+                key_str = k.value if hasattr(k, 'value') else str(k)
+                val = v.value if hasattr(v, 'value') else v
+                context[key_str] = val
+            
+            registry = get_policy_registry()
+            policy = registry.get(target)
+            
+            if policy is None:
+                return String(f"No policy found for '{target}'")
+            
+            result = policy.enforce(context)
+            if result["success"]:
+                return TRUE
+            else:
+                return String(f"Policy violation: {result['message']}")
+        
+        # === DEPENDENCY INJECTION BUILTINS ===
+        
+        def _register_dependency(*a):
+            """Register a dependency: register_dependency(name, value, [module])"""
+            if len(a) < 2 or len(a) > 3:
+                return EvaluationError("register_dependency() takes 2 or 3 arguments: name, value, [module]")
+            if not isinstance(a[0], String):
+                return EvaluationError("register_dependency() name must be a string")
+            
+            from ..dependency_injection import get_di_registry
+            
+            name = a[0].value
+            value = a[1]
+            module = a[2].value if len(a) > 2 and isinstance(a[2], String) else "__main__"
+            
+            registry = get_di_registry()
+            container = registry.get_container(module)
+            if not container:
+                # Create container if it doesn't exist
+                registry.register_module(module)
+                container = registry.get_container(module)
+            # Declare and provide the dependency
+            container.declare_dependency(name, "any", False)
+            container.provide(name, value)
+            
+            return String(f"Dependency '{name}' registered in module '{module}'")
+        
+        def _mock_dependency(*a):
+            """Create a mock for dependency: mock_dependency(name, mock_value, [module])"""
+            if len(a) < 2 or len(a) > 3:
+                return EvaluationError("mock_dependency() takes 2 or 3 arguments: name, mock, [module]")
+            if not isinstance(a[0], String):
+                return EvaluationError("mock_dependency() name must be a string")
+            
+            from ..dependency_injection import get_di_registry, ExecutionMode
+            
+            name = a[0].value
+            mock = a[1]
+            module = a[2].value if len(a) > 2 and isinstance(a[2], String) else "__main__"
+            
+            registry = get_di_registry()
+            container = registry.get_container(module)
+            if not container:
+                # Create container if it doesn't exist
+                registry.register_module(module)
+                container = registry.get_container(module)
+            # Declare and mock the dependency
+            if name not in container.contracts:
+                container.declare_dependency(name, "any", False)
+            container.mock(name, mock)
+            
+            return String(f"Mock for '{name}' registered in module '{module}'")
+        
+        def _clear_mocks(*a):
+            """Clear all mocks: clear_mocks([module])"""
+            from ..dependency_injection import get_di_registry
+            
+            module = a[0].value if len(a) > 0 and isinstance(a[0], String) else "__main__"
+            
+            registry = get_di_registry()
+            container = registry.get_container(module)
+            if container:
+                container.clear_mocks()
+                return String(f"All mocks cleared in module '{module}'")
+            return String(f"Module '{module}' not registered")
+        
+        def _set_execution_mode(*a):
+            """Set execution mode: set_execution_mode(mode_string)"""
+            if len(a) != 1:
+                return EvaluationError("set_execution_mode() takes 1 argument: mode")
+            if not isinstance(a[0], String):
+                return EvaluationError("set_execution_mode() mode must be a string")
+            
+            from ..dependency_injection import ExecutionMode
+            
+            mode_str = a[0].value.upper()
+            try:
+                mode = ExecutionMode[mode_str]
+                # Store in current environment
+                env = getattr(self, '_current_env', None)
+                if env:
+                    env.set("__execution_mode__", String(mode_str))
+                return String(f"Execution mode set to {mode.name}")
+            except KeyError:
+                return EvaluationError(f"Invalid execution mode: {mode_str}. Valid: PRODUCTION, DEBUG, TEST, SANDBOX")
+        
+        # Register all advanced feature builtins
+        self.builtins.update({
+            # Persistence
+            "persistent_set": Builtin(_persistent_set, "persistent_set"),
+            "persistent_get": Builtin(_persistent_get, "persistent_get"),
+            "persistent_delete": Builtin(_persistent_delete, "persistent_delete"),
+            "memory_stats": Builtin(_memory_stats, "memory_stats"),
+            # Policy
+            "create_policy": Builtin(_create_policy, "create_policy"),
+            "check_policy": Builtin(_check_policy, "check_policy"),
+            # Dependency Injection
+            "register_dependency": Builtin(_register_dependency, "register_dependency"),
+            "mock_dependency": Builtin(_mock_dependency, "mock_dependency"),
+            "clear_mocks": Builtin(_clear_mocks, "clear_mocks"),
+            "set_execution_mode": Builtin(_set_execution_mode, "set_execution_mode"),
+        })
     
     def _register_renderer_builtins(self):
         """Logic extracted from the original RENDER_REGISTRY and helper functions."""

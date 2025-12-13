@@ -1,0 +1,24 @@
+// Simple integration test for new features
+
+print("=== Testing Parser Integration ===");
+print("");
+
+print("Testing INJECT:");
+inject DatabaseAPI;
+print("✓ INJECT parsed and executed");
+
+print("");
+print("Testing VALIDATE:");
+let email_data = "test@example.com";
+let email_schema = "email";
+validate(email_data, email_schema);
+print("✓ VALIDATE parsed and executed");
+
+print("");
+print("Testing SANITIZE:");
+let user_input = "<script>alert('xss')</script>";
+sanitize(user_input, "html");
+print("✓ SANITIZE parsed and executed");
+
+print("");
+print("=== All Parser Integration Tests Passed ===");

@@ -432,6 +432,9 @@ class Lexer:
             "enum": ENUM,               # Advanced: type-safe enumerations
             "stream": STREAM,           # Advanced: event streaming
             "watch": WATCH,             # Advanced: reactive state management
+            "inject": INJECT,           # Advanced: dependency injection
+            "validate": VALIDATE,       # Data validation
+            "sanitize": SANITIZE,       # Data sanitization
         }
         return keywords.get(ident, IDENT)
 

@@ -233,6 +233,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  SanitizeStatement node")
                 return self.eval_sanitize_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.InjectStatement:
+                debug_log("  InjectStatement node")
+                return self.eval_inject_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.ImmutableStatement:
                 debug_log("  ImmutableStatement node", f"immutable {node.target}")
                 return self.eval_immutable_statement(node, env, stack_trace)

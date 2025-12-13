@@ -420,6 +420,9 @@ class UltimateParser:
             elif self.cur_token_is(SANITIZE):
                 print(f"[PARSE_STMT] Matched SANITIZE", file=sys.stderr, flush=True)
                 node = self.parse_sanitize_statement()
+            elif self.cur_token_is(INJECT):
+                print(f"[PARSE_STMT] Matched INJECT", file=sys.stderr, flush=True)
+                node = self.parse_inject_statement()
             elif self.cur_token_is(IMMUTABLE):
                 print(f"[PARSE_STMT] Matched IMMUTABLE", file=sys.stderr, flush=True)
                 node = self.parse_immutable_statement()
@@ -2542,6 +2545,26 @@ class UltimateParser:
                 self.next_token()
         
         return SanitizeStatement(data=data_expr, encoding_type=encoding_type)
+
+    def parse_inject_statement(self):
+        """Parse inject statement - dependency injection"""
+        token = self.cur_token
+        self.next_token()
+        
+        # inject dependency_name
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected dependency name after 'inject'")
+            return None
+        
+        dependency_name = self.cur_token.literal
+        dependency = Identifier(value=dependency_name)
+        self.next_token()
+        
+        # Semicolon is optional
+        if self.cur_token_is(SEMICOLON):
+            self.next_token()
+        
+        return InjectStatement(dependency=dependency)
 
     def parse_immutable_statement(self):
         """Parse immutable statement - declare immutable variables"""

@@ -38,6 +38,9 @@ class StatementEvaluatorMixin:
     def eval_program(self, statements, env):
         debug_log("eval_program", f"Processing {len(statements)} statements")
         
+        # Track current environment for builtin functions
+        self._current_env = env
+        
         try:
             EVAL_SUMMARY['parsed_statements'] = max(EVAL_SUMMARY.get('parsed_statements', 0), len(statements))
         except Exception: 
@@ -882,22 +885,84 @@ class StatementEvaluatorMixin:
         return wrapped
     
     def eval_protect_statement(self, node, env, stack_trace):
+        """Evaluate PROTECT statement with full policy engine integration."""
+        from ..policy_engine import get_policy_registry, PolicyBuilder
+        from ..object import String as StringObj
+        
+        # Evaluate target expression
         target = self.eval_node(node.target, env, stack_trace)
         if is_error(target): 
             return target
         
+        # Get target name (for registration)
+        target_name = str(node.target) if hasattr(node.target, 'value') else str(target)
+        
+        # Evaluate rules block
         rules_val = self.eval_node(node.rules, env, stack_trace)
         if is_error(rules_val): 
             return rules_val
         
+        # Convert rules to dictionary
         rules_dict = {}
         if isinstance(rules_val, Map):
             for k, v in rules_val.pairs.items():
-                rules_dict[k.value if isinstance(k, String) else str(k)] = v
+                key = k.value if isinstance(k, String) else str(k)
+                rules_dict[key] = v
         
-        policy = ProtectionPolicy(str(node.target), rules_dict, node.enforcement_level)
-        get_security_context().register_protection(str(node.target), policy)
-        return policy
+        # Determine enforcement level (string-based)
+        enforcement_level = "strict"  # Default
+        if hasattr(node, 'enforcement_level') and node.enforcement_level:
+            level_str = node.enforcement_level.lower()
+            if level_str in ["strict", "warn", "audit", "permissive"]:
+                enforcement_level = level_str
+        
+        # Build policy using PolicyBuilder
+        builder = PolicyBuilder(target_name)
+        builder.set_enforcement(enforcement_level)
+        
+        # Parse rules and add to policy
+        for rule_type, rule_config in rules_dict.items():
+            if rule_type == "verify":
+                # Add verification rules
+                if isinstance(rule_config, List):
+                    for condition in rule_config.elements:
+                        condition_str = condition.value if hasattr(condition, 'value') else str(condition)
+                        builder.add_verify_rule(condition_str)
+            
+            elif rule_type == "restrict":
+                # Add restriction rules
+                if isinstance(rule_config, Map):
+                    for field, constraints in rule_config.pairs.items():
+                        field_name = field.value if hasattr(field, 'value') else str(field)
+                        constraint_list = []
+                        if isinstance(constraints, List):
+                            for c in constraints.elements:
+                                constraint_str = c.value if hasattr(c, 'value') else str(c)
+                                constraint_list.append(constraint_str)
+                        builder.add_restrict_rule(field_name, constraint_list)
+            
+            elif rule_type == "audit":
+                # Enable audit logging
+                builder.enable_audit()
+        
+        # Build and register policy
+        policy = builder.build()
+        policy_registry = get_policy_registry()
+        policy_registry.register(target_name, policy)
+        
+        debug_log("eval_protect_statement", f"✓ Policy registered for {target_name} (level: {enforcement_level})")
+        
+        # Store policy reference in environment for enforcement
+        env.set(f"__policy_{target_name}__", policy)
+        
+        # Also register with legacy security context for backwards compatibility
+        try:
+            policy_legacy = ProtectionPolicy(target_name, rules_dict, enforcement_level)
+            get_security_context().register_protection(target_name, policy_legacy)
+        except:
+            pass  # Legacy context may not be available
+        
+        return StringObj(f"Protection policy activated for '{target_name}' (level: {enforcement_level})")
     
     def eval_middleware_statement(self, node, env, stack_trace):
         handler = self.eval_node(node.handler, env)
@@ -1585,6 +1650,61 @@ class StatementEvaluatorMixin:
         except Exception as e:
             debug_log("eval_sanitize_statement", f"Sanitization error: {e}")
             return String(data_str)  # Return original if sanitization fails
+
+    def eval_inject_statement(self, node, env, stack_trace):
+        """Evaluate inject statement - full dependency injection with mode-aware resolution."""
+        from ..dependency_injection import get_di_registry, ExecutionMode
+        from ..object import String as StringObj, Null as NullObj
+        
+        # Get dependency name
+        dep_name = node.dependency.value if hasattr(node.dependency, 'value') else str(node.dependency)
+        
+        debug_log("eval_inject_statement", f"Resolving dependency: {dep_name}")
+        
+        # Get DI registry and current module context
+        di_registry = get_di_registry()
+        
+        # Determine module name from environment context
+        module_name = env.get("__module__") 
+        module_name = module_name.value if module_name and hasattr(module_name, 'value') else "__main__"
+        
+        # Get or create container for this module
+        container = di_registry.get_container(module_name)
+        
+        # Determine execution mode from environment or default to PRODUCTION
+        mode_obj = env.get("__execution_mode__")
+        if mode_obj and hasattr(mode_obj, 'value'):
+            mode_str = mode_obj.value.upper()
+            try:
+                execution_mode = ExecutionMode[mode_str]
+            except KeyError:
+                execution_mode = ExecutionMode.PRODUCTION
+        else:
+            execution_mode = ExecutionMode.PRODUCTION
+        
+        # Set container's execution mode
+        container.execution_mode = execution_mode
+        
+        try:
+            # Attempt to resolve dependency
+            resolved = container.get(dep_name)
+            
+            if resolved is not None:
+                # Successfully resolved - store in environment
+                env.set(dep_name, resolved)
+                debug_log("eval_inject_statement", f"✓ Injected {dep_name} from container (mode: {execution_mode.name})")
+                return StringObj(f"Dependency '{dep_name}' injected ({execution_mode.name} mode)")
+            else:
+                # Dependency not registered - create null placeholder
+                debug_log("eval_inject_statement", f"⚠ Dependency {dep_name} not registered, using null")
+                env.set(dep_name, NullObj())
+                return StringObj(f"Warning: Dependency '{dep_name}' not registered")
+                
+        except Exception as e:
+            # Error during resolution
+            debug_log("eval_inject_statement", f"✗ Error injecting {dep_name}: {e}")
+            env.set(dep_name, NullObj())
+            return StringObj(f"Error: Could not inject '{dep_name}': {str(e)}")
 
     def eval_immutable_statement(self, node, env, stack_trace):
         """Evaluate immutable statement - declare variable as immutable."""

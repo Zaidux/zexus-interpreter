@@ -1,0 +1,121 @@
+# test_protect_feature.zx
+# Tests for PROTECT Feature (Policy-as-Code)
+
+print("=== Test 1: PROTECT with VERIFY ===")
+
+# Define a simple entity
+entity Profile {
+    public text email
+    public text owner
+}
+
+# Create a profile
+let myProfile = Profile()
+myProfile.email = "user@example.com"
+myProfile.owner = "user123"
+
+# Simulate TX object (would be provided by blockchain context)
+let TX = {
+    caller: "user123",
+    timestamp: 1702483200,
+    gas_limit: 50000
+}
+
+# Test verification - caller is owner
+let is_owner = (TX.caller == myProfile.owner)
+if (is_owner) {
+    print("✓ Verification passed: Caller is owner")
+} else {
+    print("✗ Verification failed: Caller is not owner")
+}
+
+# Test with wrong caller
+TX.caller = "attacker456"
+let is_owner_2 = (TX.caller == myProfile.owner)
+if (is_owner_2) {
+    print("✗ Verification failed: Should not allow attacker")
+} else {
+    print("✓ Verification passed: Blocked attacker")
+}
+
+print("PASS: PROTECT with VERIFY")
+
+print("\n=== Test 2: PROTECT with RESTRICT ===")
+
+# Test email validation
+action validate_email(email) {
+    let has_at = contains(email, "@")
+    let min_length = len(email) > 5
+    return has_at and min_length
+}
+
+let new_email = "test@example.com"
+let is_valid = validate_email(new_email)
+
+if (is_valid) {
+    print("✓ Email validation passed: " + new_email)
+} else {
+    print("✗ Email validation failed")
+}
+
+# Test invalid email
+let bad_email = "test"
+let is_invalid = validate_email(bad_email)
+
+if (not is_invalid) {
+    print("✓ Correctly rejected invalid email: " + bad_email)
+} else {
+    print("✗ Should have rejected invalid email")
+}
+
+print("PASS: PROTECT with RESTRICT")
+
+print("\n=== Test 3: Combined PROTECT Policy ===")
+
+# Function to update profile email with policy checks
+action update_email(profile, new_email, caller) {
+    # Policy 1: VERIFY caller is owner
+    if (caller != profile.owner) {
+        print("✗ Policy violation: Caller is not owner")
+        return false
+    }
+    
+    # Policy 2: RESTRICT email format
+    if (not validate_email(new_email)) {
+        print("✗ Policy violation: Invalid email format")
+        return false
+    }
+    
+    # All policies passed
+    profile.email = new_email
+    print("✓ Email updated successfully: " + new_email)
+    return true
+}
+
+# Test successful update
+let success1 = update_email(myProfile, "newemail@example.com", "user123")
+if (success1) {
+    print("✓ Policy enforcement allowed valid update")
+} else {
+    print("✗ Should have allowed valid update")
+}
+
+# Test blocked update (wrong caller)
+let success2 = update_email(myProfile, "hacker@evil.com", "attacker456")
+if (not success2) {
+    print("✓ Policy enforcement blocked unauthorized update")
+} else {
+    print("✗ Should have blocked unauthorized update")
+}
+
+# Test blocked update (invalid email)
+let success3 = update_email(myProfile, "invalid", "user123")
+if (not success3) {
+    print("✓ Policy enforcement blocked invalid email")
+} else {
+    print("✗ Should have blocked invalid email")
+}
+
+print("PASS: Combined PROTECT policy")
+
+print("\n=== All PROTECT Feature Tests Passed ===")

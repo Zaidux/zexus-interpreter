@@ -148,6 +148,7 @@ MIDDLEWARE = "MIDDLEWARE"
 AUTH = "AUTH"
 THROTTLE = "THROTTLE"
 CACHE = "CACHE"
+INJECT = "INJECT"  # Dependency injection: inject DatabaseAPI
 
 # BLOCKCHAIN & SMART CONTRACT TOKENS
 LEDGER = "LEDGER"              # Immutable state ledger: ledger balances;

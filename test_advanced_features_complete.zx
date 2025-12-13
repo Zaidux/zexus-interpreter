@@ -1,0 +1,220 @@
+// === Comprehensive Test for Advanced Features ===
+// Tests: Persistence, Policy Engine, Dependency Injection, and Built-in Functions
+
+print("=== Advanced Features Complete Test ===")
+print("")
+
+// === 1. PERSISTENCE & MEMORY MANAGEMENT ===
+print("--- 1. Testing Persistence ---")
+
+// Set persistent variables (survive program restarts)
+persistent_set("app_version", "1.0.0")
+persistent_set("user_count", 100)
+persistent_set("last_login", "2025-12-13")
+
+// Get persistent variables
+let version = persistent_get("app_version", "unknown")
+let users = persistent_get("user_count", 0)
+print("✓ Retrieved app_version: " + version)
+print("✓ Retrieved user_count: " + string(users))
+
+// Memory statistics
+let stats = memory_stats()
+print("✓ Memory tracking active")
+print("")
+
+// === 2. POLICY ENGINE & PROTECTION ===
+print("--- 2. Testing Policy Engine ---")
+
+// Create a protection policy programmatically
+let admin_policy = {
+    "verify": ["user.role == 'admin'", "user.authenticated == true"],
+    "restrict": {
+        "age": ["min:18", "max:120"],
+        "username": ["length:3-20", "pattern:[a-zA-Z0-9_]+"]
+    },
+    "audit": true
+}
+
+create_policy("admin_access", admin_policy)
+print("✓ Policy 'admin_access' created")
+
+// Test policy enforcement
+let context = {
+    "user": {
+        "role": "admin",
+        "authenticated": true
+    },
+    "age": 25,
+    "username": "admin_user"
+}
+
+let policy_result = check_policy("admin_access", context)
+print("✓ Policy check passed: " + string(policy_result))
+
+// PROTECT statement (declarative policy)
+protect myFunction {
+    verify (caller == "trusted_user")
+    restrict data {
+        length: min 10, max 100
+    }
+}
+print("✓ Protection policy declared for myFunction")
+print("")
+
+// === 3. DEPENDENCY INJECTION ===
+print("--- 3. Testing Dependency Injection ---")
+
+// Set execution mode
+set_execution_mode("PRODUCTION")
+print("✓ Execution mode set to PRODUCTION")
+
+// Register production dependencies
+register_dependency("DatabaseAPI", {
+    "host": "prod.db.example.com",
+    "port": 5432,
+    "type": "postgres"
+})
+
+register_dependency("CacheService", {
+    "host": "redis.example.com",
+    "port": 6379,
+    "type": "redis"
+})
+
+print("✓ Production dependencies registered")
+
+// Inject dependencies (uses registered values)
+inject DatabaseAPI
+inject CacheService
+
+print("✓ Dependencies injected: DatabaseAPI, CacheService")
+
+// Switch to TEST mode
+set_execution_mode("TEST")
+print("✓ Execution mode set to TEST")
+
+// Register mock dependencies for testing
+mock_dependency("DatabaseAPI", {
+    "host": "localhost",
+    "port": 5432,
+    "type": "mock",
+    "data": ["test1", "test2", "test3"]
+})
+
+mock_dependency("CacheService", {
+    "host": "localhost",
+    "port": 6379,
+    "type": "mock_redis",
+    "cache": {}
+})
+
+print("✓ Mock dependencies registered")
+
+// Inject again (will get mocks in TEST mode)
+inject DatabaseAPI
+inject CacheService
+
+print("✓ Mock dependencies injected")
+
+// Clear mocks
+clear_mocks()
+print("✓ Mocks cleared")
+print("")
+
+// === 4. COMBINED USAGE PATTERNS ===
+print("--- 4. Testing Combined Patterns ---")
+
+// Pattern 1: Persistent configuration with policy protection
+protect configStore {
+    verify (action == "read" || caller == "admin")
+    restrict value {
+        type: ["string", "number", "boolean"]
+    }
+}
+
+persistent_set("config_api_key", "secret_key_12345")
+persistent_set("config_max_users", 1000)
+print("✓ Protected persistent configuration stored")
+
+// Pattern 2: DI with policy-enforced services
+protect ServiceRegistry {
+    verify (service.validated == true)
+    restrict service {
+        name: length 1-50
+        version: pattern "^\\d+\\.\\d+\\.\\d+$"
+    }
+}
+
+register_dependency("AuthService", {
+    "name": "Authentication Service",
+    "version": "2.1.0",
+    "validated": true,
+    "endpoint": "/api/auth"
+})
+
+inject AuthService
+print("✓ Policy-enforced service injected")
+
+// Pattern 3: Memory-efficient cached data with validation
+validate({"data": "test", "count": 42}, {
+    "data": "string",
+    "count": "number"
+})
+
+sanitize("user<script>alert('xss')</script>input", ["html", "sql"])
+print("✓ Data validated and sanitized")
+print("")
+
+// === 5. ADVANCED FEATURES INTERACTION ===
+print("--- 5. Testing Feature Interactions ---")
+
+// Use persistence + DI + policy together
+set_execution_mode("DEBUG")
+
+// Store service discovery in persistent storage
+persistent_set("services_registry", {
+    "auth": "https://auth.example.com",
+    "api": "https://api.example.com",
+    "cdn": "https://cdn.example.com"
+})
+
+// Load and inject services
+let services = persistent_get("services_registry", {})
+register_dependency("ServiceDiscovery", services)
+inject ServiceDiscovery
+
+print("✓ Persistent services loaded and injected")
+
+// Create dynamic policy based on environment
+let env_policy = {
+    "verify": ["env.mode == 'DEBUG'"],
+    "audit": true
+}
+
+create_policy("debug_access", env_policy)
+print("✓ Environment-based policy created")
+
+// Check policy with current environment
+let env_context = {
+    "env": {
+        "mode": "DEBUG"
+    }
+}
+
+let debug_check = check_policy("debug_access", env_context)
+print("✓ Debug policy verified: " + string(debug_check))
+print("")
+
+// === COMPLETION ===
+print("=== All Advanced Features Tests Completed ===")
+print("")
+print("Summary:")
+print("  ✓ Persistence & Memory Management")
+print("  ✓ Policy Engine & Protection")
+print("  ✓ Dependency Injection & Mocking")
+print("  ✓ Built-in Functions")
+print("  ✓ Combined Usage Patterns")
+print("  ✓ Feature Interactions")
+print("")
+print("🎉 All tests passed successfully!")

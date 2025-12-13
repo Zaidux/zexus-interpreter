@@ -477,7 +477,7 @@ def record_dependency(env, name):
         _dependency_collector_stack[-1].add((env, name))
 
 class Environment:
-    def __init__(self, outer=None):
+    def __init__(self, outer=None, persistence_scope=None):
         self.store = {}
         self.const_vars = set()  # Track const variables
         self.outer = outer
@@ -486,6 +486,11 @@ class Environment:
         self.debug_mode = False
         # Reactive watchers: name -> list of (callback_fn, context_env)
         self.watchers = {}
+        # Persistence support
+        self.persistence_scope = persistence_scope
+        self._persistent_storage = None
+        self._memory_tracker = None
+        self._init_persistence()
 
     def get(self, name):
         val = self.store.get(name)
@@ -579,6 +584,74 @@ class Environment:
                     cb(new_val)
                 except Exception as e:
                     print(f"Error in watcher for {name}: {e}")
+    
+    # === PERSISTENCE METHODS ===
+    
+    def _init_persistence(self):
+        """Initialize persistence system if scope is provided"""
+        if self.persistence_scope:
+            try:
+                # Lazy import to avoid circular dependencies
+                import sys
+                if 'zexus.persistence' in sys.modules:
+                    from .persistence import PersistentStorage, MemoryTracker
+                    self._persistent_storage = PersistentStorage(self.persistence_scope)
+                    self._memory_tracker = MemoryTracker()
+                    self._memory_tracker.start_tracking()
+            except (ImportError, Exception):
+                # Persistence module not available or error - continue without it
+                pass
+    
+    def set_persistent(self, name, val):
+        """Set a persistent variable that survives program restarts"""
+        if self._persistent_storage:
+            self._persistent_storage.set(name, val)
+        # Also store in regular memory for access
+        self.store[name] = val
+        self.notify_watchers(name, val)
+        return val
+    
+    def get_persistent(self, name, default=None):
+        """Get a persistent variable"""
+        if self._persistent_storage:
+            val = self._persistent_storage.get(name)
+            if val is not None:
+                return val
+        # Fallback to regular store
+        return self.store.get(name, default)
+    
+    def delete_persistent(self, name):
+        """Delete a persistent variable"""
+        if self._persistent_storage:
+            self._persistent_storage.delete(name)
+        if name in self.store:
+            del self.store[name]
+    
+    def get_memory_stats(self):
+        """Get current memory tracking statistics"""
+        if self._memory_tracker:
+            return self._memory_tracker.get_stats()
+        return {"tracked_objects": 0, "message": "Memory tracking not enabled"}
+    
+    def enable_memory_tracking(self):
+        """Enable memory leak detection"""
+        if not self._memory_tracker:
+            try:
+                # Lazy import
+                import sys
+                if 'zexus.persistence' in sys.modules:
+                    from .persistence import MemoryTracker
+                    self._memory_tracker = MemoryTracker()
+                    self._memory_tracker.start_tracking()
+            except (ImportError, Exception):
+                pass
+    
+    def cleanup_persistence(self):
+        """Clean up persistence resources"""
+        if self._memory_tracker:
+            self._memory_tracker.stop_tracking()
+        if self._persistent_storage:
+            self._persistent_storage.close()
 
 # Global constants
 NULL = Null()
