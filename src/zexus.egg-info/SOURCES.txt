@@ -1,7 +1,11 @@
 .gitattributes
 .gitignore
 LICENSE
+QUESTIONS_ANSWERED.md
 README.md
+README.old.md
+VM_INTEGRATION_SUMMARY.md
+VM_QUICK_REFERENCE.md
 gitignore
 install.sh
 pyproject.toml
@@ -11,6 +15,7 @@ setup.py
 setup_stdlib.sh
 test_data.json
 test_simple.json
+test_vm_integration.py
 test_working.json
 zexus.json
 zexus_compiler.py.backup
@@ -85,6 +90,7 @@ docs/SECURITY_IMPLEMENTATION_SUMMARY.md
 docs/STATUS.md
 docs/TEST_ISSUES_REPORT.md
 docs/WATCH_FEATURE.md
+docs/ZPM_GUIDE.md
 docs/evaluator_export_compiler_summary.md
 docs/future_implentations.md
 docs/session_summary.md
@@ -119,6 +125,13 @@ examples/simple_test.zx
 examples/test.zx
 examples/token_contract.zx
 examples/ziver_chain_test.zx
+linguist-submission/SUBMISSION_INSTRUCTIONS.md
+linguist-submission/grammars.yml
+linguist-submission/languages.yml
+linguist-submission/zexus.tmLanguage.json
+linguist-submission/samples/basic.zx
+linguist-submission/samples/blockchain.zx
+linguist-submission/samples/security.zx
 renderer/__init__.py
 renderer/backend.py
 renderer/canvas.py
@@ -282,6 +295,7 @@ src/zexus/compiler/parser.py
 src/zexus/compiler/semantic.py
 src/zexus/compiler/zexus_ast.py
 src/zexus/evaluator/__init__.py
+src/zexus/evaluator/bytecode_compiler.py
 src/zexus/evaluator/core.py
 src/zexus/evaluator/expressions.py
 src/zexus/evaluator/functions.py

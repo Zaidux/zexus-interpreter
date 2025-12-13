@@ -41,7 +41,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='zexus',
-    version='0.1.0',
+    version='1.0.0',
     author='Zaidux',
     author_email='devnull@example.com',
     description='A modern, security-first programming language with blockchain support',
@@ -85,7 +85,7 @@ setup(
         'install': PostInstallCommand,
     },
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'Topic :: Software Development :: Interpreters',
         'Topic :: Software Development :: Compilers',

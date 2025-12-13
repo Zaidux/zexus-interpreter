@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zexus"
-version = "0.1.0"
+version = "1.0.0"
 description = "A modern, security-first programming language with blockchain support"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Zaidux", email = "devnull@example.com"}
+    {name = "Zaidux", email = "zaiduabubakar777@gmail.com"}
 ]
 maintainers = [
-    {name = "Zaidux", email = "devnull@example.com"}
+    {name = "Zaidux", email = "zaiduabubakar888@gmail.com"}
 ]
 keywords = [
     "programming-language",
@@ -25,7 +25,7 @@ keywords = [
     "policy-as-code",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Interpreters",
     "Topic :: Software Development :: Compilers",

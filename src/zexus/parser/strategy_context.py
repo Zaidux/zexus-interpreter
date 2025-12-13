@@ -704,12 +704,32 @@ class ContextStackParser:
                 default_value=StringLiteral(contract_name)
             ))
 
-        # 5. Return ContractStatement with strict positional arguments
-        return ContractStatement(
+        # 5. Create body BlockStatement containing storage vars and actions
+        # Convert storage_vars to LetStatements for body
+        body_statements = []
+        
+        # Add storage vars as state declarations
+        for storage_var in storage_vars:
+            body_statements.append(storage_var)
+        
+        # Add actions
+        body_statements.extend(actions)
+        
+        body_block = BlockStatement()
+        body_block.statements = body_statements
+        
+        # Also store storage_vars and actions as attributes for backward compatibility
+        contract_stmt = ContractStatement(
             name=Identifier(contract_name),
-            storage_vars=storage_vars,
-            actions=actions
+            body=body_block,
+            modifiers=None
         )
+        
+        # Add backward compatibility attributes
+        contract_stmt.storage_vars = storage_vars
+        contract_stmt.actions = actions
+        
+        return contract_stmt
 
     # === FIXED USE STATEMENT PARSERS ===
     def _parse_use_statement_block(self, block_info, all_tokens):

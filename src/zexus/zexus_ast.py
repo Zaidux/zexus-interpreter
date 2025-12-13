@@ -470,26 +470,6 @@ class VerifyStatement(Statement):
         return f"VerifyStatement(target={self.target}, conditions={len(self.conditions)})"
 
 
-class ContractStatement(Statement):
-    """Smart contract declaration - persistent state + actions
-    
-    contract Token {
-        persistent storage balances: Map<Address, integer>
-        persistent storage owner: Address
-        
-        action transfer(to: Address, amount: integer) -> boolean { ... }
-    }
-    """
-    def __init__(self, name, storage_vars, actions, blockchain_config=None):
-        self.name = name                        # Identifier
-        self.storage_vars = storage_vars or []  # Persistent storage declarations
-        self.actions = actions or []            # Contract methods/actions
-        self.blockchain_config = blockchain_config or {}  # Network config
-
-    def __repr__(self):
-        return f"ContractStatement(name={self.name}, storage={len(self.storage_vars)})"
-
-
 class ProtectStatement(Statement):
     """Protection guardrails - security rules against unauthorized access
     
