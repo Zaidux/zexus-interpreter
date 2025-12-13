@@ -1,0 +1,9 @@
+# Zexus Language Definition
+*.zx linguist-language=Zexus
+
+# Force GitHub to recognize .zx files as Zexus code
+*.zx linguist-detectable=true
+
+# Prevent test files from skewing language stats
+tests/** linguist-vendored=true
+test_*.zx linguist-vendored=false

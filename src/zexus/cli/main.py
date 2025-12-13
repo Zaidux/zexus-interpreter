@@ -21,7 +21,59 @@ from ..config import config
 
 console = Console()
 
-@click.group()
+def show_all_commands():
+    """Display all available Zexus commands with descriptions"""
+    console.print("\n[bold cyan]🚀 Zexus Programming Language - Available Commands[/bold cyan]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Command", style="cyan", width=30)
+    table.add_column("Description", style="white")
+    
+    commands = [
+        ("zx run <file>", "Execute a Zexus program"),
+        ("zx run --zexus", "Show this command list"),
+        ("zx check <file>", "Check syntax with detailed validation"),
+        ("zx validate <file>", "Validate and auto-fix syntax errors"),
+        ("zx ast <file>", "Display Abstract Syntax Tree"),
+        ("zx tokens <file>", "Show tokenization output"),
+        ("zx repl", "Start interactive REPL"),
+        ("zx init [name]", "Initialize new Zexus project"),
+        ("zx debug <on|off|minimal|status>", "Control debug logging"),
+        ("", ""),
+        ("[bold]Global Options:[/bold]", ""),
+        ("--syntax-style=<style>", "universal, tolerable, or auto (default)"),
+        ("--execution-mode=<mode>", "interpreter, compiler, or auto (default)"),
+        ("--advanced-parsing", "Enable multi-strategy parsing (default: on)"),
+        ("--debug", "Enable debug output"),
+        ("--version", "Show Zexus version"),
+        ("--help", "Show detailed help"),
+        ("", ""),
+        ("[bold]Examples:[/bold]", ""),
+        ("zx run program.zx", "Run a program with auto-detection"),
+        ("zx run --syntax-style=universal main.zx", "Run with strict syntax"),
+        ("zx run --execution-mode=compiler fast.zx", "Force compiler mode"),
+        ("zx check --debug program.zx", "Check syntax with debug info"),
+        ("", ""),
+        ("[bold]Built-in Functions:[/bold]", "50+ functions available"),
+        ("", "Memory: persist_set, persist_get, track_memory"),
+        ("", "Policy: protect, verify, restrict, sanitize"),
+        ("", "DI: inject, register_dependency, mock_dependency"),
+        ("", "Reactive: watch (keyword)"),
+        ("", "Blockchain: transaction, emit, require, balance"),
+        ("", ""),
+        ("[bold]Documentation:[/bold]", ""),
+        ("", "README: github.com/Zaidux/zexus-interpreter"),
+        ("", "Features: docs/features/ADVANCED_FEATURES_IMPLEMENTATION.md"),
+        ("", "Dev Guide: src/README.md"),
+    ]
+    
+    for cmd, desc in commands:
+        table.add_row(cmd, desc)
+    
+    console.print(table)
+    console.print("\n[bold green]💡 Tip:[/bold green] Use 'zx <command> --help' for detailed command options\n")
+
+@click.group(invoke_without_command=True)
 @click.version_option(version="0.1.0", prog_name="Zexus")
 @click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']),
               default='auto', help='Syntax style to use (universal=strict, tolerable=flexible)')
@@ -30,9 +82,23 @@ console = Console()
 @click.option('--execution-mode', type=click.Choice(['interpreter', 'compiler', 'auto']),
               default='auto', help='Execution engine to use')
 @click.option('--debug', is_flag=True, help='Enable debug logging')
+@click.option('--zexus', is_flag=True, help='Show all available Zexus commands')
 @click.pass_context
-def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug):
-    """Zexus Programming Language - Hybrid Interpreter/Compiler"""
+def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
+    """Zexus Programming Language - Hybrid Interpreter/Compiler
+    
+    Use 'zx run --zexus' or 'zx --zexus' to see all available commands.
+    """
+    
+    if zexus:
+        show_all_commands()
+        sys.exit(0)
+    
+    # If no command provided, show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        return
+    
     ctx.ensure_object(dict)
     ctx.obj['SYNTAX_STYLE'] = syntax_style
     ctx.obj['ADVANCED_PARSING'] = advanced_parsing

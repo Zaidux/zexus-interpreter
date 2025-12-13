@@ -1,3 +1,50 @@
+Metadata-Version: 2.4
+Name: zexus
+Version: 0.1.0
+Summary: A modern, security-first programming language with blockchain support
+Home-page: https://github.com/Zaidux/zexus-interpreter
+Author: Zaidux
+Author-email: Zaidux <devnull@example.com>
+Maintainer-email: Zaidux <devnull@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/Zaidux/zexus-interpreter
+Project-URL: Documentation, https://github.com/Zaidux/zexus-interpreter/blob/main/docs/
+Project-URL: Repository, https://github.com/Zaidux/zexus-interpreter
+Project-URL: Issues, https://github.com/Zaidux/zexus-interpreter/issues
+Project-URL: Changelog, https://github.com/Zaidux/zexus-interpreter/blob/main/CHANGELOG.md
+Keywords: programming-language,interpreter,compiler,blockchain,smart-contracts,security,policy-as-code
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Interpreters
+Classifier: Topic :: Software Development :: Compilers
+Classifier: Topic :: Security
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: click>=8.0
+Requires-Dist: rich>=10.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-cov>=2.0; extra == "dev"
+Requires-Dist: black>=21.0; extra == "dev"
+Requires-Dist: flake8>=3.9; extra == "dev"
+Requires-Dist: mypy>=0.900; extra == "dev"
+Provides-Extra: blockchain
+Requires-Dist: web3>=5.0; extra == "blockchain"
+Requires-Dist: eth-account>=0.5; extra == "blockchain"
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
 # Zexus Programming Language
 
 <div align="center">

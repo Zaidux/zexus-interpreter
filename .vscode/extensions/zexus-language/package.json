@@ -1,0 +1,114 @@
+{
+  "name": "zexus-language",
+  "displayName": "Zexus Language Support",
+  "description": "Syntax highlighting and language support for Zexus programming language",
+  "version": "0.1.0",
+  "publisher": "Zaidux",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zaidux/zexus-interpreter"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "zexus",
+    "blockchain",
+    "smart-contracts",
+    "security"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "zexus",
+        "aliases": [
+          "Zexus",
+          "zexus"
+        ],
+        "extensions": [
+          ".zx"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/zexus-icon.png",
+          "dark": "./images/zexus-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zexus",
+        "scopeName": "source.zexus",
+        "path": "./syntaxes/zexus.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "zexus",
+        "path": "./snippets/zexus.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "zexus.run",
+        "title": "Run Zexus File",
+        "category": "Zexus"
+      },
+      {
+        "command": "zexus.check",
+        "title": "Check Syntax",
+        "category": "Zexus"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "zexus.run",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorLangId == zexus"
+      }
+    ],
+    "configuration": {
+      "title": "Zexus",
+      "properties": {
+        "zexus.syntaxStyle": {
+          "type": "string",
+          "enum": [
+            "universal",
+            "tolerable",
+            "auto"
+          ],
+          "default": "auto",
+          "description": "Syntax style to use (universal=strict, tolerable=flexible, auto=detect)"
+        },
+        "zexus.executionMode": {
+          "type": "string",
+          "enum": [
+            "interpreter",
+            "compiler",
+            "auto"
+          ],
+          "default": "auto",
+          "description": "Execution engine to use"
+        },
+        "zexus.advancedParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable advanced multi-strategy parsing"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "echo 'Ready to publish'",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.60.0"
+  }
+}

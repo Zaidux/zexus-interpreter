@@ -1,0 +1,9 @@
+%YAML 1.2
+---
+type: programming
+color: "#FF6B35"
+extensions:
+  - ".zx"
+tm_scope: source.zexus
+ace_mode: text
+language_id: 549872365

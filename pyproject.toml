@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zexus"
+version = "0.1.0"
+description = "A modern, security-first programming language with blockchain support"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Zaidux", email = "devnull@example.com"}
+]
+maintainers = [
+    {name = "Zaidux", email = "devnull@example.com"}
+]
+keywords = [
+    "programming-language",
+    "interpreter",
+    "compiler",
+    "blockchain",
+    "smart-contracts",
+    "security",
+    "policy-as-code",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Interpreters",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Security",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click>=8.0",
+    "rich>=10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.9",
+    "mypy>=0.900",
+]
+blockchain = [
+    "web3>=5.0",
+    "eth-account>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/Zaidux/zexus-interpreter"
+Documentation = "https://github.com/Zaidux/zexus-interpreter/blob/main/docs/"
+Repository = "https://github.com/Zaidux/zexus-interpreter"
+Issues = "https://github.com/Zaidux/zexus-interpreter/issues"
+Changelog = "https://github.com/Zaidux/zexus-interpreter/blob/main/CHANGELOG.md"
+
+[project.scripts]
+zx = "zexus.cli.main:cli"
+zexus = "zexus.cli.main:cli"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+zexus = ["py.typed", "*.pyi"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
