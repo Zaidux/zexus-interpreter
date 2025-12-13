@@ -1,0 +1,10 @@
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEUutgmSj4IhyLxy3rqMkQuTd2esTYjLNYkDZZgXUw6z zaidux-codespace
+
+
+=== INSTRUCTIONS ===
+1. Copy the SSH key above (entire line starting with 'ssh-ed25519')
+2. Go to: https://github.com/settings/ssh/new
+3. Paste the key in the 'Key' field
+4. Give it a title like 'Codespace SSH Key'
+5. Click 'Add SSH key'
+6. Then we can push Ziver-Chain changes!
