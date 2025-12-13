@@ -1,5 +1,6 @@
 # src/zexus/evaluator/core.py
 import traceback
+import asyncio
 from .. import zexus_ast
 from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
@@ -8,8 +9,20 @@ from .statements import StatementEvaluatorMixin
 from .functions import FunctionEvaluatorMixin
 from .integration import EvaluationContext, get_integration
 
+# Import VM and bytecode compiler
+try:
+    from ..vm.vm import VM
+    from .bytecode_compiler import EvaluatorBytecodeCompiler, should_use_vm_for_node
+    VM_AVAILABLE = True
+except ImportError as e:
+    VM_AVAILABLE = False
+    VM = None
+    EvaluatorBytecodeCompiler = None
+    should_use_vm_for_node = lambda node: False
+    print(f"⚠️  VM not available in evaluator: {e}")
+
 class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvaluatorMixin):
-    def __init__(self, trusted: bool = False):
+    def __init__(self, trusted: bool = False, use_vm: bool = True):
         # Initialize mixins (FunctionEvaluatorMixin sets up builtins)
         FunctionEvaluatorMixin.__init__(self)
         
@@ -21,6 +34,22 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             self.integration_context.setup_for_trusted_code()
         else:
             self.integration_context.setup_for_untrusted_code()
+        
+        # VM integration
+        self.use_vm = use_vm and VM_AVAILABLE
+        self.vm_instance = None
+        self.bytecode_compiler = None
+        
+        # VM execution statistics
+        self.vm_stats = {
+            'bytecode_compiles': 0,
+            'vm_executions': 0,
+            'vm_fallbacks': 0,
+            'direct_evals': 0
+        }
+        
+        if self.use_vm and VM_AVAILABLE:
+            self._initialize_vm()
     
     def eval_node(self, node, env, stack_trace=None):
         if node is None: 
@@ -499,13 +528,143 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             traceback.print_exc()
             return EvaluationError(error_msg, stack_trace=stack_trace[-5:])  # Last 5 frames
 
+# Additional VM-related methods
+    def _initialize_vm(self):
+        """Initialize VM components for bytecode execution"""
+        try:
+            # Create bytecode compiler
+            self.bytecode_compiler = EvaluatorBytecodeCompiler()
+            debug_log("Evaluator", "VM integration initialized successfully")
+        except Exception as e:
+            debug_log("Evaluator", f"Failed to initialize VM: {e}")
+            self.use_vm = False
+    
+    def _should_use_vm(self, node) -> bool:
+        """
+        Determine if this node should be executed via VM.
+        Uses heuristics to decide when VM execution is beneficial.
+        """
+        if not self.use_vm or not VM_AVAILABLE:
+            return False
+        
+        # Check if the compiler can handle this node
+        if self.bytecode_compiler and not self.bytecode_compiler.can_compile(node):
+            return False
+        
+        # Use external heuristics
+        return should_use_vm_for_node(node)
+    
+    def _execute_via_vm(self, node, env, debug_mode=False):
+        """
+        Compile node to bytecode and execute via VM.
+        Falls back to direct evaluation on error.
+        """
+        try:
+            debug_log("VM Execution", f"Compiling {type(node).__name__} to bytecode")
+            
+            # Compile to bytecode
+            bytecode = self.bytecode_compiler.compile(node, optimize=True)
+            
+            if bytecode is None or self.bytecode_compiler.errors:
+                debug_log("VM Execution", f"Compilation failed: {self.bytecode_compiler.errors}")
+                self.vm_stats['vm_fallbacks'] += 1
+                return None  # Signal fallback
+            
+            self.vm_stats['bytecode_compiles'] += 1
+            
+            # Convert environment to dict for VM
+            vm_env = self._env_to_dict(env)
+            
+            # Add builtins to VM environment
+            vm_builtins = {}
+            if hasattr(self, 'builtins') and self.builtins:
+                vm_builtins = {k: v for k, v in self.builtins.items()}
+            
+            # Create and execute VM
+            vm = VM(builtins=vm_builtins, env=vm_env)
+            result = vm.execute(bytecode, debug=debug_mode)
+            
+            self.vm_stats['vm_executions'] += 1
+            
+            # Update environment with VM changes
+            self._update_env_from_dict(env, vm.env)
+            
+            # Convert VM result back to evaluator objects
+            return self._vm_result_to_evaluator(result)
+            
+        except Exception as e:
+            debug_log("VM Execution", f"VM execution error: {e}")
+            self.vm_stats['vm_fallbacks'] += 1
+            return None  # Signal fallback
+    
+    def _env_to_dict(self, env):
+        """Convert Environment object to dict for VM"""
+        result = {}
+        try:
+            # Get all variables from environment
+            if hasattr(env, 'store') and isinstance(env.store, dict):
+                result.update(env.store)
+            
+            # Get outer environment if available
+            if hasattr(env, 'outer') and env.outer:
+                outer_dict = self._env_to_dict(env.outer)
+                # Don't overwrite inner scope
+                for k, v in outer_dict.items():
+                    if k not in result:
+                        result[k] = v
+        except Exception as e:
+            debug_log("_env_to_dict", f"Error: {e}")
+        
+        return result
+    
+    def _update_env_from_dict(self, env, vm_env: dict):
+        """Update Environment object from VM's dict"""
+        try:
+            for key, value in vm_env.items():
+                # Only update if value changed
+                if hasattr(env, 'set'):
+                    env.set(key, value)
+                elif hasattr(env, 'store'):
+                    env.store[key] = value
+        except Exception as e:
+            debug_log("_update_env_from_dict", f"Error: {e}")
+    
+    def _vm_result_to_evaluator(self, result):
+        """Convert VM result to evaluator object"""
+        # For now, pass through
+        # Future: convert to proper evaluator objects (String, List, etc.)
+        if result is None:
+            return NULL
+        return result
+    
+    def eval_with_vm_support(self, node, env, stack_trace=None, debug_mode=False):
+        """
+        Evaluate node with optional VM execution.
+        Tries VM first if beneficial, falls back to direct evaluation.
+        """
+        # Check if we should use VM
+        if self._should_use_vm(node):
+            result = self._execute_via_vm(node, env, debug_mode)
+            if result is not None:
+                return result
+            # Fall through to direct evaluation
+        
+        # Direct evaluation
+        self.vm_stats['direct_evals'] += 1
+        return self.eval_node(node, env, stack_trace)
+    
+    def get_vm_stats(self) -> dict:
+        """Return VM execution statistics"""
+        return self.vm_stats.copy()
+
+
 # Global Entry Point
-def evaluate(program, env, debug_mode=False):
+def evaluate(program, env, debug_mode=False, use_vm=True):
     if debug_mode: 
         env.enable_debug()
     
-    # Instantiate the Modular Evaluator
-    evaluator = Evaluator()
+    # Instantiate the Modular Evaluator with VM support
+    evaluator = Evaluator(use_vm=use_vm)
 
     # Merge any module-level builtin injections (tests may add async helpers, etc.)
     try:
@@ -514,7 +673,12 @@ def evaluate(program, env, debug_mode=False):
             evaluator.builtins.update(injected_builtins)
     except Exception:
         pass
-    result = evaluator.eval_node(program, env)
+    
+    # Try VM-accelerated execution for the whole program if beneficial
+    if use_vm and VM_AVAILABLE:
+        result = evaluator.eval_with_vm_support(program, env, debug_mode=debug_mode)
+    else:
+        result = evaluator.eval_node(program, env)
     
     if debug_mode: 
         env.disable_debug()

@@ -266,6 +266,12 @@ class VM:
 				val = stack.pop() if stack else None
 				# Respect closure cells and lexical semantics
 				_store(name, val)
+			elif op == "POP":
+				if stack:
+					stack.pop()
+			elif op == "DUP":
+				if stack:
+					stack.append(stack[-1])
 			elif op == "STORE_FUNC":
 				# operand: (name_idx, func_const_idx)
 				name_idx, func_idx = operand
@@ -309,6 +315,96 @@ class VM:
 			elif op == "PRINT":
 				val = stack.pop() if stack else None
 				print(val)
+			# Arithmetic operations
+			elif op == "ADD":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a + b)
+			elif op == "SUB":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a - b)
+			elif op == "MUL":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a * b)
+			elif op == "DIV":
+				b = stack.pop() if stack else 1
+				a = stack.pop() if stack else 0
+				stack.append(a / b if b != 0 else 0)
+			elif op == "MOD":
+				b = stack.pop() if stack else 1
+				a = stack.pop() if stack else 0
+				stack.append(a % b if b != 0 else 0)
+			elif op == "POW":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a ** b)
+			elif op == "NEG":
+				a = stack.pop() if stack else 0
+				stack.append(-a)
+			# Comparison operations
+			elif op == "EQ":
+				b = stack.pop() if stack else None
+				a = stack.pop() if stack else None
+				stack.append(a == b)
+			elif op == "NEQ":
+				b = stack.pop() if stack else None
+				a = stack.pop() if stack else None
+				stack.append(a != b)
+			elif op == "LT":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a < b)
+			elif op == "GT":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a > b)
+			elif op == "LTE":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a <= b)
+			elif op == "GTE":
+				b = stack.pop() if stack else 0
+				a = stack.pop() if stack else 0
+				stack.append(a >= b)
+			# Logical operations
+			elif op == "AND":
+				b = stack.pop() if stack else False
+				a = stack.pop() if stack else False
+				stack.append(a and b)
+			elif op == "OR":
+				b = stack.pop() if stack else False
+				a = stack.pop() if stack else False
+				stack.append(a or b)
+			elif op == "NOT":
+				a = stack.pop() if stack else False
+				stack.append(not a)
+			# Collection operations
+			elif op == "BUILD_LIST":
+				count = operand if operand is not None else 0
+				elements = [stack.pop() for _ in range(count)][::-1] if count > 0 and len(stack) >= count else []
+				stack.append(elements)
+			elif op == "BUILD_MAP":
+				count = operand if operand is not None else 0
+				pairs = count  # number of key-value pairs
+				result = {}
+				for _ in range(pairs):
+					if len(stack) >= 2:
+						value = stack.pop()
+						key = stack.pop()
+						result[key] = value
+				stack.append(result)
+			elif op == "INDEX":
+				index = stack.pop() if stack else 0
+				obj = stack.pop() if stack else None
+				try:
+					if obj is not None:
+						stack.append(obj[index])
+					else:
+						stack.append(None)
+				except (KeyError, IndexError, TypeError):
+					stack.append(None)
 			elif op == "JUMP":
 				ip = operand
 			elif op == "JUMP_IF_FALSE":
