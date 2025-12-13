@@ -396,6 +396,95 @@ For questions about:
 
 ---
 
-**Last Updated**: 2024
-**Status**: ✅ Production Ready
-**Commit**: `9212371`
+## 🎉 Recent Major Updates (December 2025)
+
+### Repository Reorganization & Pip Installation ✅
+
+**Date**: December 13, 2025  
+**Commit**: `76cee5e`
+
+#### What Changed:
+1. **Clean Repository Structure**
+   - Organized all test files into `tests/{unit,integration,examples}/`
+   - Consolidated documentation into `docs/{features,guides,api}/`
+   - Moved development scripts to `scripts/`
+   - Professional, navigable directory structure
+
+2. **Universal Syntax Highlighting** 🎨
+   - Created TextMate grammar for `.zx` files
+   - GitHub Linguist configuration
+   - Works on GitHub, VS Code, Sublime Text, Atom
+   - Zexus files now recognized universally
+
+3. **Pip Installability** 📦
+   - Completely rewritten `setup.py` with proper metadata
+   - Added `pyproject.toml` for modern packaging
+   - Post-install message with documentation links
+   - Commands: `pip install zexus` (ready for PyPI)
+   - Both `zx` and `zexus` CLI commands available
+
+4. **Comprehensive README** 📚
+   - Updated with ALL features (WATCH, PROTECT, DI, persistence, blockchain)
+   - Quick start guide and examples
+   - Complete CLI reference
+   - Feature showcase with code samples
+   - 50+ built-in functions documented
+
+5. **Enhanced CLI** 🔧
+   - Added `zx --zexus` flag to show all commands
+   - Beautiful Rich-formatted command table
+   - Comprehensive help system
+   - Maintained `zx run` command (backward compatible)
+
+6. **VS Code Extension** 🎮
+   - Language configuration
+   - Auto-closing pairs and brackets
+   - Code snippets (contract, entity, protect, watch, inject)
+   - Syntax highlighting integration
+   - Keyboard shortcuts
+
+#### New Directory Structure:
+```
+zexus-interpreter/
+├── src/zexus/              # Core implementation
+├── tests/                  # All tests organized
+│   ├── unit/              # Unit tests
+│   ├── integration/       # Integration tests  
+│   └── examples/          # Example programs
+├── docs/                   # Complete documentation
+│   ├── features/          # Feature-specific docs
+│   ├── guides/            # User guides
+│   └── api/               # API reference
+├── scripts/               # Development utilities
+├── syntaxes/              # TextMate grammars
+└── .vscode/               # VS Code extension
+```
+
+#### Testing Verified:
+- ✅ `pip install -e .` successful
+- ✅ `zx --version` shows 0.1.0
+- ✅ `zx --zexus` displays command list
+- ✅ `zx run` executes programs correctly
+- ✅ Syntax highlighting active on GitHub
+
+#### For AI Assistants:
+After `pip install zexus`, all documentation is available at:
+- **Complete Feature Guide**: `docs/features/ADVANCED_FEATURES_IMPLEMENTATION.md`
+- **Developer Guide**: `src/README.md`
+- **Documentation Index**: `docs/INDEX.md`
+- **README**: Top-level with comprehensive overview
+
+The language now supports:
+- Policy-as-code (PROTECT/VERIFY/RESTRICT)
+- Blockchain contracts and transactions
+- Persistent memory with leak detection
+- Dependency injection and mocking
+- Reactive state management (WATCH)
+- 50+ built-in functions
+- Hybrid interpreter/compiler execution
+
+---
+
+**Last Updated**: December 13, 2025  
+**Status**: ✅ Production Ready & Pip Installable  
+**Latest Commit**: `76cee5e`
