@@ -1,0 +1,11 @@
+package database {
+    module connection {
+        function connect() {
+            return "connected";
+        };
+    };
+};
+
+print "Accessing database.connection.connect()...";
+print database.connection.connect();
+print "Success";

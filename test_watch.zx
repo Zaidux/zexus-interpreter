@@ -1,0 +1,32 @@
+// test_watch.zx
+
+let x = 10
+let y = 20
+let result = 0
+
+// Implicit watch
+watch {
+  result = x + y
+  print("Implicit watch triggered: result = " + result)
+}
+
+// Explicit watch
+let trigger_count = 0
+watch x => {
+  trigger_count = trigger_count + 1
+  print("Explicit watch triggered: x changed to " + x)
+}
+
+print("Initial result: " + result) 
+
+x = 15
+// Implicit watch should update result to 35
+// Explicit watch should increment trigger_count to 1
+
+print("After x=15: result=" + result + ", trigger_count=" + trigger_count)
+
+y = 25
+// Implicit watch should update result to 40
+// Explicit watch should NOT trigger (only watching x)
+
+print("After y=25: result=" + result + ", trigger_count=" + trigger_count)

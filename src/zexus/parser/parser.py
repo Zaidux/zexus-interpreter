@@ -1714,7 +1714,8 @@ class UltimateParser:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
             return None
 
-        return WatchStatement(watched_expr, reaction)
+        # FIXED: WatchStatement takes (reaction, watched_expr) not (watched_expr, reaction)
+        return WatchStatement(reaction=reaction, watched_expr=watched_expr)
 
     def parse_embedded_literal(self):
         if not self.expect_peek(LBRACE):
@@ -1857,12 +1858,10 @@ class UltimateParser:
         if parameters is None:
             return None
 
+        # After parse_action_parameters, cur_token is already at the token after ')'
         # Check for colon (traditional action-style) or curly brace (function-style)
-        if self.peek_token_is(COLON):
+        if self.cur_token_is(COLON):
             # Traditional action style: function(x) : stmt
-            if not self.expect_peek(COLON):
-                return None
-
             body = BlockStatement()
             self.next_token()
             stmt = self.parse_statement()
@@ -1871,9 +1870,26 @@ class UltimateParser:
 
             return ActionLiteral(parameters=parameters, body=body)
         
-        elif self.peek_token_is(LBRACE):
+        elif self.cur_token_is(LBRACE):
             # Function-style with braces: function(x) { stmts }
-            # Parse the brace block
+            # cur_token is already at {, so parse the brace block directly
+            body = self.parse_brace_block()
+            if not body:
+                return None
+            return ActionLiteral(parameters=parameters, body=body)
+        
+        # Also handle peek variants for backwards compatibility if cur_token is still at )
+        elif self.peek_token_is(COLON):
+            if not self.expect_peek(COLON):
+                return None
+            body = BlockStatement()
+            self.next_token()
+            stmt = self.parse_statement()
+            if stmt:
+                body.statements.append(stmt)
+            return ActionLiteral(parameters=parameters, body=body)
+        
+        elif self.peek_token_is(LBRACE):
             self.next_token()  # Move to {
             body = self.parse_brace_block()
             if not body:

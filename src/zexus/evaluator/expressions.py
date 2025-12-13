@@ -164,6 +164,53 @@ class ExpressionEvaluatorMixin:
                 r_val = float(right.value)
                 return Float(l_val + r_val)
         
+        # Mixed arithmetic operations (String coerced to number for *, -, /, %)
+        elif operator in ("*", "-", "/", "%"):
+            # Try to coerce strings to numbers for arithmetic
+            l_val = None
+            r_val = None
+            
+            # Get left value
+            if isinstance(left, (Integer, Float)):
+                l_val = float(left.value)
+            elif isinstance(left, String):
+                try:
+                    l_val = float(left.value)
+                except ValueError:
+                    pass
+            
+            # Get right value
+            if isinstance(right, (Integer, Float)):
+                r_val = float(right.value)
+            elif isinstance(right, String):
+                try:
+                    r_val = float(right.value)
+                except ValueError:
+                    pass
+            
+            # Perform operation if both values could be coerced
+            if l_val is not None and r_val is not None:
+                try:
+                    if operator == "*":
+                        result = l_val * r_val
+                    elif operator == "-":
+                        result = l_val - r_val
+                    elif operator == "/":
+                        if r_val == 0:
+                            return EvaluationError("Division by zero")
+                        result = l_val / r_val
+                    elif operator == "%":
+                        if r_val == 0:
+                            return EvaluationError("Modulo by zero")
+                        result = l_val % r_val
+                    
+                    # Return Integer if result is whole number, Float otherwise
+                    if result == int(result):
+                        return Integer(int(result))
+                    return Float(result)
+                except Exception as e:
+                    return EvaluationError(f"Arithmetic error: {str(e)}")
+        
         # Comparison with mixed numeric types
         elif operator in ("<", ">", "<=", ">="):
             if isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):

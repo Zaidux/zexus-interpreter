@@ -46,6 +46,10 @@ class ContextStackParser:
             'statement_block': self._parse_statement_block_context,
             'bracket_block': self._parse_brace_block_context,
             # DIRECT handlers for specific statement types
+            IF: self._parse_statement_block_context,
+            FOR: self._parse_statement_block_context,
+            WHILE: self._parse_statement_block_context,
+            RETURN: self._parse_statement_block_context,
             'let_statement': self._parse_let_statement_block,
             'const_statement': self._parse_const_statement_block,
             'print_statement': self._parse_print_statement_block,
@@ -79,6 +83,8 @@ class ContextStackParser:
             REQUIRE: self._parse_require_statement,
             REVERT: self._parse_revert_statement,
             LIMIT: self._parse_limit_statement,
+            # REACTIVE handlers
+            WATCH: self._parse_watch_statement,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -771,9 +777,8 @@ class ContextStackParser:
 
     def _parse_statement_block_context(self, block_info, all_tokens):
         """Parse standalone statement blocks - use direct parsers where available"""
-        print(f"🔧 [Context] Parsing statement block: {block_info.get('subtype', 'unknown')}")
-
         subtype = block_info.get('subtype', 'unknown')
+        print(f"🔧 [Context] Parsing statement block: {subtype} (type: {type(subtype)})")
 
         # Use the direct parser methods
         if subtype == 'let_statement':
@@ -792,10 +797,14 @@ class ContextStackParser:
             return self._parse_entity_statement_block(block_info, all_tokens)
         elif subtype == 'contract_statement':
              return self._parse_contract_statement_block(block_info, all_tokens)
-        elif subtype == 'use_statement': # Fix subtype mismatch
-            return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype == 'USE':
             return self._parse_use_statement_block(block_info, all_tokens)
+        elif subtype == 'use_statement': # Fix subtype mismatch
+            return self._parse_use_statement_block(block_info, all_tokens)
+        elif subtype in {IF, FOR, WHILE, RETURN}:
+            # Use the existing logic in _parse_block_statements which handles these keywords
+            stmts = self._parse_block_statements(block_info['tokens'])
+            return stmts[0] if stmts else None
         else:
             return self._parse_generic_statement_block(block_info, all_tokens)
 
@@ -1218,6 +1227,128 @@ class ContextStackParser:
 
                 i = j
                 continue
+
+            # MODULE statement heuristic
+            elif token.type == MODULE:
+                j = i + 1
+                stmt_tokens = [token]
+                brace_nest = 0
+                
+                # Collect until the matching closing brace for the module body
+                while j < len(tokens):
+                    tj = tokens[j]
+                    stmt_tokens.append(tj)
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+                
+                print(f"    📝 Found module statement: {[t.literal for t in stmt_tokens]}")
+                
+                module_name = None
+                body_block = BlockStatement()
+                
+                if len(stmt_tokens) >= 2 and stmt_tokens[1].type == IDENT:
+                    module_name = stmt_tokens[1].literal
+                
+                # find body
+                brace_start = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LBRACE:
+                        brace_start = k
+                        break
+                if brace_start is not None and brace_start + 1 < len(stmt_tokens):
+                    inner_body = stmt_tokens[brace_start + 1:-1]
+                    body_block.statements = self._parse_block_statements(inner_body)
+                
+                statements.append(ModuleStatement(
+                    name=Identifier(module_name if module_name else 'anonymous'),
+                    body=body_block
+                ))
+                
+                i = j
+                continue
+
+            # PACKAGE statement heuristic
+            elif token.type == PACKAGE:
+                j = i + 1
+                stmt_tokens = [token]
+                brace_nest = 0
+                
+                # Collect until the matching closing brace for the package body
+                while j < len(tokens):
+                    tj = tokens[j]
+                    stmt_tokens.append(tj)
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+                
+                print(f"    📝 Found package statement: {[t.literal for t in stmt_tokens]}")
+                
+                package_name = ""
+                k = 1
+                while k < len(stmt_tokens) and stmt_tokens[k].type != LBRACE:
+                    package_name += stmt_tokens[k].literal
+                    k += 1
+                
+                # find body
+                brace_start = None
+                for k, tk in enumerate(stmt_tokens):
+                    if tk.type == LBRACE:
+                        brace_start = k
+                        break
+                if brace_start is not None and brace_start + 1 < len(stmt_tokens):
+                    inner_body = stmt_tokens[brace_start + 1:-1]
+                    body_block = BlockStatement()
+                    body_block.statements = self._parse_block_statements(inner_body)
+                    body = body_block
+                else:
+                    body = BlockStatement()
+                
+                statements.append(PackageStatement(
+                    name=Identifier(package_name if package_name else 'anonymous'),
+                    body=body
+                ))
+                
+                i = j
+                continue
+
+            elif token.type == WATCH:
+                j = i + 1
+                stmt_tokens = [token]
+                brace_nest = 0
+                
+                # Collect until the matching closing brace for the watch body
+                while j < len(tokens):
+                    tj = tokens[j]
+                    stmt_tokens.append(tj)
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+                
+                print(f"    📝 Found watch statement: {[t.literal for t in stmt_tokens]}")
+                
+                block_info = {'tokens': stmt_tokens}
+                stmt = self._parse_watch_statement(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
             
             elif token.type == IF:
                 # Parse IF statement directly here
@@ -1225,13 +1356,26 @@ class ContextStackParser:
                 
                 # Collect condition tokens (between IF and {)
                 cond_tokens = []
+                paren_depth = 0
+                
                 while j < len(tokens) and tokens[j].type != LBRACE:
-                    if tokens[j].type == LPAREN and len(cond_tokens) == 0:
-                        j += 1
-                        continue
-                    elif tokens[j].type == RPAREN and len(cond_tokens) > 0:
-                        j += 1
-                        break
+                    # Handle outer parentheses for the condition
+                    if tokens[j].type == LPAREN:
+                        if len(cond_tokens) == 0 and paren_depth == 0:
+                            # Skip the very first opening paren if it wraps the whole condition
+                            j += 1
+                            paren_depth += 1
+                            continue
+                        else:
+                            paren_depth += 1
+                    
+                    elif tokens[j].type == RPAREN:
+                        paren_depth -= 1
+                        # If we hit a closing paren that matches the initial skipped one
+                        if paren_depth == 0 and len(cond_tokens) > 0:
+                            j += 1
+                            break
+                    
                     cond_tokens.append(tokens[j])
                     j += 1
                 
@@ -1337,16 +1481,87 @@ class ContextStackParser:
                 i = j
                 continue
 
+            elif token.type == TRY:
+                j = i + 1
+                stmt_tokens = [token]
+                
+                # Collect try block
+                brace_nest = 0
+                while j < len(tokens):
+                    t = tokens[j]
+                    stmt_tokens.append(t)
+                    if t.type == LBRACE:
+                        brace_nest += 1
+                    elif t.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+                
+                # Check for catch
+                if j < len(tokens) and tokens[j].type == CATCH:
+                    stmt_tokens.append(tokens[j])
+                    j += 1
+                    
+                    # Optional error variable (catch (e))
+                    if j < len(tokens) and tokens[j].type == LPAREN:
+                        while j < len(tokens) and tokens[j].type != LBRACE:
+                            stmt_tokens.append(tokens[j])
+                            j += 1
+                    
+                    # Collect catch block
+                    brace_nest = 0
+                    while j < len(tokens):
+                        t = tokens[j]
+                        stmt_tokens.append(t)
+                        if t.type == LBRACE:
+                            brace_nest += 1
+                        elif t.type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1
+                                break
+                        j += 1
+                
+                block_info = {'tokens': stmt_tokens}
+                stmt = self._parse_try_catch_statement(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
             elif token.type == RETURN:
                 # Parse RETURN statement directly
                 j = i + 1
                 value_tokens = []
+                nesting = 0  # Track brace/paren nesting
                 
-                # Collect tokens until semicolon, closing brace, or next statement
-                while j < len(tokens) and tokens[j].type not in [SEMICOLON, RBRACE]:
-                    if tokens[j].type in statement_starters and tokens[j].type != RETURN:
-                        break
-                    value_tokens.append(tokens[j])
+                # Collect tokens until semicolon at depth 0, or next statement at depth 0
+                # This properly handles: return function() { return 42; };
+                while j < len(tokens):
+                    t = tokens[j]
+                    
+                    # Track nesting for braces, parens, brackets
+                    if t.type in {LPAREN, LBRACE, LBRACKET}:
+                        nesting += 1
+                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                        nesting -= 1
+                        # Don't go negative - if we hit RBRACE at nesting 0, stop
+                        if nesting < 0:
+                            break
+                    
+                    # Only check termination conditions at nesting level 0
+                    if nesting == 0:
+                        if t.type == SEMICOLON:
+                            break
+                        # Don't break on statement starters that are inside braces
+                        # Only break if it's truly a new statement (e.g., not FUNCTION inside return expr)
+                        if t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN}:
+                            break
+                    
+                    value_tokens.append(t)
                     j += 1
                 
                 # Parse the return value
@@ -1547,15 +1762,38 @@ class ContextStackParser:
         if not tokens or len(tokens) == 0:
             return StringLiteral("")
         
+        # Handle ASSIGN (lowest precedence)
+        assign_index = -1
+        nesting = 0
+        for idx, t in enumerate(tokens):
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif t.type == ASSIGN and nesting == 0:
+                assign_index = idx
+                break
+        
+        if assign_index > 0 and assign_index < len(tokens) - 1:
+            left_tokens = tokens[:assign_index]
+            right_tokens = tokens[assign_index+1:]
+            
+            left = self._parse_expression(left_tokens)
+            right = self._parse_expression(right_tokens)
+            
+            if left and right:
+                return AssignmentExpression(name=left, value=right)
+            return left or right
+        
         # Handle logical OR (lowest precedence)
         or_index = -1
-        paren_depth = 0
+        nesting = 0
         for idx, t in enumerate(tokens):
-            if t.type == LPAREN:
-                paren_depth += 1
-            elif t.type == RPAREN:
-                paren_depth -= 1
-            elif t.type == OR and paren_depth == 0:
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif t.type == OR and nesting == 0:
                 or_index = idx
                 break  # Take the first OR at depth 0
         
@@ -1568,13 +1806,13 @@ class ContextStackParser:
         
         # Handle logical AND (next lowest precedence)
         and_index = -1
-        paren_depth = 0
+        nesting = 0
         for idx, t in enumerate(tokens):
-            if t.type == LPAREN:
-                paren_depth += 1
-            elif t.type == RPAREN:
-                paren_depth -= 1
-            elif t.type == AND and paren_depth == 0:
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif t.type == AND and nesting == 0:
                 and_index = idx
                 break
         
@@ -1594,6 +1832,13 @@ class ContextStackParser:
             return StringLiteral("")
 
         # Special cases first
+        # Handle unary prefix minus (e.g., -3, -x)
+        # We do this before other checks so negative numbers are parsed as PrefixExpression
+        if tokens[0].type == MINUS:
+            # Parse the remainder as the operand of the prefix expression
+            right_expr = self._parse_expression(tokens[1:]) if len(tokens) > 1 else IntegerLiteral(0)
+            return PrefixExpression("-", right_expr)
+
         if tokens[0].type == LBRACE:
             return self._parse_map_literal(tokens)
         if tokens[0].type == LBRACKET:
@@ -3255,3 +3500,65 @@ class ContextStackParser:
         
         parser_debug("  ✅ Limit statement")
         return LimitStatement(gas_limit=gas_limit)
+
+    def _parse_watch_statement(self, block_info, all_tokens):
+        """Parse watch statement.
+        
+        Forms:
+        1. watch { ... }  (Implicit dependencies)
+        2. watch expr => { ... } (Explicit dependencies)
+        """
+        parser_debug("🔧 [Context] Parsing watch statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != WATCH:
+            parser_debug("  ❌ Expected WATCH keyword")
+            return None
+            
+        # Check for form 1: watch { ... }
+        if len(tokens) > 1 and tokens[1].type == LBRACE:
+            # Extract body
+            inner = tokens[2:-1] if tokens[-1].type == RBRACE else tokens[2:]
+            stmts = self._parse_block_statements(inner)
+            body = BlockStatement()
+            body.statements = stmts
+            
+            parser_debug("  ✅ Watch statement (implicit)")
+            return WatchStatement(reaction=body, watched_expr=None)
+            
+        # Check for form 2: watch expr => ...
+        # Find '=>' (ASSIGN in this context usually, or maybe we need to check for it)
+        # The lexer might not produce a specific ARROW token, usually it's ASSIGN or similar.
+        # But wait, the parser uses ASSIGN for => in parse_watch_statement.
+        
+        arrow_idx = -1
+        for i, t in enumerate(tokens):
+            if t.literal == '=>': # Look for => specifically
+                arrow_idx = i
+                break
+            elif t.type == ASSIGN: # Fallback to ASSIGN token
+                arrow_idx = i
+                break
+                
+        if arrow_idx != -1:
+            expr_tokens = tokens[1:arrow_idx]
+            reaction_tokens = tokens[arrow_idx+1:]
+            
+            watched_expr = self._parse_expression(expr_tokens)
+            
+            # Parse reaction
+            if reaction_tokens and reaction_tokens[0].type == LBRACE:
+                inner = reaction_tokens[1:-1] if reaction_tokens[-1].type == RBRACE else reaction_tokens[1:]
+                stmts = self._parse_block_statements(inner)
+                reaction = BlockStatement()
+                reaction.statements = stmts
+            else:
+                # Single expression reaction
+                reaction_expr = self._parse_expression(reaction_tokens)
+                reaction = reaction_expr
+                
+            parser_debug("  ✅ Watch statement (explicit)")
+            return WatchStatement(reaction=reaction, watched_expr=watched_expr)
+            
+        parser_debug("  ❌ Invalid watch syntax")
+        return None

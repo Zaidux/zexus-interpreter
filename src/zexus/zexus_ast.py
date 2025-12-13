@@ -777,16 +777,20 @@ class StreamStatement(Statement):
 class WatchStatement(Statement):
     """Watch statement - Reactive state management
     
-    watch user_name => {
-      update_ui();
-      log_change("user_name changed to: " + user_name);
+    watch {
+      print("x changed to " + x);
     }
     
-    watch count => print "Count is now: " + count;
+    watch user_name => {
+      update_ui();
+    }
     """
-    def __init__(self, watched_expr, reaction):
-        self.watched_expr = watched_expr  # Expression: variable or expression to watch
-        self.reaction = reaction  # BlockStatement or Expression: code to execute on change
+    def __init__(self, reaction, watched_expr=None):
+        self.reaction = reaction  # BlockStatement: code to execute
+        self.watched_expr = watched_expr  # Optional Expression: explicit dependency
+
+    def __repr__(self):
+        return f"WatchStatement(expr={self.watched_expr}, reaction={self.reaction})"
 
     def __repr__(self):
         return f"WatchStatement(watch={self.watched_expr})"

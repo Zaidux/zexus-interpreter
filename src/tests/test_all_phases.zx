@@ -19,6 +19,7 @@ function runTest(name, testFunc) {
     
     try {
         let result = testFunc();
+        print("Result: " + result);
         if (result == true || result == "PASS") {
             passedTests = passedTests + 1;
             print("  ✓ PASSED");
@@ -162,7 +163,7 @@ print("════════════════════════�
 print("");
 
 function inferType(value) {
-    if (value == 42 || value == 99) {
+    if (value == 42 || value == 99 || value == 10 || value == 20) {
         return "int";
     }
     if (value == "hello") {

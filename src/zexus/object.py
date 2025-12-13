@@ -42,6 +42,18 @@ class List(Object):
         elements_str = ", ".join([el.inspect() for el in self.elements])
         return f"[{elements_str}]"
     def type(self): return "LIST"
+    
+    def get(self, index):
+        """Get element by index"""
+        try:
+            # Handle Integer object or raw int
+            idx = index.value if hasattr(index, 'value') else index
+            idx = int(idx)
+            if 0 <= idx < len(self.elements):
+                return self.elements[idx]
+            return NULL
+        except Exception:
+            return NULL
 
 class Map(Object):
     def __init__(self, pairs):
@@ -449,6 +461,21 @@ class Debug(Object):
             print(f"  {line.strip()}")
         return Boolean(True)
 
+# Global dependency collector stack for WATCH feature
+_dependency_collector_stack = []
+
+def start_collecting_dependencies():
+    _dependency_collector_stack.append(set())
+
+def stop_collecting_dependencies():
+    if _dependency_collector_stack:
+        return _dependency_collector_stack.pop()
+    return set()
+
+def record_dependency(env, name):
+    if _dependency_collector_stack:
+        _dependency_collector_stack[-1].add((env, name))
+
 class Environment:
     def __init__(self, outer=None):
         self.store = {}
@@ -457,12 +484,18 @@ class Environment:
         self.exports = {}
         # Debug tracking
         self.debug_mode = False
+        # Reactive watchers: name -> list of (callback_fn, context_env)
+        self.watchers = {}
 
     def get(self, name):
         val = self.store.get(name)
-        if val is None and self.outer is not None:
+        if val is not None:
+            record_dependency(self, name)
+            return val
+            
+        if self.outer is not None:
             return self.outer.get(name)
-        return val
+        return None
 
     def set(self, name, val):
         # Check if trying to reassign a const variable
@@ -470,8 +503,46 @@ class Environment:
             from .object import EvaluationError
             raise ValueError(f"Cannot reassign const variable '{name}'")
         self.store[name] = val
+        self.notify_watchers(name, val)
         return val
     
+    def assign(self, name, val):
+        """Assign to an existing variable in the scope chain, or create in current if not found."""
+        # 1. Check current scope
+        if name in self.store:
+            if name in self.const_vars:
+                raise ValueError(f"Cannot reassign const variable '{name}'")
+            self.store[name] = val
+            self.notify_watchers(name, val)
+            return val
+        
+        # 2. Check outer scope
+        if self.outer is not None:
+            # Let's try to find where it is defined first.
+            scope = self.outer
+            while scope is not None:
+                if name in scope.store:
+                    if name in scope.const_vars:
+                        raise ValueError(f"Cannot reassign const variable '{name}'")
+                    scope.store[name] = val
+                    scope.notify_watchers(name, val)
+                    return val
+                scope = scope.outer
+            
+            # Not found anywhere -> Create in CURRENT scope (local)
+            self.store[name] = val
+            self.notify_watchers(name, val)
+            if name == "passedTests":
+                print(f"[DEBUG] passedTests not found in chain, creating in current scope {id(self)}")
+            return val
+        
+        # 3. No outer scope (Global) -> Create here
+        self.store[name] = val
+        self.notify_watchers(name, val)
+        if name == "passedTests":
+            print(f"[DEBUG] passedTests not found (global), creating in global scope {id(self)}")
+        return val
+
     def set_const(self, name, val):
         """Set a constant (immutable) variable"""
         if name in self.store and name in self.const_vars:
@@ -493,6 +564,21 @@ class Environment:
 
     def disable_debug(self):
         self.debug_mode = False
+
+    def add_watcher(self, name, callback):
+        if name not in self.watchers:
+            self.watchers[name] = []
+        self.watchers[name].append(callback)
+
+    def notify_watchers(self, name, new_val):
+        if name in self.watchers:
+            # Copy list to avoid modification during iteration issues
+            callbacks = self.watchers[name][:]
+            for cb in callbacks:
+                try:
+                    cb(new_val)
+                except Exception as e:
+                    print(f"Error in watcher for {name}: {e}")
 
 # Global constants
 NULL = Null()

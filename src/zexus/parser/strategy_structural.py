@@ -396,6 +396,14 @@ class StructuralAnalyzer:
                     
                     # If we just closed a brace block and are back at nesting 0, stop
                     if found_brace_block and nesting == 0:
+                        # CRITICAL FIX: For IF statements, check if followed by ELSE or ELIF
+                        if t.type == IF:
+                            # Look ahead for else/elif
+                            if j < n and tokens[j].type in {ELSE, ELIF}:
+                                # Found else/elif - continue collecting
+                                found_brace_block = False
+                                continue
+                        
                         break
 
                 # Skip any trailing semicolons

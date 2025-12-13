@@ -81,6 +81,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  ForEachStatement node", f"for each {node.item.value}")
                 return self.eval_foreach_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.WatchStatement:
+                debug_log("  WatchStatement node")
+                return self.eval_watch_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.SealStatement:
                 return self.eval_seal_statement(node, env, stack_trace)
             

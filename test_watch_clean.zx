@@ -1,0 +1,70 @@
+# Clean WATCH Feature Test
+
+print("=== WATCH Feature Tests ===\n");
+
+# Test 1: Implicit Watch
+print("Test 1: Implicit Watch");
+let x = 10;
+let y = 0;
+
+watch {
+    y = x * 2;
+}
+
+if (y == 20) {
+    print("✓ Initial execution correct (y=20)");
+} else {
+    print("✗ Initial execution failed");
+}
+
+x = 20;
+if (y == 40) {
+    print("✓ Watch triggered on x change (y=40)");
+} else {
+    print("✗ Watch failed to trigger");
+}
+
+# Test 2: Explicit Watch
+print("\nTest 2: Explicit Watch");
+let a = 5;
+let b = 0;
+
+watch a => {
+    b = a + 1;
+}
+
+if (b == 0) {
+    print("✓ Block not executed initially");
+} else {
+    print("✗ Block should not run initially");
+}
+
+a = 10;
+if (b == 11) {
+    print("✓ Watch triggered on a change (b=11)");
+} else {
+    print("✗ Watch failed to trigger");
+}
+
+# Test 3: Chained Watchers
+print("\nTest 3: Chained Watchers");
+let p = 1;
+let q = 0;
+let r = 0;
+
+watch p => {
+    q = p + 1;
+}
+
+watch q => {
+    r = q * 2;
+}
+
+p = 5;
+if (r == 12) {
+    print("✓ Chained watches work (p=5 -> q=6 -> r=12)");
+} else {
+    print("✗ Chained watches failed");
+}
+
+print("\n=== All WATCH Tests Complete ===");

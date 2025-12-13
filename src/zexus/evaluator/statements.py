@@ -23,7 +23,8 @@ from ..zexus_ast import (
 )
 from ..object import (
     Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
-    Action, List, Map, EvaluationError, EntityDefinition, EmbeddedCode, Builtin
+    Action, List, Map, EvaluationError, EntityDefinition, EmbeddedCode, Builtin,
+    start_collecting_dependencies, stop_collecting_dependencies
 )
 from ..security import (
     SealedObject, SmartContract, VerifyWrapper, VerificationCheck, get_security_context,
@@ -244,7 +245,10 @@ class StatementEvaluatorMixin:
             if is_error(value):
                 return value
 
-            env.set(name, value)
+            try:
+                env.assign(name, value)
+            except ValueError as e:
+                return EvaluationError(str(e))
             return value
 
         return EvaluationError('Invalid assignment target')
@@ -321,6 +325,48 @@ class StatementEvaluatorMixin:
         
         return result
     
+    def eval_watch_statement(self, node, env, stack_trace):
+        # 1. Start collecting dependencies
+        start_collecting_dependencies()
+        
+        # 2. Evaluate the watched expression or block
+        if node.watched_expr:
+            # Explicit watch: watch expr => block
+            # Evaluate expression to capture dependencies
+            res = self.eval_node(node.watched_expr, env, stack_trace)
+            if is_error(res):
+                stop_collecting_dependencies()
+                return res
+        else:
+            # Implicit watch: watch block
+            # Evaluate block to capture dependencies AND execute it
+            res = self.eval_node(node.reaction, env, stack_trace)
+            if is_error(res):
+                stop_collecting_dependencies()
+                return res
+                
+        # 3. Stop collecting and get dependencies
+        deps = stop_collecting_dependencies()
+        
+        # 4. Define the reaction callback WITH GUARD against infinite recursion
+        executing = [False]  # Mutable flag to track execution state
+        def reaction_callback(new_val):
+            if executing[0]:
+                # Already executing, skip to prevent infinite loop
+                return
+            executing[0] = True
+            try:
+                # Re-evaluate the reaction block WITHOUT collecting dependencies
+                self.eval_node(node.reaction, env, [])
+            finally:
+                executing[0] = False
+            
+        # 5. Register callback for each dependency
+        for dep_env, name in deps:
+            dep_env.add_watcher(name, reaction_callback)
+            
+        return NULL
+
     # === MODULE LOADING (FULL LOGIC) ===
     
     def _check_import_permission(self, val, importer):
@@ -917,6 +963,8 @@ class StatementEvaluatorMixin:
         ctx.cache_policies[str(node.target)] = cp
         return NULL
     
+
+
     # === MISC STATEMENTS ===
     
     def eval_print_statement(self, node, env, stack_trace):
@@ -1024,6 +1072,7 @@ class StatementEvaluatorMixin:
     
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
+        print(f"[DEBUG] Defining function {node.name.value} in env {id(env)}")
         action = Action(node.parameters, node.body, env)
         
         # Apply modifiers if present
@@ -1352,20 +1401,7 @@ class StatementEvaluatorMixin:
         return String(f"Stream '{node.stream_name}' handler registered")
     
     
-    def eval_watch_statement(self, node, env, stack_trace):
-        """Evaluate watch statement - reactive state management."""
-        # Register watched expression and reaction
-        if not hasattr(env, '_watches'):
-            env._watches = []
-        
-        # Store watch configuration
-        env._watches.append({
-            'expression': node.watched_expr,
-            'reaction': node.reaction,
-            'last_value': None
-        })
-        
-        return String(f"Watch registered for expression")
+
 
     # === NEW SECURITY STATEMENT HANDLERS ===
 

@@ -1,0 +1,75 @@
+print("--- Test 1: Implicit Watch ---");
+let x = 10;
+let y = 0;
+
+# Implicit watch: runs immediately, then when x changes
+watch {
+    print("DEBUG: Inside watch, x=" + x);
+    y = x * 2;
+    print("DEBUG: Inside watch, y=" + y);
+    print("Watch triggered: y = " + y);
+}
+
+if (y == 20) {
+    print("Initial run correct");
+} else {
+    print("FAIL: Initial run failed, y=" + y);
+}
+
+x = 20;
+# Should trigger watch, y becomes 40
+
+if (y == 40) {
+    print("PASS: Implicit watch update");
+} else {
+    print("FAIL: Implicit watch update, y=" + y);
+}
+
+print("\n--- Test 2: Explicit Watch ---");
+let a = 5;
+let b = 0;
+
+# Explicit watch: runs expr immediately, block only on change
+watch a => {
+    b = a + 1;
+    print("Watch triggered: b = " + b);
+}
+
+if (b == 0) {
+    print("Initial run correct (should not run block)");
+} else {
+    print("FAIL: Initial run failed, b=" + b);
+}
+
+a = 10;
+# Should trigger watch, b becomes 11
+
+if (b == 11) {
+    print("PASS: Explicit watch update");
+} else {
+    print("FAIL: Explicit watch update, b=" + b);
+}
+
+print("\n--- Test 3: Chained Watch ---");
+let p = 1;
+let q = 0;
+let r = 0;
+
+watch p => {
+    q = p + 1;
+    print("p changed -> q = " + q);
+}
+
+watch q => {
+    r = q * 2;
+    print("q changed -> r = " + r);
+}
+
+p = 5;
+# p=5 -> q=6 -> r=12
+
+if (r == 12) {
+    print("PASS: Chained watch");
+} else {
+    print("FAIL: Chained watch, r=" + r);
+}
