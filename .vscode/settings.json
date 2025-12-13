@@ -1,0 +1,47 @@
+{
+  "files.associations": {
+    "*.zx": "zexus"
+  },
+  "editor.tokenColorCustomizations": {
+    "textMateRules": [
+      {
+        "scope": "keyword.control.zexus",
+        "settings": {
+          "foreground": "#C586C0"
+        }
+      },
+      {
+        "scope": "keyword.declaration.zexus",
+        "settings": {
+          "foreground": "#569CD6"
+        }
+      },
+      {
+        "scope": "keyword.security.zexus",
+        "settings": {
+          "foreground": "#4EC9B0"
+        }
+      },
+      {
+        "scope": "string.quoted.double.zexus",
+        "settings": {
+          "foreground": "#CE9178"
+        }
+      },
+      {
+        "scope": "comment.line.number-sign.zexus",
+        "settings": {
+          "foreground": "#6A9955"
+        }
+      }
+    ]
+  },
+  "[zexus]": {
+    "editor.wordWrap": "on",
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": false,
+      "strings": false
+    }
+  }
+}

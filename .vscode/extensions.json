@@ -1,0 +1,19 @@
+{
+  "contributes": {
+    "languages": [
+      {
+        "id": "zexus",
+        "aliases": ["Zexus", "zexus"],
+        "extensions": [".zx"],
+        "configuration": "./.vscode/extensions/zexus-language/language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zexus",
+        "scopeName": "source.zexus",
+        "path": "./syntaxes/zexus.tmLanguage.json"
+      }
+    ]
+  }
+}

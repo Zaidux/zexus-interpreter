@@ -33,6 +33,10 @@
     "comments": {
       "patterns": [
         {
+          "name": "comment.line.double-slash.zexus",
+          "match": "//.*$"
+        },
+        {
           "name": "comment.line.number-sign.zexus",
           "match": "#.*$"
         },
