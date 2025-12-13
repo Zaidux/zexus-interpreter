@@ -78,6 +78,7 @@ setup(
         'console_scripts': [
             'zx=zexus.cli.main:cli',
             'zexus=zexus.cli.main:cli',
+            'zpm=zexus.cli.zpm:cli',
         ]
     },
     cmdclass={

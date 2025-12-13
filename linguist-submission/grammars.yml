@@ -1,0 +1,3 @@
+vendor/grammars/zexus.tmLanguage.json:
+  language_id: 549872365
+  scope: source.zexus

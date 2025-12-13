@@ -1,0 +1,61 @@
+// Zexus security and policy-as-code features
+entity User {
+    id: integer,
+    name: string,
+    role: string
+}
+
+// Policy enforcement
+action transfer_funds(from: User, to: User, amount: integer) -> boolean {
+    // Runtime verification
+    verify(from.id > 0 and to.id > 0)
+    verify(amount > 0 and amount <= 10000)
+    
+    // Data constraints
+    restrict(amount, {
+        range: [1, 10000],
+        type: "integer"
+    })
+    
+    // Process transfer
+    print("Transferring " + string(amount))
+    return true
+}
+
+// Protection policy
+protect(transfer_funds, {
+    rate_limit: 100,
+    auth_required: true,
+    require_https: true,
+    allowed_ips: ["10.0.0.0/8"],
+    session_timeout: 1800
+}, "strict")
+
+// Reactive state management
+let balance = 1000
+
+watch balance {
+    print("Balance changed to: " + string(balance))
+    if balance < 100 {
+        print("Warning: Low balance!")
+    }
+}
+
+// Dependency injection
+register_dependency("database", ProductionDB())
+inject database
+
+// Persistent storage
+persist_set("last_transaction", {
+    amount: 500,
+    timestamp: time.now()
+})
+
+let last_tx = persist_get("last_transaction")
+print("Last transaction: " + string(last_tx))
+
+// Execute with monitoring
+let user1 = {id: 1, name: "Alice", role: "admin"}
+let user2 = {id: 2, name: "Bob", role: "user"}
+transfer_funds(user1, user2, 500)
+balance = balance - 500

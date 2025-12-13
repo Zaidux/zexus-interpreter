@@ -1,0 +1,44 @@
+// Zexus blockchain contract example
+entity Transaction {
+    from: Address,
+    to: Address,
+    amount: integer,
+    timestamp: integer
+}
+
+contract Token {
+    persistent storage total_supply: integer
+    persistent storage balances: Map<Address, integer>
+    persistent storage allowances: Map<Address, Map<Address, integer>>
+    
+    action constructor(initial_supply: integer) {
+        total_supply = initial_supply
+        balances[msg.sender] = initial_supply
+        emit Initialized(msg.sender, initial_supply)
+    }
+    
+    action transfer(to: Address, amount: integer) -> boolean {
+        require(balances[msg.sender] >= amount, "Insufficient balance")
+        require(to != address(0), "Invalid recipient")
+        
+        balances[msg.sender] = balances[msg.sender] - amount
+        balances[to] = balances.get(to, 0) + amount
+        
+        emit Transfer(msg.sender, to, amount)
+        return true
+    }
+    
+    action approve(spender: Address, amount: integer) -> boolean {
+        allowances[msg.sender][spender] = amount
+        emit Approval(msg.sender, spender, amount)
+        return true
+    }
+    
+    action balance_of(account: Address) -> integer {
+        return balances.get(account, 0)
+    }
+}
+
+// Deploy contract
+let token = contract Token(1000000)
+token.transfer(address("0x123"), 100)

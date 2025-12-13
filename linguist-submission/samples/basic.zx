@@ -1,0 +1,37 @@
+// Basic Zexus syntax demonstration
+// Variables and types
+let count = 42
+const PI = 3.14159
+let name = "Zexus"
+let active = true
+
+// Functions
+action greet(name: string) -> string {
+    return "Hello, " + name
+}
+
+// Control flow
+if count > 40 {
+    print("Large number")
+} else {
+    print("Small number")
+}
+
+// Loops
+for each i in range(1, 5) {
+    print(i)
+}
+
+// Collections
+let numbers = [1, 2, 3, 4, 5]
+let user = {name: "Alice", age: 30}
+
+// Pattern matching
+match count {
+    case 42: print("The answer")
+    case 100: print("Century")
+    default: print("Other")
+}
+
+// Main execution
+print(greet(name))
