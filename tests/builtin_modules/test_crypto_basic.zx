@@ -1,0 +1,5 @@
+use "crypto" as crypto
+
+print("Testing crypto...")
+let hash_result = crypto.keccak256("test")
+print("Result: " + hash_result)

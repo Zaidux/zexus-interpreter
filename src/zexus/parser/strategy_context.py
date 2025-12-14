@@ -57,6 +57,7 @@ class ContextStackParser:
             'function_call_statement': self._parse_function_call_statement,
             'entity_statement': self._parse_entity_statement_block,
             'USE': self._parse_use_statement_block,
+            'use_statement': self._parse_use_statement_block,  # Fix: add lowercase version
             # Added contract handling
             'contract_statement': self._parse_contract_statement_block,
             # NEW: Security statement handlers

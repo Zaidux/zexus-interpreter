@@ -266,6 +266,23 @@ class FunctionEvaluatorMixin:
             print(f"[EMBED] Executing {obj.language}.{method_name}")
             return Integer(42)  # Placeholder
         
+        # === Environment (Module) Methods ===
+        # Support for module.function() syntax (e.g., crypto.keccak256())
+        from ..object import Environment
+        if isinstance(obj, Environment):
+            # Look up the method in the environment's store
+            method_value = obj.get(method_name)
+            if method_value is None or method_value == NULL:
+                return EvaluationError(f"Module has no method '{method_name}'")
+            
+            # Evaluate arguments
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            
+            # Call the function using apply_function
+            return self.apply_function(method_value, args, env)
+        
         obj_type = obj.type() if hasattr(obj, 'type') and callable(obj.type) else type(obj).__name__
         return EvaluationError(f"Method '{method_name}' not supported for {obj_type}")
     

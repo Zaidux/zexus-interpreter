@@ -393,6 +393,7 @@ class StatementEvaluatorMixin:
     
     def eval_use_statement(self, node, env, stack_trace):
         from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
+        from ..builtin_modules import is_builtin_module, get_builtin_module
         
         # 1. Determine File Path
         file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
@@ -401,6 +402,23 @@ class StatementEvaluatorMixin:
             return EvaluationError("use: missing file path")
         
         debug_log("  UseStatement loading", file_path)
+        
+        # 1a. Check if this is a builtin module (crypto, datetime, math)
+        if is_builtin_module(file_path):
+            debug_log(f"  Loading builtin module: {file_path}")
+            module_env = get_builtin_module(file_path, self)
+            if module_env:
+                alias = getattr(node, 'alias', None)
+                if alias:
+                    env.set(alias, module_env)
+                else:
+                    # Import all functions into current scope
+                    for key in module_env.store.keys():
+                        env.set(key, module_env.get(key))
+                return NULL
+            else:
+                return EvaluationError(f"Builtin module '{file_path}' not available")
+        
         normalized_path = normalize_path(file_path)
         
         # 2. Check Cache
