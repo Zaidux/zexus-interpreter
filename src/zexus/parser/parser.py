@@ -560,7 +560,12 @@ class UltimateParser:
         return block
 
     def parse_single_statement_block(self):
-        """Parse a single statement as a block"""
+        """Parse a single statement as a block
+        
+        Note: For advanced parsing mode (default), multi-statement indented blocks
+        are handled by the StructuralAnalyzer + ContextStackParser pipeline.
+        This method is primarily for traditional recursive descent parsing.
+        """
         block = BlockStatement()
         # Don't consume the next token if it's the end of a structure
         if not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):

@@ -865,24 +865,55 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_verify_statement(self, node, env, stack_trace):
-        target = self.eval_node(node.target, env, stack_trace)
-        if is_error(target): 
-            return target
+        """Evaluate VERIFY statement - supports simple assertion and complex wrapper forms"""
+        from .utils import is_truthy as check_truthy
         
-        checks = []
-        for cond in node.conditions:
-            val = self.eval_node(cond, env, stack_trace)
-            if is_error(val): 
-                return val
+        # Simple assertion form: verify condition, "message"
+        if node.condition is not None:
+            condition_val = self.eval_node(node.condition, env, stack_trace)
+            if is_error(condition_val):
+                return condition_val
             
-            if callable(val) or isinstance(val, Action):
-                checks.append(VerificationCheck(str(cond), lambda ctx: val))
-            else:
-                checks.append(VerificationCheck(str(cond), lambda ctx, v=val: v))
+            # Check if condition is truthy
+            if not check_truthy(condition_val):
+                error_msg = "Verification failed"
+                if node.message:
+                    msg_val = self.eval_node(node.message, env, stack_trace)
+                    if not is_error(msg_val):
+                        error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+                
+                from ..object import Error
+                return Error(error_msg)
+            
+            # Verification passed
+            from ..object import Boolean
+            return Boolean(True)
         
-        wrapped = VerifyWrapper(target, checks, node.error_handler)
-        get_security_context().register_verify_check(str(node.target), wrapped)
-        return wrapped
+        # Complex wrapper form: verify(target, [conditions...])
+        if node.target is not None:
+            target = self.eval_node(node.target, env, stack_trace)
+            if is_error(target): 
+                return target
+            
+            checks = []
+            if node.conditions:
+                for cond in node.conditions:
+                    val = self.eval_node(cond, env, stack_trace)
+                    if is_error(val): 
+                        return val
+                    
+                    if callable(val) or isinstance(val, Action):
+                        checks.append(VerificationCheck(str(cond), lambda ctx: val))
+                    else:
+                        checks.append(VerificationCheck(str(cond), lambda ctx, v=val: v))
+            
+            wrapped = VerifyWrapper(target, checks, node.error_handler)
+            get_security_context().register_verify_check(str(node.target), wrapped)
+            return wrapped
+        
+        # Neither form provided
+        from ..object import Error
+        return Error("Invalid VERIFY statement: requires condition or target")
     
     def eval_protect_statement(self, node, env, stack_trace):
         """Evaluate PROTECT statement with full policy engine integration."""
@@ -948,7 +979,7 @@ class StatementEvaluatorMixin:
         # Build and register policy
         policy = builder.build()
         policy_registry = get_policy_registry()
-        policy_registry.register(target_name, policy)
+        policy_registry.register_policy(target_name, policy)
         
         debug_log("eval_protect_statement", f"✓ Policy registered for {target_name} (level: {enforcement_level})")
         
@@ -2417,3 +2448,63 @@ class StatementEvaluatorMixin:
             return Integer(tx.gas_remaining)
         else:
             return EvaluationError(f"Unknown gas property: {prop}")
+
+    def eval_protocol_statement(self, node, env, stack_trace):
+        """Evaluate PROTOCOL statement - define an interface/trait.
+        
+        protocol Transferable {
+            action transfer(to, amount)
+            action balance() -> int
+        }
+        """
+        from ..object import String as StringObj
+        
+        # Create protocol definition (similar to entity but for interfaces)
+        protocol_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Store method signatures
+        methods = {}
+        for method in node.methods:
+            method_name = method.name.value if hasattr(method.name, 'value') else str(method.name)
+            methods[method_name] = {
+                'params': method.parameters if hasattr(method, 'parameters') else [],
+                'return_type': method.return_type if hasattr(method, 'return_type') else None
+            }
+        
+        # Create protocol object
+        protocol_def = {
+            'type': 'protocol',
+            'name': protocol_name,
+            'methods': methods
+        }
+        
+        # Store in environment
+        env.set(protocol_name, protocol_def)
+        
+        return StringObj(f"Protocol '{protocol_name}' defined with {len(methods)} methods")
+    
+    def eval_persistent_statement(self, node, env, stack_trace):
+        """Evaluate PERSISTENT statement - declare persistent storage in contracts.
+        
+        persistent storage balances: map
+        persistent storage owner: string = "0x0"
+        """
+        from ..object import NULL
+        
+        # Get variable name
+        var_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Evaluate initial value if provided
+        value = NULL
+        if node.initial_value:
+            value = self.eval_node(node.initial_value, env, stack_trace)
+            if is_error(value):
+                return value
+        
+        # Mark as persistent in environment (special marker)
+        env.set(f"__persistent_{var_name}__", True)
+        
+        # Store the actual value
+        env.set(var_name, value)
+        
+        return NULL

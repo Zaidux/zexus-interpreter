@@ -329,6 +329,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.LimitStatement:
                 debug_log("  LimitStatement node", "set gas limit")
                 return self.eval_limit_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ProtocolStatement:
+                debug_log("  ProtocolStatement node", f"protocol {node.name}")
+                return self.eval_protocol_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.PersistentStatement:
+                debug_log("  PersistentStatement node", f"persistent {node.name}")
+                return self.eval_persistent_statement(node, env, stack_trace)
 
             # === EXPRESSIONS ===
             elif node_type == zexus_ast.Identifier:

@@ -453,15 +453,24 @@ class EntityStatement(Statement):
 
 
 class VerifyStatement(Statement):
-    """Verify security checks - wraps verification logic around components
+    """Verify security checks - supports two forms:
     
-    verify(transfer_funds, [
-        check_authenticated(),
-        check_balance(amount),
-        check_whitelist(recipient)
-    ])
+    Simple assertion (like require):
+        verify condition, "error message"
+    
+    Complex verification wrapper:
+        verify(transfer_funds, [
+            check_authenticated(),
+            check_balance(amount),
+            check_whitelist(recipient)
+        ])
     """
-    def __init__(self, target, conditions, error_handler=None):
+    def __init__(self, condition=None, message=None, target=None, conditions=None, error_handler=None):
+        # Simple assertion form
+        self.condition = condition          # Boolean condition to check
+        self.message = message              # Error message if condition fails
+        
+        # Complex wrapper form  
         self.target = target                # Function/action to verify
         self.conditions = conditions        # List of verification conditions
         self.error_handler = error_handler  # Optional error handling action
@@ -1304,3 +1313,32 @@ def attach_modifiers(node, modifiers):
     except Exception:
         pass
     return node
+class ProtocolStatement(Statement):
+    """Protocol declaration - interface/trait definition
+    
+    protocol Transferable {
+        action transfer(to, amount)
+        action balance() -> int
+    }
+    """
+    def __init__(self, name, methods):
+        self.name = name                    # Identifier
+        self.methods = methods              # List of method signatures
+
+    def __repr__(self):
+        return f"ProtocolStatement(name={self.name}, methods={len(self.methods)})"
+
+
+class PersistentStatement(Statement):
+    """Persistent storage declaration within contracts
+    
+    persistent storage balances: map
+    persistent storage owner: string
+    """
+    def __init__(self, name, type_annotation=None, initial_value=None):
+        self.name = name                    # Identifier
+        self.type_annotation = type_annotation  # Optional type
+        self.initial_value = initial_value  # Optional initial value
+
+    def __repr__(self):
+        return f"PersistentStatement(name={self.name})"

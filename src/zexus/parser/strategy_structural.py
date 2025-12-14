@@ -363,26 +363,51 @@ class StructuralAnalyzer:
                 j = i + 1
                 nesting = 0  # Track nesting level for (), [], {}
                 found_brace_block = False  # Did we encounter a { ... } block?
+                found_colon_block = False  # Did we encounter a : (tolerable syntax)?
+                baseline_column = None  # Track indentation for colon-based blocks
                 in_assignment = (t.type in {LET, CONST})  # Are we in an assignment RHS?
 
                 while j < n:
                     tj = tokens[j]
 
                     # Check if this is a statement terminator at nesting 0 BEFORE updating nesting
-                    if nesting == 0 and tj.type in stop_types:
+                    if nesting == 0 and tj.type in stop_types and not found_colon_block:
                         break
                     
-                    # Track nesting level
+                    # Detect colon-based block (tolerable syntax for action/function/if/while etc.)
+                    if tj.type == COLON and nesting == 0 and t.type in {ACTION, FUNCTION, IF, WHILE, FOR}:
+                        found_colon_block = True
+                        stmt_tokens.append(tj)
+                        j += 1
+                        # Record the baseline column for dedent detection
+                        # This is the column of the first token AFTER the colon
+                        if j < n:
+                            baseline_column = tokens[j].column if hasattr(tokens[j], 'column') else 1
+                        continue
+                    
+                    # Track nesting level BEFORE dedent check (so we don't break inside {...} or [...] or (...))
                     if tj.type in {LPAREN, LBRACE, LBRACKET}:
-                        if tj.type == LBRACE:
+                        # Only mark as brace block if NOT already in colon block (to distinguish code blocks from data literals)
+                        if tj.type == LBRACE and not found_colon_block:
                             found_brace_block = True
                         nesting += 1
                     elif tj.type in {RPAREN, RBRACE, RBRACKET}:
                         nesting -= 1
+                    
+                    # If we're in a colon block, collect until dedent
+                    if found_colon_block and nesting == 0:
+                        current_column = tj.column if hasattr(tj, 'column') else 1
+                        # Stop if we hit a dedent (token BEFORE baseline column, indicating unindent)
+                        # This works because baseline_column is the indented level (e.g., 6)
+                        # and when we see column 2, that's < 6, so we stop
+                        #print(f"    [DEDENT CHECK] token={tj.type} col={current_column} baseline={baseline_column} nesting={nesting}")
+                        if current_column < baseline_column and tj.type in statement_starters:
+                            #print(f"    [DEDENT BREAK] Breaking on dedent: {tj.type} at col {current_column}")
+                            break
 
                     # Stop at new statement starters only if we're at nesting 0
                     # BUT: for LET/CONST, allow function expressions in the RHS
-                    if nesting == 0 and tj.type in statement_starters:
+                    if nesting == 0 and tj.type in statement_starters and not found_colon_block:
                         # Exception: allow chained method calls
                         prev = tokens[j-1] if j > 0 else None
                         if not (prev and prev.type == DOT):
