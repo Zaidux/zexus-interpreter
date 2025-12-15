@@ -375,6 +375,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 from ..object import Boolean
                 return Boolean(node.value)
             
+            elif node_type == zexus_ast.NullLiteral:
+                debug_log("  NullLiteral node")
+                return NULL
+            
             elif node_type == zexus_ast.InfixExpression:
                 debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
                 return self.eval_infix_expression(node, env, stack_trace)
@@ -386,6 +390,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.IfExpression:
                 debug_log("  IfExpression node")
                 return self.eval_if_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.TernaryExpression:
+                debug_log("  TernaryExpression node")
+                return self.eval_ternary_expression(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.NullishExpression:
+                debug_log("  NullishExpression node")
+                return self.eval_nullish_expression(node, env, stack_trace)
             
             elif node_type == zexus_ast.CallExpression:
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")

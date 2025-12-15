@@ -1814,6 +1814,49 @@ class ContextStackParser:
                 return AssignmentExpression(name=left, value=right)
             return left or right
         
+        # Handle ternary operator ? : (very low precedence, after assignment before OR)
+        question_index = -1
+        colon_index = -1
+        nesting = 0
+        for idx, t in enumerate(tokens):
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif t.type == QUESTION and nesting == 0 and question_index == -1:
+                question_index = idx
+            elif t.type == COLON and nesting == 0 and question_index != -1 and colon_index == -1:
+                colon_index = idx
+                break  # Found complete ternary
+        
+        if question_index > 0 and colon_index > question_index + 1 and colon_index < len(tokens) - 1:
+            condition = self._parse_expression(tokens[:question_index])
+            true_value = self._parse_expression(tokens[question_index+1:colon_index])
+            false_value = self._parse_expression(tokens[colon_index+1:])
+            
+            if condition and true_value and false_value:
+                return TernaryExpression(condition=condition, true_value=true_value, false_value=false_value)
+            return condition or true_value or false_value
+        
+        # Handle nullish coalescing ?? (after ternary, before OR)
+        nullish_index = -1
+        nesting = 0
+        for idx, t in enumerate(tokens):
+            if t.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif t.type == NULLISH and nesting == 0:
+                nullish_index = idx
+                break
+        
+        if nullish_index > 0 and nullish_index < len(tokens) - 1:
+            left = self._parse_expression(tokens[:nullish_index])
+            right = self._parse_expression(tokens[nullish_index+1:])
+            if left and right:
+                return NullishExpression(left=left, right=right)
+            return left or right
+        
         # Handle logical OR (lowest precedence)
         or_index = -1
         nesting = 0
@@ -2103,6 +2146,8 @@ class ContextStackParser:
             lit = getattr(token, 'literal', 'false')
             val = False if isinstance(lit, str) and lit.lower() == 'false' else True
             return Boolean(val)
+        elif token.type == NULL:
+            return NullLiteral()
         else:
             return StringLiteral(token.literal)
 

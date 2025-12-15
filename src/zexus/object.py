@@ -128,7 +128,12 @@ class EntityDefinition(Object):
         return "ENTITY_DEF"
         
     def inspect(self):
-        props_str = ", ".join([f"{prop['name']}: {prop['type']}" for prop in self.properties])
+        # Handle both dict format {prop_name: {type: ..., default_value: ...}}
+        # and list format [{name: ..., type: ...}]
+        if isinstance(self.properties, dict):
+            props_str = ", ".join([f"{name}: {info['type']}" for name, info in self.properties.items()])
+        else:
+            props_str = ", ".join([f"{prop['name']}: {prop['type']}" for prop in self.properties])
         return f"entity {self.name} {{ {props_str} }}"
         
     def create_instance(self, initial_values=None):

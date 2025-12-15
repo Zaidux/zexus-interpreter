@@ -49,9 +49,18 @@ def _resolve_awaitable(obj):
 
 def is_truthy(obj):
     """Check if an object is truthy (for if statements, while loops, etc.)"""
+    from ..object import Boolean as BooleanObj
+    
     if is_error(obj):
         return False
-    return not (obj == NULL or obj == FALSE)
+    if obj == NULL or obj is NULL:
+        return False
+    if obj == FALSE or obj is FALSE:
+        return False
+    # Check Boolean objects by their value
+    if isinstance(obj, BooleanObj):
+        return obj.value
+    return True
 
 # JSON conversion functions (moved from original)
 def _zexus_to_python(value):

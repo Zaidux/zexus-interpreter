@@ -136,6 +136,19 @@ class Lexer:
                 tok = Token(GT, self.ch)
                 tok.line = current_line
                 tok.column = current_column
+        elif self.ch == '?':
+            # Check for nullish coalescing '??'
+            if self.peek_char() == '?':
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(NULLISH, literal)
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                tok = Token(QUESTION, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '"':
             string_literal = self.read_string()
             tok = Token(STRING, string_literal)
@@ -351,6 +364,7 @@ class Lexer:
             "else": ELSE,
             "true": TRUE,
             "false": FALSE,
+            "null": NULL,
             "return": RETURN,
             "for": FOR,
             "each": EACH,

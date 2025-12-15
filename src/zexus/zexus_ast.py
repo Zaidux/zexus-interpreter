@@ -327,6 +327,10 @@ class Boolean(Expression):
     def __repr__(self):
         return f"Boolean({self.value})"
 
+class NullLiteral(Expression):
+    def __repr__(self):
+        return "NullLiteral()"
+
 class ListLiteral(Expression):
     def __init__(self, elements): 
         self.elements = elements
@@ -422,6 +426,25 @@ class IfExpression(Expression):
 
     def __repr__(self):
         return f"IfExpression(condition={self.condition}, elif_parts={len(self.elif_parts)})"
+
+class TernaryExpression(Expression):
+    """Represents: condition ? true_value : false_value"""
+    def __init__(self, condition, true_value, false_value):
+        self.condition = condition
+        self.true_value = true_value
+        self.false_value = false_value
+
+    def __repr__(self):
+        return f"TernaryExpression(condition={self.condition}, true={self.true_value}, false={self.false_value})"
+
+class NullishExpression(Expression):
+    """Represents: value ?? default (returns default if value is null/undefined)"""
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+    def __repr__(self):
+        return f"NullishExpression(left={self.left}, default={self.right})"
 
 
 # =====================================================

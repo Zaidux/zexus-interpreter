@@ -288,3 +288,31 @@ class ExpressionEvaluatorMixin:
                 return val
             results.append(val)
         return results
+
+    def eval_ternary_expression(self, node, env, stack_trace):
+        """Evaluate ternary expression: condition ? true_value : false_value"""
+        from .utils import is_truthy
+        
+        condition = self.eval_node(node.condition, env, stack_trace)
+        if is_error(condition):
+            return condition
+        
+        if is_truthy(condition):
+            return self.eval_node(node.true_value, env, stack_trace)
+        else:
+            return self.eval_node(node.false_value, env, stack_trace)
+
+    def eval_nullish_expression(self, node, env, stack_trace):
+        """Evaluate nullish coalescing: value ?? default
+        Returns default if value is null/undefined, otherwise returns value"""
+        left = self.eval_node(node.left, env, stack_trace)
+        
+        # If left is an error, return the error
+        if is_error(left):
+            return left
+        
+        # Check if left is null or undefined (NULL)
+        if left is NULL or left is None or (hasattr(left, 'type') and left.type() == 'NULL'):
+            return self.eval_node(node.right, env, stack_trace)
+        
+        return left

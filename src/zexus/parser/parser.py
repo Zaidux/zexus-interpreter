@@ -8,18 +8,20 @@ from ..strategy_recovery import ErrorRecoveryEngine
 from ..config import config  # Import the config
 
 # Precedence constants
-LOWEST, ASSIGN_PREC, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL, LOGICAL = 1, 2, 3, 4, 5, 6, 7, 8, 9
+LOWEST, TERNARY, ASSIGN_PREC, NULLISH_PREC, LOGICAL, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 
 precedences = {
+    QUESTION: TERNARY,  # condition ? true : false (very low precedence)
+    ASSIGN: ASSIGN_PREC,
+    NULLISH: NULLISH_PREC,  # value ?? default
+    OR: LOGICAL, AND: LOGICAL,
     EQ: EQUALS, NOT_EQ: EQUALS,
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
     PLUS: SUM, MINUS: SUM,
     SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
-    AND: LOGICAL, OR: LOGICAL,
     LPAREN: CALL,
     LBRACKET: CALL,
     DOT: CALL,
-    ASSIGN: ASSIGN_PREC,
 }
 
 class UltimateParser:
@@ -56,6 +58,7 @@ class UltimateParser:
             MINUS: self.parse_prefix_expression,
             TRUE: self.parse_boolean,
             FALSE: self.parse_boolean,
+            NULL: self.parse_null,
             LPAREN: self.parse_grouped_expression,
             IF: self.parse_if_expression,
             LBRACKET: self.parse_list_literal,
@@ -82,6 +85,8 @@ class UltimateParser:
             GTE: self.parse_infix_expression,
             AND: self.parse_infix_expression,
             OR: self.parse_infix_expression,
+            QUESTION: self.parse_ternary_expression,  # condition ? true : false
+            NULLISH: self.parse_nullish_expression,  # value ?? default
             ASSIGN: self.parse_assignment_expression,
             LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
             LPAREN: self.parse_call_expression,
@@ -2084,6 +2089,11 @@ class UltimateParser:
             pass
         return Boolean(value=val)
 
+    def parse_null(self):
+        """Parse null literal"""
+        from ..zexus_ast import NullLiteral
+        return NullLiteral()
+
     def parse_list_literal(self):
         list_lit = ListLiteral(elements=[])
         list_lit.elements = self.parse_expression_list(RBRACKET)
@@ -3129,6 +3139,31 @@ class UltimateParser:
         
         property_name = self.cur_token.literal
         return GasExpression(property_name=property_name)
+
+    def parse_ternary_expression(self, condition):
+        """Parse ternary expression: condition ? true_value : false_value"""
+        from ..zexus_ast import TernaryExpression
+        
+        self.next_token()  # consume '?'
+        true_value = self.parse_expression(LOWEST)
+        
+        if not self.expect_peek(COLON):
+            self.errors.append("Expected ':' in ternary expression")
+            return None
+        
+        self.next_token()  # consume ':'
+        false_value = self.parse_expression(LOWEST)
+        
+        return TernaryExpression(condition, true_value, false_value)
+
+    def parse_nullish_expression(self, left):
+        """Parse nullish coalescing: value ?? default"""
+        from ..zexus_ast import NullishExpression
+        
+        self.next_token()  # consume '??'
+        right = self.parse_expression(NULLISH_PREC)
+        
+        return NullishExpression(left, right)
 
 # Backward compatibility
 Parser = UltimateParser

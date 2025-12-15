@@ -27,6 +27,8 @@ LTE = "<="
 GTE = ">="
 AND = "&&"
 OR = "||"
+QUESTION = "?"          # Ternary operator: condition ? true_val : false_val
+NULLISH = "??"          # Nullish coalescing: value ?? default
 
 # Delimiters
 COMMA = ","
@@ -54,6 +56,7 @@ ELSE = "ELSE"
 RETURN = "RETURN"
 TRUE = "TRUE"
 FALSE = "FALSE"
+NULL = "NULL"
 FOR = "FOR"
 EACH = "EACH"
 IN = "IN"
