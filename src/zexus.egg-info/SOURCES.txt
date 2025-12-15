@@ -1,9 +1,12 @@
 .gitattributes
 .gitignore
+DEV_SCRIPTS_README.md
 LICENSE
+PUBLISH_TO_PYPI.md
 QUESTIONS_ANSWERED.md
 README.md
 README.old.md
+SSH_PUBLIC_KEY.txt
 VM_INTEGRATION_SUMMARY.md
 VM_QUICK_REFERENCE.md
 gitignore
@@ -20,6 +23,8 @@ test_working.json
 zexus.json
 zexus_compiler.py.backup
 zx
+zx-deploy
+zx-dev
 zx-run
 zx.bin
 .github/linguist.yml
@@ -46,6 +51,7 @@ ENHANCEMENT_PACKAGE/ROADMAP.md
 ENHANCEMENT_PACKAGE/STRATEGIC_FEATURES.md
 ENHANCEMENT_PACKAGE/STRATEGIC_UPGRADES.md
 __pycache__/token.cpython-312.pyc
+chain_data/SimpleWallet_b8d904e6.sqlite
 doc/module_cache.md
 doc/parser_fix_summary.md
 doc/session_summary.md
@@ -223,6 +229,7 @@ src/tests/test_verification_simple.zx
 src/zexus/__init__.py
 src/zexus/__main__.py
 src/zexus/advanced_types.py
+src/zexus/builtin_modules.py
 src/zexus/builtin_plugins.py
 src/zexus/capability_system.py
 src/zexus/compare_interpreter_compiler.py
@@ -327,12 +334,6 @@ src/zexus/zpm/installer.py
 src/zexus/zpm/package_manager.py
 src/zexus/zpm/publisher.py
 src/zexus/zpm/registry.py
-src/zexus_lang.egg-info/PKG-INFO
-src/zexus_lang.egg-info/SOURCES.txt
-src/zexus_lang.egg-info/dependency_links.txt
-src/zexus_lang.egg-info/entry_points.txt
-src/zexus_lang.egg-info/requires.txt
-src/zexus_lang.egg-info/top_level.txt
 syntaxes/zexus.tmLanguage.json
 tests/comprehensive_test.zx
 tests/conftest.py
@@ -388,6 +389,8 @@ tests/test_ui.zx
 tests/test_while_simple.zx
 tests/test_working_control.zx
 tests/test_working_syntax.zx
+tests/builtin_modules/README.md
+tests/builtin_modules/test_crypto_basic.zx
 tests/examples/clean_test.zx
 tests/examples/debug.zx
 tests/examples/debug_test.zx

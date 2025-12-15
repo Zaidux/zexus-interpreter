@@ -426,7 +426,16 @@ class StatementEvaluatorMixin:
         
         # 3. Load if not cached
         if not module_env:
-            candidates = get_module_candidates(file_path)
+            # Get the importing file's path for relative resolution
+            importer_file = None
+            __file_obj = env.get("__file__")
+            if __file_obj:
+                if hasattr(__file_obj, 'value'):
+                    importer_file = __file_obj.value
+                elif isinstance(__file_obj, str):
+                    importer_file = __file_obj
+            
+            candidates = get_module_candidates(file_path, importer_file)
             module_env = Environment()
             loaded = False
             parse_errors = []
@@ -457,6 +466,9 @@ class StatementEvaluatorMixin:
                         parse_errors.append((candidate, parser.errors))
                         continue
                     
+                    # Set __file__ in module environment so it can do relative imports
+                    module_env.set("__file__", String(os.path.abspath(candidate)))
+                    
                     # Recursive evaluation
                     self.eval_node(program, module_env)
                     
@@ -475,14 +487,48 @@ class StatementEvaluatorMixin:
                 return EvaluationError(f"Module not found or failed to load: {file_path}")
         
         # 4. Bind to Current Environment
+        is_named_import = getattr(node, 'is_named_import', False)
+        names = getattr(node, 'names', [])
         alias = getattr(node, 'alias', None)
-        if alias:
+        
+        if is_named_import and names:
+            # Handle: use { name1, name2 } from "./file.zx"
+            exports = module_env.get_exports()
+            __file_obj = env.get("__file__")
+            importer_file = None
+            if __file_obj:
+                importer_file = __file_obj.value if hasattr(__file_obj, 'value') else __file_obj
+            
+            for name_node in names:
+                name = name_node.value if hasattr(name_node, 'value') else str(name_node)
+                
+                # Try to get from exports first
+                value = exports.get(name)
+                if value is None:
+                    # Fallback: try to get from module environment directly
+                    value = module_env.get(name)
+                
+                if value is None:
+                    return EvaluationError(f"'{name}' is not exported from {file_path}")
+                
+                # Security check
+                if importer_file and not self._check_import_permission(value, importer_file):
+                    return EvaluationError(f"Permission denied: cannot import '{name}' from '{file_path}'")
+                
+                env.set(name, value)
+                debug_log(f"  Imported '{name}' from {file_path}", value)
+                
+        elif alias:
+            # Handle: use "./file.zx" as alias
             env.set(alias, module_env)
         else:
-            # Import all exports into current scope
+            # Handle: use "./file.zx" (import all exports)
             try:
                 exports = module_env.get_exports()
-                importer_file = env.get("__file__").value if env.get("__file__") else None
+                __file_obj = env.get("__file__")
+                importer_file = None
+                if __file_obj:
+                    importer_file = __file_obj.value if hasattr(__file_obj, 'value') else __file_obj
                 
                 for name, value in exports.items():
                     if importer_file:
@@ -510,7 +556,16 @@ class StatementEvaluatorMixin:
         
         # 2. Load Logic (Explicitly repeated to ensure isolation)
         if not module_env:
-            candidates = get_module_candidates(file_path)
+            # Get the importing file's path for relative resolution
+            importer_file = None
+            __file_obj = env.get("__file__")
+            if __file_obj:
+                if hasattr(__file_obj, 'value'):
+                    importer_file = __file_obj.value
+                elif isinstance(__file_obj, str):
+                    importer_file = __file_obj
+            
+            candidates = get_module_candidates(file_path, importer_file)
             module_env = Environment()
             loaded = False
             
@@ -537,6 +592,9 @@ class StatementEvaluatorMixin:
                     if getattr(parser, 'errors', None): 
                         continue
                     
+                    # Set __file__ in module environment so it can do relative imports
+                    module_env.set("__file__", String(os.path.abspath(candidate)))
+                    
                     self.eval_node(program, module_env)
                     cache_module(normalized_path, module_env)
                     loaded = True
@@ -552,7 +610,10 @@ class StatementEvaluatorMixin:
                 return EvaluationError(f"From import: failed to load module {file_path}")
         
         # 3. Import Specific Names
-        importer_file = env.get("__file__").value if env.get("__file__") else None
+        __file_obj = env.get("__file__")
+        importer_file = None
+        if __file_obj:
+            importer_file = __file_obj.value if hasattr(__file_obj, 'value') else __file_obj
         
         for name_pair in node.imports:
             # name_pair is [source_name, dest_name] (dest_name optional)
