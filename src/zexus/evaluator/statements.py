@@ -2587,3 +2587,82 @@ class StatementEvaluatorMixin:
         env.set(var_name, value)
         
         return NULL
+
+    def eval_this_expression(self, node, env, stack_trace):
+        """Evaluate THIS expression - reference to current contract instance.
+        
+        this.balances[account]
+        this.owner = TX.caller
+        """
+        from ..object import EvaluationError
+        
+        # Look for current contract instance in environment
+        contract_instance = env.get("__contract_instance__")
+        
+        if contract_instance is None:
+            return EvaluationError("'this' can only be used inside a contract")
+        
+        return contract_instance
+
+    def eval_emit_statement(self, node, env, stack_trace):
+        """Evaluate EMIT statement - emit an event.
+        
+        emit Transfer(from, to, amount);
+        emit StateChange("balance_updated", new_balance);
+        """
+        from ..object import NULL, String
+        
+        # Get event name
+        event_name = node.event_name.value if hasattr(node.event_name, 'value') else str(node.event_name)
+        
+        # Evaluate arguments
+        args = []
+        for arg in node.arguments:
+            val = self.eval_node(arg, env, stack_trace)
+            if is_error(val):
+                return val
+            args.append(val)
+        
+        # Get or create event log in environment
+        event_log = env.get("__event_log__")
+        if event_log is None:
+            event_log = []
+            env.set("__event_log__", event_log)
+        
+        # Add event to log
+        event_data = {
+            "event": event_name,
+            "args": args
+        }
+        event_log.append(event_data)
+        
+        # Print event for debugging (optional)
+        args_str = ", ".join(str(arg.inspect() if hasattr(arg, 'inspect') else arg) for arg in args)
+        print(f"📢 Event: {event_name}({args_str})")
+        
+        return NULL
+
+    def eval_modifier_declaration(self, node, env, stack_trace):
+        """Evaluate MODIFIER declaration - store modifier for later use.
+        
+        modifier onlyOwner {
+            require(TX.caller == owner, \"Not owner\");
+        }
+        """
+        from ..object import Modifier, NULL
+        
+        # Get modifier name
+        modifier_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Create modifier object
+        modifier = Modifier(
+            name=modifier_name,
+            parameters=node.parameters,
+            body=node.body,
+            env=env
+        )
+        
+        # Store modifier in environment
+        env.set(modifier_name, modifier)
+        
+        return NULL

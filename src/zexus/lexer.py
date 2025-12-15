@@ -402,11 +402,16 @@ class Lexer:
             "sealed": SEALED,
             "secure": SECURE,
             "pure": PURE,
+            "view": VIEW,
+            "payable": PAYABLE,
+            "modifier": MODIFIER,
             # NEW: Entity, Verify, Contract, Protect
             "entity": ENTITY,
             "verify": VERIFY,
             "contract": CONTRACT,
             "protect": PROTECT,
+            "implements": IMPLEMENTS,
+            "this": THIS,
             "interface": INTERFACE,
             "capability": CAPABILITY,  # NEW: Capability keyword for security
             "grant": GRANT,             # NEW: Grant keyword for capability grants

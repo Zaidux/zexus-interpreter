@@ -193,6 +193,13 @@ NATIVE = "NATIVE"
 INLINE = "INLINE"
 SECURE = "SECURE"
 PURE = "PURE"
+VIEW = "VIEW"                  # View function (alias for pure, read-only)
+PAYABLE = "PAYABLE"            # Payable function (can receive tokens)
+MODIFIER = "MODIFIER"          # Function modifier (like onlyOwner)
+
+# Contract & Protocol
+IMPLEMENTS = "IMPLEMENTS"      # Protocol implementation: contract X implements Y
+THIS = "THIS"                  # Reference to current contract instance
 
 class Token:
     def __init__(self, token_type, literal, line=None, column=None):

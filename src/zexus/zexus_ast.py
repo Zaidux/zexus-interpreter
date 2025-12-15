@@ -331,6 +331,17 @@ class NullLiteral(Expression):
     def __repr__(self):
         return "NullLiteral()"
 
+
+class ThisExpression(Expression):
+    """This expression - reference to current contract instance
+    
+    this.balances[account]
+    this.owner = TX.caller
+    """
+    def __repr__(self):
+        return "ThisExpression()"
+
+
 class ListLiteral(Expression):
     def __init__(self, elements): 
         self.elements = elements
@@ -1192,14 +1203,18 @@ class ContractStatement(Statement):
             total_supply = total_supply + amount;
         }
     }
+    
+    contract QuantumCrypto implements QuantumResistantCrypto { ... }
     """
-    def __init__(self, name, body, modifiers=None):
+    def __init__(self, name, body, modifiers=None, implements=None):
         self.name = name  # Identifier: contract name
         self.body = body  # BlockStatement: contract body (state vars and actions)
         self.modifiers = modifiers or []  # List of modifiers
+        self.implements = implements  # Optional protocol name that contract implements
 
     def __repr__(self):
-        return f"ContractStatement(name={self.name}, modifiers={self.modifiers})"
+        impl_str = f", implements={self.implements}" if self.implements else ""
+        return f"ContractStatement(name={self.name}, modifiers={self.modifiers}{impl_str})"
 
 
 class RevertStatement(Statement):
@@ -1365,3 +1380,35 @@ class PersistentStatement(Statement):
 
     def __repr__(self):
         return f"PersistentStatement(name={self.name})"
+
+
+class EmitStatement(Statement):
+    """Emit event statement
+    
+    emit Transfer(from, to, amount);
+    emit StateChange("balance_updated", new_balance);
+    """
+    def __init__(self, event_name, arguments=None):
+        self.event_name = event_name        # Event name (Identifier or string)
+        self.arguments = arguments or []    # List of arguments
+
+    def __repr__(self):
+        return f"EmitStatement(event={self.event_name}, args={len(self.arguments)})"
+
+
+class ModifierDeclaration(Statement):
+    """Modifier declaration - reusable function modifier
+    
+    modifier onlyOwner {
+        require(TX.caller == owner, "Not owner");
+    }
+    
+    action withdraw() modifier onlyOwner { ... }
+    """
+    def __init__(self, name, parameters, body):
+        self.name = name                    # Modifier name (Identifier)
+        self.parameters = parameters or []  # List of parameters
+        self.body = body                    # BlockStatement
+
+    def __repr__(self):
+        return f"ModifierDeclaration(name={self.name}, params={len(self.parameters)})"

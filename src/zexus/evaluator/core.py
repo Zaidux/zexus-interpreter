@@ -337,6 +337,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.PersistentStatement:
                 debug_log("  PersistentStatement node", f"persistent {node.name}")
                 return self.eval_persistent_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.EmitStatement:
+                debug_log("  EmitStatement node", f"emit {node.event_name}")
+                return self.eval_emit_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ModifierDeclaration:
+                debug_log("  ModifierDeclaration node", f"modifier {node.name}")
+                return self.eval_modifier_declaration(node, env, stack_trace)
 
             # === EXPRESSIONS ===
             elif node_type == zexus_ast.Identifier:
@@ -378,6 +386,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.NullLiteral:
                 debug_log("  NullLiteral node")
                 return NULL
+            
+            elif node_type == zexus_ast.ThisExpression:
+                debug_log("  ThisExpression node")
+                return self.eval_this_expression(node, env, stack_trace)
             
             elif node_type == zexus_ast.InfixExpression:
                 debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")

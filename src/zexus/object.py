@@ -109,6 +109,18 @@ class LambdaFunction(Object):
         params = ", ".join([p.value for p in self.parameters])
         return f"lambda({params})"
     def type(self): return "LAMBDA_FUNCTION"
+class Modifier(Object):
+    """Function modifier for access control and validation"""
+    def __init__(self, name, parameters, body, env):
+        self.name = name
+        self.parameters = parameters
+        self.body = body
+        self.env = env
+    def inspect(self):
+        params = ", ".join([p.value for p in self.parameters]) if self.parameters else ""
+        return f"modifier {self.name}({params})"
+    def type(self): return "MODIFIER"
+
 
 class Builtin(Object):
     def __init__(self, fn, name=""):

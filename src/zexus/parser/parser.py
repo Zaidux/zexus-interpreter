@@ -59,6 +59,7 @@ class UltimateParser:
             TRUE: self.parse_boolean,
             FALSE: self.parse_boolean,
             NULL: self.parse_null,
+            THIS: self.parse_this,
             LPAREN: self.parse_grouped_expression,
             IF: self.parse_if_expression,
             LBRACKET: self.parse_list_literal,
@@ -300,7 +301,7 @@ class UltimateParser:
         
         # Support optional leading modifiers: e.g. `secure async action foo {}`
         modifiers = []
-        if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE}:
+        if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}:
             modifiers = self._parse_modifiers()
         try:
             node = None
@@ -409,6 +410,12 @@ class UltimateParser:
             elif self.cur_token_is(WATCH):
                 print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
                 node = self.parse_watch_statement()
+            elif self.cur_token_is(EMIT):
+                print(f"[PARSE_STMT] Matched EMIT", file=sys.stderr, flush=True)
+                node = self.parse_emit_statement()
+            elif self.cur_token_is(MODIFIER):
+                print(f"[PARSE_STMT] Matched MODIFIER", file=sys.stderr, flush=True)
+                node = self.parse_modifier_declaration()
             # === SECURITY STATEMENT HANDLERS ===
             elif self.cur_token_is(CAPABILITY):
                 print(f"[PARSE_STMT] Matched CAPABILITY", file=sys.stderr, flush=True)
@@ -496,7 +503,7 @@ class UltimateParser:
         """Consume consecutive modifier tokens and return a list of modifier names."""
         mods = []
         # Accept modifiers in any order until we hit a non-modifier token
-        while self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE}:
+        while self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}:
             # store the literal (e.g. 'secure') for readability
             mods.append(self.cur_token.literal if getattr(self.cur_token, 'literal', None) else self.cur_token.type)
             self.next_token()
@@ -2343,11 +2350,20 @@ class UltimateParser:
         
             action transfer(to: Address, amount: integer) -> boolean { ... }
         }
+        
+        contract QuantumCrypto implements QuantumResistantCrypto { ... }
         """
         if not self.expect_peek(IDENT):
             return None
 
         contract_name = Identifier(self.cur_token.literal)
+        
+        # Check for implements clause
+        implements = None
+        if self.peek_token_is(IMPLEMENTS):
+            self.next_token()  # consume 'implements'
+            if self.expect_peek(IDENT):
+                implements = Identifier(self.cur_token.literal)
 
         if not self.expect_peek(LBRACE):
             return None
@@ -2377,7 +2393,12 @@ class UltimateParser:
                     actions.append(action)
 
         self.expect_peek(RBRACE)
-        return ContractStatement(contract_name, storage_vars, actions)
+        
+        # Create body block with storage vars and actions
+        body = BlockStatement()
+        body.statements = storage_vars + actions
+        
+        return ContractStatement(contract_name, body, modifiers=[], implements=implements)
 
     def parse_protect_statement(self):
         """Parse protect statement
@@ -3164,6 +3185,55 @@ class UltimateParser:
         right = self.parse_expression(NULLISH_PREC)
         
         return NullishExpression(left, right)
+
+    def parse_this(self):
+        """Parse 'this' expression for contract self-reference"""
+        return ThisExpression()
+    
+    def parse_emit_statement(self):
+        """Parse emit statement
+        
+        emit Transfer(from, to, amount);
+        emit StateChange(\"balance_updated\", new_balance);
+        """
+        if not self.expect_peek(IDENT):
+            return None
+        
+        event_name = Identifier(self.cur_token.literal)
+        
+        # Parse optional arguments
+        arguments = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume '('
+            arguments = self.parse_expression_list(RPAREN)
+        
+        return EmitStatement(event_name, arguments)
+    
+    def parse_modifier_declaration(self):
+        """Parse modifier declaration
+        
+        modifier onlyOwner {
+            require(TX.caller == owner, \"Not owner\");
+        }
+        """
+        if not self.expect_peek(IDENT):
+            return None
+        
+        name = Identifier(self.cur_token.literal)
+        
+        # Parse optional parameters
+        parameters = []
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume '('
+            parameters = self.parse_function_parameters()
+        
+        # Parse body
+        if not self.expect_peek(LBRACE):
+            return None
+        
+        body = self.parse_block_statement()
+        
+        return ModifierDeclaration(name, parameters, body)
 
 # Backward compatibility
 Parser = UltimateParser
