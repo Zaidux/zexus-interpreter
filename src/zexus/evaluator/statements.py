@@ -47,26 +47,34 @@ class StatementEvaluatorMixin:
             pass
         
         result = NULL
-        for i, stmt in enumerate(statements):
-            debug_log(f"  Statement {i+1}", type(stmt).__name__)
-            res = self.eval_node(stmt, env)
-            res = _resolve_awaitable(res)
-            EVAL_SUMMARY['evaluated_statements'] += 1
+        try:
+            for i, stmt in enumerate(statements):
+                debug_log(f"  Statement {i+1}", type(stmt).__name__)
+                res = self.eval_node(stmt, env)
+                res = _resolve_awaitable(res)
+                EVAL_SUMMARY['evaluated_statements'] += 1
+                
+                if isinstance(res, ReturnValue): 
+                    debug_log("  ReturnValue encountered", res.value)
+                    # Execute deferred cleanup before returning
+                    self._execute_deferred_cleanup(env, [])
+                    return res.value
+                if is_error(res):
+                    debug_log("  Error encountered", res)
+                    try:
+                        EVAL_SUMMARY['errors'] += 1
+                    except Exception:
+                        pass
+                    # Execute deferred cleanup even on error
+                    self._execute_deferred_cleanup(env, [])
+                    return res
+                result = res
             
-            if isinstance(res, ReturnValue): 
-                debug_log("  ReturnValue encountered", res.value)
-                return res.value
-            if is_error(res):
-                debug_log("  Error encountered", res)
-                try:
-                    EVAL_SUMMARY['errors'] += 1
-                except Exception:
-                    pass
-                return res
-            result = res
-        
-        debug_log("eval_program completed", result)
-        return result
+            debug_log("eval_program completed", result)
+            return result
+        finally:
+            # CRITICAL: Execute all deferred cleanup at program exit
+            self._execute_deferred_cleanup(env, [])
     
     def eval_block_statement(self, block, env, stack_trace=None):
         debug_log("eval_block_statement", f"len={len(block.statements)}")
@@ -80,23 +88,29 @@ class StatementEvaluatorMixin:
             stack_trace = []
         
         result = NULL
-        for stmt in block.statements:
-            res = self.eval_node(stmt, env, stack_trace)
-            res = _resolve_awaitable(res)
-            EVAL_SUMMARY['evaluated_statements'] += 1
+        try:
+            for stmt in block.statements:
+                res = self.eval_node(stmt, env, stack_trace)
+                res = _resolve_awaitable(res)
+                EVAL_SUMMARY['evaluated_statements'] += 1
+                
+                if isinstance(res, (ReturnValue, EvaluationError)):
+                    debug_log("  Block interrupted", res)
+                    if is_error(res):
+                        try:
+                            EVAL_SUMMARY['errors'] += 1
+                        except Exception:
+                            pass
+                    # Execute deferred cleanup before returning
+                    self._execute_deferred_cleanup(env, stack_trace)
+                    return res
+                result = res
             
-            if isinstance(res, (ReturnValue, EvaluationError)):
-                debug_log("  Block interrupted", res)
-                if is_error(res):
-                    try:
-                        EVAL_SUMMARY['errors'] += 1
-                    except Exception:
-                        pass
-                return res
-            result = res
-        
-        debug_log("  Block completed", result)
-        return result
+            debug_log("  Block completed", result)
+            return result
+        finally:
+            # Always execute deferred cleanup when block exits (normal or error)
+            self._execute_deferred_cleanup(env, stack_trace)
     
     def eval_expression_statement(self, node, env, stack_trace):
         return self.eval_node(node.expression, env, stack_trace)
@@ -821,7 +835,7 @@ class StatementEvaluatorMixin:
         """
 
         # Create isolated environment (child of current)
-        sandbox_env = Environment(parent=env)
+        sandbox_env = Environment(outer=env)
         # Mark as running inside a sandbox and attach a default policy name
         sandbox_env.set('__in_sandbox__', True)
         # Allow caller to specify a policy on the node (future enhancement)
@@ -961,8 +975,7 @@ class StatementEvaluatorMixin:
                     if not is_error(msg_val):
                         error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
                 
-                from ..object import Error
-                return Error(error_msg)
+                return EvaluationError(error_msg)
             
             # Verification passed
             from ..object import Boolean
@@ -991,8 +1004,7 @@ class StatementEvaluatorMixin:
             return wrapped
         
         # Neither form provided
-        from ..object import Error
-        return Error("Invalid VERIFY statement: requires condition or target")
+        return EvaluationError("Invalid VERIFY statement: requires condition or target")
     
     def eval_protect_statement(self, node, env, stack_trace):
         """Evaluate PROTECT statement with full policy engine integration."""
@@ -1511,6 +1523,22 @@ class StatementEvaluatorMixin:
         except Exception as e:
             return EvaluationError(f"Error in SIMD statement: {str(e)}")
     
+    def _execute_deferred_cleanup(self, env, stack_trace):
+        """Execute all deferred cleanup code in LIFO order (Last In, First Out)."""
+        if not hasattr(env, '_deferred') or not env._deferred:
+            return
+        
+        # Execute in reverse order (LIFO - like a stack)
+        while env._deferred:
+            deferred_block = env._deferred.pop()  # Remove and get last item
+            try:
+                # Execute the deferred cleanup code
+                self.eval_node(deferred_block, env, stack_trace)
+            except Exception as e:
+                # Deferred cleanup should not crash the program
+                # But we can log it for debugging
+                debug_log(f"Error in deferred cleanup: {e}")
+    
     def eval_defer_statement(self, node, env, stack_trace):
         """Evaluate defer statement - cleanup code execution."""
         # Store the deferred code for later execution (at end of scope/function)
@@ -1518,7 +1546,7 @@ class StatementEvaluatorMixin:
             env._deferred = []
         
         env._deferred.append(node.code_block)
-        return String(f"Deferred cleanup code registered")
+        return NULL  # Don't return message, just silently register
     
     def eval_pattern_statement(self, node, env, stack_trace):
         """Evaluate pattern statement - pattern matching."""
@@ -1546,7 +1574,7 @@ class StatementEvaluatorMixin:
     def eval_enum_statement(self, node, env, stack_trace):
         """Evaluate enum statement - type-safe enumerations."""
         # Create an enum object
-        enum_obj = Map()
+        enum_obj = Map({})
         
         for i, member in enumerate(node.members):
             # Use provided value or auto-increment
@@ -2331,7 +2359,7 @@ class StatementEvaluatorMixin:
         debug_log("eval_limit_statement", "Setting gas limit")
         
         # Evaluate gas limit amount
-        limit_val = self.eval_node(node.gas_limit, env, stack_trace)
+        limit_val = self.eval_node(node.amount, env, stack_trace)
         if is_error(limit_val):
             return limit_val
         

@@ -99,21 +99,27 @@ class FunctionEvaluatorMixin:
             except Exception:
                 pass
             
-            res = self.eval_node(fn.body, new_env)
-            res = _resolve_awaitable(res)
-            
-            # Unwrap ReturnValue if needed
-            if isinstance(res, ReturnValue):
-                result = res.value
-            else:
-                result = res
-            
-            # Phase 2: Trigger after-call hook
-            if hasattr(self, 'integration_context'):
-                func_name = fn.name if hasattr(fn, 'name') else str(fn)
-                self.integration_context.plugins.after_action_call(func_name, result)
-            
-            return result
+            try:
+                res = self.eval_node(fn.body, new_env)
+                res = _resolve_awaitable(res)
+                
+                # Unwrap ReturnValue if needed
+                if isinstance(res, ReturnValue):
+                    result = res.value
+                else:
+                    result = res
+                
+                return result
+            finally:
+                # CRITICAL: Execute deferred cleanup when function exits
+                # This happens in finally block to ensure cleanup runs even on errors
+                if hasattr(self, '_execute_deferred_cleanup'):
+                    self._execute_deferred_cleanup(new_env, [])
+                
+                # Phase 2: Trigger after-call hook
+                if hasattr(self, 'integration_context'):
+                    func_name = fn.name if hasattr(fn, 'name') else str(fn)
+                    self.integration_context.plugins.after_action_call(func_name, result)
         
         elif isinstance(fn, Builtin):
             debug_log("  Calling builtin function", f"{fn.name}")

@@ -4,7 +4,7 @@ Bytecode Compiler for Evaluator
 This module allows the evaluator to compile AST nodes to bytecode
 for VM execution when performance is critical.
 """
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from .. import zexus_ast
 from ..vm.bytecode import Bytecode, BytecodeBuilder
 
@@ -54,6 +54,10 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_node(self, node):
         """Dispatch to appropriate compilation method based on node type"""
+        if self.builder is None:
+            self.errors.append("Bytecode builder not initialized")
+            return
+        
         if node is None:
             self.builder.emit_constant(None)
             return
@@ -67,7 +71,8 @@ class EvaluatorBytecodeCompiler:
             method(node)
         else:
             # Unsupported node type - emit error
-            self.errors.append(f"Unsupported node type for bytecode: {node_type}")
+            error_msg = f"Unsupported node type for bytecode: {node_type}"
+            self.errors.append(error_msg)
             self.builder.emit_constant(None)
     
     # === Statement Compilation ===
@@ -153,7 +158,7 @@ class EvaluatorBytecodeCompiler:
         # Loop end
         self.builder.mark_label(end_label)
         self._loop_stack.pop()
-        
+
         # While statements don't return values by default
         self.builder.emit_constant(None)
     
@@ -211,22 +216,32 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_IntegerLiteral(self, node: zexus_ast.IntegerLiteral):
         """Compile integer literal"""
+        if self.builder is None:
+            return
         self.builder.emit_constant(node.value)
     
     def _compile_FloatLiteral(self, node: zexus_ast.FloatLiteral):
         """Compile float literal"""
+        if self.builder is None:
+            return
         self.builder.emit_constant(node.value)
     
     def _compile_StringLiteral(self, node: zexus_ast.StringLiteral):
         """Compile string literal"""
+        if self.builder is None:
+            return
         self.builder.emit_constant(node.value)
     
     def _compile_Boolean(self, node: zexus_ast.Boolean):
         """Compile boolean literal"""
+        if self.builder is None:
+            return
         self.builder.emit_constant(node.value)
     
     def _compile_NullLiteral(self, node):
         """Compile null literal"""
+        if self.builder is None:
+            return
         self.builder.emit_constant(None)
     
     def _compile_ListLiteral(self, node: zexus_ast.ListLiteral):
@@ -248,6 +263,8 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_InfixExpression(self, node: zexus_ast.InfixExpression):
         """Compile infix expression"""
+        if self.builder is None:
+            return
         # Compile operands
         self._compile_node(node.left)
         self._compile_node(node.right)
@@ -316,7 +333,8 @@ class EvaluatorBytecodeCompiler:
             self.builder.emit("DUP")  # Keep value on stack
             self.builder.emit_store(node.target.value)
         else:
-            self.errors.append("Complex assignment targets not yet supported in bytecode")
+            self.errors.append(
+                "Complex assignment targets not yet supported in bytecode")
     
     def _compile_IndexExpression(self, node):
         """Compile index expression"""

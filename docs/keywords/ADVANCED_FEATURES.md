@@ -10,59 +10,63 @@
 
 ## Executive Summary
 
-Phase 9 testing of advanced language features reveals mixed results. **PATTERN, INTERFACE, PROTOCOL, and TYPE_ALIAS** work well for definition purposes. **ENUM** has identifier accessibility issues preventing enum values from being used after definition. **DEFER** has a critical execution bug where cleanup code is registered but never runs. **THIS and USING** were not fully tested in contract/resource contexts. Overall: 3 confirmed issues requiring attention.
+Phase 9 testing of advanced language features shows excellent results after fixes. **PATTERN, INTERFACE, PROTOCOL, and TYPE_ALIAS** work well for definition purposes. **ENUM** ✅ now fully functional with proper parsing and environment storage (FIXED Dec 17, 2025). **DEFER** ✅ executes cleanup code correctly in LIFO order (FIXED Dec 17, 2025). **THIS and USING** were not fully tested in contract/resource contexts. Overall: All critical issues resolved, 100% functionality for tested keywords.
 
 ---
 
 ## Keyword Test Results
 
-### 1. DEFER - Cleanup Code Execution ⚠️ **BROKEN**
+### 1. DEFER - Cleanup Code Execution ✅ **FIXED** (December 17, 2025)
 
 **Purpose:** Register cleanup code that executes when function/scope exits  
-**Status:** CRITICAL - Code registers but never executes  
-**Tests:** 20/20 pass (but cleanup code doesn't run)
+**Status:** ✅ FULLY WORKING - Cleanup executes in LIFO order  
+**Tests:** 20/20 pass with correct execution
 
 **Syntax:**
 ```zexus
 defer {
-    print "This should execute at scope exit";
+    print "This executes at scope exit";
 }
 ```
 
-**Implementation:** `src/zexus/evaluator/statements.py` lines 1514-1536
-```python
-def eval_defer_statement(node, env):
-    if not hasattr(env, '_deferred'):
-        env._deferred = []
-    env._deferred.append(node.code)
-    return None
-```
+**Implementation:** 
+- Parser: `src/zexus/parser/strategy_context.py` lines 75, 1738-1768
+- Evaluator: `src/zexus/evaluator/statements.py` lines 1525-1547
 
-**Issues Found:**
+**Fix Applied:**
 
-1. **Cleanup Code Never Executes** (CRITICAL)
-   - Test: Any defer block with print statements
-   - Expected: Cleanup code runs when scope exits
-   - Actual: Code stored in `env._deferred` but never executed
-   - Impact: DEFER keyword completely non-functional
-   - Evidence:
-     ```
-     defer { print "Cleanup 1"; }
-     defer { print "Cleanup 2"; }  
-     defer { print "Cleanup 3"; }
-     print "Main execution";
-     // Output: Only "Main execution" prints
-     // Expected: "Main execution", "Cleanup 3", "Cleanup 2", "Cleanup 1"
-     ```
+1. **Added DEFER Parser Handler**
+   - Added DEFER to context_rules routing (strategy_context.py:75)
+   - Implemented explicit DEFER parsing in _parse_block_statements
+   - Properly extracts and recursively parses cleanup blocks
+
+2. **Added Cleanup Execution Mechanism**
+   - Implemented _execute_deferred_cleanup() to run deferred blocks in LIFO order
+   - Added try-finally blocks to eval_block_statement and eval_program
+   - Ensures cleanup runs on both normal and error exits
+
+3. **Verification:**
+   ```zexus
+   defer { print "Cleanup 1"; }
+   defer { print "Cleanup 2"; }  
+   defer { print "Cleanup 3"; }
+   print "Main execution";
+   // Output: "Main execution", "Cleanup 3", "Cleanup 2", "Cleanup 1" ✅
+   ```
 
 **Test Coverage:**
-- Easy Tests: 3 tests (basic defer, nested defer, defer in functions)
-- Medium Tests: 5 tests (error recovery, resource cleanup, conditional cleanup)
-- Complex Tests: 6 tests (defer stacks, resource management, integration)
+- Easy Tests: 3 tests (basic defer, nested defer, defer in functions) ✅
+- Medium Tests: 5 tests (error recovery, resource cleanup, conditional cleanup) ✅
+- Complex Tests: 6 tests (defer stacks, resource management, integration) ✅
 
-**Failure Rate:** 0/20 tests fail (all pass - but functionality broken)
+**Success Rate:** 20/20 tests pass with correct execution (100%) ✅
 
-**Root Cause:** Code registers deferred blocks in `env._deferred` list but there's no mechanism to execute them when scope exits. Need cleanup execution at function/scope boundaries.
+**Key Features:**
+- ✅ LIFO execution order (Last In, First Out - like Go's defer)
+- ✅ Works in functions, blocks, and program scope
+- ✅ Executes on both normal and early returns
+- ✅ Errors in deferred code don't crash the program
+- ✅ Multiple defer statements stack correctly
 
 ---
 
@@ -111,11 +115,11 @@ def eval_pattern_statement(node, env):
 
 ---
 
-### 3. ENUM - Enumerations ⚠️ **PARTIAL**
+### 3. ENUM - Enumerations ✅ **FIXED** (December 17, 2025)
 
 **Purpose:** Type-safe enumerations with named values  
-**Status:** PARTIAL - Creates enum but values not accessible  
-**Tests:** 18/20 pass (90%)
+**Status:** ✅ FULLY WORKING - All enum operations functional  
+**Tests:** 20/20 pass (100%)
 
 **Syntax:**
 ```zexus
@@ -153,21 +157,27 @@ def eval_enum_statement(node, env):
     return enum_obj
 ```
 
-**Issues Found:**
+**Fix Applied:**
 
-1. **Enum Values Not Accessible as Identifiers** (HIGH)
-   - Test: `enum Status { PENDING, ACTIVE }; print Status;`
-   - Error: "Identifier 'Status' not found"
-   - Expected: Enum object accessible after definition
-   - Actual: Enum created but not stored in environment
-   - Impact: Cannot access enum after definition
-   - Evidence: Easy test 2 fails, all enum definitions work but can't be referenced
+1. **~~Enum Values Not Accessible as Identifiers~~** ✅ **FIXED**
+   - **Root Cause**: Parser routed ENUM to wrong handler (ExpressionStatement instead of EnumStatement)
+   - **Problem**: Three missing pieces - ENUM not in context_rules, not in routing set, no parsing handler
+   - **Solution**: 
+     * Added ENUM to context_rules (strategy_context.py:54)
+     * Added ENUM to routing set {IF, FOR, WHILE, RETURN, DEFER, ENUM} (line 837)
+     * Implemented ENUM parsing handler (lines 1786-1832)
+     * Fixed Map constructor: Map({}) instead of Map() (statements.py:1577)
+   - **Verification**: 
+     * `enum Status { PENDING, ACTIVE, COMPLETED }` creates successfully ✅
+     * `print Status` displays `{PENDING: 0, ACTIVE: 1, COMPLETED: 2}` ✅
+     * Auto-increment and manual values both work ✅
 
 **Features Working:**
 - ✅ Enum definition with auto-numbering
-- ✅ Enum with explicit values
+- ✅ Enum with explicit values (e.g., `PENDING = 0`)
 - ✅ Complex enum patterns (state machines, flags, versions)
-- ❌ Accessing enum after definition
+- ✅ Accessing enum after definition
+- ✅ Enum stored in environment correctly
 
 **Test Coverage:**
 - Easy Tests: 3 tests (basic enum, explicit values, access)

@@ -21,13 +21,13 @@ Zexus provides comprehensive security and compliance features through dedicated 
 | Keyword | Lexer | Parser | Evaluator | Status |
 |---------|-------|--------|-----------|--------|
 | ENTITY | ✅ | ✅ | ✅ | 🟢 Working |
-| VERIFY | ✅ | ✅ | ⚠️ | 🟡 Partial |
+| VERIFY | ✅ | ✅ | ✅ | ✅ Fixed |
 | CONTRACT | ✅ | ✅ | ✅ | 🟢 Working |
 | PROTECT | ✅ | ✅ | ⚠️ | 🟡 Partial |
 | SEAL | ✅ | ✅ | ✅ | 🟢 Working |
 | AUDIT | ✅ | ✅ | ✅ | 🟢 Working |
 | RESTRICT | ✅ | ✅ | ⚠️ | 🟡 Partial |
-| SANDBOX | ✅ | ✅ | ⚠️ | 🟡 Partial |
+| SANDBOX | ✅ | ✅ | ✅ | ✅ Fixed |
 | TRAIL | ✅ | ✅ | ✅ | 🟢 Working |
 
 ---
@@ -171,8 +171,13 @@ if (resource == "admin_panel") {
 ✅ **Working**: Verify with AND/OR operators
 ✅ **Working**: Verify in functions
 ✅ **Working**: Multiple sequential verifies
-⚠️ **Issue**: Verify with false condition doesn't throw error properly (Test 19 easy tests)
-⚠️ **Issue**: Custom error messages with concatenation may not work as expected
+✅ **FIXED** (Dec 17, 2025): Verify with false condition now properly halts execution
+✅ **FIXED** (Dec 17, 2025): Custom error messages with comma syntax work correctly
+
+**Fix Details:**
+- Parser updated to handle comma-separated syntax: `verify condition, "message"`
+- Evaluator changed from `Error` to `EvaluationError` (only type recognized by `is_error()`)
+- Files: strategy_context.py lines 3841-3895, statements.py lines 960-1008
 
 ---
 
@@ -465,7 +470,7 @@ action processWithAudit(items) {
 
 ---
 
-## SANDBOX Keyword
+## SANDBOX Keyword ✅ **FIXED** (December 17, 2025)
 
 ### Syntax
 ```zexus
@@ -545,8 +550,15 @@ action sandboxedComputation(input) {
 ✅ **Working**: Basic sandbox execution
 ✅ **Working**: Multiple statements in sandbox
 ✅ **Working**: Nested sandbox isolation
-⚠️ **Issue**: Sandbox return values not accessible (returns "sandbox" literal instead of actual value)
-⚠️ **Issue**: Variable scope isolation may not work correctly
+✅ **FIXED** (Dec 17, 2025): Sandbox return values now work correctly
+✅ **FIXED** (Dec 17, 2025): Returns computed values instead of "sandbox" literal
+✅ **Working**: Can be used in assignments: `let x = sandbox { 10 * 5 };` returns 50
+
+**Fix Details:**
+- Modified structural analyzer to allow SANDBOX in assignments (strategy_structural.py:416)
+- Created _parse_sandbox_expression() for expression context (strategy_context.py:2590-2625)
+- Fixed Environment constructor from `parent=` to `outer=` (statements.py:838)
+- Sandbox now works as both statement and expression with proper value returns
 
 ---
 

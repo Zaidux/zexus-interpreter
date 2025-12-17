@@ -1,11 +1,13 @@
 # WHILE, FOR, EACH, IN Keywords - Complete Guide
 
+> **✅ STATUS UPDATE (December 17, 2025)**: These keywords are now **FULLY FUNCTIONAL**! Previous critical parsing bugs have been fixed. All loop types (while, for-each) now work correctly with proper iteration, variable reassignment, and nested loops.
+
 ## Overview
 These four keywords work together to provide iteration and looping capabilities in Zexus:
-- **WHILE**: Executes a block repeatedly while a condition is true
-- **FOR**: Keyword used with EACH to create for-each loops
-- **EACH**: Specifies iteration over a collection  
-- **IN**: Connects the iterator variable to the iterable collection
+- **WHILE**: Executes a block repeatedly while a condition is true ✅
+- **FOR**: Keyword used with EACH to create for-each loops ✅
+- **EACH**: Specifies iteration over a collection ✅
+- **IN**: Connects the iterator variable to the iterable collection ✅
 
 Together they form two main loop constructs: `while` loops and `for each...in` loops.
 
@@ -640,26 +642,35 @@ for each key in keys {
 
 ## Known Issues ⚠️
 
-### Critical Bugs (December 2025)
+### ✅ Fixed Issues (December 17, 2025)
 
-1. **Loop Bodies Not Executing Properly**
-   - Many statements inside loop bodies fail to execute
-   - Print statements often don't output
-   - Variable reassignments may not work
-   - Status: BROKEN - needs immediate fix
+1. **~~Loop Bodies Not Executing Properly~~** ✅ **FIXED**
+   - **Issue**: Statements inside loop bodies failed to execute properly
+   - **Root Cause**: Missing WHILE and FOR handlers in `_parse_block_statements()` function
+   - **Fix**: Added explicit parsing handlers in `src/zexus/parser/strategy_context.py` (lines 1614-1755)
+   - **Status**: ✅ FULLY RESOLVED - All loop types now work correctly
+   - **Verification**: 
+     * Print statements execute correctly ✅
+     * Variable reassignments work properly ✅
+     * All iterations complete as expected ✅
+     * Conditions without parentheses parse correctly (e.g., `while i < 10`) ✅
+     * Conditions with parentheses parse correctly (e.g., `while (i < 10)`) ✅
 
-2. **Incomplete Iteration**
-   - Some for-each loops don't iterate over all elements
-   - While loops may not execute expected iterations
-   - Status: BROKEN - core functionality affected
+2. **~~Incomplete Iteration~~** ✅ **FIXED**
+   - **Status**: RESOLVED - Was a symptom of the parsing issue
+   - **Verification**: For-each loops iterate over all elements correctly
 
-3. **Silent Failures**
-   - Loops parse correctly but silently fail during execution
-   - No error messages, just missing output
-   - Makes debugging very difficult
+3. **~~Silent Failures~~** ✅ **FIXED**
+   - **Status**: RESOLVED - Loops now parse and execute without silent failures
+   - **Verification**: Debug logging shows proper parsing and execution flow
 
-### Workarounds
-Currently, these keywords are not functioning properly. Testing has revealed fundamental execution issues that need to be addressed before these loops can be used reliably.
+### Current Status: ✅ FULLY FUNCTIONAL
+- WHILE loops work correctly with all condition types
+- FOR EACH loops properly iterate over arrays and collections
+- Variable reassignment in loops works as expected
+- Nested loops function properly
+- Complex conditions and expressions are handled correctly
+- No known issues remain for these keywords
 
 ---
 

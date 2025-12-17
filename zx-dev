@@ -25,6 +25,11 @@ if __name__ == '__main__':
     # Add a marker so the code knows it's running in dev mode
     os.environ['ZEXUS_DEV_MODE'] = '1'
     
+    # Check for --debug flag
+    if '--debug' in sys.argv:
+        os.environ['ZEXUS_DEBUG'] = '1'
+        print("🐛 [DEBUG MODE] Enabled")
+    
     # Print dev mode indicator
     if '--help' not in sys.argv and len(sys.argv) > 1:
         print("🔧 [DEV MODE] Running from source")

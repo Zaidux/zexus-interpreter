@@ -50,6 +50,9 @@ class ContextStackParser:
             FOR: self._parse_statement_block_context,
             WHILE: self._parse_statement_block_context,
             RETURN: self._parse_statement_block_context,
+            DEFER: self._parse_statement_block_context,
+            ENUM: self._parse_statement_block_context,
+            SANDBOX: self._parse_statement_block_context,
             'let_statement': self._parse_let_statement_block,
             'const_statement': self._parse_const_statement_block,
             'print_statement': self._parse_print_statement_block,
@@ -830,9 +833,12 @@ class ContextStackParser:
             return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype == 'use_statement': # Fix subtype mismatch
             return self._parse_use_statement_block(block_info, all_tokens)
-        elif subtype in {IF, FOR, WHILE, RETURN}:
+        elif subtype in {IF, FOR, WHILE, RETURN, DEFER, ENUM, SANDBOX}:
             # Use the existing logic in _parse_block_statements which handles these keywords
+            print(f"🎯 [Context] Calling _parse_block_statements for subtype={subtype}")
+            print(f"🎯 [Context] block_info['tokens'] has {len(block_info.get('tokens', []))} tokens")
             stmts = self._parse_block_statements(block_info['tokens'])
+            print(f"🎯 [Context] Got {len(stmts) if stmts else 0} statements back")
             return stmts[0] if stmts else None
         else:
             return self._parse_generic_statement_block(block_info, all_tokens)
@@ -931,10 +937,9 @@ class ContextStackParser:
         """Parse statements from a block of tokens"""
         if not tokens:
             return []
-
+        
         statements = []
         i = 0
-        # Common statement-starter tokens used by several heuristics and fallbacks
         # Common statement-starter tokens used by several heuristics and fallbacks
         statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         while i < len(tokens):
@@ -1609,6 +1614,257 @@ class ContextStackParser:
                 i = j
                 continue
 
+            elif token.type == WHILE:
+                # Parse WHILE statement directly
+                j = i + 1
+                stmt_tokens = [token]
+                
+                # Collect condition tokens (between WHILE and {)
+                cond_tokens = []
+                paren_depth = 0
+                has_parens = False
+                
+                # Check if condition has parentheses
+                if j < len(tokens) and tokens[j].type == LPAREN:
+                    has_parens = True
+                    j += 1
+                    paren_depth = 1
+                    
+                    # Collect condition tokens inside parens
+                    while j < len(tokens) and paren_depth > 0:
+                        if tokens[j].type == LPAREN:
+                            paren_depth += 1
+                            cond_tokens.append(tokens[j])
+                        elif tokens[j].type == RPAREN:
+                            paren_depth -= 1
+                            if paren_depth == 0:
+                                j += 1  # Skip closing paren
+                                break
+                            cond_tokens.append(tokens[j])
+                        else:
+                            cond_tokens.append(tokens[j])
+                        j += 1
+                else:
+                    # No parentheses - collect tokens until we hit {
+                    while j < len(tokens) and tokens[j].type != LBRACE:
+                        cond_tokens.append(tokens[j])
+                        j += 1
+                
+                # Parse condition
+                condition = self._parse_expression(cond_tokens) if cond_tokens else Identifier("true")
+                
+                # Collect body block (between { and })
+                body_block = BlockStatement()
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    j += 1  # Skip opening brace
+                    body_tokens = []
+                    brace_nest = 1
+                    
+                    while j < len(tokens) and brace_nest > 0:
+                        if tokens[j].type == LBRACE:
+                            brace_nest += 1
+                        elif tokens[j].type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1  # Skip closing brace
+                                break
+                        body_tokens.append(tokens[j])
+                        j += 1
+                    
+                    # Recursively parse body statements
+                    body_block.statements = self._parse_block_statements(body_tokens)
+                
+                print(f"    📝 Found while statement with {len(body_block.statements)} body statements")
+                
+                stmt = WhileStatement(condition=condition, body=body_block)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == FOR:
+                # Parse FOR EACH statement directly
+                j = i + 1
+                stmt_tokens = [token]
+                
+                # Expect EACH keyword
+                if j < len(tokens) and tokens[j].type == EACH:
+                    j += 1
+                    
+                    # Collect iterator variable name
+                    item_name = None
+                    if j < len(tokens) and tokens[j].type == IDENT:
+                        item_name = tokens[j].literal
+                        j += 1
+                    
+                    # Expect IN keyword
+                    if j < len(tokens) and tokens[j].type == IN:
+                        j += 1
+                        
+                        # Collect iterable expression tokens (until {)
+                        iterable_tokens = []
+                        while j < len(tokens) and tokens[j].type != LBRACE:
+                            iterable_tokens.append(tokens[j])
+                            j += 1
+                        
+                        # Parse iterable
+                        iterable = self._parse_expression(iterable_tokens) if iterable_tokens else Identifier("[]")
+                        
+                        # Collect body block (between { and })
+                        body_block = BlockStatement()
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            j += 1  # Skip opening brace
+                            body_tokens = []
+                            brace_nest = 1
+                            
+                            while j < len(tokens) and brace_nest > 0:
+                                if tokens[j].type == LBRACE:
+                                    brace_nest += 1
+                                elif tokens[j].type == RBRACE:
+                                    brace_nest -= 1
+                                    if brace_nest == 0:
+                                        j += 1  # Skip closing brace
+                                        break
+                                body_tokens.append(tokens[j])
+                                j += 1
+                            
+                            # Recursively parse body statements
+                            body_block.statements = self._parse_block_statements(body_tokens)
+                        
+                        print(f"    📝 Found for each statement with {len(body_block.statements)} body statements")
+                        
+                        stmt = ForEachStatement(
+                            item=Identifier(item_name if item_name else 'item'),
+                            iterable=iterable,
+                            body=body_block
+                        )
+                        if stmt:
+                            statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == DEFER:
+                # Parse DEFER statement directly
+                j = i + 1
+                stmt_tokens = [token]
+                
+                # Collect the code block (between { and })
+                code_block = BlockStatement()
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    j += 1  # Skip opening brace
+                    block_tokens = []
+                    brace_nest = 1
+                    
+                    while j < len(tokens) and brace_nest > 0:
+                        if tokens[j].type == LBRACE:
+                            brace_nest += 1
+                        elif tokens[j].type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1  # Skip closing brace
+                                break
+                        block_tokens.append(tokens[j])
+                        j += 1
+                    
+                    # Recursively parse code block statements
+                    code_block.statements = self._parse_block_statements(block_tokens)
+                
+                print(f"    📝 Found defer statement with {len(code_block.statements)} statements")
+                
+                stmt = DeferStatement(code_block=code_block)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == ENUM:
+                # Parse ENUM statement directly
+                j = i + 1
+                stmt_tokens = [token]
+                
+                # Get enum name
+                enum_name = None
+                if j < len(tokens) and tokens[j].type == IDENT:
+                    enum_name = tokens[j].literal
+                    j += 1
+                
+                # Parse members between { and }
+                members = []
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    j += 1  # Skip opening brace
+                    
+                    while j < len(tokens) and tokens[j].type != RBRACE:
+                        if tokens[j].type == IDENT:
+                            member_name = tokens[j].literal
+                            member_value = None
+                            j += 1
+                            
+                            # Check for = value
+                            if j < len(tokens) and tokens[j].type == ASSIGN:
+                                j += 1  # Skip =
+                                if j < len(tokens) and tokens[j].type in [INT, STRING]:
+                                    member_value = tokens[j].literal
+                                    j += 1
+                            
+                            members.append(EnumMember(member_name, member_value))
+                        
+                        # Skip commas
+                        if j < len(tokens) and tokens[j].type == COMMA:
+                            j += 1
+                        else:
+                            break
+                    
+                    if j < len(tokens) and tokens[j].type == RBRACE:
+                        j += 1  # Skip closing brace
+                
+                print(f"    📝 Found enum '{enum_name}' with {len(members)} members")
+                
+                stmt = EnumStatement(enum_name, members)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == SANDBOX:
+                # Parse SANDBOX statement directly
+                j = i + 1
+                
+                # Parse body block between { and }
+                body = None
+                if j < len(tokens) and tokens[j].type == LBRACE:
+                    j += 1  # Skip opening brace
+                    block_tokens = []
+                    brace_nest = 1
+                    
+                    while j < len(tokens) and brace_nest > 0:
+                        if tokens[j].type == LBRACE:
+                            brace_nest += 1
+                        elif tokens[j].type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1  # Skip closing brace
+                                break
+                        block_tokens.append(tokens[j])
+                        j += 1
+                    
+                    # Recursively parse body statements
+                    body_statements = self._parse_block_statements(block_tokens)
+                    body = BlockStatement()
+                    body.statements = body_statements
+                
+                print(f"    📝 Found sandbox statement with {len(body.statements) if body else 0} statements")
+                
+                stmt = SandboxStatement(body=body, policy=None)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
             # Fallback: attempt to parse as expression
             else:
                 j = i
@@ -1919,6 +2175,8 @@ class ContextStackParser:
             return self._parse_lambda(tokens)
         if tokens[0].type == FUNCTION:
             return self._parse_function_literal(tokens)
+        if tokens[0].type == SANDBOX:
+            return self._parse_sandbox_expression(tokens)
 
         # Main expression parser with chaining
         i = 0
@@ -2232,11 +2490,6 @@ class ContextStackParser:
                 cur.append(t)
             i += 1
 
-        # If there is a trailing element
-        if cur:
-            elem = self._parse_expression(cur)
-            elements.append(elem)
-
         parser_debug(f"  ✅ Parsed list with {len(elements)} elements")
         return ListLiteral(elements)
 
@@ -2333,6 +2586,46 @@ class ContextStackParser:
         
         # Return as ActionLiteral (same as lambda for function expressions)
         return ActionLiteral(parameters=params, body=body)
+
+    def _parse_sandbox_expression(self, tokens):
+        """Parse a sandbox expression from tokens starting with SANDBOX
+        
+        Supports form:
+          sandbox { code }
+        
+        Returns a SandboxStatement which can be evaluated as an expression.
+        """
+        print("  🔧 [Sandbox Expression] Parsing sandbox expression")
+        if not tokens or tokens[0].type != SANDBOX:
+            return None
+        
+        i = 1
+        body = None
+        
+        # Parse body block between { and }
+        if i < len(tokens) and tokens[i].type == LBRACE:
+            i += 1  # Skip opening brace
+            block_tokens = []
+            brace_nest = 1
+            
+            while i < len(tokens) and brace_nest > 0:
+                if tokens[i].type == LBRACE:
+                    brace_nest += 1
+                elif tokens[i].type == RBRACE:
+                    brace_nest -= 1
+                    if brace_nest == 0:
+                        break
+                block_tokens.append(tokens[i])
+                i += 1
+            
+            # Parse body statements
+            if block_tokens:
+                body_statements = self._parse_block_statements(block_tokens)
+                body = BlockStatement()
+                body.statements = body_statements
+        
+        # Return SandboxStatement (can be used as expression that returns value)
+        return SandboxStatement(body=body, policy=None)
 
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
@@ -3573,7 +3866,7 @@ class ContextStackParser:
             return None
         
         parser_debug("  ✅ Limit statement")
-        return LimitStatement(gas_limit=gas_limit)
+        return LimitStatement(amount=gas_limit)
 
     def _parse_watch_statement(self, block_info, all_tokens):
         """Parse watch statement.
@@ -3677,8 +3970,15 @@ class ContextStackParser:
     def _parse_verify_statement(self, block_info, all_tokens):
         """Parse verify statement.
         
-        Form: verify ( <condition> )
-        Example: verify (TX.caller == self.owner)
+        Forms:
+        1. verify condition, "message"
+        2. verify (condition)
+        3. verify(target, [conditions])
+        
+        Examples:
+        - verify false, "Access denied"
+        - verify (TX.caller == self.owner)
+        - verify(transfer_funds, [check_auth()])
         """
         parser_debug("🔧 [Context] Parsing verify statement")
         tokens = block_info.get('tokens', [])
@@ -3687,17 +3987,40 @@ class ContextStackParser:
             parser_debug("  ❌ Expected VERIFY keyword")
             return None
         
-        # Extract tokens between LPAREN and RPAREN
-        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        # Check for comma-separated format: verify condition, message
+        comma_idx = None
+        paren_depth = 0
+        for i, tok in enumerate(tokens[1:], 1):
+            if tok.type in {LPAREN, LBRACKET}:
+                paren_depth += 1
+            elif tok.type in {RPAREN, RBRACKET}:
+                paren_depth -= 1
+            elif tok.type == COMMA and paren_depth == 0:
+                comma_idx = i
+                break
         
-        condition = self._parse_expression(inner) if inner else None
-        
-        if condition is None:
-            parser_debug("  ❌ verify needs a condition")
-            return None
-        
-        parser_debug("  ✅ Verify statement")
-        return VerifyStatement(condition=condition)
+        if comma_idx:
+            # Format: verify condition, message
+            cond_tokens = tokens[1:comma_idx]
+            msg_tokens = tokens[comma_idx+1:]
+            
+            condition = self._parse_expression(cond_tokens) if cond_tokens else None
+            message = self._parse_expression(msg_tokens) if msg_tokens else None
+            
+            parser_debug(f"  ✅ Verify statement (simple assertion) with message")
+            return VerifyStatement(condition=condition, message=message)
+        else:
+            # Format: verify (condition) or verify(target, [...])
+            inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[1:]
+            
+            condition = self._parse_expression(inner) if inner else None
+            
+            if condition is None:
+                parser_debug("  ❌ verify needs a condition")
+                return None
+            
+            parser_debug("  ✅ Verify statement (parenthesized)")
+            return VerifyStatement(condition=condition)
 
     def _parse_restrict_statement(self, block_info, all_tokens):
         """Parse restrict statement (already exists in AST).

@@ -27,7 +27,7 @@ Zexus provides blockchain-specific features through LEDGER, STATE, TX, HASH, SIG
 | HASH | ✅ (builtin) | ✅ | ✅ | 🟢 Working |
 | SIGNATURE | ✅ (builtin) | ✅ | ✅ | 🔴 Broken |
 | VERIFY_SIG | ✅ (builtin) | ✅ | ✅ | 🔴 Untested |
-| LIMIT | ✅ | ✅ | ⚠️ | 🔴 Broken |
+| LIMIT | ✅ | ✅ | ✅ | ✅ Fixed |
 | GAS | ✅ (builtin) | ✅ | ✅ | 🟢 Working |
 | PERSISTENT | ✅ | ✅ | ✅ | 🔴 Broken |
 | STORAGE | ✅ | ✅ | ✅ | 🟢 Working |
@@ -351,7 +351,7 @@ let isValid = verify_sig(message, sig, publicKey, "ECDSA");
 
 ---
 
-## LIMIT Keyword
+## LIMIT Keyword ✅ **FIXED** (December 17, 2025)
 
 ### Syntax
 ```zexus
@@ -366,12 +366,21 @@ Set gas/resource limits for execution.
 #### Set Gas Limit
 ```zexus
 limit(10000);
+limit(5000);
+```
+
+#### With Expressions
+```zexus
+let base = 100;
+limit(base * 10);      // 1000
+limit(2500 + 2500);    // 5000
 ```
 
 ### Test Results
-❌ **Broken**: TypeError in parser
-- Error: "LimitStatement.__init__() got an unexpected keyword argument 'gas_limit'"
-- Parser/AST constructor mismatch
+✅ **FIXED**: All limit operations working
+- Parameter mismatch resolved: parser now passes `amount=` instead of `gas_limit=`
+- Evaluator updated to access `node.amount` instead of `node.gas_limit`
+- Files: strategy_context.py line 3790, statements.py line 2362
 
 ---
 
@@ -475,17 +484,21 @@ Used with PERSISTENT keyword to declare storage.
 
 ## Known Issues
 
-### Issue 1: LIMIT Constructor Parameter Mismatch
-**Description**: Parser creates LimitStatement with wrong parameter name
+### ~~Issue 1: LIMIT Constructor Parameter Mismatch~~ ✅ **FIXED** (December 17, 2025)
+**Description**: ~~Parser creates LimitStatement with wrong parameter name~~ **RESOLVED**
 
-**Error**:
-```
-TypeError: LimitStatement.__init__() got an unexpected keyword argument 'gas_limit'
-```
+**Fix Applied**:
+- Changed parser call from `LimitStatement(gas_limit=gas_limit)` to `LimitStatement(amount=gas_limit)`
+- Changed evaluator access from `node.gas_limit` to `node.amount`
+- Simple parameter name alignment between parser and AST definition
 
-**Test**: test_blockchain_easy.zx Test 13
-**Impact**: Critical - LIMIT keyword completely broken
-**Root Cause**: Parser passes 'gas_limit' but AST expects different parameter name
+**Verification**:
+- `limit(10000);` executes without error ✅
+- `limit(base * 10);` works with expressions ✅
+- Multiple limit statements work correctly ✅
+
+**Test**: test_blockchain_easy.zx Test 13 now passes
+**Status**: ✅ FULLY WORKING
 
 ### Issue 2: SIGNATURE Requires PEM Format Keys
 **Description**: Signature creation fails with invalid key format

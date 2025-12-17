@@ -1,3 +1,2 @@
-chain_data
 tests
 zexus
