@@ -93,6 +93,11 @@ class ContextStackParser:
             PROTECT: self._parse_protect_statement,
             VERIFY: self._parse_verify_statement,
             RESTRICT: self._parse_restrict_statement,
+            # ENTERPRISE FEATURE handlers
+            MIDDLEWARE: self._parse_middleware_statement,
+            AUTH: self._parse_auth_statement,
+            THROTTLE: self._parse_throttle_statement,
+            CACHE: self._parse_cache_statement,
             # DEPENDENCY INJECTION handlers
             INJECT: self._parse_inject_statement,
             VALIDATE: self._parse_validate_statement,
@@ -941,7 +946,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE}
         while i < len(tokens):
             token = tokens[i]
 
@@ -2173,7 +2178,7 @@ class ContextStackParser:
             return self._parse_list_literal(tokens)
         if tokens[0].type == LAMBDA:
             return self._parse_lambda(tokens)
-        if tokens[0].type == FUNCTION:
+        if tokens[0].type == FUNCTION or tokens[0].type == ACTION:
             return self._parse_function_literal(tokens)
         if tokens[0].type == SANDBOX:
             return self._parse_sandbox_expression(tokens)
@@ -2539,15 +2544,15 @@ class ContextStackParser:
         return LambdaExpression(parameters=params, body=body)
 
     def _parse_function_literal(self, tokens):
-        """Parse a function literal expression (anonymous function)
+        """Parse a function or action literal expression (anonymous function)
         
         Supports forms:
           function(x) { return x * 2; }
-          function(x, y) { return x + y; }
+          action(x, y) { return x + y; }
           function() { return 42; }
         """
-        print("  🔧 [Function Literal] Parsing function literal")
-        if not tokens or tokens[0].type != FUNCTION:
+        print("  🔧 [Function Literal] Parsing function/action literal")
+        if not tokens or tokens[0].type not in {FUNCTION, ACTION}:
             return None
         
         i = 1
@@ -3966,6 +3971,230 @@ class ContextStackParser:
         
         parser_debug("  ✅ Protect statement")
         return ProtectStatement(target=target, rules=rules_block)
+
+    def _parse_middleware_statement(self, block_info, all_tokens):
+        """Parse middleware statement.
+        
+        Form: middleware(name, action(req, res) { ... })
+        Example: middleware("authenticate", action(request, response) { ... })
+        """
+        parser_debug("🔧 [Context] Parsing middleware statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != MIDDLEWARE:
+            parser_debug("  ❌ Expected MIDDLEWARE keyword")
+            return None
+        
+        # Expect LPAREN after middleware
+        if len(tokens) < 2 or tokens[1].type != LPAREN:
+            parser_debug("  ❌ Expected ( after middleware")
+            return None
+        
+        # Find matching RPAREN
+        paren_depth = 0
+        rparen_idx = -1
+        for i in range(1, len(tokens)):
+            if tokens[i].type == LPAREN:
+                paren_depth += 1
+            elif tokens[i].type == RPAREN:
+                paren_depth -= 1
+                if paren_depth == 0:
+                    rparen_idx = i
+                    break
+        
+        if rparen_idx == -1:
+            parser_debug("  ❌ Unmatched parentheses")
+            return None
+        
+        # Parse arguments: name, handler
+        args_tokens = tokens[2:rparen_idx]
+        
+        # Find comma separating name and handler
+        comma_idx = -1
+        depth = 0
+        for i, tok in enumerate(args_tokens):
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                depth += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                depth -= 1
+            elif tok.type == COMMA and depth == 0:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            parser_debug("  ❌ Expected comma between name and handler")
+            return None
+        
+        name_tokens = args_tokens[:comma_idx]
+        handler_tokens = args_tokens[comma_idx+1:]
+        
+        name = self._parse_expression(name_tokens)
+        handler = self._parse_expression(handler_tokens)
+        
+        parser_debug("  ✅ Middleware statement")
+        return MiddlewareStatement(name=name, handler=handler)
+
+    def _parse_auth_statement(self, block_info, all_tokens):
+        """Parse auth statement.
+        
+        Form: auth { provider: "oauth2", scopes: ["read", "write"] }
+        """
+        parser_debug("🔧 [Context] Parsing auth statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != AUTH:
+            parser_debug("  ❌ Expected AUTH keyword")
+            return None
+        
+        # Expect LBRACE after auth
+        if len(tokens) < 2 or tokens[1].type != LBRACE:
+            parser_debug("  ❌ Expected { after auth")
+            return None
+        
+        # Find matching RBRACE
+        brace_depth = 0
+        rbrace_idx = -1
+        for i in range(1, len(tokens)):
+            if tokens[i].type == LBRACE:
+                brace_depth += 1
+            elif tokens[i].type == RBRACE:
+                brace_depth -= 1
+                if brace_depth == 0:
+                    rbrace_idx = i
+                    break
+        
+        if rbrace_idx == -1:
+            parser_debug("  ❌ Unmatched braces")
+            return None
+        
+        # Parse config map
+        config_tokens = tokens[2:rbrace_idx]
+        config = self._parse_map_literal_tokens(config_tokens)
+        
+        parser_debug("  ✅ Auth statement")
+        return AuthStatement(config=config)
+
+    def _parse_throttle_statement(self, block_info, all_tokens):
+        """Parse throttle statement.
+        
+        Form: throttle(target, { requests_per_minute: 100 })
+        """
+        parser_debug("🔧 [Context] Parsing throttle statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != THROTTLE:
+            parser_debug("  ❌ Expected THROTTLE keyword")
+            return None
+        
+        # Expect LPAREN after throttle
+        if len(tokens) < 2 or tokens[1].type != LPAREN:
+            parser_debug("  ❌ Expected ( after throttle")
+            return None
+        
+        # Find matching RPAREN
+        paren_depth = 0
+        rparen_idx = -1
+        for i in range(1, len(tokens)):
+            if tokens[i].type == LPAREN:
+                paren_depth += 1
+            elif tokens[i].type == RPAREN:
+                paren_depth -= 1
+                if paren_depth == 0:
+                    rparen_idx = i
+                    break
+        
+        if rparen_idx == -1:
+            parser_debug("  ❌ Unmatched parentheses")
+            return None
+        
+        # Parse arguments: target, limits
+        args_tokens = tokens[2:rparen_idx]
+        
+        # Find comma separating target and limits
+        comma_idx = -1
+        depth = 0
+        for i, tok in enumerate(args_tokens):
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                depth += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                depth -= 1
+            elif tok.type == COMMA and depth == 0:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            parser_debug("  ❌ Expected comma between target and limits")
+            return None
+        
+        target_tokens = args_tokens[:comma_idx]
+        limits_tokens = args_tokens[comma_idx+1:]
+        
+        target = self._parse_expression(target_tokens)
+        limits = self._parse_expression(limits_tokens)
+        
+        parser_debug("  ✅ Throttle statement")
+        return ThrottleStatement(target=target, limits=limits)
+
+    def _parse_cache_statement(self, block_info, all_tokens):
+        """Parse cache statement.
+        
+        Form: cache(target, { ttl: 3600 })
+        """
+        parser_debug("🔧 [Context] Parsing cache statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != CACHE:
+            parser_debug("  ❌ Expected CACHE keyword")
+            return None
+        
+        # Expect LPAREN after cache
+        if len(tokens) < 2 or tokens[1].type != LPAREN:
+            parser_debug("  ❌ Expected ( after cache")
+            return None
+        
+        # Find matching RPAREN
+        paren_depth = 0
+        rparen_idx = -1
+        for i in range(1, len(tokens)):
+            if tokens[i].type == LPAREN:
+                paren_depth += 1
+            elif tokens[i].type == RPAREN:
+                paren_depth -= 1
+                if paren_depth == 0:
+                    rparen_idx = i
+                    break
+        
+        if rparen_idx == -1:
+            parser_debug("  ❌ Unmatched parentheses")
+            return None
+        
+        # Parse arguments: target, policy
+        args_tokens = tokens[2:rparen_idx]
+        
+        # Find comma separating target and policy
+        comma_idx = -1
+        depth = 0
+        for i, tok in enumerate(args_tokens):
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                depth += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                depth -= 1
+            elif tok.type == COMMA and depth == 0:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            parser_debug("  ❌ Expected comma between target and policy")
+            return None
+        
+        target_tokens = args_tokens[:comma_idx]
+        policy_tokens = args_tokens[comma_idx+1:]
+        
+        target = self._parse_expression(target_tokens)
+        policy = self._parse_expression(policy_tokens)
+        
+        parser_debug("  ✅ Cache statement")
+        return CacheStatement(target=target, policy=policy)
 
     def _parse_verify_statement(self, block_info, all_tokens):
         """Parse verify statement.

@@ -1,11 +1,11 @@
 # Zexus Language Keyword Testing Master List
 
 **Purpose**: Systematic testing and documentation of all Zexus language keywords  
-**Status**: In Progress - Debugging Critical Issues (WHILE/FOR/EACH + DEFER + ARRAYS + VERIFY + ENUM + LIMIT + SANDBOX FIXED ✅)  
-**Last Updated**: December 17, 2025 - SANDBOX Expression Support Fix  
+**Status**: In Progress - Debugging Critical Issues (12 CRITICAL FIXES THIS SESSION ✅)  
+**Last Updated**: December 17, 2025 - MIDDLEWARE/AUTH/THROTTLE/CACHE Parser Fix  
 **Tests Created**: 1055+ (375 easy, 380 medium, 365 complex)  
-**Keywords Tested**: 101 keywords + 7 builtins = 108 total (LET, CONST, IF, ELIF, ELSE, WHILE, FOR, EACH, IN, ACTION, FUNCTION, LAMBDA, RETURN, PRINT, DEBUG, USE, IMPORT, EXPORT, MODULE, PACKAGE, FROM, EXTERNAL, TRY, CATCH, REVERT, REQUIRE, ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC, EVENT, EMIT, STREAM, WATCH, ENTITY, VERIFY, CONTRACT, PROTECT, SEAL, AUDIT, RESTRICT, SANDBOX, TRAIL, CAPABILITY, GRANT, REVOKE, IMMUTABLE, VALIDATE, SANITIZE, LEDGER, STATE, TX, HASH, SIGNATURE, VERIFY_SIG, LIMIT, GAS, PERSISTENT, STORAGE, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING, SCREEN, COMPONENT, THEME, COLOR, GRAPHICS, CANVAS, ANIMATION, CLOCK, PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER + mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text)  
-**Critical Issues Found**: 13 (~~Loop execution~~ ✅, ~~WHILE condition parsing~~ ✅, ~~defer cleanup~~ ✅, ~~array literal parsing~~ ✅, ~~verify doesn't throw errors~~ ✅, ~~enum values not accessible~~ ✅, ~~limit constructor broken~~ ✅, ~~sandbox return values~~ ✅, closure/map issues, external linking, require context-sensitivity, validate schema registry incomplete, sanitize variable scope issues, signature requires PEM keys, TX function scope issue, persistent assignment target error, type_alias duplicate registration, **middleware parser missing, auth parser missing, throttle parser missing, cache parser missing, inject DI system broken**)
+**Keywords Tested**: 101 keywords + 7 builtins = 108 total (LET, CONST, IF, ELIF, ELSE, WHILE, FOR, EACH, IN, ACTION, FUNCTION, LAMBDA, RETURN, PRINT, DEBUG, USE, IMPORT, EXPORT, MODULE, PACKAGE, FROM, EXTERNAL, TRY, CATCH, REVERT, REQUIRE, ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC, EVENT, EMIT, STREAM, WATCH, ENTITY, VERIFY, CONTRACT, PROTECT, SEAL, AUDIT, RESTRICT, SANDBOX, TRAIL, CAPABILITY, GRANT, REVOKE, IMMUTABLE, VALIDATE, SANITIZE, LEDGER, STATE, TX, HASH, SIGNATURE, VERIFY_SIG, LIMIT, GAS, PERSISTENT, STORAGE, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING, SCREEN, COMPONENT, THEME, COLOR, GRAPHICS, CANVAS, ANIMATION, CLOCK, PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER, MIDDLEWARE, AUTH, THROTTLE, CACHE + mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text)  
+**Critical Issues Found**: 9 (~~Loop execution~~ ✅, ~~WHILE condition parsing~~ ✅, ~~defer cleanup~~ ✅, ~~array literal parsing~~ ✅, ~~verify doesn't throw errors~~ ✅, ~~enum values not accessible~~ ✅, ~~limit constructor broken~~ ✅, ~~sandbox return values~~ ✅, ~~middleware parser missing~~ ✅, ~~auth parser missing~~ ✅, ~~throttle parser missing~~ ✅, ~~cache parser missing~~ ✅, closure/map issues, external linking, require context-sensitivity, validate schema registry incomplete, sanitize variable scope issues, signature requires PEM keys, TX function scope issue, persistent assignment target error, type_alias duplicate registration, inject DI system broken)
 
 ## Testing Methodology
 For each keyword:
@@ -244,20 +244,20 @@ For each keyword:
 
 | Keyword | Status | Easy | Medium | Complex | Doc | Errors | Notes |
 |---------|--------|------|--------|---------|-----|--------|-------|
-| MIDDLEWARE | ❌ | ❌ | ❌ | ❌ | 🟢 | 1 | Parser missing - AST/evaluator exist |
-| AUTH | ❌ | ❌ | ❌ | ❌ | 🟢 | 1 | Parser missing - AST/evaluator exist |
-| THROTTLE | ❌ | ❌ | ❌ | ❌ | 🟢 | 1 | Parser missing - AST/evaluator exist |
-| CACHE | ❌ | ❌ | ❌ | ❌ | 🟢 | 1 | Parser missing - AST/evaluator exist |
+| MIDDLEWARE | 🟢 | 🟢 | 🟢 | ⚪ | 🟢 | 0 | Request/response processing - FIXED ✅ |
+| AUTH | 🟢 | 🟢 | 🟢 | ⚪ | 🟢 | 0 | Authentication config - FIXED ✅ |
+| THROTTLE | 🟢 | 🟢 | 🟢 | ⚪ | 🟢 | 0 | Rate limiting - FIXED ✅ |
+| CACHE | 🟢 | 🟢 | 🟢 | ⚪ | 🟢 | 0 | Caching directive - FIXED ✅ |
 | INJECT | ❌ | ❌ | ❌ | ❌ | 🟢 | 1 | DI system returns None - runtime error |
 
 ---
 
 ## Testing Progress
 
-**Total Keywords**: 130+ (101 tested, 5 incomplete implementations)  
-**Fully Working**: 73 keywords (WHILE/FOR/EACH/IN/DEFER fixed, arrays work correctly)  
+**Total Keywords**: 130+ (101 tested, 1 incomplete implementation)  
+**Fully Working**: 77 keywords (12 FIXED THIS SESSION: WHILE/FOR/EACH/IN/DEFER/ARRAY/VERIFY/ENUM/LIMIT/SANDBOX/MIDDLEWARE/AUTH/THROTTLE/CACHE ✅)  
 **Partially Working**: 23 keywords  
-**Implementation Incomplete**: 5 (MIDDLEWARE, AUTH, THROTTLE, CACHE, INJECT)  
+**Implementation Incomplete**: 1 (INJECT)  
 **Not Tested**: 29+  
 **Total Errors Found**: 17 critical implementation issues (5 fixed this session)
 
@@ -653,29 +653,41 @@ For each keyword:
    - **Status**: RESOLVED - Was a symptom of Error #1, fixed by same solution
    - **Verification**: For-each loops now iterate over all array elements correctly
 
-### MIDDLEWARE/AUTH/THROTTLE/CACHE Keyword Errors (IMPLEMENTATION INCOMPLETE)
-1. **Parser Handlers Missing** (Priority: HIGH)
-   - Description: MIDDLEWARE, AUTH, THROTTLE, CACHE have tokens, AST definitions, and evaluators but no parser handlers
-   - Test: Any attempt to use these keywords fails - parsed as identifiers/call expressions
-   - Error: "Identifier not found: middleware" (and similar for auth, throttle, cache)
-   - Files: test_phase13_easy.zx (all tests blocked)
-   - Status: Partial implementation - backend exists but not wired to parser
-   - Impact: HIGH - Enterprise features completely unusable
-   - Root Cause: parse_statement() in parser.py missing cases for these tokens
-   - Fix Required: Add 4 parser method handlers similar to parse_protect_statement()
-   - Components Status:
-     * Tokens: ✅ Defined (zexus_token.py lines 150-153)
-     * Lexer: ✅ Registered (lexer.py lines 429-432)
-     * Parser: ❌ **MISSING** handlers in parse_statement()
-     * AST: ✅ Defined (MiddlewareStatement, AuthStatement, ThrottleStatement, CacheStatement)
-     * Evaluator: ✅ Complete (statements.py lines 1077-1143)
-   - Expected Syntax:
-     * `middleware(name, action(req, res) { ... })`
-     * `auth { "provider": "oauth2", ... }`
-     * `throttle(target, { "requests_per_minute": 100 })`
-     * `cache(target, { "ttl": 300 })`
-   - Documentation: docs/QUICK_START.md shows intended usage
-   - Estimated Fix: 2-4 hours to add parser methods
+### MIDDLEWARE/AUTH/THROTTLE/CACHE Keyword Errors
+1. **~~Parser Handlers Missing~~** ✅ **FIXED** (December 17, 2025)
+   - **Root Cause**: MIDDLEWARE, AUTH, THROTTLE, CACHE had tokens, AST definitions, and evaluators but were completely missing from advanced parser
+   - **Problem**: Any attempt to use these keywords failed - parsed as identifiers/call expressions
+   - **Error**: "Identifier not found: middleware" (and similar for auth, throttle, cache)
+   - **Solution**: Added complete parser support with THREE critical additions for each keyword:
+     * (1) Added to context_rules dictionary (line 94-97) to route to parsing handlers
+     * (2) Added to statement_starters set (line 948) for proper statement recognition
+     * (3) Implemented 4 new parsing handlers (lines 3975-4200):
+       - `_parse_middleware_statement()`: Parse `middleware(name, action(req, res) { ... })`
+       - `_parse_auth_statement()`: Parse `auth { provider: "oauth2", ... }`
+       - `_parse_throttle_statement()`: Parse `throttle(target, { limits })`
+       - `_parse_cache_statement()`: Parse `cache(target, { policy })`
+     * (4) CRITICAL FIX: Added ACTION token support to `_parse_expression()` (line 2181)
+       - ACTION was not recognized as expression starter for anonymous actions
+       - Updated `_parse_function_literal()` to accept both FUNCTION and ACTION tokens
+       - This fixed middleware handlers and all anonymous action usage!
+   - **Fix Locations**:
+     * `src/zexus/parser/strategy_context.py` lines 94-97 (context_rules)
+     * `src/zexus/parser/strategy_context.py` line 948 (statement_starters)
+     * `src/zexus/parser/strategy_context.py` lines 3975-4200 (4 parsing handlers)
+     * `src/zexus/parser/strategy_context.py` line 2181 (ACTION expression support)
+     * `src/zexus/parser/strategy_context.py` line 2554 (function literal ACTION support)
+   - **Status**: ✅ FULLY WORKING - All 4 enterprise keywords now parse and evaluate correctly
+   - **Impact**: HIGH - Enterprise features (middleware, auth, rate limiting, caching) now fully functional
+   - **Verification**:
+     * `middleware("auth", action(req, res) { return true; })` works ✅
+     * `auth { provider: "oauth2", scopes: ["read", "write"] }` works ✅
+     * `throttle(api_endpoint, { requests_per_minute: 100 })` works ✅
+     * `cache(expensive_query, { ttl: 3600 })` works ✅
+     * All statements parse correctly as MiddlewareStatement, AuthStatement, etc. ✅
+   - **Pattern Discovery**: When adding keywords that take action/function expressions as parameters:
+     * Must add ACTION token to expression parsers (not just statement parsers)
+     * ACTION should be treated identically to FUNCTION for anonymous actions
+     * Both ACTION and FUNCTION should parse as ActionLiteral in expression context
 
 ### INJECT Keyword Errors (IMPLEMENTATION BROKEN)
 1. **Dependency Injection System Returns None** (Priority: CRITICAL)
