@@ -32,6 +32,7 @@ class StructuralAnalyzer:
         stop_types = {SEMICOLON, RBRACE}
         
         # Statement starters (keywords that begin a new statement)
+        # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
@@ -39,7 +40,7 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, SEND, RECEIVE, ATOMIC,
+              CHANNEL, ATOMIC,
               # Blockchain keywords
               LEDGER, STATE, REQUIRE, REVERT, LIMIT
           }
@@ -543,6 +544,7 @@ class StructuralAnalyzer:
             return results
 
         stop_types = {SEMICOLON, RBRACE}
+        # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
@@ -550,7 +552,7 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, SEND, RECEIVE, ATOMIC
+              CHANNEL, ATOMIC
           }
 
         cur = []

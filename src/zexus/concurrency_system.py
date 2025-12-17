@@ -45,8 +45,8 @@ class Channel(Generic[T]):
     _queue: queue.Queue = field(default_factory=queue.Queue)
     _closed: bool = field(default=False)
     _lock: Lock = field(default_factory=Lock)
-    _send_ready: Condition = field(default_factory=Condition)
-    _recv_ready: Condition = field(default_factory=Condition)
+    _send_ready: Condition = field(default=None)
+    _recv_ready: Condition = field(default=None)
     _closed_event: Event = field(default_factory=Event)
     
     def __post_init__(self):
@@ -54,6 +54,9 @@ class Channel(Generic[T]):
             self._queue = queue.Queue(maxsize=self.capacity)
         else:
             self._queue = queue.Queue()
+        # Initialize Condition variables with the same lock
+        self._send_ready = Condition(self._lock)
+        self._recv_ready = Condition(self._lock)
     
     @property
     def is_open(self) -> bool:
@@ -228,8 +231,9 @@ class ConcurrencyManager:
             channel = Channel(name=name, element_type=element_type, capacity=capacity)
             self.channels[name] = channel
             
-            from .utils import debug_log
-            debug_log("ConcurrencyManager", f"Created channel: {channel}")
+            # Debug logging (optional)
+            # from .evaluator.utils import debug_log
+            # debug_log("ConcurrencyManager", f"Created channel: {channel}")
             
             return channel
     
@@ -255,8 +259,9 @@ class ConcurrencyManager:
             atomic = Atomic()
             self.atomics[name] = atomic
             
-            from .utils import debug_log
-            debug_log("ConcurrencyManager", f"Created atomic: {name}")
+            # Debug logging (optional)
+            # from .evaluator.utils import debug_log
+            # debug_log("ConcurrencyManager", f"Created atomic: {name}")
             
             return atomic
     

@@ -1948,7 +1948,7 @@ class ContextStackParser:
                     return inner if inner else StringLiteral("")
                 return StringLiteral("")
 
-            elif t.type == IDENT:  # Identifier or function call
+            elif t.type == IDENT or t.type in {SEND, RECEIVE}:  # Identifier or function call (including concurrency keywords)
                 name = t.literal
                 i += 1
                 # Check for immediate function call

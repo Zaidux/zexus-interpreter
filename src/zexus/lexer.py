@@ -391,6 +391,10 @@ class Lexer:
             "clock": CLOCK,           # NEW (optional recognition)
             "async": ASYNC,
             "await": AWAIT,
+            "channel": CHANNEL,       # NEW: Channel for concurrent communication
+            "send": SEND,             # NEW: Send to channel
+            "receive": RECEIVE,       # NEW: Receive from channel
+            "atomic": ATOMIC,         # NEW: Atomic operations
             "event": EVENT,
             "emit": EMIT,
             "enum": ENUM,

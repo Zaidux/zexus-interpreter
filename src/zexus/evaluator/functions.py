@@ -534,8 +534,72 @@ class FunctionEvaluatorMixin:
             "filter": Builtin(_filter, "filter"),
         })
         
+        # Register concurrency builtins
+        self._register_concurrency_builtins()
+        
         # Register blockchain builtins
         self._register_blockchain_builtins()
+    
+    def _register_concurrency_builtins(self):
+        """Register concurrency operations as builtin functions"""
+        
+        def _send(*a):
+            """Send value to channel: send(channel, value)"""
+            if len(a) != 2:
+                return EvaluationError("send() requires 2 arguments: channel, value")
+            
+            channel = a[0]
+            value = a[1]
+            
+            # Check if it's a valid channel object
+            if not hasattr(channel, 'send'):
+                return EvaluationError(f"send() first argument must be a channel, got {type(channel).__name__}")
+            
+            try:
+                channel.send(value, timeout=5.0)
+                return NULL  # send returns nothing on success
+            except Exception as e:
+                return EvaluationError(f"send() error: {str(e)}")
+        
+        def _receive(*a):
+            """Receive value from channel: value = receive(channel)"""
+            if len(a) != 1:
+                return EvaluationError("receive() requires 1 argument: channel")
+            
+            channel = a[0]
+            
+            # Check if it's a valid channel object
+            if not hasattr(channel, 'receive'):
+                return EvaluationError(f"receive() first argument must be a channel, got {type(channel).__name__}")
+            
+            try:
+                value = channel.receive(timeout=5.0)
+                return value if value is not None else NULL
+            except Exception as e:
+                return EvaluationError(f"receive() error: {str(e)}")
+        
+        def _close_channel(*a):
+            """Close a channel: close_channel(channel)"""
+            if len(a) != 1:
+                return EvaluationError("close_channel() requires 1 argument: channel")
+            
+            channel = a[0]
+            
+            if not hasattr(channel, 'close'):
+                return EvaluationError(f"close_channel() argument must be a channel, got {type(channel).__name__}")
+            
+            try:
+                channel.close()
+                return NULL
+            except Exception as e:
+                return EvaluationError(f"close_channel() error: {str(e)}")
+        
+        # Register concurrency builtins
+        self.builtins.update({
+            "send": Builtin(_send, "send"),
+            "receive": Builtin(_receive, "receive"),
+            "close_channel": Builtin(_close_channel, "close_channel"),
+        })
     
     def _register_blockchain_builtins(self):
         """Register blockchain cryptographic and utility functions"""
