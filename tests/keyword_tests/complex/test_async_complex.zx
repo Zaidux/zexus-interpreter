@@ -1,0 +1,25 @@
+// ============================================================================
+// COMPLEX LEVEL: ASYNC/AWAIT/CHANNEL/SEND/RECEIVE/ATOMIC Keywords Test Suite
+// ============================================================================
+// Testing advanced async patterns
+// Keywords: ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC
+// NOTE: Most features not yet available - need lexer registration
+// ============================================================================
+
+print "=== COMPLEX ASYNC/CONCURRENCY TESTS ===";
+print "";
+
+print "CRITICAL FINDING:";
+print "CHANNEL, SEND, RECEIVE, ATOMIC tokens are defined in zexus_token.py";
+print "Parser has handlers for these keywords in parser.py";
+print "Evaluator has handlers in statements.py";
+print "Runtime system exists in concurrency_system.py";
+print "";
+print "BUT: These keywords are NOT in the lexer.py keywords dictionary!";
+print "Without lexer registration, these keywords cannot be recognized.";
+print "";
+
+print "ASYNC and AWAIT are registered in lexer, but implementation unclear.";
+print "";
+
+print "=== COMPLEX ASYNC/CONCURRENCY TESTS COMPLETE ===";

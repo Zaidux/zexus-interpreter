@@ -1,0 +1,235 @@
+// ===================================
+// PHASE 8: PERFORMANCE OPTIMIZATION
+// Complex Tests (20 tests)
+// Keywords: NATIVE, GC, INLINE, BUFFER, SIMD
+// ===================================
+
+print "=== Test 1: Memory management with GC control ===";
+gc "pause";
+let largeData1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let largeData2 = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+let largeData3 = [21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+gc "resume";
+gc "collect";
+print "✓ Memory management with GC";
+
+print "\n=== Test 2: Complex buffer-based data structure ===";
+buffer header allocate(16);
+buffer body allocate(256);
+buffer footer allocate(16);
+buffer header write(0, [0xFF, 0xFE, 0xFD, 0xFC]);
+buffer body write(0, [1, 2, 3, 4, 5, 6, 7, 8]);
+buffer footer write(0, [0xAA, 0xBB, 0xCC, 0xDD]);
+print "✓ Multi-buffer data structure";
+
+print "\n=== Test 3: Inline optimization chain ===";
+action step1(x) { return x + 10; }
+action step2(x) { return x * 2; }
+action step3(x) { return x - 5; }
+action step4(x) { return x / 3; }
+inline step1;
+inline step2;
+inline step3;
+inline step4;
+let chainResult = step4(step3(step2(step1(5))));
+print "✓ Inline optimization chain: " + chainResult;
+
+print "\n=== Test 4: Buffer ring buffer implementation ===";
+buffer ringBuf allocate(10);
+let writePos = 0;
+buffer ringBuf write(0, [1]);
+buffer ringBuf write(1, [2]);
+buffer ringBuf write(2, [3]);
+buffer ringBuf write(3, [4]);
+buffer ringBuf write(4, [5]);
+print "✓ Ring buffer pattern";
+
+print "\n=== Test 5: GC with allocation bursts ===";
+gc "collect";
+let burst1 = [1, 2, 3, 4, 5];
+gc "collect";
+let burst2 = [6, 7, 8, 9, 10];
+gc "collect";
+let burst3 = [11, 12, 13, 14, 15];
+gc "collect";
+print "✓ GC with allocation bursts";
+
+print "\n=== Test 6: High-performance computation pattern ===";
+action fastCompute(n) {
+    let result = 0;
+    let i = 0;
+    while (i < n) {
+        result = result + i * 2;
+        i = i + 1;
+    }
+    return result;
+}
+inline fastCompute;
+print "✓ High-performance computation";
+
+print "\n=== Test 7: Buffer memory pool pattern ===";
+buffer pool1 allocate(64);
+buffer pool2 allocate(64);
+buffer pool3 allocate(64);
+buffer pool4 allocate(64);
+buffer pool1 write(0, [1, 2, 3]);
+buffer pool2 write(0, [4, 5, 6]);
+buffer pool3 write(0, [7, 8, 9]);
+buffer pool4 write(0, [10, 11, 12]);
+print "✓ Buffer memory pool";
+
+print "\n=== Test 8: Inline with complex control flow ===";
+action complexLogic(x, y) {
+    if (x > y) {
+        if (x > 10) {
+            return x * 2;
+        } else {
+            return x + 5;
+        }
+    } else {
+        if (y > 10) {
+            return y * 2;
+        } else {
+            return y + 5;
+        }
+    }
+}
+inline complexLogic;
+let logic1 = complexLogic(15, 5);
+let logic2 = complexLogic(3, 20);
+print "✓ Complex inlined logic: " + logic1 + ", " + logic2;
+
+print "\n=== Test 9: GC debug and profiling ===";
+gc "enable_debug";
+let profData1 = [1, 2, 3, 4, 5];
+gc "collect";
+let profData2 = [6, 7, 8, 9, 10];
+gc "collect";
+gc "disable_debug";
+print "✓ GC debug and profiling";
+
+print "\n=== Test 10: Buffer-based serialization ===";
+buffer serialBuf allocate(128);
+buffer serialBuf write(0, [0x01, 0x02, 0x03, 0x04]);
+buffer serialBuf write(4, [0x05, 0x06, 0x07, 0x08]);
+buffer serialBuf write(8, [0x09, 0x0A, 0x0B, 0x0C]);
+let serialized = buffer serialBuf read(0, 12);
+print "✓ Buffer serialization";
+
+print "\n=== Test 11: Inline recursive optimization ===";
+action factorialOptimized(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorialOptimized(n - 1);
+}
+inline factorialOptimized;
+let fact5 = factorialOptimized(5);
+print "✓ Optimized recursive: " + fact5;
+
+print "\n=== Test 12: Buffer double buffering ===";
+buffer frontBuf allocate(32);
+buffer backBuf allocate(32);
+buffer frontBuf write(0, [1, 2, 3, 4]);
+let swapData = buffer frontBuf read(0, 4);
+buffer backBuf write(0, swapData);
+buffer backBuf write(4, [5, 6, 7, 8]);
+print "✓ Double buffering pattern";
+
+print "\n=== Test 13: GC pressure testing ===";
+gc "pause";
+let pressure1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let pressure2 = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+let pressure3 = [21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+let pressure4 = [31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
+gc "resume";
+gc "collect";
+print "✓ GC pressure testing";
+
+print "\n=== Test 14: Inline matrix operations ===";
+action matrixAdd(a, b) { return a + b; }
+action matrixMul(a, b) { return a * b; }
+action matrixOp(x, y, z) {
+    return matrixAdd(matrixMul(x, y), z);
+}
+inline matrixAdd;
+inline matrixMul;
+inline matrixOp;
+let matResult = matrixOp(5, 10, 3);
+print "✓ Inlined matrix operations: " + matResult;
+
+print "\n=== Test 15: Buffer with complex access patterns ===";
+buffer complexBuf allocate(100);
+buffer complexBuf write(0, [1, 2, 3]);
+buffer complexBuf write(25, [4, 5, 6]);
+buffer complexBuf write(50, [7, 8, 9]);
+buffer complexBuf write(75, [10, 11, 12]);
+let complex1 = buffer complexBuf read(0, 3);
+let complex2 = buffer complexBuf read(50, 3);
+print "✓ Complex buffer access";
+
+print "\n=== Test 16: GC lifecycle management ===";
+gc "collect";
+gc "pause";
+let lifecycle1 = "data1";
+let lifecycle2 = "data2";
+gc "resume";
+gc "collect";
+gc "pause";
+let lifecycle3 = "data3";
+gc "resume";
+gc "collect";
+print "✓ GC lifecycle management";
+
+print "\n=== Test 17: Inline with state management ===";
+state optimizedCounter = 0;
+action incrementOptimized() {
+    optimizedCounter = optimizedCounter + 1;
+    return optimizedCounter;
+}
+inline incrementOptimized;
+let inc1 = incrementOptimized();
+let inc2 = incrementOptimized();
+let inc3 = incrementOptimized();
+print "✓ Inlined state management: " + optimizedCounter;
+
+print "\n=== Test 18: Buffer stream processing ===";
+buffer streamBuf allocate(200);
+buffer streamBuf write(0, [1, 2, 3, 4, 5]);
+let chunk1 = buffer streamBuf read(0, 5);
+buffer streamBuf write(5, [6, 7, 8, 9, 10]);
+let chunk2 = buffer streamBuf read(5, 5);
+buffer streamBuf write(10, [11, 12, 13, 14, 15]);
+let chunk3 = buffer streamBuf read(10, 5);
+print "✓ Buffer stream processing";
+
+print "\n=== Test 19: Complete optimization stack ===";
+gc "pause";
+buffer optStack allocate(256);
+action stackOp(x) { return x * 2; }
+inline stackOp;
+buffer optStack write(0, [1, 2, 3, 4, 5]);
+let stackData = buffer optStack read(0, 5);
+gc "resume";
+gc "collect";
+print "✓ Complete optimization stack";
+
+print "\n=== Test 20: Buffer cleanup and GC finalization ===";
+buffer header free();
+buffer body free();
+buffer footer free();
+buffer ringBuf free();
+buffer pool1 free();
+buffer pool2 free();
+buffer pool3 free();
+buffer pool4 free();
+buffer serialBuf free();
+buffer frontBuf free();
+buffer backBuf free();
+buffer complexBuf free();
+buffer streamBuf free();
+buffer optStack free();
+gc "collect";
+print "✓ Complete cleanup and finalization";
+
+print "\n=== All Complex Performance Tests Complete ===";

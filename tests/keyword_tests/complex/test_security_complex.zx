@@ -1,0 +1,465 @@
+// COMPLEX SECURITY TESTS
+// Testing: ENTITY, VERIFY, CONTRACT, PROTECT, SEAL, AUDIT, RESTRICT, SANDBOX, TRAIL
+// 20 complex tests with advanced patterns
+
+print "=== COMPLEX SECURITY TESTS ===";
+print "";
+
+// Test 1: Complex entity relationships
+print "Test 1: Complex entities";
+entity User {
+    id: integer,
+    username: string,
+    email: string,
+    role: string,
+    active: boolean
+}
+
+entity Permission {
+    id: integer,
+    name: string,
+    resource: string,
+    action: string
+}
+
+entity Role {
+    id: integer,
+    name: string,
+    level: integer
+}
+print "Complex entity system defined ✅";
+print "";
+
+// Test 2: Contract with complex state machine
+print "Test 2: State machine contract";
+contract OrderProcessor {
+    state orders = {};
+    state orderCount = 0;
+    state status = "idle";
+    
+    action createOrder(customerId, items) {
+        verify status != "paused", "System paused";
+        verify customerId > 0, "Invalid customer";
+        
+        orderCount = orderCount + 1;
+        status = "processing";
+        
+        // Simulated order creation
+        status = "idle";
+        return orderCount;
+    }
+    
+    action getOrderCount() {
+        return orderCount;
+    }
+    
+    action pauseSystem() {
+        status = "paused";
+        return "Paused";
+    }
+    
+    action resumeSystem() {
+        status = "idle";
+        return "Resumed";
+    }
+}
+print "Order processor contract defined ✅";
+print "";
+
+// Test 3: Layered verification system
+print "Test 3: Layered verification";
+action validateTransaction(from, to, amount) {
+    // Layer 1: Basic validation
+    verify from != "", "Sender required";
+    verify to != "", "Recipient required";
+    verify amount > 0, "Amount must be positive";
+    
+    // Layer 2: Business rules
+    verify from != to, "Cannot transfer to self";
+    verify amount <= 100000, "Exceeds transfer limit";
+    
+    // Layer 3: Additional checks
+    verify amount >= 1, "Minimum transfer is 1";
+    
+    return "Valid transaction";
+}
+
+let validationResult = validateTransaction("Alice", "Bob", 500);
+print "Validation: " + validationResult;
+print "";
+
+// Test 4: Multi-level sandbox isolation
+print "Test 4: Multi-level sandbox";
+let globalVar = "global";
+
+sandbox {
+    let level1 = "level_1";
+    print "Level 1: " + level1;
+    
+    sandbox {
+        let level2 = "level_2";
+        print "Level 2: " + level2;
+        
+        sandbox {
+            let level3 = "level_3";
+            print "Level 3: " + level3;
+        }
+    }
+}
+print "Multi-level isolation complete ✅";
+print "";
+
+// Test 5: Comprehensive audit system
+print "Test 5: Comprehensive audit";
+action auditedOperation(operation, user, data, severity) {
+    audit data, operation;
+    
+    if (severity == "high") {
+        audit user, "high_severity_operation";
+    }
+    
+    return "Operation completed";
+}
+
+let op1 = auditedOperation("create", "alice", "user_data", "high");
+let op2 = auditedOperation("read", "bob", "config_data", "low");
+print "Audited operations: " + op1 + ", " + op2;
+print "";
+
+// Test 6: Contract with audit trail
+print "Test 6: Contract with audit";
+contract AuditedSystem {
+    state operations = 0;
+    state lastOperation = "";
+    
+    action execute(operation) {
+        audit operation, "system_operation";
+        operations = operations + 1;
+        lastOperation = operation;
+        return operations;
+    }
+    
+    action getStats() {
+        return operations;
+    }
+}
+print "Audited system contract defined ✅";
+print "";
+
+// Test 7: Verification with custom error messages
+print "Test 7: Custom error messages";
+action validateWithMessages(value) {
+    try {
+        verify value > 0, "Value must be positive (got " + value + ")";
+        verify value < 1000, "Value exceeds maximum (got " + value + ")";
+        verify (value % 2) == 0, "Value must be even (got " + value + ")";
+        return "Valid";
+    } catch (e) {
+        return "Invalid: " + e;
+    }
+}
+
+let val1 = validateWithMessages(10);
+let val2 = validateWithMessages(-5);
+print "Validation results: " + val1 + ", " + val2;
+print "";
+
+// Test 8: Seal complex data structures
+print "Test 8: Seal complex data";
+let complexData = {
+    "config": "production",
+    "api_key": "secret123",
+    "max_connections": 100
+};
+seal complexData;
+print "Complex data sealed ✅";
+print "";
+
+// Test 9: Contract with verification and audit
+print "Test 9: Contract verification + audit";
+contract SecureBank {
+    state balance = 10000;
+    state transactions = 0;
+    
+    action transfer(to, amount) {
+        verify amount > 0, "Invalid amount";
+        verify balance >= amount, "Insufficient funds";
+        verify amount <= 5000, "Exceeds single transaction limit";
+        
+        audit amount, "transfer";
+        
+        balance = balance - amount;
+        transactions = transactions + 1;
+        
+        return balance;
+    }
+    
+    action deposit(amount) {
+        verify amount > 0, "Invalid amount";
+        
+        audit amount, "deposit";
+        
+        balance = balance + amount;
+        transactions = transactions + 1;
+        
+        return balance;
+    }
+}
+print "Secure bank contract defined ✅";
+print "";
+
+// Test 10: Nested verification patterns
+print "Test 10: Nested verification";
+action complexValidation(user, permissions, resource) {
+    verify user != "", "User required";
+    
+    if (resource == "admin_panel") {
+        verify permissions == "admin", "Admin access required";
+        return "Admin access granted";
+    } elif (resource == "dashboard") {
+        verify permissions == "user" || permissions == "admin", "User access required";
+        return "Dashboard access granted";
+    } else {
+        return "Public access";
+    }
+}
+
+let access1 = complexValidation("alice", "admin", "admin_panel");
+let access2 = complexValidation("bob", "user", "dashboard");
+print "Access results: " + access1 + ", " + access2;
+print "";
+
+// Test 11: Sandbox with state isolation
+print "Test 11: Sandbox state isolation";
+let sharedValue = 100;
+
+action sandboxedComputation(input) {
+    let result = sandbox {
+        let temp = input * 2;
+        let squared = temp * temp;
+        return squared;
+    };
+    return result;
+}
+
+let computed = sandboxedComputation(5);
+print "Sandboxed computation: " + computed;
+print "";
+
+// Test 12: Trail with multiple event types
+print "Test 12: Multiple trails";
+trail audit;
+trail print;
+trail debug;
+print "Multiple trails configured ✅";
+print "";
+
+// Test 13: Entity-based access control
+print "Test 13: Entity access control";
+entity AccessControl {
+    userId: integer,
+    resourceId: integer,
+    permission: string,
+    grantedBy: integer,
+    expiresAt: string
+}
+
+action checkPermission(userId, resourceId, requiredPermission) {
+    verify userId > 0, "Invalid user";
+    verify resourceId > 0, "Invalid resource";
+    verify requiredPermission != "", "Permission required";
+    
+    audit userId, "permission_check";
+    
+    return "Permission granted";
+}
+
+let permCheck = checkPermission(1, 100, "read");
+print "Permission check: " + permCheck;
+print "";
+
+// Test 14: Contract with complex business logic
+print "Test 14: Complex business logic";
+contract InventorySystem {
+    state inventory = {};
+    state totalItems = 0;
+    state reorderThreshold = 10;
+    
+    action addItem(itemId, quantity) {
+        verify itemId > 0, "Invalid item ID";
+        verify quantity > 0, "Invalid quantity";
+        
+        audit itemId, "inventory_add";
+        
+        totalItems = totalItems + quantity;
+        return totalItems;
+    }
+    
+    action removeItem(itemId, quantity) {
+        verify itemId > 0, "Invalid item ID";
+        verify quantity > 0, "Invalid quantity";
+        verify totalItems >= quantity, "Insufficient inventory";
+        
+        audit itemId, "inventory_remove";
+        
+        totalItems = totalItems - quantity;
+        
+        if (totalItems < reorderThreshold) {
+            audit itemId, "reorder_triggered";
+        }
+        
+        return totalItems;
+    }
+    
+    action getInventory() {
+        return totalItems;
+    }
+}
+print "Inventory system defined ✅";
+print "";
+
+// Test 15: Verification chain
+print "Test 15: Verification chain";
+action verificationChain(step1, step2, step3) {
+    verify step1 == "complete", "Step 1 not complete";
+    
+    if (step1 == "complete") {
+        verify step2 == "complete", "Step 2 not complete";
+    }
+    
+    if (step1 == "complete" && step2 == "complete") {
+        verify step3 == "complete", "Step 3 not complete";
+    }
+    
+    return "All steps verified";
+}
+
+let chainResult = verificationChain("complete", "complete", "complete");
+print "Chain result: " + chainResult;
+print "";
+
+// Test 16: Audit aggregation pattern
+print "Test 16: Audit aggregation";
+action processWithAggregateAudit(items) {
+    let processed = 0;
+    let failed = 0;
+    
+    // Simulated batch processing
+    let i = 0;
+    while (i < items) {
+        if ((i % 3) == 0) {
+            failed = failed + 1;
+        } else {
+            processed = processed + 1;
+        }
+        i = i + 1;
+    }
+    
+    audit processed, "batch_processed";
+    audit failed, "batch_failed";
+    
+    return processed;
+}
+
+let batchResult = processWithAggregateAudit(10);
+print "Batch processed: " + batchResult;
+print "";
+
+// Test 17: Sandbox error propagation
+print "Test 17: Sandbox error handling";
+action safeSandboxOperation(shouldFail) {
+    try {
+        let result = sandbox {
+            if (shouldFail) {
+                verify false, "Intentional sandbox failure";
+            }
+            return "Success";
+        };
+        return result;
+    } catch (e) {
+        return "Caught error";
+    }
+}
+
+let safe1 = safeSandboxOperation(false);
+let safe2 = safeSandboxOperation(true);
+print "Safe operations: " + safe1 + ", " + safe2;
+print "";
+
+// Test 18: Seal with verification
+print "Test 18: Seal + verify";
+action sealAfterVerification(data) {
+    verify data != "", "Data required";
+    verify data != null, "Data cannot be null";
+    
+    seal data;
+    audit data, "data_sealed";
+    
+    return "Sealed and audited";
+}
+
+let sealResult = sealAfterVerification("important_data");
+print "Seal result: " + sealResult;
+print "";
+
+// Test 19: Multi-contract system
+print "Test 19: Multi-contract system";
+contract Registry {
+    state registrations = 0;
+    
+    action register(name) {
+        verify name != "", "Name required";
+        registrations = registrations + 1;
+        return registrations;
+    }
+}
+
+contract Validator {
+    state validations = 0;
+    
+    action validate(data) {
+        verify data != "", "Data required";
+        validations = validations + 1;
+        return validations;
+    }
+}
+print "Multi-contract system defined ✅";
+print "";
+
+// Test 20: Comprehensive security workflow
+print "Test 20: Complete security workflow";
+entity SecureResource {
+    id: integer,
+    name: string,
+    owner: string,
+    accessLevel: integer
+}
+
+action secureWorkflow(resourceId, user, action) {
+    // Step 1: Verify inputs
+    verify resourceId > 0, "Invalid resource";
+    verify user != "", "User required";
+    verify action != "", "Action required";
+    
+    // Step 2: Audit the request
+    audit user, "workflow_start";
+    audit resourceId, "resource_access";
+    
+    // Step 3: Execute in sandbox
+    let result = sandbox {
+        // Simulated secure operation
+        let processed = "processed_" + action;
+        return processed;
+    };
+    
+    // Step 4: Audit completion
+    audit result, "workflow_complete";
+    
+    return result;
+}
+
+let workflowResult = secureWorkflow(1, "alice", "read");
+print "Workflow: " + workflowResult;
+print "";
+
+print "=== COMPLEX SECURITY TESTS COMPLETE ===";

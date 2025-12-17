@@ -1,0 +1,145 @@
+// ===============================================
+// PHASE 12: SPECIAL KEYWORDS EASY TESTS
+// Testing: EXACTLY, EMBEDDED, MAP, TRUE, FALSE, NULL
+// Total: 20 tests
+// ===============================================
+
+// ============= EXACTLY Keyword Tests =============
+print "=== Test 1: Basic EXACTLY block";
+exactly test {
+    print "Exactly block executed";
+}
+print "✓ Exactly block works";
+
+print "=== Test 2: EXACTLY with return";
+exactly compute {
+    let x = 10 + 5;
+    print "Computed: " + x;
+}
+print "✓ Exactly with computation works";
+
+// ============= EMBEDDED Keyword Tests =============
+print "=== Test 3: Basic EMBEDDED code";
+embedded python "sample" {
+    print("Python code placeholder")
+}
+print "✓ Embedded code declared";
+
+print "=== Test 4: EMBEDDED with language";
+embedded javascript "util" {
+    console.log("JS code");
+}
+print "✓ Embedded JS declared";
+
+// ============= MAP Literal Tests =============
+print "=== Test 5: Empty map literal";
+let emptyMap = {};
+print "Empty map created";
+print "✓ Empty map works";
+
+print "=== Test 6: Simple map literal";
+let person = {"name": "Alice", "age": 30};
+print "Name: " + person["name"];
+print "✓ Simple map works";
+
+print "=== Test 7: Nested map literal";
+let config = {
+    "database": {"host": "localhost", "port": 5432},
+    "cache": {"enabled": true}
+};
+print "DB Host: " + config["database"]["host"];
+print "✓ Nested map works";
+
+print "=== Test 8: Map with numbers";
+let scores = {"math": 95, "english": 88, "science": 92};
+print "Math score: " + scores["math"];
+print "✓ Map with numbers works";
+
+// ============= TRUE Keyword Tests =============
+print "=== Test 9: TRUE literal";
+let isActive = true;
+if (isActive) {
+    print "Active is true";
+}
+print "✓ TRUE literal works";
+
+print "=== Test 10: TRUE in comparison";
+let flag = true;
+if (flag == true) {
+    print "Flag is true";
+}
+print "✓ TRUE comparison works";
+
+print "=== Test 11: TRUE in logic";
+if (true && true) {
+    print "Both true";
+}
+print "✓ TRUE logic works";
+
+// ============= FALSE Keyword Tests =============
+print "=== Test 12: FALSE literal";
+let isDisabled = false;
+if (!isDisabled) {
+    print "Not disabled";
+}
+print "✓ FALSE literal works";
+
+print "=== Test 13: FALSE in comparison";
+let inactive = false;
+if (inactive == false) {
+    print "Inactive is false";
+}
+print "✓ FALSE comparison works";
+
+print "=== Test 14: FALSE in logic";
+if (false || true) {
+    print "One is true";
+}
+print "✓ FALSE logic works";
+
+// ============= NULL Keyword Tests =============
+print "=== Test 15: NULL literal";
+let empty = null;
+if (empty == null) {
+    print "Value is null";
+}
+print "✓ NULL literal works";
+
+print "=== Test 16: NULL comparison";
+let value = null;
+if (value == null) {
+    print "Value is null";
+} else {
+    print "Value is not null";
+}
+print "✓ NULL comparison works";
+
+// ============= Combined Tests =============
+print "=== Test 17: Map with boolean values";
+let settings = {"debug": true, "production": false};
+if (settings["debug"]) {
+    print "Debug mode enabled";
+}
+print "✓ Map with booleans works";
+
+print "=== Test 18: Map with null values";
+let optional = {"value": null, "name": "test"};
+if (optional["value"] == null) {
+    print "Value is null";
+}
+print "✓ Map with null works";
+
+print "=== Test 19: TRUE, FALSE, NULL in map";
+let states = {"active": true, "inactive": false, "pending": null};
+print "Active: " + states["active"];
+print "Inactive: " + states["inactive"];
+print "✓ All types in map work";
+
+print "=== Test 20: EXACTLY with map and booleans";
+exactly test {
+    let config = {"valid": true, "ready": false};
+    if (config["valid"]) {
+        print "Configuration valid";
+    }
+}
+print "✓ Exactly with map and booleans works";

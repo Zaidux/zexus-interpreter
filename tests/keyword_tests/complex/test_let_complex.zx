@@ -1,0 +1,338 @@
+# Complex Tests for LET Keyword
+# Testing advanced scenarios, integration with multiple features, and stress cases
+
+# Test 1: Deep nesting and closure-like behavior
+action createCounter() {
+    let count = 0;
+    
+    action increment() {
+        count = count + 1;
+        return count;
+    }
+    
+    return increment;
+}
+
+let counter = createCounter();
+print counter();
+print counter();
+print counter();
+# Expected output: 1, 2, 3
+
+# Test 2: Complex state machine
+let state = "idle";
+let data = null;
+let errorCount = 0;
+
+action transition(newState, newData) {
+    print "Transitioning from " + state + " to " + newState;
+    state = newState;
+    data = newData;
+    
+    if (state == "error") {
+        errorCount = errorCount + 1;
+    }
+}
+
+transition("loading", null);
+transition("loaded", {"user": "Alice"});
+transition("error", "Connection failed");
+transition("retry", null);
+
+print "Final state: " + state;
+print "Error count: " + errorCount;
+# Expected output: transition messages, Final state: retry, Error count: 1
+
+# Test 3: Recursive function with mutable state
+let factorialCache = {};
+
+action factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    
+    let result = n * factorial(n - 1);
+    return result;
+}
+
+let result5 = factorial(5);
+let result6 = factorial(6);
+print result5;
+print result6;
+# Expected output: 120, 720
+
+# Test 4: Complex data transformation pipeline
+let rawData = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let filtered = [];
+let mapped = [];
+let reduced = 0;
+
+# Filter even numbers
+for each num in rawData {
+    if (num % 2 == 0) {
+        filtered = filtered + [num];
+    }
+}
+
+# Double the filtered numbers
+for each num in filtered {
+    let doubled = num * 2;
+    mapped = mapped + [doubled];
+}
+
+# Sum the mapped numbers
+for each num in mapped {
+    reduced = reduced + num;
+}
+
+print "Filtered: " + filtered;
+print "Mapped: " + mapped;
+print "Reduced: " + reduced;
+# Expected output: Filtered: [2, 4, 6, 8, 10], Mapped: [4, 8, 12, 16, 20], Reduced: 60
+
+# Test 5: Multiple levels of variable shadowing
+let x = "global";
+
+action outerFunction() {
+    let x = "outer";
+    print "Outer function: " + x;
+    
+    action innerFunction() {
+        let x = "inner";
+        print "Inner function: " + x;
+        
+        if (true) {
+            let x = "block";
+            print "Block scope: " + x;
+        }
+        
+        print "After block: " + x;
+    }
+    
+    innerFunction();
+    print "After inner: " + x;
+}
+
+outerFunction();
+print "Global: " + x;
+# Expected output: Outer function: outer, Inner function: inner, Block scope: block, After block: inner, After inner: outer, Global: global
+
+# Test 6: Complex array and map operations
+let users = [
+    {"name": "Alice", "age": 30, "active": true},
+    {"name": "Bob", "age": 25, "active": false},
+    {"name": "Charlie", "age": 35, "active": true}
+];
+
+let activeUsers = [];
+let totalAge = 0;
+let averageAge = 0;
+
+for each user in users {
+    if (user["active"]) {
+        activeUsers = activeUsers + [user];
+        totalAge = totalAge + user["age"];
+    }
+}
+
+let activeCount = 2;  # Manual count for now
+averageAge = totalAge / activeCount;
+
+print "Active users count: " + activeCount;
+print "Average age: " + averageAge;
+# Expected output: Active users count: 2, Average age: 32.5
+
+# Test 7: Try-catch with variable scope
+let errorMessage = "";
+let successCount = 0;
+let errorCount = 0;
+
+action riskyOperation(shouldFail) {
+    if (shouldFail) {
+        return {"error": true, "message": "Operation failed"};
+    }
+    return {"error": false, "result": "Success"};
+}
+
+for each shouldFail in [false, true, false, true, false] {
+    let result = riskyOperation(shouldFail);
+    
+    if (result["error"]) {
+        errorCount = errorCount + 1;
+        errorMessage = result["message"];
+    } else {
+        successCount = successCount + 1;
+    }
+}
+
+print "Success: " + successCount + ", Errors: " + errorCount;
+# Expected output: Success: 3, Errors: 2
+
+# Test 8: Fibonacci with memoization using variables
+let fib0 = 0;
+let fib1 = 1;
+let fibSequence = [0, 1];
+
+action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    
+    let a = 0;
+    let b = 1;
+    let i = 2;
+    
+    while (i <= n) {
+        let next = a + b;
+        a = b;
+        b = next;
+        i = i + 1;
+    }
+    
+    return b;
+}
+
+let fib10 = fibonacci(10);
+let fib15 = fibonacci(15);
+print "Fibonacci(10): " + fib10;
+print "Fibonacci(15): " + fib15;
+# Expected output: Fibonacci(10): 55, Fibonacci(15): 610
+
+# Test 9: Complex lambda usage with variables
+let operations = {
+    "add": lambda(a, b) => a + b,
+    "multiply": lambda(a, b) => a * b,
+    "subtract": lambda(a, b) => a - b
+};
+
+let x = 10;
+let y = 5;
+
+let addResult = operations["add"](x, y);
+let multiplyResult = operations["multiply"](x, y);
+let subtractResult = operations["subtract"](x, y);
+
+print "Add: " + addResult;
+print "Multiply: " + multiplyResult;
+print "Subtract: " + subtractResult;
+# Expected output: Add: 15, Multiply: 50, Subtract: 5
+
+# Test 10: Stress test - Many variables
+let v1 = 1;
+let v2 = 2;
+let v3 = 3;
+let v4 = 4;
+let v5 = 5;
+let v6 = 6;
+let v7 = 7;
+let v8 = 8;
+let v9 = 9;
+let v10 = 10;
+
+let sum = v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10;
+print "Sum of 10 variables: " + sum;
+# Expected output: Sum of 10 variables: 55
+
+# Test 11: Variable reassignment chain
+let x = 1;
+x = x + 1;
+x = x * 2;
+x = x - 3;
+x = x / 1;
+print "Final x: " + x;
+# Expected output: Final x: 1
+
+# Test 12: Complex conditional with multiple variables
+let temperature = 75;
+let humidity = 60;
+let windSpeed = 10;
+let weather = "";
+
+if (temperature > 80) {
+    if (humidity > 70) {
+        weather = "Hot and humid";
+    } else {
+        weather = "Hot and dry";
+    }
+} elif (temperature > 60) {
+    if (windSpeed > 15) {
+        weather = "Pleasant and windy";
+    } else {
+        weather = "Pleasant";
+    }
+} else {
+    weather = "Cold";
+}
+
+print "Weather: " + weather;
+# Expected output: Weather: Pleasant
+
+# Test 13: Array of functions
+action double(x) {
+    return x * 2;
+}
+
+action triple(x) {
+    return x * 3;
+}
+
+action quadruple(x) {
+    return x * 4;
+}
+
+let transformations = [double, triple, quadruple];
+let value = 5;
+let results = [];
+
+for each transform in transformations {
+    let result = transform(value);
+    results = results + [result];
+}
+
+print results;
+# Expected output: [10, 15, 20]
+
+# Test 14: Complex map manipulation
+let database = {
+    "users": {"alice": 30, "bob": 25},
+    "products": {"laptop": 1200, "phone": 800}
+};
+
+let aliceAge = database["users"]["alice"];
+let laptopPrice = database["products"]["laptop"];
+
+let totalValue = aliceAge + laptopPrice;
+print "Total: " + totalValue;
+# Expected output: Total: 1230
+
+# Test 15: Simulated game loop
+let playerHealth = 100;
+let enemyHealth = 50;
+let round = 0;
+let winner = "";
+
+while (playerHealth > 0 && enemyHealth > 0) {
+    round = round + 1;
+    
+    # Player attacks
+    let playerDamage = 15;
+    enemyHealth = enemyHealth - playerDamage;
+    
+    if (enemyHealth <= 0) {
+        winner = "Player";
+    } else {
+        # Enemy attacks
+        let enemyDamage = 10;
+        playerHealth = playerHealth - enemyDamage;
+        
+        if (playerHealth <= 0) {
+            winner = "Enemy";
+        }
+    }
+}
+
+print "Game ended in " + round + " rounds";
+print "Winner: " + winner;
+print "Player health: " + playerHealth;
+print "Enemy health: " + enemyHealth;
+# Expected output: Game ended in 4 rounds, Winner: Player, Player health: 70, Enemy health: -10

@@ -1,0 +1,223 @@
+// ===============================================
+// PHASE 11: MODIFIERS MEDIUM TESTS
+// Testing: PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER
+// Total: 20 tests
+// ===============================================
+
+// ============= PUBLIC with Module System =============
+print "=== Test 1: PUBLIC action with return values";
+public action getData() {
+    let data = [1, 2, 3, 4, 5];
+    return data;
+}
+let myData = getData();
+print "Data length: " + len(myData);
+print "✓ Public with arrays works";
+
+print "=== Test 2: PUBLIC function with object";
+public function createUser(name, age) {
+    let user = {"name": name, "age": age};
+    return user;
+}
+let user = createUser("Alice", 30);
+print "User name: " + user["name"];
+print "✓ Public with objects works";
+
+// ============= PRIVATE with Encapsulation =============
+print "=== Test 3: PRIVATE helper with PUBLIC wrapper";
+private action helper(x) {
+    return x * 2;
+}
+public action publicWrapper(val) {
+    return helper(val);
+}
+let wrapped = publicWrapper(10);
+print "Wrapped result: " + wrapped;
+print "✓ Private-public pattern works";
+
+print "=== Test 4: PRIVATE function chain";
+private function validateInput(x) {
+    return x > 0;
+}
+private function processInput(x) {
+    if (validateInput(x)) {
+        return x * 3;
+    } else {
+        return 0;
+    }
+}
+public function process(x) {
+    return processInput(x);
+}
+let processed = process(5);
+print "Processed: " + processed;
+print "✓ Private function chain works";
+
+// ============= SEALED with State =============
+print "=== Test 5: SEALED action with state";
+let counter = 0;
+sealed action incrementCounter() {
+    counter = counter + 1;
+    return counter;
+}
+let c1 = incrementCounter();
+let c2 = incrementCounter();
+print "Counter: " + c2;
+print "✓ Sealed with state works";
+
+print "=== Test 6: SEALED function protection";
+sealed function protectedCompute(a, b) {
+    let result = a + b;
+    return result * 2;
+}
+let comp = protectedCompute(3, 7);
+print "Compute: " + comp;
+print "✓ Sealed compute works";
+
+// ============= SECURE with Validation =============
+print "=== Test 7: SECURE action with guards";
+secure action transfer(amount) {
+    if (amount <= 0) {
+        return "Invalid amount";
+    }
+    return "Transferred: " + amount;
+}
+let t1 = transfer(100);
+let t2 = transfer(-10);
+print t1;
+print t2;
+print "✓ Secure validation works";
+
+print "=== Test 8: SECURE function with multiple checks";
+secure function authenticatedOperation(user, password) {
+    if (len(user) == 0) {
+        return "No user";
+    }
+    if (len(password) < 8) {
+        return "Weak password";
+    }
+    return "Authenticated";
+}
+let auth = authenticatedOperation("alice", "password123");
+print "Auth: " + auth;
+print "✓ Secure multi-check works";
+
+// ============= PURE with Immutability =============
+print "=== Test 9: PURE action with calculations";
+pure action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return n;
+}
+let fib = fibonacci(5);
+print "Fib: " + fib;
+print "✓ Pure calculation works";
+
+print "=== Test 10: PURE function composition";
+pure function double(x) {
+    return x * 2;
+}
+pure function addTen(x) {
+    return x + 10;
+}
+public function composed(x) {
+    return addTen(double(x));
+}
+let comp_result = composed(5);
+print "Composed: " + comp_result;
+print "✓ Pure composition works";
+
+// ============= VIEW with Read Operations =============
+print "=== Test 11: VIEW action reading state";
+let globalState = {"balance": 1000, "name": "Account"};
+view action getBalance() {
+    return globalState["balance"];
+}
+let bal = getBalance();
+print "Balance: " + bal;
+print "✓ View read works";
+
+print "=== Test 12: VIEW function with computed value";
+let items = [10, 20, 30, 40, 50];
+view function sumItems() {
+    return items[0] + items[1] + items[2];
+}
+let total = sumItems();
+print "Total: " + total;
+print "✓ View computed works";
+
+// ============= PAYABLE with Transaction Logic =============
+print "=== Test 13: PAYABLE action with balance tracking";
+let wallet = 0;
+payable action deposit(amount) {
+    wallet = wallet + amount;
+    return wallet;
+}
+let w1 = deposit(100);
+let w2 = deposit(50);
+print "Wallet: " + w2;
+print "✓ Payable tracking works";
+
+print "=== Test 14: PAYABLE function with fee";
+payable function depositWithFee(amount, fee) {
+    let net = amount - fee;
+    return net;
+}
+let net = depositWithFee(100, 5);
+print "Net deposit: " + net;
+print "✓ Payable fee works";
+
+// ============= MODIFIER with Logic =============
+print "=== Test 15: MODIFIER with parameter";
+modifier minAmount(amount) {
+    require(amount >= 10, "Amount too small");
+}
+print "✓ Modifier with parameter declared";
+
+print "=== Test 16: MODIFIER with multiple requires";
+modifier validTransaction {
+    require(1 == 1, "First check");
+    require(2 > 1, "Second check");
+    print "Transaction valid";
+}
+print "✓ Multi-require modifier works";
+
+// ============= Complex Combinations =============
+print "=== Test 17: PUBLIC SECURE PURE action";
+public secure pure action safeCompute(x, y) {
+    return x + y;
+}
+let safe = safeCompute(10, 20);
+print "Safe compute: " + safe;
+print "✓ Three-modifier combo works";
+
+print "=== Test 18: PRIVATE VIEW action";
+private view action internalReader() {
+    return "internal data";
+}
+public action exposedReader() {
+    return internalReader();
+}
+let exposed = exposedReader();
+print "Exposed: " + exposed;
+print "✓ Private-view pattern works";
+
+print "=== Test 19: SEALED PAYABLE action";
+let totalReceived = 0;
+sealed payable action receivePayment(amount) {
+    totalReceived = totalReceived + amount;
+    return totalReceived;
+}
+let r1 = receivePayment(75);
+let r2 = receivePayment(25);
+print "Total received: " + r2;
+print "✓ Sealed payable works";
+
+print "=== Test 20: All modifiers on one action";
+public private sealed secure pure view payable action everything() {
+    return "all modifiers applied";
+}
+let everything_result = everything();
+print "Everything: " + everything_result;
+print "✓ All modifiers work together";

@@ -1,0 +1,277 @@
+// ===================================
+// PHASE 10.3: RENDERER OPERATIONS
+// Complex Tests (20 tests)
+// Builtins: mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text
+// ===================================
+
+print "=== Test 1: Advanced color mixing system ===";
+let baseRed = "red";
+let baseBlue = "blue";
+let baseGreen = "green";
+let purple = mix(baseRed, baseBlue, 0.5);
+let cyan = mix(baseBlue, baseGreen, 0.5);
+let yellow = mix(baseRed, baseGreen, 0.5);
+let purpleLight = mix(purple, "white", 0.3);
+let purpleDark = mix(purple, "black", 0.3);
+let cyanLight = mix(cyan, "white", 0.3);
+let cyanDark = mix(cyan, "black", 0.3);
+print "Advanced color system: 7 variations";
+print "✓ Advanced color mixing";
+
+print "\n=== Test 2: Canvas animation frame simulation ===";
+let frame1 = create_canvas(800, 600);
+let frame2 = create_canvas(800, 600);
+let frame3 = create_canvas(800, 600);
+let x = 0;
+while (x < 3) {
+    let frameCanvas = create_canvas(800, 600);
+    let pos = x * 100;
+    draw_line(frameCanvas, pos, 0, pos, 600);
+    draw_text(frameCanvas, pos + 10, 300, "Frame " + x);
+    x = x + 1;
+}
+print "✓ Animation frames";
+
+print "\n=== Test 3: Complex screen composition ===";
+screen MainScreen {
+    print "Main screen";
+}
+component Header {
+    print "Header";
+}
+component Sidebar {
+    print "Sidebar";
+}
+component Content {
+    print "Content";
+}
+set_theme("DashTheme");
+print "✓ Screen composition";
+
+print "\n=== Test 4: Color palette generation system ===";
+let paletteBase = "blue";
+let shade900 = mix(paletteBase, "black", 0.8);
+let shade700 = mix(paletteBase, "black", 0.6);
+let shade500 = paletteBase;
+let shade300 = mix(paletteBase, "white", 0.4);
+let shade100 = mix(paletteBase, "white", 0.8);
+let tint50 = mix(paletteBase, "white", 0.95);
+print "Material Design palette: 6 shades";
+print "✓ Palette generation";
+
+print "\n=== Test 5: Canvas data visualization ===";
+let vizCanvas = create_canvas(1000, 600);
+draw_line(vizCanvas, 100, 500, 900, 500);
+draw_line(vizCanvas, 100, 500, 100, 100);
+let dataPoints = 8;
+let i = 0;
+while (i < dataPoints) {
+    let x1 = 100 + (i * 100);
+    let y1 = 500 - (i * 40);
+    let x2 = 100 + ((i + 1) * 100);
+    let y2 = 500 - ((i + 1) * 40);
+    if (i < dataPoints - 1) {
+        draw_line(vizCanvas, x1, y1, x2, y2);
+    }
+    draw_text(vizCanvas, x1, y1 - 10, "P" + i);
+    i = i + 1;
+}
+draw_text(vizCanvas, 500, 550, "Data Visualization");
+print "✓ Data visualization";
+
+print "\n=== Test 6: Theme-aware color system ===";
+let lightAccentHover = mix("blue", "white", 0.2);
+let darkAccentHover = mix("cyan", "white", 0.2);
+set_theme("LightTheme");
+print "✓ Theme-aware colors";
+
+print "\n=== Test 7: Canvas drawing library ===";
+let libCanvas = create_canvas(800, 800);
+draw_line(libCanvas, 100, 100, 300, 100);
+draw_line(libCanvas, 300, 100, 300, 250);
+draw_line(libCanvas, 300, 250, 100, 250);
+draw_line(libCanvas, 100, 250, 100, 100);
+draw_text(libCanvas, 200, 175, "Rectangle");
+draw_text(libCanvas, 500, 500, "Circle");
+draw_text(libCanvas, 400, 750, "Drawing Library");
+print "✓ Drawing library";
+
+print "\n=== Test 8: Color accessibility matrix ===";
+let bgWhite = "white";
+let bgBlack = "black";
+let fgRed = "red";
+let fgBlue = "blue";
+let contrast1 = mix(bgWhite, fgRed, 0.5);
+let contrast2 = mix(bgWhite, fgBlue, 0.5);
+let contrast3 = mix(bgBlack, fgRed, 0.5);
+let contrast4 = mix(bgBlack, fgBlue, 0.5);
+print "Accessibility matrix: 4 contrasts";
+print "✓ Accessibility matrix";
+
+print "\n=== Test 9: Multi-canvas rendering system ===";
+let bgLayer = create_canvas(1920, 1080);
+let contentLayer = create_canvas(1920, 1080);
+let uiLayer = create_canvas(1920, 1080);
+let overlayLayer = create_canvas(1920, 1080);
+draw_line(bgLayer, 0, 0, 1920, 1080);
+draw_text(contentLayer, 960, 540, "Content");
+draw_text(uiLayer, 100, 100, "UI Elements");
+draw_text(overlayLayer, 960, 100, "Overlay");
+print "✓ Multi-canvas system";
+
+print "\n=== Test 10: Color interpolation curves ===";
+let startColor = "red";
+let endColor = "blue";
+let steps = 10;
+let k = 0;
+while (k < steps) {
+    let ratio = k / (steps - 1);
+    let interpolated = mix(startColor, endColor, ratio);
+    k = k + 1;
+}
+print "Interpolation: 10 steps";
+print "✓ Color interpolation";
+
+print "\n=== Test 11: Canvas text rendering engine ===";
+let textEngine = create_canvas(1200, 800);
+let fonts = ["Title", "Subtitle", "Body", "Caption"];
+let yPos = 100;
+let m = 0;
+while (m < 4) {
+    draw_text(textEngine, 100, yPos, fonts + " Text");
+    yPos = yPos + 150;
+    m = m + 1;
+}
+print "✓ Text rendering engine";
+
+print "\n=== Test 12: Gradient generator system ===";
+let gradCanvas = create_canvas(1000, 100);
+let gradSteps = 20;
+let n = 0;
+while (n < gradSteps) {
+    let xPos = n * 50;
+    let ratio = n / (gradSteps - 1);
+    let gradColor = mix("red", "yellow", ratio);
+    draw_line(gradCanvas, xPos, 0, xPos, 100);
+    n = n + 1;
+}
+draw_text(gradCanvas, 500, 50, "Gradient");
+print "✓ Gradient generator";
+
+print "\n=== Test 13: UI component canvas rendering ===";
+component Button {
+    let bgColor = mix("blue", "white", 0.2);
+    let hoverColor = mix("blue", "white", 0.4);
+    let activeColor = mix("blue", "black", 0.2);
+}
+let buttonCanvas = create_canvas(200, 60);
+draw_line(buttonCanvas, 10, 10, 190, 10);
+draw_line(buttonCanvas, 190, 10, 190, 50);
+draw_line(buttonCanvas, 190, 50, 10, 50);
+draw_line(buttonCanvas, 10, 50, 10, 10);
+draw_text(buttonCanvas, 100, 30, "Click Me");
+print "✓ Component rendering";
+
+print "\n=== Test 14: Color theme switcher ===";
+set_theme("Theme1");
+let t1Primary = mix("blue", "white", 0.3);
+set_theme("Theme2");
+let t2Primary = mix("blue", "black", 0.3);
+set_theme("Theme3");
+let t3Primary = "blue";
+print "✓ Theme switcher";
+
+print "\n=== Test 15: Canvas coordinate transformation ===";
+let transCanvas = create_canvas(800, 800);
+let centerX = 400;
+let centerY = 400;
+draw_line(transCanvas, 0, centerY, 800, centerY);
+draw_line(transCanvas, centerX, 0, centerX, 800);
+let radius = 200;
+let p = 0;
+while (p < 4) {
+    let angle = p * 90;
+    draw_text(transCanvas, centerX, centerY, "C");
+    p = p + 1;
+}
+print "✓ Coordinate transformation";
+
+print "\n=== Test 16: Color mixing with alpha simulation ===";
+let solidColor = "red";
+let alpha25 = mix(solidColor, "white", 0.75);
+let alpha50 = mix(solidColor, "white", 0.50);
+let alpha75 = mix(solidColor, "white", 0.25);
+let alpha100 = solidColor;
+print "Alpha simulation: 4 levels";
+print "✓ Alpha simulation";
+
+print "\n=== Test 17: Canvas dashboard layout ===";
+let dashCanvas = create_canvas(1600, 900);
+draw_line(dashCanvas, 0, 80, 1600, 80);
+draw_line(dashCanvas, 250, 80, 250, 900);
+draw_text(dashCanvas, 800, 40, "Dashboard Header");
+draw_text(dashCanvas, 125, 200, "Sidebar");
+draw_text(dashCanvas, 925, 490, "Main Content");
+let widget1X = 300;
+let widget1Y = 120;
+draw_line(dashCanvas, widget1X, widget1Y, widget1X + 600, widget1Y);
+draw_line(dashCanvas, widget1X + 600, widget1Y, widget1X + 600, widget1Y + 300);
+draw_line(dashCanvas, widget1X + 600, widget1Y + 300, widget1X, widget1Y + 300);
+draw_line(dashCanvas, widget1X, widget1Y + 300, widget1X, widget1Y);
+draw_text(dashCanvas, widget1X + 300, widget1Y + 150, "Widget 1");
+print "✓ Dashboard layout";
+
+print "\n=== Test 18: Color harmony generator ===";
+let baseHarmony = "blue";
+let complementary = mix(baseHarmony, "orange", 0.5);
+let analogous1 = mix(baseHarmony, "cyan", 0.3);
+let analogous2 = mix(baseHarmony, "purple", 0.3);
+let triadic1 = mix(baseHarmony, "red", 0.33);
+let triadic2 = mix(baseHarmony, "yellow", 0.33);
+print "Color harmony: 6 colors";
+print "✓ Color harmony";
+
+print "\n=== Test 19: Canvas animation timeline ===";
+let timeline = create_canvas(2000, 200);
+let frames = 20;
+let q = 0;
+while (q < frames) {
+    let frameX = q * 100;
+    draw_line(timeline, frameX, 0, frameX, 200);
+    draw_text(timeline, frameX + 10, 100, "F" + q);
+    q = q + 1;
+}
+draw_text(timeline, 1000, 20, "Animation Timeline");
+print "✓ Animation timeline";
+
+print "\n=== Test 20: Complete rendering system integration ===";
+screen AppScreen {
+    print "App screen";
+}
+component Navbar {
+    print "Navbar";
+}
+component Footer {
+    print "Footer";
+}
+set_theme("AppTheme");
+let masterCanvas = create_canvas(1920, 1080);
+let primaryShade = mix("blue", "white", 0.2);
+let primaryTint = mix("blue", "black", 0.2);
+let secondaryShade = mix("gray", "white", 0.2);
+draw_line(masterCanvas, 0, 60, 1920, 60);
+draw_line(masterCanvas, 0, 1040, 1920, 1040);
+draw_text(masterCanvas, 960, 30, "Application Header");
+draw_text(masterCanvas, 960, 1060, "Application Footer");
+draw_text(masterCanvas, 960, 540, "Main Content Area");
+let contentBox = create_canvas(1600, 900);
+draw_line(contentBox, 100, 100, 1500, 100);
+draw_line(contentBox, 1500, 100, 1500, 800);
+draw_line(contentBox, 1500, 800, 100, 800);
+draw_line(contentBox, 100, 800, 100, 100);
+draw_text(contentBox, 800, 450, "Content Box");
+print "Primary: " + primaryShade;
+print "Secondary: " + secondaryShade;
+print "✓ Complete integration";
+
+print "\n=== All Complex Renderer Operations Tests Complete ===";

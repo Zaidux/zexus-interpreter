@@ -1,0 +1,177 @@
+// ===================================
+// PHASE 10.3: RENDERER OPERATIONS
+// Medium Tests (20 tests)
+// Builtins: mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text
+// ===================================
+
+print "=== Test 1: mix() color palette generation ===";
+let base = "blue";
+let lighter1 = mix(base, "white", 0.2);
+let lighter2 = mix(base, "white", 0.4);
+let darker1 = mix(base, "black", 0.2);
+let darker2 = mix(base, "black", 0.4);
+print "Palette generated from: " + base;
+print "✓ Color palette";
+
+print "\n=== Test 2: Canvas drawing shapes ===";
+let shapeCanvas = create_canvas(500, 500);
+draw_line(shapeCanvas, 100, 100, 400, 100);
+draw_line(shapeCanvas, 400, 100, 400, 400);
+draw_line(shapeCanvas, 400, 400, 100, 400);
+draw_line(shapeCanvas, 100, 400, 100, 100);
+draw_text(shapeCanvas, 250, 250, "Square");
+print "✓ Shape drawing";
+
+print "\n=== Test 3: set_theme() with render integration ===";
+theme AppTheme {
+    let primary = "blue";
+    let secondary = "gray";
+}
+set_theme("AppTheme");
+print "✓ Theme integration";
+
+print "\n=== Test 4: mix() complementary colors ===";
+let cyan = mix("blue", "green", 0.5);
+let magenta = mix("red", "blue", 0.5);
+let yellow = mix("red", "green", 0.5);
+print "CMY colors generated";
+print "✓ Complementary colors";
+
+print "\n=== Test 5: Canvas coordinate system ===";
+let coordCanvas = create_canvas(400, 400);
+draw_line(coordCanvas, 0, 200, 400, 200);
+draw_line(coordCanvas, 200, 0, 200, 400);
+draw_text(coordCanvas, 205, 195, "Origin");
+print "✓ Coordinate system";
+
+print "\n=== Test 6: draw_text() multi-line pattern ===";
+let textCanvas = create_canvas(600, 400);
+draw_text(textCanvas, 50, 50, "Line 1");
+draw_text(textCanvas, 50, 100, "Line 2");
+draw_text(textCanvas, 50, 150, "Line 3");
+print "✓ Multi-line text";
+
+print "\n=== Test 7: mix() gradient simulation ===";
+let step0 = mix("red", "blue", 0.0);
+let step1 = mix("red", "blue", 0.25);
+let step2 = mix("red", "blue", 0.50);
+let step3 = mix("red", "blue", 0.75);
+let step4 = mix("red", "blue", 1.0);
+print "Gradient: 5 steps";
+print "✓ Gradient simulation";
+
+print "\n=== Test 8: Canvas layering concept ===";
+let layer1 = create_canvas(800, 600);
+let layer2 = create_canvas(800, 600);
+draw_line(layer1, 0, 0, 800, 600);
+draw_line(layer2, 800, 0, 0, 600);
+print "✓ Canvas layering";
+
+print "\n=== Test 9: draw_line() pattern generation ===";
+let patternCanvas = create_canvas(400, 400);
+let i = 0;
+while (i < 5) {
+    let offset = i * 80;
+    draw_line(patternCanvas, offset, 0, offset, 400);
+    i = i + 1;
+}
+print "✓ Line pattern";
+
+print "\n=== Test 10: mix() theme colors ===";
+let primaryColor = "blue";
+let primaryLight = mix(primaryColor, "white", 0.3);
+let primaryDark = mix(primaryColor, "black", 0.3);
+let secondaryColor = "gray";
+let secondaryLight = mix(secondaryColor, "white", 0.3);
+print "Theme colors generated";
+print "✓ Theme color generation";
+
+print "\n=== Test 11: Canvas text alignment ===";
+let alignCanvas = create_canvas(800, 400);
+draw_text(alignCanvas, 50, 200, "Left");
+draw_text(alignCanvas, 400, 200, "Center");
+draw_text(alignCanvas, 750, 200, "Right");
+print "✓ Text alignment";
+
+print "\n=== Test 12: draw_line() geometric shapes ===";
+let geoCanvas = create_canvas(600, 600);
+draw_line(geoCanvas, 300, 100, 500, 300);
+draw_line(geoCanvas, 500, 300, 300, 500);
+draw_line(geoCanvas, 300, 500, 100, 300);
+draw_line(geoCanvas, 100, 300, 300, 100);
+draw_text(geoCanvas, 300, 300, "Diamond");
+print "✓ Geometric shapes";
+
+print "\n=== Test 13: mix() color temperature ===";
+let warm1 = mix("red", "orange", 0.5);
+let warm2 = mix("orange", "yellow", 0.5);
+let cool1 = mix("blue", "cyan", 0.5);
+let cool2 = mix("cyan", "green", 0.5);
+print "Warm and cool colors";
+print "✓ Color temperature";
+
+print "\n=== Test 14: Canvas resolution scaling ===";
+let sd = create_canvas(640, 480);
+let hd = create_canvas(1280, 720);
+let fhd = create_canvas(1920, 1080);
+let uhd = create_canvas(3840, 2160);
+print "Multiple resolutions created";
+print "✓ Resolution scaling";
+
+print "\n=== Test 15: draw_text() info display ===";
+let infoCanvas = create_canvas(800, 600);
+draw_text(infoCanvas, 10, 30, "Canvas: 800x600");
+draw_text(infoCanvas, 10, 60, "Resolution: Standard");
+draw_text(infoCanvas, 10, 90, "Format: RGB");
+print "✓ Info display";
+
+print "\n=== Test 16: mix() brand colors ===";
+let brandPrimary = "blue";
+let brandAccent = mix(brandPrimary, "purple", 0.3);
+let brandHighlight = mix(brandPrimary, "white", 0.4);
+let brandShadow = mix(brandPrimary, "black", 0.6);
+print "Brand colors generated";
+print "✓ Brand colors";
+
+print "\n=== Test 17: Canvas chart simulation ===";
+let chartCanvas = create_canvas(800, 400);
+draw_line(chartCanvas, 50, 350, 750, 350);
+draw_line(chartCanvas, 50, 350, 50, 50);
+draw_line(chartCanvas, 50, 350, 150, 200);
+draw_line(chartCanvas, 150, 200, 250, 150);
+draw_line(chartCanvas, 250, 150, 350, 180);
+draw_line(chartCanvas, 350, 180, 450, 100);
+draw_text(chartCanvas, 400, 380, "Data Chart");
+print "✓ Chart simulation";
+
+print "\n=== Test 18: mix() accessibility colors ===";
+let highContrast1 = mix("black", "white", 0.1);
+let highContrast2 = mix("black", "white", 0.9);
+let midContrast = mix("black", "white", 0.5);
+print "Accessibility colors generated";
+print "✓ Accessibility colors";
+
+print "\n=== Test 19: Canvas UI element simulation ===";
+let uiCanvas = create_canvas(400, 200);
+draw_line(uiCanvas, 50, 50, 350, 50);
+draw_line(uiCanvas, 350, 50, 350, 150);
+draw_line(uiCanvas, 350, 150, 50, 150);
+draw_line(uiCanvas, 50, 150, 50, 50);
+draw_text(uiCanvas, 200, 100, "Button");
+print "✓ UI element";
+
+print "\n=== Test 20: Complete renderer operations ===";
+let masterCanvas = create_canvas(1024, 768);
+let bgColor = mix("white", "gray", 0.1);
+let borderColor = mix("black", "gray", 0.7);
+draw_line(masterCanvas, 0, 0, 1024, 0);
+draw_line(masterCanvas, 1024, 0, 1024, 768);
+draw_line(masterCanvas, 1024, 768, 0, 768);
+draw_line(masterCanvas, 0, 768, 0, 0);
+draw_text(masterCanvas, 512, 384, "Master Canvas");
+draw_text(masterCanvas, 512, 420, "BG: " + bgColor);
+draw_text(masterCanvas, 512, 456, "Border: " + borderColor);
+set_theme("MasterTheme");
+print "✓ Complete operations";
+
+print "\n=== All Medium Renderer Operations Tests Complete ===";

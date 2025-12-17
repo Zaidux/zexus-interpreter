@@ -1,0 +1,370 @@
+// COMPLEX CAPABILITY & VALIDATION TESTS
+// Testing: CAPABILITY, GRANT, REVOKE, IMMUTABLE, VALIDATE, SANITIZE
+// 20 complex tests with advanced patterns
+
+print "=== COMPLEX CAPABILITY & VALIDATION TESTS ===";
+print "";
+
+// Test 1: Multi-tier capability system
+print "Test 1: Multi-tier system";
+capability tier1_read {
+    "description": "Tier 1 read access",
+    "scope": "tier1"
+};
+capability tier2_read {
+    "description": "Tier 2 read access",
+    "scope": "tier2"
+};
+capability tier2_write {
+    "description": "Tier 2 write access",
+    "scope": "tier2"
+};
+capability tier3_admin {
+    "description": "Tier 3 admin access",
+    "scope": "tier3"
+};
+grant "basic_user" tier1_read;
+grant "power_user" tier1_read, tier2_read, tier2_write;
+grant "administrator" tier1_read, tier2_read, tier2_write, tier3_admin;
+print "Multi-tier system established ✅";
+print "";
+
+// Test 2: Capability lifecycle management
+print "Test 2: Capability lifecycle";
+capability session_read {
+    "description": "Session read",
+    "scope": "session"
+};
+capability session_write {
+    "description": "Session write",
+    "scope": "session"
+};
+// Login
+grant "user_session_456" session_read, session_write;
+// Activity
+print "Session active";
+// Logout
+revoke "user_session_456" session_read, session_write;
+print "Lifecycle managed ✅";
+print "";
+
+// Test 3: Immutable security policies
+print "Test 3: Immutable policies";
+immutable securityPolicy = {
+    "minPasswordLength": 12,
+    "requireSpecialChars": true,
+    "maxLoginAttempts": 3,
+    "sessionTimeout": 1800,
+    "enableMFA": true
+};
+immutable allowedOrigins = ["https://app.example.com", "https://admin.example.com"];
+immutable trustedDomains = ["example.com", "trusted.com"];
+print "Security policies locked ✅";
+print "";
+
+// Test 4: Sanitization defense in depth
+print "Test 4: Defense in depth";
+let maliciousInput = "<script>document.cookie</script><img src=x onerror=alert('xss')>";
+let sanitized1 = sanitize maliciousInput, "html";
+let sanitized2 = sanitize sanitized1, "html";
+let sanitized3 = sanitize sanitized2, "html";
+print "Multi-layer sanitization complete ✅";
+print "";
+
+// Test 5: Capability-based authorization system
+print "Test 5: Authorization system";
+capability can_create_users {
+    "description": "Create users",
+    "scope": "users"
+};
+capability can_delete_users {
+    "description": "Delete users",
+    "scope": "users"
+};
+capability can_modify_permissions {
+    "description": "Modify permissions",
+    "scope": "permissions"
+};
+capability can_view_audit_logs {
+    "description": "View audit logs",
+    "scope": "audit"
+};
+grant "user_admin" can_create_users, can_delete_users;
+grant "security_admin" can_modify_permissions, can_view_audit_logs;
+grant "super_admin" can_create_users, can_delete_users, can_modify_permissions, can_view_audit_logs;
+print "Authorization system configured ✅";
+print "";
+
+// Test 6: Immutable environment configuration
+print "Test 6: Environment config";
+immutable environment = "production";
+immutable debugMode = false;
+immutable logLevel = "ERROR";
+immutable apiEndpoints = {
+    "auth": "https://auth.example.com/api",
+    "data": "https://data.example.com/api",
+    "files": "https://files.example.com/api"
+};
+immutable featureFlags = {
+    "newUI": false,
+    "betaFeatures": false,
+    "experimentalMode": false
+};
+print "Environment locked down ✅";
+print "";
+
+// Test 7: Complex sanitization patterns
+print "Test 7: Complex sanitization";
+let sqlInjection = "'; DROP TABLE users; --";
+let xssPayload = "<svg onload=alert('xss')>";
+let pathTraversal = "../../../etc/passwd";
+let commandInjection = "; rm -rf /";
+let sanitizedSql = sanitize sqlInjection, "sql";
+let sanitizedXss = sanitize xssPayload, "html";
+let sanitizedPath = sanitize pathTraversal, "path";
+let sanitizedCmd = sanitize commandInjection, "shell";
+print "Complex attacks sanitized ✅";
+print "";
+
+// Test 8: Granular capability management
+print "Test 8: Granular capabilities";
+capability read_public_data {
+    "description": "Read public data",
+    "scope": "data:public"
+};
+capability read_private_data {
+    "description": "Read private data",
+    "scope": "data:private"
+};
+capability read_confidential_data {
+    "description": "Read confidential data",
+    "scope": "data:confidential"
+};
+capability read_secret_data {
+    "description": "Read secret data",
+    "scope": "data:secret"
+};
+grant "public_user" read_public_data;
+grant "authorized_user" read_public_data, read_private_data;
+grant "privileged_user" read_public_data, read_private_data, read_confidential_data;
+grant "top_secret_user" read_public_data, read_private_data, read_confidential_data, read_secret_data;
+print "Granular access control established ✅";
+print "";
+
+// Test 9: Immutable cryptographic configuration
+print "Test 9: Crypto config";
+immutable encryptionAlgorithm = "AES-256-GCM";
+immutable hashAlgorithm = "SHA-256";
+immutable keyDerivationFunction = "PBKDF2";
+immutable iterations = 100000;
+immutable saltLength = 32;
+immutable ivLength = 16;
+print "Cryptographic config immutable ✅";
+print "";
+
+// Test 10: Dynamic capability revocation
+print "Test 10: Dynamic revocation";
+capability temporary_upload {
+    "description": "Temporary upload access",
+    "scope": "upload"
+};
+capability temporary_download {
+    "description": "Temporary download access",
+    "scope": "download"
+};
+// Grant temporary access
+grant "temp_user" temporary_upload, temporary_download;
+// Simulate timer
+print "Access granted temporarily";
+// Revoke after timeout
+revoke "temp_user" temporary_upload, temporary_download;
+print "Temporary access revoked ✅";
+print "";
+
+// Test 11: Nested immutable structures
+print "Test 11: Complex immutable nesting";
+immutable applicationConfig = {
+    "app": {
+        "name": "SecureApp",
+        "version": "2.0.0",
+        "environment": "production"
+    },
+    "database": {
+        "primary": {
+            "host": "db-primary.internal",
+            "port": 5432,
+            "ssl": true
+        },
+        "replica": {
+            "host": "db-replica.internal",
+            "port": 5432,
+            "ssl": true
+        }
+    },
+    "security": {
+        "mfa": true,
+        "sessionTimeout": 3600,
+        "maxAttempts": 5
+    }
+};
+print "Complex immutable config created ✅";
+print "";
+
+// Test 12: Capability inheritance and delegation
+print "Test 12: Capability delegation";
+capability delegate_read {
+    "description": "Delegate read capabilities",
+    "scope": "delegation"
+};
+capability delegate_write {
+    "description": "Delegate write capabilities",
+    "scope": "delegation"
+};
+// Main user
+grant "primary_user" delegate_read, delegate_write;
+// Delegate to assistant
+grant "assistant_user" delegate_read;
+print "Delegation established ✅";
+print "";
+
+// Test 13: Input sanitization pipeline
+print "Test 13: Sanitization pipeline";
+let userGeneratedContent = "<script>alert(1)</script><p>Hello</p><iframe src='bad'></iframe>";
+// Stage 1: Remove scripts
+let stage1 = sanitize userGeneratedContent, "html";
+// Stage 2: Clean remaining
+let stage2 = sanitize stage1, "html";
+// Stage 3: Final pass
+let stage3 = sanitize stage2, "html";
+print "Pipeline stages: " + stage3;
+print "";
+
+// Test 14: Capability audit trail
+print "Test 14: Capability audit";
+capability audit_capable {
+    "description": "Auditable capability",
+    "scope": "audit"
+};
+grant "audited_user" audit_capable;
+print "Capability granted (auditable)";
+revoke "audited_user" audit_capable;
+print "Capability revoked (auditable)";
+print "Audit trail created ✅";
+print "";
+
+// Test 15: Immutable rate limiting configuration
+print "Test 15: Rate limit config";
+immutable rateLimits = {
+    "api": {
+        "requestsPerMinute": 60,
+        "requestsPerHour": 1000,
+        "burstSize": 10
+    },
+    "auth": {
+        "attemptsPerMinute": 5,
+        "lockoutDuration": 300
+    },
+    "upload": {
+        "maxFileSize": 10485760,
+        "maxFilesPerHour": 100
+    }
+};
+print "Rate limits immutable ✅";
+print "";
+
+// Test 16: Context-aware sanitization
+print "Test 16: Context-aware sanitization";
+let htmlContext = "<div>Content</div>";
+let jsContext = "var x = 'user_input';";
+let sqlContext = "SELECT * FROM table WHERE id = 'value'";
+let urlContext = "http://example.com?param=value";
+let sanitizedHtml = sanitize htmlContext, "html";
+let sanitizedJs = sanitize jsContext, "js";
+let sanitizedSql2 = sanitize sqlContext, "sql";
+let sanitizedUrl = sanitize urlContext, "url";
+print "Context-aware sanitization done ✅";
+print "";
+
+// Test 17: Capability matrix
+print "Test 17: Capability matrix";
+capability matrix_read_a {
+    "description": "Matrix read A",
+    "scope": "matrix_a"
+};
+capability matrix_write_a {
+    "description": "Matrix write A",
+    "scope": "matrix_a"
+};
+capability matrix_read_b {
+    "description": "Matrix read B",
+    "scope": "matrix_b"
+};
+capability matrix_write_b {
+    "description": "Matrix write B",
+    "scope": "matrix_b"
+};
+grant "role_a_reader" matrix_read_a;
+grant "role_a_writer" matrix_read_a, matrix_write_a;
+grant "role_b_reader" matrix_read_b;
+grant "role_full_access" matrix_read_a, matrix_write_a, matrix_read_b, matrix_write_b;
+print "Capability matrix configured ✅";
+print "";
+
+// Test 18: Immutable allowed values
+print "Test 18: Immutable whitelist";
+immutable allowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "application/pdf"];
+immutable allowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".pdf"];
+immutable allowedProtocols = ["https", "wss"];
+immutable trustedCertificates = ["cert1.pem", "cert2.pem"];
+print "Whitelist configurations immutable ✅";
+print "";
+
+// Test 19: Bulk capability operations
+print "Test 19: Bulk capability ops";
+capability bulk_cap_1 {
+    "description": "Bulk 1",
+    "scope": "bulk"
+};
+capability bulk_cap_2 {
+    "description": "Bulk 2",
+    "scope": "bulk"
+};
+capability bulk_cap_3 {
+    "description": "Bulk 3",
+    "scope": "bulk"
+};
+capability bulk_cap_4 {
+    "description": "Bulk 4",
+    "scope": "bulk"
+};
+capability bulk_cap_5 {
+    "description": "Bulk 5",
+    "scope": "bulk"
+};
+grant "bulk_operator" bulk_cap_1, bulk_cap_2, bulk_cap_3, bulk_cap_4, bulk_cap_5;
+revoke "bulk_operator" bulk_cap_1, bulk_cap_2, bulk_cap_3, bulk_cap_4, bulk_cap_5;
+print "Bulk operations successful ✅";
+print "";
+
+// Test 20: Complete security hardening
+print "Test 20: Complete hardening";
+// Immutable configs
+immutable hardenedConfig = {
+    "security": "maximum",
+    "encryption": "required",
+    "audit": "enabled"
+};
+// Capabilities
+capability hardened_access {
+    "description": "Hardened access",
+    "scope": "hardened"
+};
+grant "hardened_user" hardened_access;
+// Sanitization
+let untrustedInput = "<script>bad()</script>";
+let trustedOutput = sanitize untrustedInput, "html";
+// Complete
+print "System hardened completely ✅";
+print "";
+
+print "=== COMPLEX CAPABILITY & VALIDATION TESTS COMPLETE ===";

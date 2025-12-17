@@ -1,0 +1,134 @@
+// ===================================
+// PHASE 10.3: RENDERER OPERATIONS
+// Easy Tests (20 tests)
+// Builtins: mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text
+// ===================================
+
+print "=== Test 1: mix() color mixing ===";
+let mixedColor = mix("red", "blue", 0.5);
+print "Mixed color: " + mixedColor;
+print "✓ Color mixing";
+
+print "\n=== Test 2: create_canvas() basic ===";
+let canvas1 = create_canvas(800, 600);
+print "Canvas created: " + canvas1;
+print "✓ Canvas creation";
+
+print "\n=== Test 3: draw_line() on canvas ===";
+let canvas2 = create_canvas(400, 300);
+draw_line(canvas2, 0, 0, 100, 100);
+print "✓ Line drawn";
+
+print "\n=== Test 4: draw_text() on canvas ===";
+let canvas3 = create_canvas(500, 400);
+draw_text(canvas3, 50, 50, "Hello World");
+print "✓ Text drawn";
+
+print "\n=== Test 5: set_theme() global ===";
+set_theme("DarkTheme");
+print "✓ Global theme set";
+
+print "\n=== Test 6: mix() different ratios ===";
+let light = mix("white", "black", 0.2);
+let dark = mix("white", "black", 0.8);
+print "Light: " + light;
+print "Dark: " + dark;
+print "✓ Different mix ratios";
+
+print "\n=== Test 7: Multiple canvas creation ===";
+let c1 = create_canvas(100, 100);
+let c2 = create_canvas(200, 200);
+let c3 = create_canvas(300, 300);
+print "Created 3 canvases";
+print "✓ Multiple canvases";
+
+print "\n=== Test 8: draw_line() multiple lines ===";
+let canvas4 = create_canvas(400, 400);
+draw_line(canvas4, 0, 0, 100, 0);
+draw_line(canvas4, 100, 0, 100, 100);
+draw_line(canvas4, 100, 100, 0, 100);
+draw_line(canvas4, 0, 100, 0, 0);
+print "✓ Multiple lines (square)";
+
+print "\n=== Test 9: draw_text() multiple texts ===";
+let canvas5 = create_canvas(600, 400);
+draw_text(canvas5, 10, 10, "Title");
+draw_text(canvas5, 10, 30, "Subtitle");
+draw_text(canvas5, 10, 50, "Content");
+print "✓ Multiple text labels";
+
+print "\n=== Test 10: mix() primary colors ===";
+let purple = mix("red", "blue", 0.5);
+let orange = mix("red", "yellow", 0.5);
+let green = mix("blue", "yellow", 0.5);
+print "Purple: " + purple;
+print "Orange: " + orange;
+print "Green: " + green;
+print "✓ Primary color mixing";
+
+print "\n=== Test 11: Canvas with coordinates ===";
+let canvas6 = create_canvas(1920, 1080);
+draw_line(canvas6, 0, 0, 1920, 1080);
+print "✓ Full HD canvas";
+
+print "\n=== Test 12: draw_text() positioning ===";
+let canvas7 = create_canvas(800, 600);
+draw_text(canvas7, 400, 300, "Center");
+draw_text(canvas7, 0, 0, "Top-Left");
+draw_text(canvas7, 800, 600, "Bottom-Right");
+print "✓ Text positioning";
+
+print "\n=== Test 13: mix() edge cases ===";
+let almostFirst = mix("red", "blue", 0.1);
+let almostSecond = mix("red", "blue", 0.9);
+print "Almost red: " + almostFirst;
+print "Almost blue: " + almostSecond;
+print "✓ Mix edge ratios";
+
+print "\n=== Test 14: Small canvas ===";
+let tiny = create_canvas(50, 50);
+draw_line(tiny, 0, 0, 50, 50);
+draw_text(tiny, 25, 25, "X");
+print "✓ Tiny canvas";
+
+print "\n=== Test 15: Large canvas ===";
+let large = create_canvas(3840, 2160);
+print "4K canvas created";
+print "✓ Large canvas";
+
+print "\n=== Test 16: draw_line() diagonal ===";
+let canvas8 = create_canvas(500, 500);
+draw_line(canvas8, 0, 0, 500, 500);
+draw_line(canvas8, 500, 0, 0, 500);
+print "✓ Diagonal cross";
+
+print "\n=== Test 17: mix() grayscale ===";
+let gray25 = mix("white", "black", 0.25);
+let gray50 = mix("white", "black", 0.50);
+let gray75 = mix("white", "black", 0.75);
+print "Grayscale generated";
+print "✓ Grayscale mixing";
+
+print "\n=== Test 18: draw_text() long text ===";
+let canvas9 = create_canvas(1000, 200);
+draw_text(canvas9, 10, 100, "This is a long text message for testing");
+print "✓ Long text";
+
+print "\n=== Test 19: Canvas grid pattern ===";
+let grid = create_canvas(400, 400);
+draw_line(grid, 200, 0, 200, 400);
+draw_line(grid, 0, 200, 400, 200);
+print "✓ Grid pattern";
+
+print "\n=== Test 20: Complete drawing ===";
+let complete = create_canvas(600, 400);
+draw_line(complete, 100, 100, 500, 100);
+draw_line(complete, 500, 100, 500, 300);
+draw_line(complete, 500, 300, 100, 300);
+draw_line(complete, 100, 300, 100, 100);
+draw_text(complete, 300, 200, "Box");
+let boxColor = mix("blue", "green", 0.5);
+print "Box drawn with color: " + boxColor;
+print "✓ Complete drawing";
+
+print "\n=== All Easy Renderer Operations Tests Complete ===";

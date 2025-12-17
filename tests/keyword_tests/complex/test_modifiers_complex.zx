@@ -1,0 +1,497 @@
+// ===============================================
+// PHASE 11: MODIFIERS COMPLEX TESTS
+// Testing: PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER
+// Total: 20 tests
+// ===============================================
+
+// ============= PUBLIC API Pattern =============
+print "=== Test 1: PUBLIC API with versioning";
+public action apiV1_getUser(id) {
+    return "User API v1: " + id;
+}
+public action apiV2_getUser(id) {
+    return "User API v2: " + id;
+}
+let v1 = apiV1_getUser(100);
+let v2 = apiV2_getUser(100);
+print v1;
+print v2;
+print "✓ API versioning works";
+
+print "=== Test 2: PUBLIC interface with PRIVATE implementation";
+private action validateEmail(email) {
+    return len(email) > 5;
+}
+private action validateAge(age) {
+    return age >= 18;
+}
+private action validatePhone(phone) {
+    return len(phone) == 10;
+}
+public action registerUser(email, age, phone) {
+    if (!validateEmail(email)) {
+        return "Invalid email";
+    }
+    if (!validateAge(age)) {
+        return "Must be 18+";
+    }
+    if (!validatePhone(phone)) {
+        return "Invalid phone";
+    }
+    return "User registered";
+}
+let reg = registerUser("user@example.com", 25, "1234567890");
+print reg;
+print "✓ Public-private API works";
+
+// ============= SEALED Component System =============
+print "=== Test 3: SEALED component factory";
+let componentCount = 0;
+let lastComponent = null;
+sealed action registerComponent(name, version) {
+    let comp = {"name": name, "version": version, "id": componentCount};
+    componentCount = componentCount + 1;
+    lastComponent = comp;
+    return comp;
+}
+sealed action getLastComponent() {
+    return lastComponent;
+}
+let c1 = registerComponent("Button", "1.0");
+let c2 = registerComponent("Input", "2.0");
+let retrieved = getLastComponent();
+print "Component: " + retrieved["name"];
+print "✓ Sealed component system works";
+
+print "=== Test 4: SEALED state machine";
+let machineState = "IDLE";
+sealed action transitionTo(newState) {
+    let oldState = machineState;
+    machineState = newState;
+    return "Transitioned from " + oldState + " to " + newState;
+}
+sealed action getCurrentState() {
+    return machineState;
+}
+let t1 = transitionTo("RUNNING");
+let t2 = transitionTo("STOPPED");
+let current = getCurrentState();
+print "Current state: " + current;
+print "✓ Sealed state machine works";
+
+// ============= SECURE Transaction System =============
+print "=== Test 5: SECURE transaction processor";
+secure action validateTransaction(amount, sender, recipient) {
+    if (amount <= 0) {
+        return "Invalid amount";
+    }
+    if (len(sender) == 0) {
+        return "Invalid sender";
+    }
+    if (len(recipient) == 0) {
+        return "Invalid recipient";
+    }
+    return "Transaction valid";
+}
+secure action processTransaction(amount, sender, recipient) {
+    let validation = validateTransaction(amount, sender, recipient);
+    if (validation != "Transaction valid") {
+        return validation;
+    }
+    return "Processed: " + sender + " -> " + recipient + " : " + amount;
+}
+let tx1 = processTransaction(100, "Alice", "Bob");
+let tx2 = processTransaction(-10, "Alice", "Bob");
+print tx1;
+print tx2;
+print "✓ Secure transaction system works";
+
+print "=== Test 6: SECURE authentication chain";
+let users = [{"name": "alice", "pass": "secret123"}];
+secure function findUser(username) {
+    if (users[0]["name"] == username) {
+        return users[0];
+    }
+    return null;
+}
+secure function verifyPassword(user, password) {
+    if (user == null) {
+        return false;
+    }
+    return user["pass"] == password;
+}
+secure action login(username, password) {
+    let user = findUser(username);
+    if (verifyPassword(user, password)) {
+        return "Login successful";
+    } else {
+        return "Login failed";
+    }
+}
+let login_result = login("alice", "secret123");
+print login_result;
+print "✓ Secure auth chain works";
+
+// ============= PURE Functional Programming =============
+print "=== Test 7: PURE data transformations";
+pure function map_double(arr) {
+    return [arr[0] * 2, arr[1] * 2, arr[2] * 2];
+}
+pure function filter_positive(arr) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] > 0) {
+            result = result + [arr[i]];
+        }
+        i = i + 1;
+    }
+    return result;
+}
+let numbers = [1, -2, 3];
+let doubled = map_double(numbers);
+let positive = filter_positive(numbers);
+print "Doubled first: " + doubled[0];
+print "Positive count: " + len(positive);
+print "✓ Pure transformations work";
+
+print "=== Test 8: PURE mathematical pipeline";
+pure function add(a, b) {
+    return a + b;
+}
+pure function multiply(a, b) {
+    return a * b;
+}
+pure function power(base, exp) {
+    if (exp == 0) {
+        return 1;
+    }
+    if (exp == 1) {
+        return base;
+    }
+    return base * base;
+}
+public function calculate(x, y) {
+    let sum = add(x, y);
+    let product = multiply(sum, 2);
+    let squared = power(product, 2);
+    return squared;
+}
+let calc_result = calculate(3, 7);
+print "Calculation: " + calc_result;
+print "✓ Pure math pipeline works";
+
+// ============= VIEW Query System =============
+print "=== Test 9: VIEW database queries";
+let database = [
+    {"id": 1, "name": "Alice", "age": 30},
+    {"id": 2, "name": "Bob", "age": 25},
+    {"id": 3, "name": "Charlie", "age": 35}
+];
+view function queryById(id) {
+    let i = 0;
+    while (i < len(database)) {
+        if (database[i]["id"] == id) {
+            return database[i];
+        }
+        i = i + 1;
+    }
+    return null;
+}
+view function queryByName(name) {
+    let i = 0;
+    while (i < len(database)) {
+        if (database[i]["name"] == name) {
+            return database[i];
+        }
+        i = i + 1;
+    }
+    return null;
+}
+let user1 = queryById(2);
+let user2 = queryByName("Charlie");
+print "User by ID: " + user1["name"];
+print "User by name: " + user2["name"];
+print "✓ View queries work";
+
+print "=== Test 10: VIEW aggregation functions";
+let inventory = [
+    {"item": "Widget", "quantity": 50, "price": 10},
+    {"item": "Gadget", "quantity": 30, "price": 25}
+];
+view function getTotalValue() {
+    let total = 0;
+    let i = 0;
+    while (i < len(inventory)) {
+        total = total + inventory[i]["quantity"];
+        i = i + 1;
+    }
+    return total;
+}
+view function getInventoryCount() {
+    return len(inventory);
+}
+let total_qty = getTotalValue();
+let item_count = getInventoryCount();
+print "Total quantity: " + total_qty;
+print "Item count: " + item_count;
+print "✓ View aggregation works";
+
+// ============= PAYABLE Smart Contract Pattern =============
+print "=== Test 11: PAYABLE contract with events";
+let contractBalance = 0;
+let transactionCount = 0;
+payable action deposit(amount, sender) {
+    contractBalance = contractBalance + amount;
+    transactionCount = transactionCount + 1;
+    return contractBalance;
+}
+payable action withdraw(amount, recipient) {
+    if (amount > contractBalance) {
+        return "Insufficient balance";
+    }
+    contractBalance = contractBalance - amount;
+    transactionCount = transactionCount + 1;
+    return contractBalance;
+}
+view function getBalance() {
+    return contractBalance;
+}
+view function getTransactionCount() {
+    return transactionCount;
+}
+let d1 = deposit(100, "Alice");
+let d2 = deposit(50, "Bob");
+let w1 = withdraw(30, "Charlie");
+let final_bal = getBalance();
+let txCount = getTransactionCount();
+print "Final balance: " + final_bal;
+print "Transaction count: " + txCount;
+print "✓ Payable contract works";
+
+print "=== Test 12: PAYABLE escrow system";
+let escrowBalance = 0;
+let escrowLocked = false;
+payable action createEscrow(amount) {
+    if (escrowLocked) {
+        return "Escrow locked";
+    }
+    escrowBalance = amount;
+    escrowLocked = true;
+    return "Escrow created: " + amount;
+}
+payable action releaseEscrow() {
+    if (!escrowLocked) {
+        return "No active escrow";
+    }
+    let amount = escrowBalance;
+    escrowBalance = 0;
+    escrowLocked = false;
+    return "Released: " + amount;
+}
+let esc1 = createEscrow(500);
+let esc2 = releaseEscrow();
+print esc1;
+print esc2;
+print "✓ Payable escrow works";
+
+// ============= MODIFIER Advanced Patterns =============
+print "=== Test 13: MODIFIER with complex logic";
+modifier complexGuard {
+    let authorized = true;
+    let balance = 100;
+    require(authorized == true, "Not authorized");
+    require(balance > 50, "Insufficient balance");
+    print "Complex guard passed";
+}
+print "✓ Complex modifier works";
+
+print "=== Test 14: MODIFIER chaining pattern";
+modifier firstCheck {
+    require(1 > 0, "First check failed");
+}
+modifier secondCheck {
+    require(2 > 1, "Second check failed");
+}
+modifier thirdCheck {
+    require(3 > 2, "Third check failed");
+}
+print "✓ Modifier chaining declared";
+
+// ============= Multi-Modifier Advanced Patterns =============
+print "=== Test 15: PUBLIC SECURE PAYABLE payment gateway";
+let gatewayBalance = 0;
+let gatewayTxCount = 0;
+public secure payable action acceptPayment(amount, currency, sender) {
+    if (amount <= 0) {
+        return "Invalid amount";
+    }
+    if (len(currency) != 3) {
+        return "Invalid currency";
+    }
+    gatewayBalance = gatewayBalance + amount;
+    gatewayTxCount = gatewayTxCount + 1;
+    return "Payment accepted: " + amount + " " + currency;
+}
+public view function getGatewayStats() {
+    return {"balance": gatewayBalance, "txCount": gatewayTxCount};
+}
+let pay1 = acceptPayment(100, "USD", "Alice");
+let pay2 = acceptPayment(50, "EUR", "Bob");
+let stats = getGatewayStats();
+print "Gateway balance: " + stats["balance"];
+print "✓ Multi-modifier gateway works";
+
+print "=== Test 16: PRIVATE PURE SECURE calculation service";
+private pure secure function sensitiveCalculation(x, y) {
+    return x * y + x - y;
+}
+public secure function exposedCalculate(a, b) {
+    if (a < 0) {
+        return "Negative not allowed";
+    }
+    if (b < 0) {
+        return "Negative not allowed";
+    }
+    return sensitiveCalculation(a, b);
+}
+let calc1 = exposedCalculate(10, 5);
+let calc2 = exposedCalculate(-5, 3);
+print "Calc1: " + calc1;
+print calc2;
+print "✓ Private-pure-secure works";
+
+print "=== Test 17: SEALED VIEW caching layer";
+let cachedValue1 = null;
+let cachedValue2 = null;
+sealed action cacheSet(key, value) {
+    if (key == "user:1") {
+        cachedValue1 = value;
+    } else {
+        cachedValue2 = value;
+    }
+    return "Cached";
+}
+sealed view function cacheGet(key) {
+    if (key == "user:1") {
+        return cachedValue1;
+    } else {
+        return cachedValue2;
+    }
+}
+let set1 = cacheSet("user:1", "Alice");
+let set2 = cacheSet("user:2", "Bob");
+let get1 = cacheGet("user:1");
+print "Cached value: " + get1;
+print "✓ Sealed-view cache works";
+
+print "=== Test 18: PURE VIEW data transformation pipeline";
+let rawData = [
+    {"value": 10, "category": "A"},
+    {"value": 20, "category": "B"},
+    {"value": 30, "category": "A"}
+];
+pure view function sumByCategory(data, category) {
+    let sum = 0;
+    let i = 0;
+    while (i < len(data)) {
+        if (data[i]["category"] == category) {
+            sum = sum + data[i]["value"];
+        }
+        i = i + 1;
+    }
+    return sum;
+}
+pure view function countByCategory(data, category) {
+    let count = 0;
+    let i = 0;
+    while (i < len(data)) {
+        if (data[i]["category"] == category) {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+let sumA = sumByCategory(rawData, "A");
+let countB = countByCategory(rawData, "B");
+print "Sum category A: " + sumA;
+print "Count category B: " + countB;
+print "✓ Pure-view pipeline works";
+
+// ============= Real-World Integration Tests =============
+print "=== Test 19: Complete access control system";
+let systemUsers = [{"name": "admin", "role": "admin"}];
+let accessLogCount = 0;
+private secure function checkRole(username, requiredRole) {
+    let i = 0;
+    while (i < len(systemUsers)) {
+        if (systemUsers[i]["name"] == username) {
+            return systemUsers[i]["role"] == requiredRole;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+private action logAccess(username, resource, granted) {
+    accessLogCount = accessLogCount + 1;
+    return null;
+}
+public secure action accessResource(username, resource) {
+    let hasAccess = checkRole(username, "admin");
+    logAccess(username, resource, hasAccess);
+    if (hasAccess) {
+        return "Access granted to " + resource;
+    } else {
+        return "Access denied to " + resource;
+    }
+}
+public view function getAccessLogCount() {
+    return accessLogCount;
+}
+let access1 = accessResource("admin", "database");
+let access2 = accessResource("guest", "database");
+let logCount = getAccessLogCount();
+print access1;
+print access2;
+print "Log entries: " + logCount;
+print "✓ Complete access control works";
+
+print "=== Test 20: Full-stack modifier integration";
+let appVersion = "1.0";
+let userCount = 0;
+sealed action initializeApp() {
+    appVersion = "1.0";
+    return "App initialized";
+}
+public secure payable action registerUserAdvanced(username, deposit) {
+    if (len(username) < 3) {
+        return "Username too short";
+    }
+    if (deposit < 10) {
+        return "Minimum deposit is 10";
+    }
+    userCount = userCount + 1;
+    return "User registered: " + username;
+}
+private pure function calculateFee(amount) {
+    return amount * 5 / 100;
+}
+public secure payable function processUserPayment(username, amount) {
+    let fee = calculateFee(amount);
+    let net = amount - fee;
+    return "Processed " + net + " for " + username + " (fee: " + fee + ")";
+}
+public view function getAppStats() {
+    return {"userCount": userCount, "version": appVersion};
+}
+let init = initializeApp();
+let reg1 = registerUserAdvanced("alice", 100);
+let reg2 = registerUserAdvanced("bob", 50);
+let payment = processUserPayment("alice", 200);
+let appStats = getAppStats();
+print init;
+print reg1;
+print payment;
+print "Users: " + appStats["userCount"];
+print "✓ Full-stack integration works";

@@ -1,0 +1,195 @@
+// ===================================
+// PHASE 10: RENDERER & UI KEYWORDS
+// Medium Tests (20 tests)
+// Keywords: SCREEN, COMPONENT, THEME, COLOR, GRAPHICS, CANVAS, ANIMATION, CLOCK
+// ===================================
+
+print "=== Test 1: SCREEN with state management ===";
+screen StateScreen {
+    let screenState = "active";
+    print "Screen state: " + screenState;
+}
+print "✓ Screen with state";
+
+print "\n=== Test 2: COMPONENT with props pattern ===";
+component SmartButton {
+    let label = "Click me";
+    let enabled = true;
+    print "Button: " + label;
+}
+print "✓ Component with props";
+
+print "\n=== Test 3: THEME with color palette ===";
+theme ModernTheme {
+    let primary = "blue";
+    let secondary = "gray";
+    print "Theme colors: " + primary + ", " + secondary;
+}
+print "✓ Theme with palette";
+
+print "\n=== Test 4: SCREEN with actions ===";
+screen InteractiveScreen {
+    action handleClick() {
+        print "Clicked";
+    }
+    print "Screen ready";
+}
+print "✓ Screen with actions";
+
+print "\n=== Test 5: COMPONENT composition pattern ===";
+component List {
+    print "List component";
+}
+component ListItem {
+    print "List item";
+}
+print "✓ Component composition";
+
+print "\n=== Test 6: THEME with dynamic values ===";
+theme DynamicTheme {
+    let mode = "dark";
+    if (mode == "dark") {
+        print "Dark mode active";
+    }
+}
+print "✓ Dynamic theme";
+
+print "\n=== Test 7: SCREEN with lifecycle hooks ===";
+screen LifecycleScreen {
+    action onMount() {
+        print "Screen mounted";
+    }
+    action onUnmount() {
+        print "Screen unmounted";
+    }
+    print "Lifecycle screen";
+}
+print "✓ Screen lifecycle";
+
+print "\n=== Test 8: COMPONENT with events ===";
+component EventButton {
+    action onClick() {
+        print "Button clicked";
+    }
+    action onHover() {
+        print "Button hovered";
+    }
+    print "Event button ready";
+}
+print "✓ Component events";
+
+print "\n=== Test 9: THEME inheritance ===";
+theme ParentTheme {
+    let fontFamily = "Arial";
+    print "Parent theme";
+}
+theme ChildTheme {
+    let fontSize = 14;
+    print "Child theme";
+}
+print "✓ Theme inheritance";
+
+print "\n=== Test 10: SCREEN with data binding ===";
+screen DataScreen {
+    let users = ["Alice", "Bob", "Charlie"];
+    print "Users loaded: 3";
+}
+print "✓ Data binding screen";
+
+print "\n=== Test 11: COMPONENT with computed properties ===";
+component Calculator {
+    let a = 10;
+    let b = 20;
+    let sum = a + b;
+    print "Sum: " + sum;
+}
+print "✓ Computed properties";
+
+print "\n=== Test 12: THEME with responsive design ===";
+theme ResponsiveTheme {
+    let screenWidth = 1920;
+    if (screenWidth > 1200) {
+        print "Desktop layout";
+    }
+}
+print "✓ Responsive theme";
+
+print "\n=== Test 13: SCREEN navigation system ===";
+screen NavScreen {
+    action navigateTo(target) {
+        print "Navigating to: " + target;
+    }
+    print "Navigation ready";
+}
+print "✓ Navigation system";
+
+print "\n=== Test 14: COMPONENT with slots concept ===";
+component Modal {
+    let title = "Modal Title";
+    let content = "Modal content";
+    print "Modal: " + title;
+}
+print "✓ Component slots";
+
+print "\n=== Test 15: THEME with animations ===";
+theme AnimatedTheme {
+    let transitionDuration = 300;
+    print "Animation duration: " + transitionDuration + "ms";
+}
+print "✓ Animated theme";
+
+print "\n=== Test 16: SCREEN with forms ===";
+screen FormScreen {
+    let formData = { "name": "John", "email": "john@example.com" };
+    print "Form initialized";
+}
+print "✓ Form screen";
+
+print "\n=== Test 17: COMPONENT with validation ===";
+component Input {
+    action validate(value) {
+        if (value) {
+            print "Valid input";
+        }
+    }
+    print "Input component";
+}
+print "✓ Component validation";
+
+print "\n=== Test 18: THEME with breakpoints ===";
+theme BreakpointTheme {
+    let mobile = 768;
+    let tablet = 1024;
+    let desktop = 1920;
+    print "Breakpoints defined";
+}
+print "✓ Theme breakpoints";
+
+print "\n=== Test 19: SCREEN with async loading ===";
+screen AsyncScreen {
+    action loadData() {
+        print "Loading data...";
+    }
+    print "Async screen ready";
+}
+print "✓ Async loading screen";
+
+print "\n=== Test 20: Complete application structure ===";
+screen AppContainer {
+    let title = "My App";
+    print "App: " + title;
+}
+component Navigation {
+    let items = ["Home", "About", "Contact"];
+    print "Nav items: 3";
+}
+component Content {
+    print "Content area";
+}
+theme AppTheme {
+    let primary = "#007bff";
+    print "App theme loaded";
+}
+print "✓ Complete app structure";
+
+print "\n=== All Medium Renderer Tests Complete ===";

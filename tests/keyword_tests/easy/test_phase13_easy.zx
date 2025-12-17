@@ -1,0 +1,139 @@
+// Phase 13: Advanced Keywords - Easy Tests
+// Keywords: MIDDLEWARE, AUTH, THROTTLE, CACHE, INJECT
+// Note: MIDDLEWARE, AUTH, THROTTLE, CACHE lack parser implementations
+// Testing INJECT only, plus underlying constructs
+// 20 basic tests
+
+print "=== Test 1: INJECT basic dependency ===";
+inject Logger;
+print "✓ Test 1 passed";
+
+print "\n=== Test 2: INJECT another dependency ===";
+inject Database;
+print "✓ Test 2 passed";
+
+print "\n=== Test 3: INJECT with multiple ===";
+inject Cache;
+inject Service;
+print "✓ Test 3 passed";
+
+print "\n=== Test 4: Map literal (used by auth/throttle/cache) ===";
+let config = {
+    "provider": "oauth2"
+};
+print "✓ Test 4 passed";
+
+print "\n=== Test 5: Map with numbers ===";
+let limits = {
+    "requests_per_minute": 100,
+    "burst_size": 10
+};
+print "✓ Test 5 passed";
+
+print "\n=== Test 6: Map with boolean ===";
+let authConfig = {
+    "provider": "jwt",
+    "mfa_required": true
+};
+print "✓ Test 6 passed";
+
+print "\n=== Test 7: Map with nested data ===";
+let policy = {
+    "ttl": 300,
+    "enabled": true
+};
+print "✓ Test 7 passed";
+
+print "\n=== Test 8: Action literal (used by middleware) ===";
+action handler(req, res) {
+    return true;
+}
+print "✓ Test 8 passed";
+
+print "\n=== Test 9: Action with parameters ===";
+action process(data, options) {
+    return data;
+}
+print "✓ Test 9 passed";
+
+print "\n=== Test 10: INJECT in action ===";
+action setup() {
+    inject API;
+    return "configured";
+}
+let res = setup();
+print "✓ Test 10 passed";
+
+print "\n=== Test 11: Map with string lists ===";
+let scopes = {
+    "provider": "oauth2",
+    "scopes": ["read", "write"]
+};
+print "✓ Test 11 passed";
+
+print "\n=== Test 12: Map access ===";
+let settings = {"timeout": 3600};
+let val = settings["timeout"];
+print "✓ Test 12 passed";
+
+print "\n=== Test 13: Action with return ===";
+action compute() {
+    return 42;
+}
+let value = compute();
+print "✓ Test 13 passed";
+
+print "\n=== Test 14: Action with conditional ===";
+action check(enabled) {
+    if (enabled) {
+        return "yes";
+    }
+    return "no";
+}
+let status = check(true);
+print "✓ Test 14 passed";
+
+print "\n=== Test 15: INJECT with variable ===";
+inject Helper;
+let obj = "initialized";
+print "✓ Test 15 passed";
+
+print "\n=== Test 16: Map with all types ===";
+let fullConfig = {
+    "name": "app",
+    "port": 8080,
+    "enabled": true,
+    "items": [1, 2, 3]
+};
+print "✓ Test 16 passed";
+
+print "\n=== Test 17: INJECT sequence ===";
+inject Auth;
+inject Router;
+inject Validator;
+print "✓ Test 17 passed";
+
+print "\n=== Test 18: Action with map parameter ===";
+action configure(opts) {
+    return opts;
+}
+let options = {"mode": "production"};
+let result = configure(options);
+print "✓ Test 18 passed";
+
+print "\n=== Test 19: Map with nested map ===";
+let nested = {
+    "database": {
+        "host": "localhost",
+        "port": 5432
+    }
+};
+print "✓ Test 19 passed";
+
+print "\n=== Test 20: INJECT with action combo ===";
+inject Controller;
+action serve() {
+    return "serving";
+}
+let final = serve();
+print "✓ Test 20 passed";

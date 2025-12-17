@@ -1,0 +1,239 @@
+// ============================================
+// MEDIUM TESTS: ACTION, FUNCTION, LAMBDA, RETURN
+// ============================================
+// More complex function patterns and use cases
+
+// Test 1: Recursive function (factorial)
+action factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+print factorial(5);
+// Expected: 120
+
+// Test 2: Function with array parameter
+action sumArray(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < 3) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+print sumArray([10, 20, 30]);
+// Expected: 60
+
+// Test 3: Function returning function (higher-order)
+action makeAdder(x) {
+    return lambda(y) => x + y;
+}
+let addFive = makeAdder(5);
+print addFive(10);
+// Expected: 15
+
+// Test 4: Function with map parameter
+action getProperty(obj, key) {
+    return obj[key];
+}
+let person = {"name": "Bob", "age": 30};
+print getProperty(person, "name");
+// Expected: Bob
+
+// Test 5: Multiple return paths
+action classify(num) {
+    if (num < 0) {
+        return "negative";
+    } elif (num == 0) {
+        return "zero";
+    } else {
+        return "positive";
+    }
+}
+print classify(-5);
+print classify(0);
+print classify(5);
+// Expected: negative, zero, positive
+
+// Test 6: Function with default-like behavior
+action greet(name) {
+    if (name == null) {
+        return "Hello, Guest";
+    }
+    return "Hello, " + name;
+}
+print greet("Alice");
+// Expected: Hello, Alice
+
+// Test 7: Lambda in array
+let operations = [
+    lambda(x) => x + 1,
+    lambda(x) => x * 2,
+    lambda(x) => x - 1
+];
+print operations[0](10);
+print operations[1](10);
+print operations[2](10);
+// Expected: 11, 20, 9
+
+// Test 8: Closure capturing variable
+action makeCounter() {
+    let count = 0;
+    return lambda() => {
+        count = count + 1;
+        return count;
+    };
+}
+let counter = makeCounter();
+print counter();
+print counter();
+print counter();
+// Expected: 1, 2, 3
+
+// Test 9: Function with multiple local variables
+action calculateArea(width, height) {
+    let area = width * height;
+    let perimeter = 2 * (width + height);
+    return {"area": area, "perimeter": perimeter};
+}
+let rect = calculateArea(5, 10);
+print rect["area"];
+print rect["perimeter"];
+// Expected: 50, 30
+
+// Test 10: Recursive fibonacci
+action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+print fibonacci(7);
+// Expected: 13
+
+// Test 11: Function as parameter (callback)
+action applyTwice(func, value) {
+    return func(func(value));
+}
+let doubler = lambda(x) => x * 2;
+print applyTwice(doubler, 3);
+// Expected: 12
+
+// Test 12: Action with guard clauses
+action divide(a, b) {
+    if (b == 0) {
+        return "Error: Division by zero";
+    }
+    return a / b;
+}
+print divide(10, 2);
+print divide(10, 0);
+// Expected: 5, Error: Division by zero
+
+// Test 13: Function building array
+action range(start, end) {
+    let result = [];
+    let i = start;
+    while (i < end) {
+        result = result;
+        i = i + 1;
+    }
+    return result;
+}
+let nums = range(1, 4);
+print "Range created";
+// Expected: Range created
+
+// Test 14: Lambda with conditional
+let absValue = lambda(x) => {
+    if (x < 0) {
+        return -x;
+    } else {
+        return x;
+    }
+};
+print absValue(-10);
+print absValue(10);
+// Expected: 10, 10
+
+// Test 15: Action with nested conditionals
+action checkAge(age) {
+    if (age < 13) {
+        return "Child";
+    } elif (age < 18) {
+        return "Teen";
+    } elif (age < 65) {
+        return "Adult";
+    } else {
+        return "Senior";
+    }
+}
+print checkAge(10);
+print checkAge(16);
+print checkAge(30);
+print checkAge(70);
+// Expected: Child, Teen, Adult, Senior
+
+// Test 16: Function with accumulator pattern
+action product(arr) {
+    let result = 1;
+    let idx = 0;
+    while (idx < 3) {
+        result = result * arr[idx];
+        idx = idx + 1;
+    }
+    return result;
+}
+print product([2, 3, 4]);
+// Expected: 24
+
+// Test 17: Chained function calls
+action addTen(x) {
+    return x + 10;
+}
+action multiplyTwo(x) {
+    return x * 2;
+}
+print multiplyTwo(addTen(5));
+// Expected: 30
+
+// Test 18: Function with boolean logic
+action inRange(val, min, max) {
+    return val >= min && val <= max;
+}
+print inRange(5, 1, 10);
+print inRange(15, 1, 10);
+// Expected: true, false
+
+// Test 19: Lambda with multiple statements
+let calculator = lambda(a, b, op) => {
+    if (op == "add") {
+        return a + b;
+    } elif (op == "sub") {
+        return a - b;
+    } elif (op == "mul") {
+        return a * b;
+    } else {
+        return a / b;
+    }
+};
+print calculator(10, 5, "add");
+print calculator(10, 5, "mul");
+// Expected: 15, 50
+
+// Test 20: Function with early return optimization
+action findFirst(arr, target) {
+    let i = 0;
+    while (i < 5) {
+        if (arr[i] == target) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+print findFirst([1, 2, 3, 4, 5], 3);
+print findFirst([1, 2, 3, 4, 5], 9);
+// Expected: 2, -1

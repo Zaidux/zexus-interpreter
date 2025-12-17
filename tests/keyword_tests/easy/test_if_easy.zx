@@ -1,0 +1,155 @@
+# Easy Tests for IF/ELIF/ELSE Keywords
+# Testing basic conditional execution
+
+# Test 1: Simple if statement (true condition)
+if (true) {
+    print "Condition is true";
+}
+# Expected output: Condition is true
+
+# Test 2: Simple if statement (false condition)
+if (false) {
+    print "This should not print";
+}
+# Expected output: (nothing)
+
+# Test 3: If with comparison
+if (10 > 5) {
+    print "10 is greater than 5";
+}
+# Expected output: 10 is greater than 5
+
+# Test 4: If-else (true condition)
+if (true) {
+    print "True branch";
+} else {
+    print "False branch";
+}
+# Expected output: True branch
+
+# Test 5: If-else (false condition)
+if (false) {
+    print "True branch";
+} else {
+    print "False branch";
+}
+# Expected output: False branch
+
+# Test 6: If without parentheses
+if true {
+    print "Parentheses optional";
+}
+# Expected output: Parentheses optional
+
+# Test 7: Comparison operators
+if (5 == 5) {
+    print "Equal";
+}
+# Expected output: Equal
+
+# Test 8: Not equal
+if (5 != 3) {
+    print "Not equal";
+}
+# Expected output: Not equal
+
+# Test 9: Less than
+if (3 < 10) {
+    print "Less than";
+}
+# Expected output: Less than
+
+# Test 10: Greater than or equal
+if (10 >= 10) {
+    print "Greater or equal";
+}
+# Expected output: Greater or equal
+
+# Test 11: If with variable
+let x = 15;
+if (x > 10) {
+    print "x is greater than 10";
+}
+# Expected output: x is greater than 10
+
+# Test 12: If-elif-else (first condition true)
+let score = 95;
+if (score >= 90) {
+    print "Grade A";
+} elif (score >= 80) {
+    print "Grade B";
+} else {
+    print "Grade C";
+}
+# Expected output: Grade A
+
+# Test 13: If-elif-else (second condition true)
+let score2 = 85;
+if (score2 >= 90) {
+    print "Grade A";
+} elif (score2 >= 80) {
+    print "Grade B";
+} else {
+    print "Grade C";
+}
+# Expected output: Grade B
+
+# Test 14: If-elif-else (else clause)
+let score3 = 70;
+if (score3 >= 90) {
+    print "Grade A";
+} elif (score3 >= 80) {
+    print "Grade B";
+} else {
+    print "Grade C";
+}
+# Expected output: Grade C
+
+# Test 15: Multiple elif clauses
+let num = 5;
+if (num == 1) {
+    print "One";
+} elif (num == 2) {
+    print "Two";
+} elif (num == 3) {
+    print "Three";
+} elif (num == 5) {
+    print "Five";
+} else {
+    print "Other";
+}
+# Expected output: Five
+
+# Test 16: Logical AND
+if (true && true) {
+    print "Both true";
+}
+# Expected output: Both true
+
+# Test 17: Logical OR
+if (false || true) {
+    print "At least one true";
+}
+# Expected output: At least one true
+
+# Test 18: Nested condition check
+let age = 25;
+if (age >= 18 && age < 65) {
+    print "Working age";
+}
+# Expected output: Working age
+
+# Test 19: String comparison
+let name = "Alice";
+if (name == "Alice") {
+    print "Hello Alice";
+}
+# Expected output: Hello Alice
+
+# Test 20: If with multiple statements
+if (true) {
+    print "First";
+    print "Second";
+    print "Third";
+}
+# Expected output: First, Second, Third

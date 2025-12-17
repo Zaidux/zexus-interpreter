@@ -1,0 +1,261 @@
+// ============================================================================
+// EASY LEVEL: TRY/CATCH/REVERT/REQUIRE Keywords Test Suite
+// ============================================================================
+// Testing basic error handling functionality in Zexus
+// Keywords: TRY, CATCH, REVERT, REQUIRE
+// ============================================================================
+
+print "=== EASY ERROR HANDLING TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Basic try-catch with no error
+// Expected: Should execute try block normally
+// ============================================================================
+print "Test 1: Basic try-catch (no error)";
+try {
+    let x = 10;
+    print x;
+} catch (error) {
+    print "Error caught: " + error;
+}
+print "";
+
+// ============================================================================
+// TEST 2: Try-catch with division (should not error in Zexus)
+// Expected: Should execute normally
+// ============================================================================
+print "Test 2: Try-catch with arithmetic";
+try {
+    let result = 100 / 5;
+    print "Result: " + result;
+} catch (e) {
+    print "Caught: " + e;
+}
+print "";
+
+// ============================================================================
+// TEST 3: Basic require with true condition
+// Expected: Should pass silently
+// ============================================================================
+print "Test 3: Require with true condition";
+let balance = 100;
+require(balance > 0);
+print "Balance check passed";
+print "";
+
+// ============================================================================
+// TEST 4: Basic require with message (true condition)
+// Expected: Should pass silently
+// ============================================================================
+print "Test 4: Require with message (passing)";
+let amount = 50;
+require(amount <= 100, "Amount too large");
+print "Amount check passed";
+print "";
+
+// ============================================================================
+// TEST 5: Try-catch protecting a require that passes
+// Expected: No error caught
+// ============================================================================
+print "Test 5: Try-catch with passing require";
+try {
+    require(5 > 2);
+    print "Require passed";
+} catch (err) {
+    print "Error: " + err;
+}
+print "";
+
+// ============================================================================
+// TEST 6: Try-catch protecting a require that fails
+// Expected: Should catch the error
+// ============================================================================
+print "Test 6: Try-catch with failing require";
+try {
+    require(1 > 5, "Condition is false");
+    print "This should not print";
+} catch (err) {
+    print "Caught requirement failure";
+}
+print "";
+
+// ============================================================================
+// TEST 7: Basic revert in try-catch
+// Expected: Should catch the revert
+// ============================================================================
+print "Test 7: Revert in try-catch";
+try {
+    revert();
+    print "This should not print";
+} catch (error) {
+    print "Caught revert";
+}
+print "";
+
+// ============================================================================
+// TEST 8: Revert with message
+// Expected: Should catch the revert with message
+// ============================================================================
+print "Test 8: Revert with message";
+try {
+    revert("Custom error message");
+    print "This should not print";
+} catch (e) {
+    print "Caught: Transaction reverted";
+}
+print "";
+
+// ============================================================================
+// TEST 9: Multiple requires (all passing)
+// Expected: All should pass
+// ============================================================================
+print "Test 9: Multiple passing requires";
+let value = 50;
+require(value > 0);
+require(value < 100);
+require(value == 50);
+print "All requirements met";
+print "";
+
+// ============================================================================
+// TEST 10: Try-catch with nested blocks
+// Expected: Should execute inner block
+// ============================================================================
+print "Test 10: Try-catch with nested blocks";
+try {
+    if (true) {
+        print "Inside nested block";
+    }
+} catch (error) {
+    print "Error: " + error;
+}
+print "";
+
+// ============================================================================
+// TEST 11: Require with comparison operators
+// Expected: Should pass
+// ============================================================================
+print "Test 11: Require with comparisons";
+let age = 25;
+require(age >= 18, "Must be adult");
+print "Age verification passed";
+print "";
+
+// ============================================================================
+// TEST 12: Require with boolean expression
+// Expected: Should pass
+// ============================================================================
+print "Test 12: Require with boolean";
+let isValid = true;
+require(isValid, "Must be valid");
+print "Validation passed";
+print "";
+
+// ============================================================================
+// TEST 13: Try-catch with function call in try block
+// Expected: Should execute function normally
+// ============================================================================
+print "Test 13: Try-catch with function";
+action getValue() {
+    return 42;
+}
+
+try {
+    let val = getValue();
+    print "Got value: " + val;
+} catch (e) {
+    print "Error: " + e;
+}
+print "";
+
+// ============================================================================
+// TEST 14: Require with logical AND
+// Expected: Should pass when both conditions true
+// ============================================================================
+print "Test 14: Require with AND operator";
+let x = 10;
+let y = 20;
+require(x > 5 && y > 15, "Conditions not met");
+print "AND condition passed";
+print "";
+
+// ============================================================================
+// TEST 15: Require with logical OR
+// Expected: Should pass when at least one condition true
+// ============================================================================
+print "Test 15: Require with OR operator";
+let a = 5;
+let b = 3;
+require(a > 10 || b < 5, "Neither condition met");
+print "OR condition passed";
+print "";
+
+// ============================================================================
+// TEST 16: Try-catch with variable access
+// Expected: Should access variable normally
+// ============================================================================
+print "Test 16: Try-catch variable access";
+let data = "test data";
+try {
+    print "Data: " + data;
+} catch (error) {
+    print "Error: " + error;
+}
+print "";
+
+// ============================================================================
+// TEST 17: Try-catch with array access
+// Expected: Should access array normally
+// ============================================================================
+print "Test 17: Try-catch array access";
+let arr = [1, 2, 3];
+try {
+    print "Array: " + arr;
+} catch (e) {
+    print "Error: " + e;
+}
+print "";
+
+// ============================================================================
+// TEST 18: Require with equality check
+// Expected: Should pass when equal
+// ============================================================================
+print "Test 18: Require with equality";
+let expected = 10;
+let actual = 10;
+require(actual == expected, "Values don't match");
+print "Equality check passed";
+print "";
+
+// ============================================================================
+// TEST 19: Try-catch with map access
+// Expected: Should access map normally
+// ============================================================================
+print "Test 19: Try-catch map access";
+let config = {"debug": true, "mode": "test"};
+try {
+    print "Config mode: test";
+} catch (error) {
+    print "Error: " + error;
+}
+print "";
+
+// ============================================================================
+// TEST 20: Nested try-catch blocks
+// Expected: Should handle both levels
+// ============================================================================
+print "Test 20: Nested try-catch";
+try {
+    print "Outer try";
+    try {
+        print "Inner try";
+    } catch (innerError) {
+        print "Inner catch";
+    }
+} catch (outerError) {
+    print "Outer catch";
+}
+print "";
+
+print "=== EASY ERROR HANDLING TESTS COMPLETE ===";

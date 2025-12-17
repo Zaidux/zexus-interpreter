@@ -1,0 +1,383 @@
+// ============================================================================
+// MEDIUM LEVEL: TRY/CATCH/REVERT/REQUIRE Keywords Test Suite
+// ============================================================================
+// Testing intermediate error handling with functions, loops, and patterns
+// Keywords: TRY, CATCH, REVERT, REQUIRE
+// ============================================================================
+
+print "=== MEDIUM ERROR HANDLING TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Error handling in function with return
+// Expected: Should catch error and return from catch block
+// ============================================================================
+print "Test 1: Error handling in function";
+action safeDivide(a, b) {
+    try {
+        if (b == 0) {
+            revert("Division by zero");
+        }
+        return a / b;
+    } catch (e) {
+        return 0;
+    }
+}
+
+print "10 / 2 = " + safeDivide(10, 2);
+print "10 / 0 = " + safeDivide(10, 0);
+print "";
+
+// ============================================================================
+// TEST 2: Require with complex condition
+// Expected: Should validate complex expressions
+// ============================================================================
+print "Test 2: Require with complex condition";
+action validateUser(age, balance, isActive) {
+    require(age >= 18 && balance > 0 && isActive, "User validation failed");
+    return "Valid user";
+}
+
+print validateUser(25, 100, true);
+print "";
+
+// ============================================================================
+// TEST 3: Multiple require statements in sequence
+// Expected: Should check all requirements
+// ============================================================================
+print "Test 3: Sequential requires";
+action processTransfer(sender, recipient, amount, balances) {
+    require(amount > 0, "Amount must be positive");
+    require(sender != recipient, "Cannot send to self");
+    print "Transfer validated";
+    return true;
+}
+
+processTransfer("Alice", "Bob", 100, {"Alice": 500});
+print "";
+
+// ============================================================================
+// TEST 4: Try-catch with multiple operations
+// Expected: Should handle errors from any operation
+// ============================================================================
+print "Test 4: Try-catch with multiple operations";
+action complexOperation(x) {
+    try {
+        let step1 = x * 2;
+        let step2 = step1 + 10;
+        let step3 = step2 / 2;
+        return step3;
+    } catch (error) {
+        return null;
+    }
+}
+
+print "Result: " + complexOperation(5);
+print "";
+
+// ============================================================================
+// TEST 5: Revert with dynamic message
+// Expected: Should construct error message dynamically
+// ============================================================================
+print "Test 5: Revert with dynamic message";
+action checkBalance(account, required) {
+    try {
+        if (account < required) {
+            let shortfall = required - account;
+            revert("Insufficient funds");
+        }
+        return "Sufficient balance";
+    } catch (e) {
+        return "Error: Transaction failed";
+    }
+}
+
+print checkBalance(100, 50);
+print checkBalance(50, 100);
+print "";
+
+// ============================================================================
+// TEST 6: Nested try-catch with different error handling
+// Expected: Should handle errors at appropriate level
+// ============================================================================
+print "Test 6: Nested try-catch";
+action nestedOperation() {
+    try {
+        print "Outer try start";
+        try {
+            print "Inner try";
+            revert("Inner error");
+        } catch (inner) {
+            print "Inner catch handled it";
+        }
+        print "After inner try-catch";
+    } catch (outer) {
+        print "Outer catch: " + outer;
+    }
+    return "Complete";
+}
+
+print nestedOperation();
+print "";
+
+// ============================================================================
+// TEST 7: Require in loop (simulated with multiple calls)
+// Expected: Should validate each iteration
+// ============================================================================
+print "Test 7: Require in repeated operations";
+action validateValue(val) {
+    require(val > 0 && val < 100, "Value out of range");
+    return val;
+}
+
+print "Valid values: " + validateValue(50);
+print "Valid values: " + validateValue(75);
+print "";
+
+// ============================================================================
+// TEST 8: Try-catch with array operations
+// Expected: Should handle array access safely
+// ============================================================================
+print "Test 8: Try-catch with arrays";
+action getElement(arr, index) {
+    try {
+        if (index < 0) {
+            revert("Negative index");
+        }
+        return arr;
+    } catch (e) {
+        return null;
+    }
+}
+
+let myArray = [10, 20, 30];
+print "Array access: " + getElement(myArray, 1);
+print "";
+
+// ============================================================================
+// TEST 9: Require with map/object validation
+// Expected: Should validate object properties
+// ============================================================================
+print "Test 9: Require with object validation";
+action validateConfig(config) {
+    let hasDebug = true; // Simulated property check
+    require(hasDebug, "Debug mode required");
+    return "Config valid";
+}
+
+let config = {"debug": true, "mode": "production"};
+print validateConfig(config);
+print "";
+
+// ============================================================================
+// TEST 10: Error handling with early return
+// Expected: Should return from function on error
+// ============================================================================
+print "Test 10: Early return on error";
+action processPayment(amount, balance) {
+    if (amount <= 0) {
+        return "Invalid amount";
+    }
+    if (balance < amount) {
+        return "Insufficient balance";
+    }
+    return "Payment processed";
+}
+
+print processPayment(100, 200);
+print processPayment(100, 50);
+print "";
+
+// ============================================================================
+// TEST 11: Try-catch with conditional logic
+// Expected: Should handle conditional branches
+// ============================================================================
+print "Test 11: Try-catch with conditionals";
+action conditionalError(value) {
+    try {
+        if (value < 0) {
+            revert("Negative value");
+        } elif (value == 0) {
+            revert("Zero value");
+        } else {
+            return "Valid: " + value;
+        }
+    } catch (e) {
+        return "Error handled";
+    }
+}
+
+print conditionalError(10);
+print conditionalError(-5);
+print "";
+
+// ============================================================================
+// TEST 12: Require with inequality operators
+// Expected: Should validate ranges
+// ============================================================================
+print "Test 12: Require with range validation";
+action validateRange(value, min, max) {
+    require(value >= min, "Below minimum");
+    require(value <= max, "Above maximum");
+    return "In range: " + value;
+}
+
+print validateRange(50, 1, 100);
+print "";
+
+// ============================================================================
+// TEST 13: Try-catch with lambda functions
+// Expected: Should handle errors in lambda
+// ============================================================================
+print "Test 13: Try-catch with lambda";
+let safeLambda = lambda(x) {
+    try {
+        return x * 2;
+    } catch (e) {
+        return 0;
+    }
+};
+
+print "Lambda result: " + safeLambda(21);
+print "";
+
+// ============================================================================
+// TEST 14: Multiple catch blocks (if supported) or sequential try-catch
+// Expected: Should handle different error types
+// ============================================================================
+print "Test 14: Sequential error handling";
+action multiErrorHandler(code) {
+    try {
+        if (code == 1) {
+            revert("Error type 1");
+        } elif (code == 2) {
+            revert("Error type 2");
+        }
+        return "No error";
+    } catch (e) {
+        return "Handled error code " + code;
+    }
+}
+
+print multiErrorHandler(0);
+print multiErrorHandler(1);
+print "";
+
+// ============================================================================
+// TEST 15: Require with null checks
+// Expected: Should validate non-null values
+// ============================================================================
+print "Test 15: Require null checks";
+action processData(data) {
+    require(data != null, "Data cannot be null");
+    return "Data processed";
+}
+
+print processData("valid data");
+print "";
+
+// ============================================================================
+// TEST 16: Try-catch protecting multiple requires
+// Expected: Should catch first failing require
+// ============================================================================
+print "Test 16: Try-catch with multiple requires";
+try {
+    require(true, "First check");
+    require(true, "Second check");
+    require(true, "Third check");
+    print "All checks passed";
+} catch (e) {
+    print "A check failed";
+}
+print "";
+
+// ============================================================================
+// TEST 17: Revert with expression evaluation
+// Expected: Should evaluate expression before reverting
+// ============================================================================
+print "Test 17: Revert with expression";
+action revertWithCalc(x, y) {
+    try {
+        let result = x + y;
+        if (result > 100) {
+            revert("Result too large");
+        }
+        return result;
+    } catch (e) {
+        return "Error caught";
+    }
+}
+
+print "Small sum: " + revertWithCalc(10, 20);
+print "Large sum: " + revertWithCalc(60, 50);
+print "";
+
+// ============================================================================
+// TEST 18: Error handling with state changes
+// Expected: Should handle state modifications safely
+// ============================================================================
+print "Test 18: Error handling with state";
+let counter = 0;
+action incrementSafely(amount) {
+    try {
+        require(amount > 0, "Amount must be positive");
+        counter = counter + amount;
+        return counter;
+    } catch (e) {
+        return counter;
+    }
+}
+
+print "Counter: " + incrementSafely(10);
+print "Counter: " + incrementSafely(5);
+print "";
+
+// ============================================================================
+// TEST 19: Try-catch with finally-like pattern (sequential operations)
+// Expected: Should execute cleanup operations
+// ============================================================================
+print "Test 19: Try-catch with cleanup";
+action operationWithCleanup() {
+    let status = "not started";
+    try {
+        status = "in progress";
+        print "Operation running";
+        status = "completed";
+    } catch (e) {
+        status = "failed";
+    }
+    print "Status: " + status;
+    return status;
+}
+
+operationWithCleanup();
+print "";
+
+// ============================================================================
+// TEST 20: Complex error handling workflow
+// Expected: Should handle multi-step validation and processing
+// ============================================================================
+print "Test 20: Complex workflow";
+action processTransaction(sender, recipient, amount) {
+    try {
+        // Validation phase
+        require(sender != null, "Sender required");
+        require(recipient != null, "Recipient required");
+        require(amount > 0, "Invalid amount");
+        
+        // Processing phase
+        print "Validating transaction...";
+        require(sender != recipient, "Cannot send to self");
+        
+        // Success
+        print "Transaction validated";
+        return "Success";
+    } catch (error) {
+        return "Transaction failed";
+    }
+}
+
+print processTransaction("Alice", "Bob", 100);
+print "";
+
+print "=== MEDIUM ERROR HANDLING TESTS COMPLETE ===";

@@ -1,0 +1,170 @@
+// ===============================================
+// PHASE 11: MODIFIERS EASY TESTS
+// Testing: PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER
+// Total: 20 tests
+// ===============================================
+
+// ============= PUBLIC Modifier Tests =============
+print "=== Test 1: Basic PUBLIC action";
+public action greet() {
+    print "Hello World";
+    return "greeting";
+}
+let result1 = greet();
+print "✓ Public action defined and called";
+
+print "=== Test 2: PUBLIC function";
+public function add(a, b) {
+    return a + b;
+}
+let sum = add(5, 3);
+print "Result: " + sum;
+print "✓ Public function works";
+
+// ============= PRIVATE Modifier Tests =============
+print "=== Test 3: Basic PRIVATE action";
+private action internal() {
+    return "private data";
+}
+let priv = internal();
+print "Private result: " + priv;
+print "✓ Private action defined";
+
+// ============= SEALED Modifier Tests =============
+print "=== Test 4: Basic SEALED action";
+sealed action locked() {
+    return 42;
+}
+let sealed_result = locked();
+print "Sealed result: " + sealed_result;
+print "✓ Sealed action works";
+
+// ============= SECURE Modifier Tests =============
+print "=== Test 5: Basic SECURE action";
+secure action protected() {
+    return "secured";
+}
+let sec = protected();
+print "Secure result: " + sec;
+print "✓ Secure action defined";
+
+print "=== Test 6: SECURE function";
+secure function validate(x) {
+    return x > 0;
+}
+let valid = validate(10);
+print "Valid: " + valid;
+print "✓ Secure function works";
+
+// ============= PURE Modifier Tests =============
+print "=== Test 7: Basic PURE action";
+pure action calculate(x) {
+    return x * 2;
+}
+let doubled = calculate(5);
+print "Doubled: " + doubled;
+print "✓ Pure action works";
+
+print "=== Test 8: PURE function with no side effects";
+pure function square(n) {
+    return n * n;
+}
+let sq = square(4);
+print "Square: " + sq;
+print "✓ Pure function works";
+
+// ============= VIEW Modifier Tests =============
+print "=== Test 9: Basic VIEW action";
+view action reader() {
+    return "read-only data";
+}
+let view_result = reader();
+print "View result: " + view_result;
+print "✓ View action works";
+
+print "=== Test 10: VIEW function";
+view function getCount() {
+    return 100;
+}
+let count = getCount();
+print "Count: " + count;
+print "✓ View function works";
+
+// ============= PAYABLE Modifier Tests =============
+print "=== Test 11: Basic PAYABLE action";
+payable action receive() {
+    return "payment received";
+}
+let payment = receive();
+print "Payment: " + payment;
+print "✓ Payable action works";
+
+print "=== Test 12: PAYABLE function";
+payable function deposit(amount) {
+    return "Deposited: " + amount;
+}
+let dep = deposit(50);
+print dep;
+print "✓ Payable function works";
+
+// ============= MODIFIER Keyword Tests =============
+print "=== Test 13: Basic MODIFIER declaration";
+modifier onlyOwner {
+    print "Checking ownership";
+}
+print "✓ Modifier declared";
+
+print "=== Test 14: MODIFIER with require";
+modifier authorized {
+    require(1 == 1, "Not authorized");
+}
+print "✓ Modifier with require";
+
+// ============= Multiple Modifiers Tests =============
+print "=== Test 15: Multiple modifiers on action";
+public secure action securePublic() {
+    return "public and secure";
+}
+let multi1 = securePublic();
+print "Multi result: " + multi1;
+print "✓ Multiple modifiers work";
+
+print "=== Test 16: Three modifiers";
+public pure secure action tripleModified() {
+    return 123;
+}
+let tri = tripleModified();
+print "Triple: " + tri;
+print "✓ Triple modifiers work";
+
+print "=== Test 17: PRIVATE PURE action";
+private pure action privatePure(x) {
+    return x + 10;
+}
+let pp = privatePure(5);
+print "Private pure: " + pp;
+print "✓ Private pure works";
+
+// ============= Edge Cases =============
+print "=== Test 18: VIEW PAYABLE combination";
+view payable function viewPayable() {
+    return "view and payable";
+}
+let vp = viewPayable();
+print "View payable: " + vp;
+print "✓ View payable works";
+
+print "=== Test 19: All execution modifiers";
+secure pure view action allModifiers() {
+    return "all flags";
+}
+let all = allModifiers();
+print "All modifiers: " + all;
+print "✓ All modifiers work";
+
+print "=== Test 20: MODIFIER with body";
+modifier hasBalance {
+    let balance = 100;
+    require(balance > 0, "No balance");
+}
+print "✓ Modifier with body works";

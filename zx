@@ -5,7 +5,7 @@ PY="${PYTHON:-python3}"
 export PYTHONPATH="$DIR/src:$PYTHONPATH"
 
 if [ "$#" -ge 1 ] && [[ "$1" == *.zx ]]; then
-  exec "$PY" "$DIR/main.py" --syntax-style=auto --advanced-parsing run "$1"
+  exec "$PY" "$DIR/scripts/main.py" --syntax-style=auto --advanced-parsing run "$1"
 else
-  exec "$PY" "$DIR/main.py" "$@"
+  exec "$PY" "$DIR/scripts/main.py" "$@"
 fi

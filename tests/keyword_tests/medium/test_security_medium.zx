@@ -1,0 +1,272 @@
+// MEDIUM SECURITY TESTS
+// Testing: ENTITY, VERIFY, CONTRACT, PROTECT, SEAL, AUDIT, RESTRICT, SANDBOX, TRAIL
+// 20 medium tests with more complex patterns
+
+print "=== MEDIUM SECURITY TESTS ===";
+print "";
+
+// Test 1: Entity with default values (if supported)
+print "Test 1: Entity with defaults";
+entity Account {
+    id: integer,
+    balance: integer,
+    active: boolean,
+    type: string
+}
+let acc1 = Account;
+print "Account entity: " + acc1;
+print "";
+
+// Test 2: Verify in function
+print "Test 2: Verify in function";
+action validateAge(age) {
+    verify age >= 18, "Must be 18 or older";
+    return "Valid";
+}
+let result1 = validateAge(25);
+print "Age validation: " + result1;
+print "";
+
+// Test 3: Verify with complex condition
+print "Test 3: Complex verify";
+action checkBounds(value, min, max) {
+    verify value >= min && value <= max, "Out of bounds";
+    return "In range";
+}
+let result2 = checkBounds(50, 0, 100);
+print "Bounds check: " + result2;
+print "";
+
+// Test 4: Multiple verifies in function
+print "Test 4: Multiple verifies";
+action processPayment(amount, balance) {
+    verify amount > 0, "Amount must be positive";
+    verify balance >= amount, "Insufficient balance";
+    verify amount <= 10000, "Amount exceeds limit";
+    return balance - amount;
+}
+let newBalance = processPayment(500, 1000);
+print "New balance: " + newBalance;
+print "";
+
+// Test 5: Nested sandbox execution
+print "Test 5: Nested sandbox";
+let outer = "outer_value";
+sandbox {
+    let inner = "inner_value";
+    print "Inner: " + inner;
+    sandbox {
+        let nested = "nested_value";
+        print "Nested: " + nested;
+    }
+    print "Back to inner";
+}
+print "Back to outer";
+print "";
+
+// Test 6: Sandbox with result
+print "Test 6: Sandbox with result";
+let sandboxResult = sandbox {
+    let computed = 10 * 5;
+    return computed;
+};
+print "Sandbox result: " + sandboxResult;
+print "";
+
+// Test 7: Audit with timestamp
+print "Test 7: Audit with timestamp";
+let transactionData = 1000;
+let timestamp = "2025-12-16";
+audit transactionData, "transaction", timestamp;
+print "Audited with timestamp ✅";
+print "";
+
+// Test 8: Multiple audits
+print "Test 8: Multiple audits";
+let user1 = "Alice";
+let user2 = "Bob";
+audit user1, "login";
+audit user2, "login";
+audit user1, "data_access";
+print "Multiple audits logged ✅";
+print "";
+
+// Test 9: Seal in function
+print "Test 9: Seal in function";
+action sealData(data) {
+    seal data;
+    return "Data sealed";
+}
+let sealResult = "sensitive_data";
+let msg = sealData(sealResult);
+print "Seal result: " + msg;
+print "";
+
+// Test 10: Contract with state updates
+print "Test 10: Contract state";
+contract Wallet {
+    state balance = 1000;
+    state transactions = 0;
+    
+    action deposit(amount) {
+        balance = balance + amount;
+        transactions = transactions + 1;
+        return balance;
+    }
+    
+    action withdraw(amount) {
+        if (balance >= amount) {
+            balance = balance - amount;
+            transactions = transactions + 1;
+            return balance;
+        }
+        return balance;
+    }
+    
+    action getBalance() {
+        return balance;
+    }
+}
+print "Wallet contract defined ✅";
+print "";
+
+// Test 11: Contract with verification
+print "Test 11: Contract with verify";
+contract SecureVault {
+    state value = 0;
+    state locked = false;
+    
+    action setValue(newValue) {
+        verify !locked, "Vault is locked";
+        verify newValue >= 0, "Value must be positive";
+        value = newValue;
+        return value;
+    }
+    
+    action lock() {
+        locked = true;
+        return "Locked";
+    }
+}
+print "SecureVault contract defined ✅";
+print "";
+
+// Test 12: Entity as function parameter type hint
+print "Test 12: Entity type hint";
+entity Transaction {
+    from: string,
+    to: string,
+    amount: integer
+}
+
+action processTransaction(tx) {
+    print "Processing transaction";
+    return "Processed";
+}
+print "Transaction entity and processor defined ✅";
+print "";
+
+// Test 13: Verify with OR condition
+print "Test 13: Verify with OR";
+action checkAccess(role) {
+    verify role == "admin" || role == "moderator", "Insufficient permissions";
+    return "Access granted";
+}
+let access1 = checkAccess("admin");
+print "Access: " + access1;
+print "";
+
+// Test 14: Conditional audit
+print "Test 14: Conditional audit";
+action auditIfImportant(data, important) {
+    if (important) {
+        audit data, "important_event";
+        return "Audited";
+    }
+    return "Not audited";
+}
+let auditResult = auditIfImportant("critical_data", true);
+print "Audit result: " + auditResult;
+print "";
+
+// Test 15: Sandbox with error handling
+print "Test 15: Sandbox with error";
+try {
+    sandbox {
+        let test = 10;
+        verify false, "Sandbox error";
+    }
+} catch (e) {
+    print "Caught sandbox error ✅";
+}
+print "";
+
+// Test 16: Trail with filter (if supported)
+print "Test 16: Trail with filter";
+trail audit, "user_actions";
+print "Filtered trail set up ✅";
+print "";
+
+// Test 17: Multiple entities
+print "Test 17: Multiple entities";
+entity Customer {
+    id: integer,
+    name: string,
+    email: string
+}
+
+entity Order {
+    id: integer,
+    customerId: integer,
+    total: integer,
+    status: string
+}
+print "Multiple entities defined ✅";
+print "";
+
+// Test 18: Verify in conditional
+print "Test 18: Verify in conditional";
+let amount = 500;
+if (amount > 100) {
+    verify amount <= 1000, "Amount too high";
+    print "Amount verified in conditional ✅";
+}
+print "";
+
+// Test 19: Contract with ledger (if supported)
+print "Test 19: Contract with ledger";
+contract Ledger {
+    ledger history;
+    state entries = 0;
+    
+    action addEntry(data) {
+        entries = entries + 1;
+        return entries;
+    }
+}
+print "Ledger contract defined ✅";
+print "";
+
+// Test 20: Combining multiple security features
+print "Test 20: Combined security";
+action secureOperation(data, user) {
+    // Verify preconditions
+    verify data != null, "Data required";
+    verify user != "", "User required";
+    
+    // Audit the operation
+    audit data, "secure_operation";
+    
+    // Execute in sandbox
+    let result = sandbox {
+        let processed = "processed_" + data;
+        return processed;
+    };
+    
+    return result;
+}
+let finalResult = secureOperation("test_data", "alice");
+print "Combined operation: " + finalResult;
+print "";
+
+print "=== MEDIUM SECURITY TESTS COMPLETE ===";

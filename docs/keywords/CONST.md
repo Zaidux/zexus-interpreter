@@ -1,0 +1,481 @@
+# CONST Keyword - Complete Guide
+
+## Overview
+The `const` keyword in Zexus is used to declare **immutable (constant) variables**. Once a value is assigned to a `const` variable, it **cannot be reassigned**. This makes your code more predictable and helps prevent accidental modifications.
+
+## Syntax
+
+```zexus
+const variable_name = value;
+const variable_name : value;    // Alternative syntax (colon instead of equals)
+```
+
+**Note**: The semicolon at the end is optional in Zexus.
+
+## Basic Usage
+
+### Simple Constant Declaration
+```zexus
+const PI = 3.14159;
+const APP_NAME = "MyApp";
+const MAX_USERS = 1000;
+const IS_PRODUCTION = true;
+```
+
+### Immutability Enforcement
+```zexus
+const x = 10;
+x = 20;    // ❌ Error: Cannot reassign const variable 'x'
+```
+
+This is the key difference from `let` - **const variables cannot be reassigned**.
+
+## When to Use CONST
+
+### ✅ Use CONST for:
+- **Configuration values** that shouldn't change
+- **Mathematical constants** (PI, E, etc.)
+- **Fixed limits** and thresholds
+- **Function results** that won't be modified
+- **References** that should remain stable
+- **API keys** and other secrets (in combination with security features)
+
+### ❌ Don't Use CONST for:
+- Values that need to change (use `let` instead)
+- Loop counters and accumulators
+- State that updates over time
+- Temporary calculation variables that get reassigned
+
+## Type Annotations (Optional)
+
+Like `let`, `const` supports optional type annotations:
+
+```zexus
+const age: integer = 25;
+const username: string = "admin";
+const isEnabled: bool = true;
+```
+
+### Supported Types
+- `integer` or `int` - Whole numbers
+- `string` or `str` - Text values
+- `bool` or `boolean` - True/False values
+- `float` - Decimal numbers
+- Custom types and type aliases
+
+## Advanced Features
+
+### 1. Expression Assignment
+Constants can be assigned from any expression:
+
+```zexus
+const total = 10 + 20 + 30;
+const message = "Hello, " + "World!";
+const result = (5 * 3) + (10 / 2);
+```
+
+### 2. Function Return Values
+```zexus
+action calculate(a, b) {
+    return a * b;
+}
+
+const product = calculate(5, 10);    // product = 50 (immutable)
+```
+
+### 3. Complex Data Structures
+```zexus
+const numbers = [1, 2, 3, 4, 5];
+const config = {"theme": "dark", "size": 16};
+const matrix = [[1, 2], [3, 4], [5, 6]];
+```
+
+**Important Note**: While the variable binding is immutable, the contents of arrays and objects may still be modifiable depending on the implementation. The constant refers to the *reference*, not necessarily deep immutability of nested structures.
+
+### 4. Conditional Assignment
+```zexus
+const status = age >= 18 ? "adult" : "minor";
+const value = userInput ?? "default_value";    // Nullish coalescing
+```
+
+### 5. Lambda Functions
+```zexus
+const multiply = lambda(a, b) => a * b;
+const result = multiply(4, 5);    // result = 20
+```
+
+## Comparison with LET
+
+| Feature | CONST | LET |
+|---------|-------|-----|
+| Mutability | ❌ Cannot be reassigned | ✅ Can be reassigned |
+| When to use | Fixed values | Values that change |
+| Safety | Higher (prevents accidents) | Standard |
+| Performance | May optimize better | Standard |
+| Best for | Configuration, constants | Counters, state |
+
+**Example:**
+```zexus
+const immutableVar = 10;
+immutableVar = 20;  // ❌ Error: Cannot reassign const variable
+
+let mutableVar = 10;
+mutableVar = 20;    // ✅ Allowed
+```
+
+## Scope Rules
+
+Constants follow lexical (block) scoping, just like `let`:
+
+### Function Scope
+```zexus
+action example() {
+    const localConst = "I'm local";
+    print localConst;    // ✅ Works
+}
+
+example();
+print localConst;    // ❌ Error: localConst is not defined
+```
+
+### Block Scope
+```zexus
+if (true) {
+    const blockConst = "I'm in a block";
+    print blockConst;    // ✅ Works
+}
+
+print blockConst;    // ❌ Error: blockConst is not defined
+```
+
+### Loop Scope
+```zexus
+for each i in [1, 2, 3] {
+    const loopConst = i * 2;
+    print loopConst;    // New const for each iteration
+}
+
+print loopConst;    // ❌ Error: loopConst is not defined
+```
+
+## Shadowing Behavior
+
+**Important**: In Zexus, const variables **cannot be shadowed** by another const in nested scopes with the same name:
+
+```zexus
+const x = 10;
+
+if (true) {
+    const x = 20;    // ❌ Error: Cannot reassign const variable 'x'
+}
+```
+
+**Workaround**: Use different variable names in nested scopes:
+
+```zexus
+const outerValue = 10;
+
+if (true) {
+    const innerValue = 20;    // ✅ Works
+}
+```
+
+## Common Patterns
+
+### 1. Configuration Constants
+```zexus
+const CONFIG = {
+    "api_url": "https://api.example.com",
+    "timeout": 5000,
+    "retry_attempts": 3,
+    "debug_mode": false
+};
+
+const API_URL = CONFIG["api_url"];
+const TIMEOUT = CONFIG["timeout"];
+```
+
+### 2. Mathematical Constants
+```zexus
+const PI = 3.14159265;
+const E = 2.71828;
+const GOLDEN_RATIO = 1.618;
+
+action calculateCircleArea(radius) {
+    return PI * radius * radius;
+}
+```
+
+### 3. Enum-like Values
+```zexus
+const STATUS_PENDING = "pending";
+const STATUS_APPROVED = "approved";
+const STATUS_REJECTED = "rejected";
+
+const currentStatus = STATUS_PENDING;
+```
+
+### 4. Function Factories
+```zexus
+const makeMultiplier = action(factor) {
+    return lambda(x) => x * factor;
+};
+
+const double = makeMultiplier(2);
+const triple = makeMultiplier(3);
+
+print double(10);    // Output: 20
+print triple(10);    // Output: 30
+```
+
+### 5. Immutable Results
+```zexus
+const userData = fetchUserFromAPI();
+const processedData = transformData(userData);
+const finalResult = validateAndFormat(processedData);
+```
+
+## Edge Cases & Gotchas
+
+### 1. Must Initialize
+```zexus
+// ❌ Error: Must initialize const
+const x;
+
+// ✅ Correct: Always provide a value
+const x = 0;
+const x = null;
+```
+
+### 2. No Reassignment
+```zexus
+const count = 0;
+count = count + 1;    // ❌ Error: Cannot reassign const
+```
+
+If you need to update a value, use `let` instead:
+
+```zexus
+let count = 0;
+count = count + 1;    // ✅ Works
+```
+
+### 3. Cannot Shadow with Same Name
+```zexus
+const x = 10;
+
+if (true) {
+    const x = 20;    // ❌ Error in Zexus
+}
+```
+
+### 4. Reference vs Deep Immutability
+```zexus
+const arr = [1, 2, 3];
+// The binding 'arr' cannot change, but...
+// Array/object content mutability depends on implementation
+```
+
+## Best Practices
+
+### ✅ DO
+- Use UPPERCASE for true constants: `const MAX_SIZE = 100;`
+- Use `const` by default, `let` when you need mutability
+- Group related constants together
+- Use descriptive names: `const USER_TIMEOUT_MS = 5000;`
+- Use `const` for configuration objects
+- Use `const` for function references
+
+### ❌ DON'T
+- Use `const` for values that need to change
+- Try to reassign const variables
+- Shadow const variables with the same name
+- Use generic names: `const x = 10;`
+- Mix `const` and `let` unnecessarily
+
+## Performance Considerations
+
+1. **Optimization**: Compilers can better optimize `const` since the value won't change
+2. **Memory**: Same as `let` - no additional overhead
+3. **Safety**: Prevents accidental bugs from reassignment
+4. **Readability**: Makes intent clear - this value is fixed
+
+## Integration with Other Features
+
+### With Functions
+```zexus
+const greet = action(name) {
+    return "Hello, " + name + "!";
+};
+
+const greeting = greet("Alice");
+print greeting;
+```
+
+### With Async/Await
+```zexus
+async action fetchData() {
+    const data = await getFromAPI();
+    return data;
+}
+
+const result = await fetchData();
+```
+
+### With Pattern Matching
+```zexus
+const value = 42;
+
+pattern value {
+    case 42 => print "The answer!";
+    case _ => print "Something else";
+}
+```
+
+### With Error Handling
+```zexus
+try {
+    const result = riskyOperation();
+    print result;
+} catch (error) {
+    const errorMsg = "Failed: " + error;
+    print errorMsg;
+}
+```
+
+## Debugging Tips
+
+1. **Use DEBUG statement**:
+```zexus
+const x = 10;
+debug x;    // Shows variable info and const status
+```
+
+2. **Check immutability**:
+```zexus
+const value = 42;
+// Try to reassign and catch the error
+try {
+    value = 50;
+} catch (e) {
+    print "Correctly immutable!";
+}
+```
+
+3. **Verify scope**:
+```zexus
+const global = "global";
+
+action test() {
+    const local = "local";
+    print global;    // ✅ Can access
+    print local;     // ✅ Can access
+}
+
+test();
+print global;    // ✅ Can access
+print local;     // ❌ Error: not defined
+```
+
+## Real-World Examples
+
+### 1. API Configuration
+```zexus
+const API_CONFIG = {
+    "base_url": "https://api.myapp.com/v1",
+    "api_key": "abc123",
+    "endpoints": {
+        "users": "/users",
+        "posts": "/posts",
+        "auth": "/auth"
+    }
+};
+
+action fetchUsers() {
+    const url = API_CONFIG["base_url"] + API_CONFIG["endpoints"]["users"];
+    return fetch(url);
+}
+```
+
+### 2. Game Constants
+```zexus
+const PLAYER_MAX_HEALTH = 100;
+const PLAYER_SPEED = 5;
+const GRAVITY = 9.8;
+
+const playerConfig = {
+    "health": PLAYER_MAX_HEALTH,
+    "speed": PLAYER_SPEED,
+    "jumpForce": 10
+};
+```
+
+### 3. Calculation Helpers
+```zexus
+const calculateTax = lambda(amount, rate) => amount * rate;
+const formatCurrency = lambda(amount) => "$" + amount;
+
+const price = 100;
+const taxRate = 0.08;
+const tax = calculateTax(price, taxRate);
+const total = price + tax;
+
+print formatCurrency(total);    // Output: $108
+```
+
+### 4. Data Processing Pipeline
+```zexus
+const rawData = fetchFromDatabase();
+const filteredData = filterActive(rawData);
+const mappedData = mapToDTO(filteredData);
+const sortedData = sortByDate(mappedData);
+const finalData = formatForDisplay(sortedData);
+```
+
+## Comparison Table: CONST vs LET
+
+| Aspect | CONST | LET |
+|--------|-------|-----|
+| **Syntax** | `const x = 10;` | `let x = 10;` |
+| **Reassignment** | ❌ Not allowed | ✅ Allowed |
+| **Shadowing** | ❌ Not allowed (same name) | ✅ Allowed |
+| **Scope** | Block/Lexical | Block/Lexical |
+| **Initialization** | Required | Required |
+| **Use Case** | Fixed values | Changing values |
+| **Safety** | High | Medium |
+| **Performance** | May optimize | Standard |
+| **Best For** | Config, constants | Counters, state |
+
+## Future Enhancements
+
+### Potential Upgrades
+1. **Deep Freeze**: Make nested structures truly immutable
+2. **Compile-Time Constants**: Evaluate at compile time for better performance
+3. **Const Assertions**: `const x = [1, 2, 3] as readonly;`
+4. **Destructuring**: `const [a, b, c] = [1, 2, 3];`
+
+### Patches Needed
+- Allow shadowing in nested scopes (or document why it's disallowed)
+- Better error messages for reassignment attempts
+- Warnings for unused constants
+- Deep immutability for arrays and objects
+
+## Summary
+
+The `const` keyword is essential for writing safe, maintainable Zexus code. It declares variables that cannot be reassigned, making your intentions clear and preventing accidental modifications.
+
+### Key Takeaways:
+- ✅ Use `const` for values that won't change
+- ✅ Use `let` for values that need to be updated
+- ❌ Cannot reassign const variables
+- ❌ Cannot shadow const with same name in nested scope
+- 🎯 Const makes code more predictable and safer
+
+**Rule of Thumb**: Start with `const` by default, switch to `let` only when you need mutability.
+
+---
+
+**Related Keywords**: LET, IMMUTABLE, ASSIGN, IDENT  
+**Category**: Variable Declaration  
+**Status**: ✅ Fully Implemented  
+**Last Updated**: December 16, 2025

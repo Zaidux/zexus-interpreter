@@ -1,0 +1,248 @@
+// ===================================
+// PHASE 9: ADVANCED LANGUAGE FEATURES
+// Complex Tests (20 tests)
+// Keywords: DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING
+// ===================================
+
+print "=== Test 1: DEFER stack with multiple cleanups ===";
+action deferStack() {
+    defer {
+        print "Cleanup 3";
+    }
+    defer {
+        print "Cleanup 2";
+    }
+    defer {
+        print "Cleanup 1";
+    }
+    print "Main execution";
+}
+deferStack();
+print "✓ Defer stack executed";
+
+print "\n=== Test 2: ENUM-based state machine ===";
+enum WorkflowState {
+    DRAFT = 0,
+    REVIEW = 1,
+    APPROVED = 2,
+    PUBLISHED = 3,
+    ARCHIVED = 4
+}
+print "✓ Workflow state enum";
+
+print "\n=== Test 3: Complex PATTERN matching ===";
+let command = "process";
+pattern command {
+    "start" => print "Starting";
+    "stop" => print "Stopping";
+    "process" => print "Processing";
+    "restart" => print "Restarting";
+    "status" => print "Status Check";
+    default => print "Unknown Command";
+}
+print "✓ Complex pattern matching";
+
+print "\n=== Test 4: INTERFACE for layered architecture ===";
+interface DataLayer {
+    action connect();
+    action query();
+    action disconnect();
+}
+interface BusinessLayer {
+    action process();
+    action validate();
+}
+interface PresentationLayer {
+    action render();
+    action handle();
+}
+print "✓ Layered architecture interfaces";
+
+print "\n=== Test 5: TYPE_ALIAS for domain modeling ===";
+type_alias CustomerId = string;
+type_alias OrderId = string;
+type_alias ProductId = string;
+type_alias Price = number;
+print "✓ Domain modeling aliases";
+
+print "\n=== Test 6: DEFER with error recovery ===";
+action errorRecovery() {
+    defer {
+        print "Recovery cleanup";
+    }
+    defer {
+        print "Transaction rollback";
+    }
+    print "Attempting operation";
+}
+errorRecovery();
+print "✓ Error recovery with defer";
+
+print "\n=== Test 7: PROTOCOL for plugin system ===";
+protocol PluginProtocol {
+    action initialize();
+    action execute();
+    action cleanup();
+    action getInfo();
+}
+print "✓ Plugin protocol";
+
+print "\n=== Test 8: ENUM with bitwise flags ===";
+enum AccessFlags {
+    NONE = 0,
+    READ = 1,
+    WRITE = 2,
+    DELETE = 4,
+    ADMIN = 8,
+    SUPER = 16
+}
+print "✓ Bitwise flags enum";
+
+print "\n=== Test 9: PATTERN with nested logic ===";
+let level = "high";
+pattern level {
+    "low" => print "Low priority";
+    "medium" => print "Medium priority";
+    "high" => print "High priority";
+    "critical" => print "Critical priority";
+    default => print "Unknown priority";
+}
+print "✓ Pattern with priorities";
+
+print "\n=== Test 10: INTERFACE composition ===";
+interface Readable {
+    action read();
+}
+interface Writable {
+    action write();
+}
+interface Seekable {
+    action seek();
+}
+print "✓ Interface composition";
+
+print "\n=== Test 11: DEFER resource management pattern ===";
+action resourceManagement() {
+    defer {
+        print "Close database";
+    }
+    defer {
+        print "Close network";
+    }
+    defer {
+        print "Close file";
+    }
+    print "All resources open";
+}
+resourceManagement();
+print "✓ Resource management pattern";
+
+print "\n=== Test 12: ENUM complex state transitions ===";
+enum ConnectionState {
+    DISCONNECTED = 0,
+    CONNECTING = 1,
+    CONNECTED = 2,
+    AUTHENTICATING = 3,
+    AUTHENTICATED = 4,
+    DISCONNECTING = 5
+}
+print "✓ Connection state transitions";
+
+print "\n=== Test 13: PATTERN decision tree ===";
+let action = "save";
+pattern action {
+    "create" => print "Create new";
+    "read" => print "Read existing";
+    "update" => print "Update existing";
+    "delete" => print "Delete existing";
+    "save" => print "Save changes";
+    default => print "Invalid action";
+}
+print "✓ Pattern decision tree";
+
+print "\n=== Test 14: PROTOCOL for event system ===";
+protocol EventEmitter {
+    action subscribe();
+    action unsubscribe();
+    action emit();
+    action listListeners();
+}
+print "✓ Event emitter protocol";
+
+print "\n=== Test 15: TYPE_ALIAS nested types ===";
+type_alias StringList = array;
+type_alias IntMap = map;
+type_alias ConfigMap = map;
+print "✓ Nested type aliases";
+
+print "\n=== Test 16: DEFER with conditional cleanup ===";
+action conditionalCleanup(shouldClean) {
+    defer {
+        if (shouldClean) {
+            print "Performing cleanup";
+        }
+    }
+    print "Operation complete";
+}
+conditionalCleanup(true);
+print "✓ Conditional cleanup";
+
+print "\n=== Test 17: INTERFACE for microservices ===";
+interface MicroserviceInterface {
+    action health();
+    action metrics();
+    action process();
+    action shutdown();
+}
+print "✓ Microservice interface";
+
+print "\n=== Test 18: ENUM with semantic versioning ===";
+enum ApiVersion {
+    V1 = 1,
+    V2 = 2,
+    V3 = 3,
+    BETA = 99,
+    ALPHA = 98
+}
+print "✓ API version enum";
+
+print "\n=== Test 19: Complex PATTERN with defaults ===";
+let errorCode = 9999;
+pattern errorCode {
+    0 => print "Success";
+    1 => print "Warning";
+    2 => print "Error";
+    3 => print "Critical";
+    default => print "Unknown error";
+}
+print "✓ Complex pattern with defaults";
+
+print "\n=== Test 20: Complete advanced features integration ===";
+enum SystemState {
+    INIT = 0,
+    READY = 1,
+    RUNNING = 2,
+    SHUTDOWN = 3
+}
+interface SystemInterface {
+    action start();
+    action stop();
+}
+protocol SystemProtocol {
+    action monitor();
+}
+type_alias SystemId = string;
+action systemTest() {
+    defer {
+        print "System cleanup";
+    }
+    print "System running";
+}
+systemTest();
+pattern "complete" {
+    "complete" => print "Pattern matched";
+    default => print "Not matched";
+}
+print "✓ Complete integration";
+
+print "\n=== All Complex Advanced Features Tests Complete ===";

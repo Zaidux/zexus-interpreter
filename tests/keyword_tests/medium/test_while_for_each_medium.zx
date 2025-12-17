@@ -1,0 +1,199 @@
+// ============================================
+// MEDIUM TESTS: WHILE, FOR, EACH, IN Keywords
+// ============================================
+// More complex iteration patterns and combinations
+
+// Test 1: While loop with break condition pattern
+let searchVal = 3;
+let found = false;
+let idx = 0;
+let list = [1, 2, 3, 4, 5];
+while (idx < 5 && !found) {
+    if (list[idx] == searchVal) {
+        found = true;
+        print "Found at index: " + idx;
+    }
+    idx = idx + 1;
+}
+// Expected: Found at index: 2
+
+// Test 2: For each with accumulation
+let total = 0;
+for each num in [10, 20, 30, 40] {
+    total = total + num;
+}
+print total;
+// Expected: 100
+
+// Test 3: While with multiple variables
+let x = 0;
+let y = 10;
+while (x < y) {
+    print x + ", " + y;
+    x = x + 1;
+    y = y - 1;
+}
+// Expected: 0, 10; 1, 9; 2, 8; 3, 7; 4, 6
+
+// Test 4: For each with conditional printing
+for each n in [1, 2, 3, 4, 5, 6] {
+    if (n % 2 == 0) {
+        print n + " is even";
+    }
+}
+// Expected: 2 is even, 4 is even, 6 is even
+
+// Test 5: Nested while loops
+let outer = 0;
+while (outer < 2) {
+    let inner = 0;
+    while (inner < 2) {
+        print "(" + outer + ", " + inner + ")";
+        inner = inner + 1;
+    }
+    outer = outer + 1;
+}
+// Expected: (0, 0), (0, 1), (1, 0), (1, 1)
+
+// Test 6: For each with array building
+let doubled = [];
+for each value in [1, 2, 3] {
+    let result = value * 2;
+    print result;
+}
+// Expected: 2, 4, 6
+
+// Test 7: While loop with power calculation
+let base = 2;
+let power = 1;
+let limit = 100;
+while (power < limit) {
+    print power;
+    power = power * base;
+}
+// Expected: 1, 2, 4, 8, 16, 32, 64
+
+// Test 8: For each with map access
+let data = {"a": 10, "b": 20, "c": 30};
+for each key in ["a", "b", "c"] {
+    print data[key];
+}
+// Expected: 10, 20, 30
+
+// Test 9: While with OR condition
+let count = 0;
+let flag = true;
+while (count < 3 || flag) {
+    print count;
+    count = count + 1;
+    if (count == 1) {
+        flag = false;
+    }
+}
+// Expected: 0, 1, 2
+
+// Test 10: For each with string manipulation
+for each str in ["hello", "world"] {
+    let upper = str;  // Placeholder for uppercase
+    print str + " processed";
+}
+// Expected: hello processed, world processed
+
+// Test 11: While with factorial calculation
+let n = 5;
+let factorial = 1;
+let counter = 1;
+while (counter <= n) {
+    factorial = factorial * counter;
+    counter = counter + 1;
+}
+print factorial;
+// Expected: 120
+
+// Test 12: For each with nested conditionals
+for each age in [15, 18, 25, 65] {
+    if (age < 18) {
+        print "Minor";
+    } elif (age >= 65) {
+        print "Senior";
+    } else {
+        print "Adult";
+    }
+}
+// Expected: Minor, Adult, Adult, Senior
+
+// Test 13: While with array iteration pattern
+let arr = [5, 10, 15, 20];
+let index = 0;
+while (index < 4) {
+    print arr[index];
+    index = index + 1;
+}
+// Expected: 5, 10, 15, 20
+
+// Test 14: For each with calculation and comparison
+let prices = [10, 25, 30, 15];
+for each price in prices {
+    if (price > 20) {
+        print "Expensive: " + price;
+    } else {
+        print "Affordable: " + price;
+    }
+}
+// Expected: Affordable: 10, Expensive: 25, Expensive: 30, Affordable: 15
+
+// Test 15: While loop with step increment
+let step = 0;
+while (step <= 10) {
+    print step;
+    step = step + 2;
+}
+// Expected: 0, 2, 4, 6, 8, 10
+
+// Test 16: For each with range summing
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let sum = 0;
+for each num in numbers {
+    sum = sum + num;
+}
+print sum;
+// Expected: 55
+
+// Test 17: While with complex boolean logic
+let a = 5;
+let b = 10;
+let c = 3;
+while (a < b && b > c) {
+    print a;
+    a = a + 2;
+}
+// Expected: 5, 7, 9
+
+// Test 18: For each with multiple operations
+for each val in [2, 3, 4] {
+    let squared = val * val;
+    let cubed = squared * val;
+    print cubed;
+}
+// Expected: 8, 27, 64
+
+// Test 19: While loop with decrement and condition
+let remaining = 10;
+while (remaining > 0) {
+    if (remaining % 3 == 0) {
+        print remaining;
+    }
+    remaining = remaining - 1;
+}
+// Expected: 9, 6, 3
+
+// Test 20: For each with function-like pattern
+let scores = [85, 92, 78, 95];
+let passing = 0;
+for each score in scores {
+    if (score >= 80) {
+        passing = passing + 1;
+    }
+}
+print "Passing: " + passing;
+// Expected: Passing: 3

@@ -1,0 +1,341 @@
+# Complex Tests for IF/ELIF/ELSE Keywords
+# Testing advanced scenarios, deeply nested conditions, and edge cases
+
+# Test 1: Deep nesting (4 levels)
+let level1 = true;
+let level2 = true;
+let level3 = true;
+let level4 = true;
+
+if (level1) {
+    if (level2) {
+        if (level3) {
+            if (level4) {
+                print "All four levels true";
+            }
+        }
+    }
+}
+# Expected output: All four levels true
+
+# Test 2: Complex decision tree
+action categorize(age, income, hasDebt) {
+    if (age < 25) {
+        if (income < 30000) {
+            return "Young, Low Income";
+        } elif (income < 60000) {
+            return "Young, Mid Income";
+        } else {
+            return "Young, High Income";
+        }
+    } elif (age < 50) {
+        if (hasDebt) {
+            if (income < 50000) {
+                return "Mid Age, Debt, Low Income";
+            } else {
+                return "Mid Age, Debt, Good Income";
+            }
+        } else {
+            return "Mid Age, No Debt";
+        }
+    } else {
+        if (income > 80000) {
+            return "Senior, Wealthy";
+        } else {
+            return "Senior, Moderate";
+        }
+    }
+}
+
+print categorize(22, 25000, false);
+print categorize(35, 45000, true);
+print categorize(55, 90000, false);
+# Expected output: Young, Low Income, Mid Age, Debt, Low Income, Senior, Wealthy
+
+# Test 3: State machine with if-elif
+let state = "init";
+let counter = 0;
+
+while (counter < 5) {
+    if (state == "init") {
+        print "Initializing";
+        state = "loading";
+    } elif (state == "loading") {
+        print "Loading";
+        state = "ready";
+    } elif (state == "ready") {
+        print "Ready";
+        state = "done";
+    } elif (state == "done") {
+        print "Done";
+        state = "init";
+    }
+    counter = counter + 1;
+}
+# Expected output: Initializing, Loading, Ready, Done, Initializing
+
+# Test 4: Guard clauses pattern
+action validateUser(user) {
+    if (user == null) {
+        return "Error: Null user";
+    }
+    
+    if (user["age"] < 18) {
+        return "Error: Too young";
+    }
+    
+    if (!user["active"]) {
+        return "Error: Inactive";
+    }
+    
+    if (user["balance"] < 0) {
+        return "Error: Negative balance";
+    }
+    
+    return "Valid user";
+}
+
+let user1 = {"age": 25, "active": true, "balance": 100};
+let user2 = {"age": 15, "active": true, "balance": 50};
+let user3 = {"age": 30, "active": false, "balance": 200};
+
+print validateUser(user1);
+print validateUser(user2);
+print validateUser(user3);
+# Expected output: Valid user, Error: Too young, Error: Inactive
+
+# Test 5: Multiple elif with complex conditions
+let x = 15;
+let y = 20;
+let z = 25;
+
+if (x > y && y > z) {
+    print "Descending";
+} elif (x < y && y < z) {
+    print "Ascending";
+} elif (x == y && y == z) {
+    print "All equal";
+} elif (x == y || y == z || x == z) {
+    print "Some equal";
+} else {
+    print "Mixed order";
+}
+# Expected output: Ascending
+
+# Test 6: Recursion with conditional
+action factorial(n) {
+    if (n <= 1) {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    }
+}
+
+print factorial(5);
+print factorial(7);
+# Expected output: 120, 5040
+
+# Test 7: FizzBuzz pattern
+for each num in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] {
+    if (num % 15 == 0) {
+        print "FizzBuzz";
+    } elif (num % 3 == 0) {
+        print "Fizz";
+    } elif (num % 5 == 0) {
+        print "Buzz";
+    } else {
+        print num;
+    }
+}
+# Expected output: 1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz
+
+# Test 8: Complex validation chain
+action validatePassword(pwd) {
+    if (pwd == null) {
+        return "Error: Password is null";
+    }
+    
+    let len = 10;  # Simulating length check
+    
+    if (len < 8) {
+        return "Error: Too short";
+    } elif (len > 32) {
+        return "Error: Too long";
+    }
+    
+    if (pwd == "password123") {
+        return "Error: Too common";
+    }
+    
+    return "Valid password";
+}
+
+print validatePassword("securePass123!");
+print validatePassword("password123");
+# Expected output: Valid password, Error: Too common
+
+# Test 9: Nested loops with conditionals
+for each i in [1, 2, 3] {
+    for each j in [1, 2, 3] {
+        if (i == j) {
+            print "Equal";
+        } elif (i < j) {
+            print "Less";
+        } else {
+            print "Greater";
+        }
+    }
+}
+# Expected output: Equal, Less, Less, Greater, Equal, Less, Greater, Greater, Equal
+
+# Test 10: Switch-like behavior with elif
+action getDayName(dayNum) {
+    if (dayNum == 1) {
+        return "Monday";
+    } elif (dayNum == 2) {
+        return "Tuesday";
+    } elif (dayNum == 3) {
+        return "Wednesday";
+    } elif (dayNum == 4) {
+        return "Thursday";
+    } elif (dayNum == 5) {
+        return "Friday";
+    } elif (dayNum == 6) {
+        return "Saturday";
+    } elif (dayNum == 7) {
+        return "Sunday";
+    } else {
+        return "Invalid day";
+    }
+}
+
+print getDayName(1);
+print getDayName(5);
+print getDayName(7);
+print getDayName(8);
+# Expected output: Monday, Friday, Sunday, Invalid day
+
+# Test 11: Conditional with side effects
+let globalCounter = 0;
+
+action incrementIfEven(n) {
+    if (n % 2 == 0) {
+        globalCounter = globalCounter + 1;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+let r1 = incrementIfEven(4);
+let r2 = incrementIfEven(7);
+let r3 = incrementIfEven(10);
+
+print globalCounter;
+# Expected output: 2
+
+# Test 12: Complex array filtering
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let evens = [];
+let odds = [];
+let primes = [];
+
+for each n in numbers {
+    if (n % 2 == 0) {
+        evens = evens + [n];
+    } else {
+        odds = odds + [n];
+    }
+    
+    if (n == 2 || n == 3 || n == 5 || n == 7) {
+        primes = primes + [n];
+    }
+}
+
+print evens;
+print odds;
+print primes;
+# Expected output: [2, 4, 6, 8, 10], [1, 3, 5, 7, 9], [2, 3, 5, 7]
+
+# Test 13: Range categorization
+action categorizeNumber(num) {
+    if (num < 0) {
+        if (num < -100) {
+            return "Very Negative";
+        } elif (num < -10) {
+            return "Negative";
+        } else {
+            return "Slightly Negative";
+        }
+    } elif (num == 0) {
+        return "Zero";
+    } else {
+        if (num > 100) {
+            return "Very Positive";
+        } elif (num > 10) {
+            return "Positive";
+        } else {
+            return "Slightly Positive";
+        }
+    }
+}
+
+print categorizeNumber(-150);
+print categorizeNumber(-25);
+print categorizeNumber(0);
+print categorizeNumber(5);
+print categorizeNumber(50);
+print categorizeNumber(200);
+# Expected output: Very Negative, Negative, Zero, Slightly Positive, Positive, Very Positive
+
+# Test 14: Binary search simulation
+action binarySearchStep(target, low, high) {
+    if (low > high) {
+        return "Not found";
+    }
+    
+    let mid = (low + high) / 2;
+    
+    if (mid == target) {
+        return "Found";
+    } elif (mid < target) {
+        return "Search upper half";
+    } else {
+        return "Search lower half";
+    }
+}
+
+print binarySearchStep(50, 0, 100);
+print binarySearchStep(25, 0, 50);
+print binarySearchStep(75, 51, 100);
+# Expected output: Found, Search lower half, Search upper half
+
+# Test 15: Grade calculator with multiple criteria
+action calculateGrade(score, attendance, participation) {
+    if (score >= 90) {
+        if (attendance >= 90) {
+            return "A+";
+        } else {
+            return "A";
+        }
+    } elif (score >= 80) {
+        if (participation >= 80) {
+            return "B+";
+        } else {
+            return "B";
+        }
+    } elif (score >= 70) {
+        return "C";
+    } elif (score >= 60) {
+        return "D";
+    } else {
+        return "F";
+    }
+}
+
+print calculateGrade(95, 95, 85);
+print calculateGrade(92, 80, 90);
+print calculateGrade(85, 75, 85);
+print calculateGrade(85, 70, 70);
+print calculateGrade(75, 80, 75);
+# Expected output: A+, A, B+, B, C

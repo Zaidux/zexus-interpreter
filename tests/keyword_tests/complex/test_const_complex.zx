@@ -1,0 +1,290 @@
+# Complex Tests for CONST Keyword
+# Testing immutability enforcement, advanced scenarios, and edge cases
+
+# Test 1: Const in closure-like pattern
+action createMultiplier(factor) {
+    const multiplier = factor;
+    
+    action multiply(x) {
+        return x * multiplier;
+    }
+    
+    return multiply;
+}
+
+const times3 = createMultiplier(3);
+const times5 = createMultiplier(5);
+
+print times3(10);
+print times5(10);
+# Expected output: 30, 50
+
+# Test 2: Const with complex data structures
+const database = {
+    "users": {"alice": 30, "bob": 25},
+    "settings": {"theme": "dark", "notifications": true}
+};
+
+const aliceAge = database["users"]["alice"];
+const theme = database["settings"]["theme"];
+
+print aliceAge;
+print theme;
+# Expected output: 30, dark
+
+# Test 3: Multiple levels of const
+const outerVal = 10;
+
+action testOuter() {
+    const inner = 20;
+    
+    action testInner() {
+        const deepest = 30;
+        return outerVal + inner + deepest;
+    }
+    
+    return testInner();
+}
+
+const total = testOuter();
+print total;
+# Expected output: 60
+
+# Test 4: Const with recursive function
+action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+const fib10 = fibonacci(10);
+const fib12 = fibonacci(12);
+print fib10;
+print fib12;
+# Expected output: 55, 144
+
+# Test 5: Const array operations (reading)
+const data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const firstFive = [data[0], data[1], data[2], data[3], data[4]];
+print firstFive;
+# Expected output: [1, 2, 3, 4, 5]
+
+# Test 6: Const in conditional chains
+const score = 95;
+
+const grade = score >= 90 ? "A" :
+              score >= 80 ? "B" :
+              score >= 70 ? "C" :
+              score >= 60 ? "D" : "F";
+
+print grade;
+# Expected output: A
+
+# Test 7: Const with map operations
+const operations = {
+    "add": lambda(a, b) => a + b,
+    "sub": lambda(a, b) => a - b,
+    "mul": lambda(a, b) => a * b,
+    "div": lambda(a, b) => a / b
+};
+
+const sum = operations["add"](10, 5);
+const diff = operations["sub"](10, 5);
+const prod = operations["mul"](10, 5);
+const quot = operations["div"](10, 5);
+
+print sum;
+print diff;
+print prod;
+print quot;
+# Expected output: 15, 5, 50, 2
+
+# Test 8: Const with array of functions
+action makeAdder(n) {
+    return lambda(x) => x + n;
+}
+
+const adders = [makeAdder(1), makeAdder(2), makeAdder(3)];
+const result1 = adders[0](10);
+const result2 = adders[1](10);
+const result3 = adders[2](10);
+
+print result1;
+print result2;
+print result3;
+# Expected output: 11, 12, 13
+
+# Test 9: Const configuration object
+const appConfig = {
+    "version": "1.0.0",
+    "features": {
+        "darkMode": true,
+        "notifications": true,
+        "analytics": false
+    },
+    "limits": {
+        "maxUsers": 1000,
+        "maxStorage": 5000
+    }
+};
+
+const version = appConfig["version"];
+const darkMode = appConfig["features"]["darkMode"];
+const maxUsers = appConfig["limits"]["maxUsers"];
+
+print version;
+print darkMode;
+print maxUsers;
+# Expected output: 1.0.0, true, 1000
+
+# Test 10: Const with mathematical formulas
+const pi = 3.14159;
+const radius = 5;
+const area = pi * radius * radius;
+const circumference = 2 * pi * radius;
+
+print area;
+print circumference;
+# Expected output: 78.53975, 31.4159
+
+# Test 11: Const shadow testing (inner scope)
+# NOTE: Shadowing const with const may not be supported
+# Using different variable names instead
+const outerX = "outer";
+print outerX;
+
+if (true) {
+    const innerX = "inner";
+    print innerX;
+}
+
+print outerX;
+# Expected output: outer, inner, outer
+
+# Test 12: Multiple const in nested blocks
+const level1 = 1;
+
+if (true) {
+    const level2 = 2;
+    
+    if (true) {
+        const level3 = 3;
+        const levelSum = level1 + level2 + level3;
+        print levelSum;
+    }
+}
+# Expected output: 6
+
+# Test 13: Const with error handling pattern
+action safeDiv(a, b) {
+    if (b == 0) {
+        return null;
+    }
+    return a / b;
+}
+
+const result = safeDiv(10, 2);
+const errorResult = safeDiv(10, 0);
+
+print result;
+print errorResult;
+# Expected output: 5, null
+
+# Test 14: Const with array transformation
+const numbers = [1, 2, 3, 4, 5];
+let squares = [];
+
+for each num in numbers {
+    const square = num * num;
+    squares = squares + [square];
+}
+
+print squares;
+# Expected output: Shows error OR array of squares
+
+# Test 15: Const factorial calculation
+action factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    const prev = factorial(n - 1);
+    return n * prev;
+}
+
+const fact5 = factorial(5);
+const fact7 = factorial(7);
+
+print fact5;
+print fact7;
+# Expected output: 120, 5040
+
+# Test 16: Const with boolean logic chains
+const isValid = true;
+const isActive = true;
+const hasPermission = true;
+
+const canProceed = isValid && isActive && hasPermission;
+print canProceed;
+# Expected output: true
+
+# Test 17: Const with string operations
+const str1 = "Hello";
+const str2 = "World";
+const str3 = "!";
+const message = str1 + " " + str2 + str3;
+
+print message;
+# Expected output: Hello World!
+
+# Test 18: Const in while loop (new const each iteration)
+let counter = 0;
+while (counter < 3) {
+    const loopValue = counter * 10;
+    print loopValue;
+    counter = counter + 1;
+}
+# Expected output: 0, 10, 20
+
+# Test 19: Const with nested functions
+action outerFunc() {
+    const outerValue = 100;
+    
+    action middle() {
+        const middleValue = 200;
+        
+        action inner() {
+            const innerValue = 300;
+            return outerValue + middleValue + innerValue;
+        }
+        
+        return inner();
+    }
+    
+    return middle();
+}
+
+const nestedSum = outerFunc();
+print nestedSum;
+# Expected output: 600
+
+# Test 20: Stress test - many const declarations
+const v1 = 1;
+const v2 = 2;
+const v3 = 3;
+const v4 = 4;
+const v5 = 5;
+const v6 = 6;
+const v7 = 7;
+const v8 = 8;
+const v9 = 9;
+const v10 = 10;
+const v11 = 11;
+const v12 = 12;
+const v13 = 13;
+const v14 = 14;
+const v15 = 15;
+
+const bigSum = v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15;
+print bigSum;
+# Expected output: 120

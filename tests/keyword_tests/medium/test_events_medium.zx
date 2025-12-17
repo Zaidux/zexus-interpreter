@@ -1,0 +1,356 @@
+// ============================================================================
+// MEDIUM LEVEL: EVENT/EMIT/STREAM/WATCH Keywords Test Suite
+// ============================================================================
+// Testing intermediate event patterns and reactive programming
+// Keywords: EVENT (with EMIT), EMIT, STREAM, WATCH
+// ============================================================================
+
+print "=== MEDIUM EVENTS/REACTIVE TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Event-driven function pattern
+// Expected: Functions emit events for state changes
+// ============================================================================
+print "Test 1: Event-driven functions";
+action processPayment(amount) {
+    emit PaymentStarted(amount);
+    let result = amount * 2;
+    emit PaymentCompleted(result);
+    return result;
+}
+
+print "Result: " + processPayment(50);
+print "";
+
+// ============================================================================
+// TEST 2: Conditional event emission
+// Expected: Emit different events based on conditions
+// ============================================================================
+print "Test 2: Conditional events";
+action validateUser(age) {
+    if (age >= 18) {
+        emit UserValid(age);
+        return "Valid";
+    } else {
+        emit UserInvalid(age);
+        return "Invalid";
+    }
+}
+
+print validateUser(25);
+print validateUser(15);
+print "";
+
+// ============================================================================
+// TEST 3: Event with complex data
+// Expected: Emit events with structured data
+// ============================================================================
+print "Test 3: Events with complex data";
+action createUser(name, email) {
+    let userData = {"name": name, "email": email, "created": true};
+    emit UserCreated(name, email);
+    return "User created";
+}
+
+print createUser("Alice", "alice@example.com");
+print "";
+
+// ============================================================================
+// TEST 4: Multiple events in workflow
+// Expected: Emit events at each workflow stage
+// ============================================================================
+print "Test 4: Workflow events";
+action processOrder(orderId) {
+    emit OrderReceived(orderId);
+    
+    print "Processing order...";
+    emit OrderProcessing(orderId);
+    
+    print "Order complete";
+    emit OrderCompleted(orderId);
+    
+    return "Done";
+}
+
+print processOrder(12345);
+print "";
+
+// ============================================================================
+// TEST 5: Event emission with error handling
+// Expected: Emit events in try-catch
+// ============================================================================
+print "Test 5: Events with error handling";
+action safeOperation(value) {
+    try {
+        emit OperationStarted(value);
+        
+        if (value < 0) {
+            emit OperationFailed(value);
+            revert("Negative value");
+        }
+        
+        emit OperationSucceeded(value);
+        return value;
+    } catch (e) {
+        emit OperationError(value);
+        return 0;
+    }
+}
+
+print "Safe op 10: " + safeOperation(10);
+print "Safe op -5: " + safeOperation(-5);
+print "";
+
+// ============================================================================
+// TEST 6: Event counter pattern
+// Expected: Track event counts
+// ============================================================================
+print "Test 6: Event counting";
+let eventCount = 0;
+
+action trackEvent(name) {
+    eventCount = eventCount + 1;
+    emit EventTracked(name, eventCount);
+    return eventCount;
+}
+
+print "Event 1: " + trackEvent("Click");
+print "Event 2: " + trackEvent("Scroll");
+print "Event 3: " + trackEvent("Submit");
+print "";
+
+// ============================================================================
+// TEST 7: State machine with events
+// Expected: Emit events on state transitions
+// ============================================================================
+print "Test 7: State machine events";
+let currentState = "idle";
+
+action transition(newState) {
+    emit StateChanging(currentState, newState);
+    currentState = newState;
+    emit StateChanged(newState);
+    return currentState;
+}
+
+print "State: " + transition("active");
+print "State: " + transition("paused");
+print "";
+
+// ============================================================================
+// TEST 8: WATCH statement with variable
+// Expected: React to variable changes
+// ============================================================================
+print "Test 8: Basic watch statement";
+let watchedValue = 10;
+
+// Note: Testing if watch syntax works
+print "Watch setup for watchedValue";
+// watch watchedValue => print "Value changed";
+
+print "Watch test noted (may need syntax adjustment)";
+print "";
+
+// ============================================================================
+// TEST 9: STREAM statement
+// Expected: Set up event stream handler
+// ============================================================================
+print "Test 9: Stream statement";
+// Note: Stream syntax from parser: stream name as eventVar => { handler }
+print "Stream test noted (syntax: stream name as event => {})";
+print "";
+
+// ============================================================================
+// TEST 10: Event-based validation
+// Expected: Emit validation events
+// ============================================================================
+print "Test 10: Validation events";
+action validateInput(input) {
+    emit ValidationStarted(input);
+    
+    if (input == null) {
+        emit ValidationFailed("null");
+        return false;
+    }
+    
+    if (input == "") {
+        emit ValidationFailed("empty");
+        return false;
+    }
+    
+    emit ValidationPassed(input);
+    return true;
+}
+
+print "Valid: " + validateInput("test");
+print "Invalid: " + validateInput(null);
+print "";
+
+// ============================================================================
+// TEST 11: Nested event emissions
+// Expected: Emit events from nested functions
+// ============================================================================
+print "Test 11: Nested events";
+action outerFunction() {
+    emit OuterStart();
+    
+    action innerFunction() {
+        emit InnerStart();
+        return "Inner done";
+    }
+    
+    let result = innerFunction();
+    emit OuterComplete();
+    return result;
+}
+
+print outerFunction();
+print "";
+
+// ============================================================================
+// TEST 12: Event with calculated data
+// Expected: Emit results of calculations
+// ============================================================================
+print "Test 12: Events with calculations";
+action calculate(a, b) {
+    let sum = a + b;
+    let product = a * b;
+    
+    emit CalculationResult(sum, product);
+    return sum;
+}
+
+print "Calc result: " + calculate(5, 10);
+print "";
+
+// ============================================================================
+// TEST 13: Audit trail with events
+// Expected: Create audit log via events
+// ============================================================================
+print "Test 13: Audit trail";
+action auditAction(user, action) {
+    emit AuditLog(user, action, "timestamp");
+    print "Audited: " + user + " - " + action;
+    return "Logged";
+}
+
+print auditAction("Alice", "login");
+print auditAction("Bob", "update");
+print "";
+
+// ============================================================================
+// TEST 14: Event-driven authorization
+// Expected: Emit auth events
+// ============================================================================
+print "Test 14: Authorization events";
+action checkPermission(user, permission) {
+    emit PermissionCheck(user, permission);
+    
+    if (user == "admin") {
+        emit PermissionGranted(user, permission);
+        return true;
+    } else {
+        emit PermissionDenied(user, permission);
+        return false;
+    }
+}
+
+print "Admin: " + checkPermission("admin", "write");
+print "User: " + checkPermission("user", "write");
+print "";
+
+// ============================================================================
+// TEST 15: Event batching pattern
+// Expected: Emit batch of events
+// ============================================================================
+print "Test 15: Event batching";
+action emitBatch(count) {
+    let i = 0;
+    // Note: Using sequential emits instead of loop
+    emit BatchEvent(1);
+    emit BatchEvent(2);
+    emit BatchEvent(3);
+    return "Batch emitted";
+}
+
+print emitBatch(3);
+print "";
+
+// ============================================================================
+// TEST 16: Event with boolean logic
+// Expected: Emit based on boolean expressions
+// ============================================================================
+print "Test 16: Events with boolean logic";
+action checkConditions(a, b) {
+    let bothTrue = (a && b);
+    let anyTrue = (a || b);
+    
+    emit LogicResult(bothTrue, anyTrue);
+    return bothTrue;
+}
+
+print "Both true: " + checkConditions(true, true);
+print "One true: " + checkConditions(true, false);
+print "";
+
+// ============================================================================
+// TEST 17: Event timing/sequencing
+// Expected: Events in specific sequence
+// ============================================================================
+print "Test 17: Event sequencing";
+emit SequenceStart();
+emit SequenceStep(1);
+emit SequenceStep(2);
+emit SequenceStep(3);
+emit SequenceEnd();
+print "Sequence emitted";
+print "";
+
+// ============================================================================
+// TEST 18: Event with type coercion
+// Expected: Handle different data types
+// ============================================================================
+print "Test 18: Type handling in events";
+action emitMixed() {
+    emit MixedData("string", 123, true, null);
+    return "Mixed emitted";
+}
+
+print emitMixed();
+print "";
+
+// ============================================================================
+// TEST 19: Event-based state query
+// Expected: Emit current state info
+// ============================================================================
+print "Test 19: State query events";
+let systemState = {"status": "running", "uptime": 100};
+
+action queryState() {
+    emit StateQueried("running", 100);
+    return "State queried";
+}
+
+print queryState();
+print "";
+
+// ============================================================================
+// TEST 20: Cascading events
+// Expected: One event triggers others
+// ============================================================================
+print "Test 20: Cascading events";
+action triggerCascade() {
+    emit PrimaryEvent("start");
+    
+    // Simulate cascade
+    emit SecondaryEvent("triggered");
+    emit TertiaryEvent("also triggered");
+    
+    return "Cascade complete";
+}
+
+print triggerCascade();
+print "";
+
+print "=== MEDIUM EVENTS/REACTIVE TESTS COMPLETE ===";

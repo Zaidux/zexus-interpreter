@@ -1,0 +1,163 @@
+// ===================================
+// EASY TESTS: WHILE, FOR, EACH, IN
+// ===================================
+// These tests cover basic loop functionality
+
+// Test 1: Simple while loop with counter
+// Expected: 0 1 2 3 4
+let i = 0;
+while (i < 5) {
+    print i;
+    i = i + 1;
+}
+
+// Test 2: While loop with condition check
+// Expected: Starting Loop done
+print "Starting";
+let count = 0;
+while (count < 3) {
+    count = count + 1;
+}
+print "Loop done";
+
+// Test 3: For each with simple array
+// Expected: 1 2 3 4 5
+for each num in [1, 2, 3, 4, 5] {
+    print num;
+}
+
+// Test 4: For each with string array
+// Expected: apple banana cherry
+for each fruit in ["apple", "banana", "cherry"] {
+    print fruit;
+}
+
+// Test 5: While loop that breaks immediately
+// Expected: Never printed
+let x = 10;
+while (x < 5) {
+    print "Never printed";
+    x = x + 1;
+}
+
+// Test 6: For each with range (if range is supported)
+// Expected: 0 1 2 3 4
+for each i in range(0, 5) {
+    print i;
+}
+
+// Test 7: Simple counter accumulation
+// Expected: Total: 15
+let total = 0;
+for each n in [1, 2, 3, 4, 5] {
+    total = total + n;
+}
+print "Total: " + total;
+
+// Test 8: While loop with boolean condition
+// Expected: Counting... Done
+let isDone = false;
+let counter = 0;
+print "Counting...";
+while (isDone == false) {
+    counter = counter + 1;
+    if (counter >= 3) {
+        isDone = true;
+    }
+}
+print "Done";
+
+// Test 9: For each with single element
+// Expected: solo
+for each item in ["solo"] {
+    print item;
+}
+
+// Test 10: While loop counting down
+// Expected: 5 4 3 2 1 Blastoff!
+let countdown = 5;
+while (countdown > 0) {
+    print countdown;
+    countdown = countdown - 1;
+}
+print "Blastoff!";
+
+// Test 11: For each printing indices (simulated)
+// Expected: Item 0: a Item 1: b Item 2: c
+let letters = ["a", "b", "c"];
+let index = 0;
+for each letter in letters {
+    print "Item " + index + ": " + letter;
+    index = index + 1;
+}
+
+// Test 12: Empty array for each
+// Expected: After loop
+for each item in [] {
+    print "Should not print";
+}
+print "After loop";
+
+// Test 13: While with comparison operators
+// Expected: Growing... Complete
+let size = 0;
+print "Growing...";
+while (size <= 2) {
+    size = size + 1;
+}
+print "Complete";
+
+// Test 14: For each doubling values
+// Expected: 2 4 6 8 10
+for each num in [1, 2, 3, 4, 5] {
+    print num * 2;
+}
+
+// Test 15: While loop with string building
+// Expected: x xx xxx
+let str = "";
+let loopCount = 0;
+while (loopCount < 3) {
+    str = str + "x";
+    print str;
+    loopCount = loopCount + 1;
+}
+
+// Test 16: For each with boolean values
+// Expected: true false true
+for each value in [true, false, true] {
+    print value;
+}
+
+// Test 17: Nested items name check
+// Expected: 10 20 30
+let nums = [10, 20, 30];
+for each num in nums {
+    print num;
+}
+
+// Test 18: While with exact equality
+// Expected: Running... Stopped
+let steps = 0;
+print "Running...";
+while (steps != 5) {
+    steps = steps + 1;
+}
+print "Stopped";
+
+// Test 19: For each with calculation
+// Expected: Sum is 6
+let sum = 0;
+for each value in [1, 2, 3] {
+    sum = sum + value;
+}
+print "Sum is " + sum;
+
+// Test 20: While loop with greater than
+// Expected: Decreasing... Zero reached
+let val = 3;
+print "Decreasing...";
+while (val > 0) {
+    val = val - 1;
+}
+print "Zero reached";

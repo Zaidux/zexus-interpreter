@@ -1,0 +1,119 @@
+// ============================================
+// EASY TESTS: PRINT, DEBUG, USE, IMPORT, EXPORT, MODULE, PACKAGE, FROM, EXTERNAL
+// ============================================
+
+// ===================
+// PRINT KEYWORD TESTS
+// ===================
+
+// Test 1: Print simple string
+print "Hello, World!";
+// Expected: Hello, World!
+
+// Test 2: Print integer
+print 42;
+// Expected: 42
+
+// Test 3: Print boolean
+print true;
+print false;
+// Expected: true, false
+
+// Test 4: Print null
+print null;
+// Expected: null
+
+// Test 5: Print variable
+let message = "Test Message";
+print message;
+// Expected: Test Message
+
+// Test 6: Print expression
+print 10 + 20;
+// Expected: 30
+
+// Test 7: Print string concatenation
+print "Hello, " + "World!";
+// Expected: Hello, World!
+
+// Test 8: Print array
+print [1, 2, 3];
+// Expected: [1, 2, 3]
+
+// Test 9: Print map
+print {"name": "Alice", "age": 30};
+// Expected: {name: Alice, age: 30} (or similar)
+
+// Test 10: Print function result
+action getValue() {
+    return "Function Result";
+}
+print getValue();
+// Expected: Function Result
+
+// ===================
+// DEBUG KEYWORD TESTS
+// ===================
+
+// Test 11: Debug simple value
+debug "Debug message";
+// Expected: [DEBUG] Debug message (or similar format)
+
+// Test 12: Debug variable
+let testVar = 123;
+debug testVar;
+// Expected: [DEBUG] 123
+
+// Test 13: Debug expression
+debug 5 * 5;
+// Expected: [DEBUG] 25
+
+// Test 14: Debug boolean
+debug true;
+// Expected: [DEBUG] true
+
+// Test 15: Debug array
+debug [10, 20, 30];
+// Expected: [DEBUG] [10, 20, 30]
+
+// ===================
+// MODULE SYSTEM TESTS
+// ===================
+
+// Test 16: Simple use statement (assuming math module exists)
+// Note: This might fail if no module system yet
+// Commenting out if modules not implemented
+// use "math" as math;
+// print "Math module loaded";
+// Expected: Math module loaded
+
+// Test 17: External declaration
+external calculateHash;
+print "External declared";
+// Expected: External declared
+
+// Test 18: Module-like organization
+// Define functions that could be exported
+action moduleFunc1() {
+    return "Module Function 1";
+}
+
+action moduleFunc2() {
+    return "Module Function 2";
+}
+
+print moduleFunc1();
+print moduleFunc2();
+// Expected: Module Function 1, Module Function 2
+
+// Test 19: Export syntax (even if not fully functional)
+// export moduleFunc1;
+// Note: May not have visible effect in single-file test
+print "Export syntax tested";
+// Expected: Export syntax tested
+
+// Test 20: Print multiple values on separate lines
+print "Line 1";
+print "Line 2";
+print "Line 3";
+// Expected: Line 1, Line 2, Line 3

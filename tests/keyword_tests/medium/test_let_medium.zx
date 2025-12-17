@@ -1,0 +1,165 @@
+# Medium Tests for LET Keyword
+# Testing intermediate complexity, edge cases, and integration with other features
+
+# Test 1: Variable shadowing
+let x = 10;
+print x;
+
+if (true) {
+    let x = 20;
+    print x;
+}
+
+print x;
+# Expected output: 10, 20, 10
+
+# Test 2: Arrays
+let numbers = [1, 2, 3, 4, 5];
+print numbers;
+let firstElement = numbers[0];
+print firstElement;
+# Expected output: [1, 2, 3, 4, 5], 1
+
+# Test 3: Maps/Objects
+let person = {"name": "Bob", "age": 30};
+print person;
+# Expected output: {"name": "Bob", "age": 30}
+
+# Test 4: Nested data structures
+let matrix = [[1, 2], [3, 4]];
+print matrix;
+let element = matrix[0][1];
+print element;
+# Expected output: [[1, 2], [3, 4]], 2
+
+# Test 5: Ternary operator
+let age = 25;
+let status = age >= 18 ? "adult" : "minor";
+print status;
+# Expected output: adult
+
+# Test 6: Nullish coalescing
+let userInput = null;
+let value = userInput ?? "default";
+print value;
+# Expected output: default
+
+# Test 7: Function return values
+action add(a, b) {
+    return a + b;
+}
+
+let result = add(10, 20);
+print result;
+# Expected output: 30
+
+# Test 8: Multiple reassignments
+let counter = 0;
+counter = counter + 1;
+counter = counter + 2;
+counter = counter + 3;
+print counter;
+# Expected output: 6
+
+# Test 9: Complex expressions
+let calculation = (10 + 5) * 2 - 3;
+print calculation;
+# Expected output: 27
+
+# Test 10: String interpolation (if supported)
+let name = "Alice";
+let age = 30;
+let message = "Name: " + name + ", Age: " + age;
+print message;
+# Expected output: Name: Alice, Age: 30
+
+# Test 11: Logical operations
+let a = true;
+let b = false;
+let andResult = a && b;
+let orResult = a || b;
+print andResult;
+print orResult;
+# Expected output: false, true
+
+# Test 12: Variable with function call in expression
+action multiply(x) {
+    return x * 2;
+}
+
+let doubled = multiply(5) + 10;
+print doubled;
+# Expected output: 20
+
+# Test 13: Accumulator pattern
+let total = 0;
+let numbers = [1, 2, 3, 4, 5];
+
+for each num in numbers {
+    total = total + num;
+}
+
+print total;
+# Expected output: 15
+
+# Test 14: Conditional variable assignment
+let score = 85;
+let grade = null;
+
+if (score >= 90) {
+    grade = "A";
+} elif (score >= 80) {
+    grade = "B";
+} else {
+    grade = "C";
+}
+
+print grade;
+# Expected output: B
+
+# Test 15: Array modification
+let list = [1, 2, 3];
+list = list + [4, 5];
+print list;
+# Expected output: [1, 2, 3, 4, 5]
+
+# Test 16: Type coercion tests
+let stringNum = "42";
+let realNum = 42;
+let sum = realNum + 10;
+print sum;
+# Expected output: 52
+
+# Test 17: Nested function calls
+action square(x) {
+    return x * x;
+}
+
+action addTen(x) {
+    return x + 10;
+}
+
+let result = addTen(square(5));
+print result;
+# Expected output: 35
+
+# Test 18: Loop variable scope
+for each i in [1, 2, 3] {
+    let doubled = i * 2;
+    print doubled;
+}
+# Expected output: 2, 4, 6
+
+# Test 19: Complex boolean expressions
+let x = 10;
+let y = 20;
+let z = 30;
+let result = (x < y) && (y < z) && (x + y < z);
+print result;
+# Expected output: true
+
+# Test 20: Map access and modification
+let config = {"theme": "dark", "fontSize": 14};
+let theme = config["theme"];
+print theme;
+# Expected output: dark

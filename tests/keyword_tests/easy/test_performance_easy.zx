@@ -1,0 +1,105 @@
+// ===================================
+// PHASE 8: PERFORMANCE OPTIMIZATION
+// Easy Tests (20 tests)
+// Keywords: NATIVE, GC, INLINE, BUFFER, SIMD
+// ===================================
+
+print "=== Test 1: GC collect ===";
+gc "collect";
+print "✓ GC collect executed";
+
+print "\n=== Test 2: GC pause ===";
+gc "pause";
+print "✓ GC paused";
+
+print "\n=== Test 3: GC resume ===";
+gc "resume";
+print "✓ GC resumed";
+
+print "\n=== Test 4: GC enable_debug ===";
+gc "enable_debug";
+print "✓ GC debug enabled";
+
+print "\n=== Test 5: GC disable_debug ===";
+gc "disable_debug";
+print "✓ GC debug disabled";
+
+print "\n=== Test 6: INLINE function declaration ===";
+action fastAdd(a, b) {
+    return a + b;
+}
+inline fastAdd;
+print "✓ Function marked for inlining";
+
+print "\n=== Test 7: BUFFER allocate ===";
+buffer myBuffer allocate(1024);
+print "✓ Buffer allocated";
+
+print "\n=== Test 8: BUFFER write ===";
+buffer myBuffer write(0, [72, 101, 108, 108, 111]);
+print "✓ Buffer write complete";
+
+print "\n=== Test 9: BUFFER read ===";
+let data = buffer myBuffer read(0, 5);
+print "✓ Buffer read complete";
+
+print "\n=== Test 10: BUFFER free ===";
+buffer myBuffer free();
+print "✓ Buffer freed";
+
+print "\n=== Test 11: Simple action for inlining ===";
+action multiply(x, y) {
+    return x * y;
+}
+inline multiply;
+let result = multiply(5, 10);
+print "✓ Inlined function works: " + result;
+
+print "\n=== Test 12: Multiple GC operations ===";
+gc "collect";
+gc "pause";
+gc "resume";
+print "✓ Multiple GC operations";
+
+print "\n=== Test 13: BUFFER allocate small ===";
+buffer smallBuf allocate(10);
+print "✓ Small buffer allocated";
+
+print "\n=== Test 14: BUFFER write single byte ===";
+buffer smallBuf write(0, [255]);
+print "✓ Single byte written";
+
+print "\n=== Test 15: BUFFER read single byte ===";
+let byte = buffer smallBuf read(0, 1);
+print "✓ Single byte read";
+
+print "\n=== Test 16: BUFFER cleanup ===";
+buffer smallBuf free();
+print "✓ Small buffer freed";
+
+print "\n=== Test 17: INLINE multiple functions ===";
+action add(a, b) { return a + b; }
+action sub(a, b) { return a - b; }
+inline add;
+inline sub;
+print "✓ Multiple functions inlined";
+
+print "\n=== Test 18: GC sequence ===";
+gc "collect";
+gc "collect";
+print "✓ GC sequence complete";
+
+print "\n=== Test 19: BUFFER allocate and immediate free ===";
+buffer tempBuf allocate(100);
+buffer tempBuf free();
+print "✓ Buffer allocate and free";
+
+print "\n=== Test 20: Combined performance operations ===";
+gc "collect";
+action quickCalc(x) { return x * 2; }
+inline quickCalc;
+buffer perfBuf allocate(512);
+buffer perfBuf free();
+print "✓ Combined performance operations";
+
+print "\n=== All Easy Performance Tests Complete ===";

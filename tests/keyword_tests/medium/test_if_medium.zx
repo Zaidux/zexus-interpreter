@@ -1,0 +1,244 @@
+# Medium Tests for IF/ELIF/ELSE Keywords
+# Testing nested conditions, complex logic, and edge cases
+
+# Test 1: Nested if statements
+let x = 10;
+let y = 20;
+
+if (x > 5) {
+    if (y > 15) {
+        print "Both conditions true";
+    }
+}
+# Expected output: Both conditions true
+
+# Test 2: Nested if-else
+let a = 15;
+
+if (a > 10) {
+    if (a > 20) {
+        print "Greater than 20";
+    } else {
+        print "Between 10 and 20";
+    }
+}
+# Expected output: Between 10 and 20
+
+# Test 3: If with variable assignment in block
+if (true) {
+    let result = "Success";
+    print result;
+}
+# Expected output: Success
+
+# Test 4: Multiple conditions with AND
+let age = 25;
+let hasLicense = true;
+
+if (age >= 18 && hasLicense) {
+    print "Can drive";
+}
+# Expected output: Can drive
+
+# Test 5: Multiple conditions with OR
+let isWeekend = false;
+let isHoliday = true;
+
+if (isWeekend || isHoliday) {
+    print "Day off";
+}
+# Expected output: Day off
+
+# Test 6: Complex boolean expression
+let score = 85;
+let bonus = 10;
+let total = score + bonus;
+
+if (total >= 90) {
+    print "Excellent";
+}
+# Expected output: Excellent
+
+# Test 7: If with function call
+action isEven(n) {
+    return n % 2 == 0;
+}
+
+if (isEven(10)) {
+    print "10 is even";
+}
+# Expected output: 10 is even
+
+# Test 8: Elif chain with calculations
+let value = 50;
+
+if (value < 25) {
+    print "Low";
+} elif (value < 50) {
+    print "Medium";
+} elif (value < 75) {
+    print "High";
+} else {
+    print "Very High";
+}
+# Expected output: High
+
+# Test 9: Nested if-elif-else
+let temperature = 75;
+
+if (temperature > 80) {
+    print "Hot";
+} else {
+    if (temperature > 60) {
+        print "Warm";
+    } elif (temperature > 40) {
+        print "Cool";
+    } else {
+        print "Cold";
+    }
+}
+# Expected output: Warm
+
+# Test 10: If with array access
+let numbers = [10, 20, 30, 40];
+
+if (numbers[0] < numbers[3]) {
+    print "First is less than last";
+}
+# Expected output: First is less than last
+
+# Test 11: If with map access
+let person = {"age": 30, "active": true};
+
+if (person["active"]) {
+    print "Person is active";
+}
+# Expected output: Person is active
+
+# Test 12: Negation with NOT operator
+let isReady = false;
+
+if (!isReady) {
+    print "Not ready";
+}
+# Expected output: Not ready
+
+# Test 13: Combined logic operators
+let x2 = 10;
+let y2 = 20;
+let z2 = 30;
+
+if ((x2 < y2) && (y2 < z2) || (x2 == 10)) {
+    print "Complex condition true";
+}
+# Expected output: Complex condition true
+
+# Test 14: If returning values (pattern)
+action checkSign(num) {
+    if (num > 0) {
+        return "positive";
+    } elif (num < 0) {
+        return "negative";
+    } else {
+        return "zero";
+    }
+}
+
+let sign1 = checkSign(5);
+let sign2 = checkSign(-3);
+let sign3 = checkSign(0);
+
+print sign1;
+print sign2;
+print sign3;
+# Expected output: positive, negative, zero
+
+# Test 15: Multiple elif with different types
+let input = 42;
+
+if (input == true) {
+    print "Boolean true";
+} elif (input == false) {
+    print "Boolean false";
+} elif (input == 42) {
+    print "The answer";
+} elif (input == null) {
+    print "Null value";
+} else {
+    print "Something else";
+}
+# Expected output: The answer
+
+# Test 16: If with ternary-like behavior via function
+action max(a, b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+let maximum = max(15, 23);
+print maximum;
+# Expected output: 23
+
+# Test 17: String comparisons in elif
+let status = "pending";
+
+if (status == "approved") {
+    print "Approved";
+} elif (status == "pending") {
+    print "Pending";
+} elif (status == "rejected") {
+    print "Rejected";
+} else {
+    print "Unknown";
+}
+# Expected output: Pending
+
+# Test 18: If with early returns
+action processValue(val) {
+    if (val < 0) {
+        return "invalid";
+    }
+    
+    if (val == 0) {
+        return "zero";
+    }
+    
+    return "valid";
+}
+
+print processValue(-5);
+print processValue(0);
+print processValue(10);
+# Expected output: invalid, zero, valid
+
+# Test 19: Nested conditions with multiple branches
+let level = 2;
+let points = 150;
+
+if (level == 1) {
+    if (points > 100) {
+        print "Level 1 Expert";
+    } else {
+        print "Level 1 Beginner";
+    }
+} elif (level == 2) {
+    if (points > 100) {
+        print "Level 2 Expert";
+    } else {
+        print "Level 2 Beginner";
+    }
+} else {
+    print "Unknown Level";
+}
+# Expected output: Level 2 Expert
+
+# Test 20: If with loop variable
+for each i in [1, 2, 3, 4, 5] {
+    if (i % 2 == 0) {
+        print i;
+    }
+}
+# Expected output: 2, 4

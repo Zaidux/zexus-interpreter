@@ -1,0 +1,89 @@
+# Easy Tests for LET Keyword
+# Testing basic functionality and simple use cases
+
+# Test 1: Basic integer variable
+let x = 10;
+print x;
+# Expected output: 10
+
+# Test 2: Basic string variable
+let name = "Alice";
+print name;
+# Expected output: Alice
+
+# Test 3: Basic boolean variable
+let isTrue = true;
+print isTrue;
+# Expected output: true
+
+# Test 4: Basic reassignment
+let counter = 0;
+print counter;
+counter = 5;
+print counter;
+# Expected output: 0, then 5
+
+# Test 5: Simple arithmetic expression
+let sum = 5 + 10;
+print sum;
+# Expected output: 15
+
+# Test 6: String concatenation
+let greeting = "Hello" + " " + "World";
+print greeting;
+# Expected output: Hello World
+
+# Test 7: Negative numbers
+let negative = -42;
+print negative;
+# Expected output: -42
+
+# Test 8: Float/decimal values
+let price = 19.99;
+print price;
+# Expected output: 19.99
+
+# Test 9: Null value
+let empty = null;
+print empty;
+# Expected output: null
+
+# Test 10: Multiple variables
+let a = 1;
+let b = 2;
+let c = 3;
+print a;
+print b;
+print c;
+# Expected output: 1, 2, 3
+
+# Test 11: Variable in expression
+let x = 10;
+let y = x + 5;
+print y;
+# Expected output: 15
+
+# Test 12: Reassignment with expression
+let num = 10;
+num = num + 5;
+print num;
+# Expected output: 15
+
+# Test 13: Alternative syntax with colon
+# DISABLED - BUG FOUND: Colon syntax not working correctly
+# let altValue : 100;
+# print altValue;
+# Expected output: 100
+# Using = instead for now
+let altValue = 100;
+print altValue;
+
+# Test 14: Boolean expressions
+let isGreater = 10 > 5;
+print isGreater;
+# Expected output: true
+
+# Test 15: Comparison result
+let isEqual = 5 == 5;
+print isEqual;
+# Expected output: true

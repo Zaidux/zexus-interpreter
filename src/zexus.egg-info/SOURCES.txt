@@ -60,6 +60,7 @@ doc/summary.new
 docs/ADVANCED_FEATURES_IMPLEMENTATION.md
 docs/ARCHITECTURE.md
 docs/BLOCKCHAIN_FEATURES.md
+docs/BLOCKCHAIN_KEYWORDS.md
 docs/COMMAND_audit.md
 docs/COMMAND_buffer.md
 docs/COMMAND_const.md

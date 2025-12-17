@@ -1,0 +1,153 @@
+// ============================================
+// EASY TESTS: WHILE, FOR, EACH, IN Keywords
+// ============================================
+// These keywords work together for loops and iteration
+// Syntax: while (condition) { body }
+//         for each item in iterable { body }
+
+// Test 1: Basic while loop with counter
+let counter = 0;
+while (counter < 3) {
+    print counter;
+    counter = counter + 1;
+}
+// Expected: 0, 1, 2
+
+// Test 2: While loop with boolean condition
+let done = false;
+let count = 0;
+while (!done) {
+    print count;
+    count = count + 1;
+    if (count >= 2) {
+        done = true;
+    }
+}
+// Expected: 0, 1
+
+// Test 3: For each with simple array
+for each num in [1, 2, 3] {
+    print num;
+}
+// Expected: 1, 2, 3
+
+// Test 4: For each with string array
+for each name in ["Alice", "Bob", "Charlie"] {
+    print name;
+}
+// Expected: Alice, Bob, Charlie
+
+// Test 5: For each with expression in array
+for each x in [10, 20, 30] {
+    print x + 5;
+}
+// Expected: 15, 25, 35
+
+// Test 6: While loop counting down
+let countdown = 3;
+while (countdown > 0) {
+    print countdown;
+    countdown = countdown - 1;
+}
+// Expected: 3, 2, 1
+
+// Test 7: For each with boolean values
+for each flag in [true, false, true] {
+    print flag;
+}
+// Expected: true, false, true
+
+// Test 8: Empty array (should not print anything)
+for each item in [] {
+    print item;
+}
+// Expected: (nothing)
+
+// Test 9: Single element array
+for each single in [42] {
+    print single;
+}
+// Expected: 42
+
+// Test 10: While with immediate false condition
+let x = 5;
+while (x < 5) {
+    print x;
+}
+print "After while";
+// Expected: After while
+
+// Test 11: For each with mixed types
+for each value in [1, "two", true] {
+    print value;
+}
+// Expected: 1, two, true
+
+// Test 12: While loop with multiplication
+let val = 1;
+while (val <= 8) {
+    print val;
+    val = val * 2;
+}
+// Expected: 1, 2, 4, 8
+
+// Test 13: For each with negative numbers
+for each n in [-1, -2, -3] {
+    print n;
+}
+// Expected: -1, -2, -3
+
+// Test 14: While with compound condition
+let a = 0;
+let b = 5;
+while (a < 3 && b > 3) {
+    print a;
+    a = a + 1;
+    b = b - 1;
+}
+// Expected: 0, 1
+
+// Test 15: For each with range-like array
+for each i in [0, 1, 2, 3, 4] {
+    print i;
+}
+// Expected: 0, 1, 2, 3, 4
+
+// Test 16: Nested for each (simple)
+for each outer in [1, 2] {
+    for each inner in [10, 20] {
+        print outer + inner;
+    }
+}
+// Expected: 11, 21, 12, 22
+
+// Test 17: While loop building a sum
+let sum = 0;
+let i = 1;
+while (i <= 5) {
+    sum = sum + i;
+    i = i + 1;
+}
+print sum;
+// Expected: 15
+
+// Test 18: For each with variable assignment inside
+for each num in [5, 10, 15] {
+    let doubled = num * 2;
+    print doubled;
+}
+// Expected: 10, 20, 30
+
+// Test 19: While with comparison operators
+let test = 10;
+while (test >= 8) {
+    print test;
+    test = test - 1;
+}
+// Expected: 10, 9, 8
+
+// Test 20: For each with string concatenation
+for each word in ["Hello", "World"] {
+    print word + "!";
+}
+// Expected: Hello!, World!

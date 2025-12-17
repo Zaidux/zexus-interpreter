@@ -1,0 +1,345 @@
+// ===============================================
+// PHASE 12: SPECIAL KEYWORDS COMPLEX TESTS
+// Testing: EXACTLY, EMBEDDED, MAP, TRUE, FALSE, NULL
+// Total: 20 tests
+// ===============================================
+
+// ============= EXACTLY Advanced Patterns =============
+print "=== Test 1: EXACTLY with nested blocks";
+exactly outer {
+    print "Outer block";
+    if (true) {
+        print "Nested condition";
+    }
+}
+print "✓ Exactly with nested blocks works";
+
+print "=== Test 2: EXACTLY with action calls";
+action helper(x) {
+    return x * 2;
+}
+exactly process {
+    let value = 10;
+    let doubled = helper(value);
+    print "Doubled: " + doubled;
+}
+print "✓ Exactly with action calls works";
+
+print "=== Test 3: Multiple EXACTLY blocks";
+exactly first {
+    print "First block";
+}
+exactly second {
+    print "Second block";
+}
+exactly third {
+    print "Third block";
+}
+print "✓ Multiple exactly blocks work";
+
+// ============= EMBEDDED Complex Patterns =============
+print "=== Test 4: EMBEDDED with documentation";
+embedded typescript "api" {
+    // TypeScript API handler
+    interface User { name: string; }
+}
+print "✓ Embedded TypeScript declared";
+
+print "=== Test 5: EMBEDDED language variations";
+embedded go "concurrent" {
+    func ProcessData() {}
+}
+embedded ruby "dsl" {
+    def config; end
+}
+print "✓ Multiple embedded languages work";
+
+// ============= MAP Complex Structures =============
+print "=== Test 6: Map-based configuration system";
+let appConfig = {
+    "database": {"host": "localhost", "port": 5432},
+    "cache": {"enabled": true, "ttl": 3600},
+    "features": {"auth": true, "logging": false}
+};
+print "DB: " + appConfig["database"]["host"];
+print "Auth: " + appConfig["features"]["auth"];
+print "✓ Map configuration system works";
+
+print "=== Test 7: Map with computed values";
+action createUser(name, age) {
+    let isAdult = age >= 18;
+    return {"name": name, "age": age, "adult": isAdult};
+}
+let user1 = createUser("Alice", 25);
+let user2 = createUser("Bob", 16);
+print "Alice adult: " + user1["adult"];
+print "Bob adult: " + user2["adult"];
+print "✓ Map with computed values works";
+
+print "=== Test 8: Map factory pattern";
+action createDatabase(type) {
+    if (type == "mysql") {
+        return {"type": "mysql", "port": 3306};
+    } else {
+        return {"type": "postgres", "port": 5432};
+    }
+}
+let db1 = createDatabase("mysql");
+let db2 = createDatabase("postgres");
+print "MySQL port: " + db1["port"];
+print "Postgres port: " + db2["port"];
+print "✓ Map factory pattern works";
+
+print "=== Test 9: Map with null coalescing pattern";
+action getValue(map, key, defaultVal) {
+    let value = map[key];
+    if (value == null) {
+        return defaultVal;
+    }
+    return value;
+}
+let config = {"name": "app", "version": null};
+let version = getValue(config, "version", "1.0.0");
+print "Version: " + version;
+print "✓ Map with null coalescing works";
+
+// ============= TRUE Complex Logic =============
+print "=== Test 10: TRUE in state machine";
+let running = false;
+let initialized = true;
+
+action canStart() {
+    return initialized == true && running == false;
+}
+
+if (canStart()) {
+    running = true;
+    print "System started";
+}
+print "✓ TRUE in state machine works";
+
+print "=== Test 11: TRUE flag system";
+let flags = {
+    "debug": true,
+    "verbose": true,
+    "production": false
+};
+
+if (flags["debug"] == true && flags["verbose"] == true) {
+    print "Debug mode with verbose output";
+}
+print "✓ TRUE flag system works";
+
+print "=== Test 12: TRUE validation chain";
+action validateUser(name, email, age) {
+    let nameValid = len(name) > 0;
+    let emailValid = len(email) > 5;
+    let ageValid = age >= 18;
+    
+    return {
+        "valid": nameValid && emailValid && ageValid,
+        "nameOk": nameValid,
+        "emailOk": emailValid,
+        "ageOk": ageValid
+    };
+}
+
+let validation = validateUser("Alice", "alice@example.com", 25);
+if (validation["valid"] == true) {
+    print "User validation passed";
+}
+print "✓ TRUE validation chain works";
+
+// ============= FALSE Complex Logic =============
+print "=== Test 13: FALSE in access control";
+let isAdmin = false;
+let isGuest = true;
+
+action hasWriteAccess() {
+    return isAdmin == true && isGuest == false;
+}
+
+if (hasWriteAccess() == false) {
+    print "Write access denied";
+}
+print "✓ FALSE in access control works";
+
+print "=== Test 14: FALSE in error handling";
+let hasError = false;
+let isReady = true;
+
+if (hasError == false && isReady == true) {
+    print "System ready, no errors";
+}
+print "✓ FALSE in error handling works";
+
+// ============= NULL Complex Patterns =============
+print "=== Test 15: NULL in optional chain pattern";
+action getUserName(user) {
+    if (user == null) {
+        return "Anonymous";
+    }
+    let name = user["name"];
+    if (name == null) {
+        return "Unnamed";
+    }
+    return name;
+}
+
+let result1 = getUserName(null);
+let result2 = getUserName({"age": 30});
+let result3 = getUserName({"name": "Alice"});
+
+print "Result1: " + result1;
+print "Result2: " + result2;
+print "Result3: " + result3;
+print "✓ NULL optional chain works";
+
+print "=== Test 16: NULL in resource management";
+let connection = null;
+
+action connect() {
+    return {"status": "connected", "id": 123};
+}
+
+if (connection == null) {
+    connection = connect();
+    print "Connection established";
+}
+print "✓ NULL resource management works";
+
+print "=== Test 17: NULL sentinel values";
+let cache = {
+    "user:1": {"name": "Alice"},
+    "user:2": null,
+    "user:3": {"name": "Bob"}
+};
+
+action getCachedUser(id) {
+    let key = "user:" + id;
+    let value = cache[key];
+    if (value == null) {
+        return "Cache miss";
+    }
+    return value["name"];
+}
+
+let cached1 = getCachedUser("1");
+let cached2 = getCachedUser("2");
+print "User 1: " + cached1;
+print "✓ NULL sentinel values work";
+
+// ============= Combined Advanced Patterns =============
+print "=== Test 18: State management system";
+let initialized = false;
+let running = false;
+let error = null;
+
+action initialize() {
+    initialized = true;
+    return true;
+}
+
+action start() {
+    if (initialized == false) {
+        return false;
+    }
+    running = true;
+    return true;
+}
+
+let initResult = initialize();
+let startResult = start();
+
+if (running == true) {
+    print "System running";
+}
+if (error == null) {
+    print "No errors";
+}
+print "✓ State management works";
+
+print "=== Test 19: Feature flag system with EXACTLY";
+exactly featureSystem {
+    let features = {
+        "beta": true,
+        "experimental": false,
+        "deprecated": null
+    };
+    
+    action isFeatureEnabled(name) {
+        let status = features[name];
+        if (status == null) {
+            return false;
+        }
+        return status == true;
+    }
+    
+    if (isFeatureEnabled("beta")) {
+        print "Beta features enabled";
+    }
+    
+    if (isFeatureEnabled("experimental") == false) {
+        print "Experimental disabled";
+    }
+}
+print "✓ Feature flag system works";
+
+print "=== Test 20: Complete integration test";
+exactly integrationTest {
+    let applicationState = {
+        "name": "TestApp",
+        "version": "1.0.0",
+        "initialized": false,
+        "running": false,
+        "config": null,
+        "errors": 0
+    };
+    
+    action bootstrap() {
+        if (applicationState["initialized"] == true) {
+            return false;
+        }
+        
+        applicationState["config"] = {
+            "debug": true,
+            "port": 8080
+        };
+        applicationState["initialized"] = true;
+        return true;
+    }
+    
+    action launch() {
+        if (applicationState["initialized"] == false) {
+            return false;
+        }
+        if (applicationState["config"] == null) {
+            return false;
+        }
+        applicationState["running"] = true;
+        return true;
+    }
+    
+    action getStatus() {
+        return {
+            "ready": applicationState["running"] == true,
+            "hasErrors": applicationState["errors"] > 0,
+            "hasConfig": applicationState["config"] != null
+        };
+    }
+    
+    let bootstrapped = bootstrap();
+    let launched = launch();
+    let status = getStatus();
+    
+    if (status["ready"] == true) {
+        print "Application ready";
+    }
+    if (status["hasErrors"] == false) {
+        print "No errors detected";
+    }
+    if (status["hasConfig"] == true) {
+        print "Configuration loaded";
+    }
+}
+print "✓ Complete integration works";

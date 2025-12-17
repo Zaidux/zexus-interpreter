@@ -1,0 +1,305 @@
+// ============================================
+// COMPLEX TESTS: PRINT, DEBUG, USE, IMPORT, EXPORT, MODULE, PACKAGE, FROM, EXTERNAL
+// ============================================
+
+// ===================
+// PRINT COMPLEX TESTS
+// ===================
+
+// Test 1: Print deeply nested structure
+let deepData = {
+    "level1": {
+        "level2": {
+            "level3": {
+                "value": 42
+            }
+        }
+    }
+};
+print deepData;
+// Expected: Deep nested map structure
+
+// Test 2: Print from recursive function
+action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+print "Fibonacci sequence:";
+print fibonacci(0);
+print fibonacci(1);
+print fibonacci(5);
+print fibonacci(10);
+// Expected: Fibonacci sequence:, 0, 1, 5, 55
+
+// Test 3: Print mixed type array
+let mixedArray = [1, "two", true, null, [3, 4], {"key": "value"}];
+print mixedArray;
+// Expected: [1, two, true, null, [3, 4], {key: value}]
+
+// Test 4: Print closure results
+action makeCounter(start) {
+    let count = start;
+    return lambda() => {
+        count = count + 1;
+        return count;
+    };
+}
+
+let counter = makeCounter(10);
+print counter();
+print counter();
+print counter();
+// Expected: 11, 12, 13 (or {} if closure broken)
+
+// Test 5: Print chain of function calls
+action addOne(x) {
+    return x + 1;
+}
+
+action multiplyTwo(x) {
+    return x * 2;
+}
+
+action subtractFive(x) {
+    return x - 5;
+}
+
+print subtractFive(multiplyTwo(addOne(10)));
+// Expected: 17 ((10+1)*2-5)
+
+// Test 6: Print pattern matching simulation
+action classifyNumber(n) {
+    if (n % 15 == 0) {
+        return "FizzBuzz";
+    } elif (n % 3 == 0) {
+        return "Fizz";
+    } elif (n % 5 == 0) {
+        return "Buzz";
+    } else {
+        return n;
+    }
+}
+
+print classifyNumber(15);
+print classifyNumber(9);
+print classifyNumber(10);
+print classifyNumber(7);
+// Expected: FizzBuzz, Fizz, Buzz, 7
+
+// Test 7: Print with complex conditionals
+let score = 85;
+let grade = "";
+
+if (score >= 90) {
+    grade = "A";
+} elif (score >= 80) {
+    grade = "B";
+} elif (score >= 70) {
+    grade = "C";
+} elif (score >= 60) {
+    grade = "D";
+} else {
+    grade = "F";
+}
+
+print "Grade: " + grade;
+// Expected: Grade: B
+
+// ===================
+// DEBUG COMPLEX TESTS
+// ===================
+
+// Test 8: Debug in recursive calls (may spam output)
+action factorialDebug(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    let result = n * factorialDebug(n - 1);
+    return result;
+}
+
+print factorialDebug(5);
+// Expected: 120
+
+// Test 9: Debug complex expressions
+let a = 10;
+let b = 20;
+let c = 30;
+let complexResult = (a + b) * c - (a * b);
+print "Complex calculation: " + complexResult;
+// Expected: Complex calculation: 700
+
+// ===================
+// MODULE SYSTEM COMPLEX TESTS
+// ===================
+
+// Test 10: Module-style library simulation
+let StringLib = {
+    "trim": lambda(s) => s,
+    "uppercase": lambda(s) => s,
+    "lowercase": lambda(s) => s,
+    "length": lambda(s) => 10,
+    "concat": lambda(a, b) => a + b
+};
+
+print StringLib["concat"]("Hello, ", "World!");
+// Expected: Hello, World!
+
+// Test 11: Package with multiple sub-modules
+let Framework = {
+    "http": {
+        "get": lambda(url) => "GET " + url,
+        "post": lambda(url, data) => "POST " + url
+    },
+    "database": {
+        "connect": lambda(host) => "Connected to " + host,
+        "query": lambda(sql) => "Executing: " + sql
+    },
+    "utils": {
+        "hash": lambda(data) => "hashed",
+        "validate": lambda(data) => true
+    }
+};
+
+print Framework["http"]["get"]("https://api.example.com");
+print Framework["database"]["connect"]("localhost");
+print Framework["utils"]["validate"]("test");
+// Expected: GET https://api.example.com, Connected to localhost, true
+
+// Test 12: External with callback pattern
+external nativeSort;
+external nativeHash;
+
+action handleExternalResult(func, data) {
+    print "Calling external function";
+    return "External result";
+}
+
+print handleExternalResult(nativeSort, [3, 1, 2]);
+// Expected: Calling external function, External result
+
+// Test 13: Import pattern with destructuring
+let BigLibrary = {
+    "math": {
+        "add": lambda(a, b) => a + b,
+        "multiply": lambda(a, b) => a * b,
+        "power": lambda(a, b) => a * a
+    },
+    "string": {
+        "reverse": lambda(s) => s,
+        "split": lambda(s, delim) => [s]
+    },
+    "array": {
+        "map": lambda(arr, func) => arr,
+        "filter": lambda(arr, pred) => arr,
+        "reduce": lambda(arr, func, init) => init
+    }
+};
+
+// Simulate: from BigLibrary.math import add, multiply
+let add = BigLibrary["math"]["add"];
+let multiply = BigLibrary["math"]["multiply"];
+
+print add(5, 3);
+print multiply(5, 3);
+// Expected: 8, 15
+
+// Test 14: Module factory pattern
+action createModule(name, version) {
+    return {
+        "name": name,
+        "version": version,
+        "info": lambda() => name + " v" + version
+    };
+}
+
+let myModule = createModule("TestModule", "2.0");
+print myModule["info"]();
+// Expected: TestModule v2.0
+
+// Test 15: Namespace collision simulation
+let V1 = {
+    "process": lambda(x) => x + 1
+};
+
+let V2 = {
+    "process": lambda(x) => x * 2
+};
+
+print "V1 process: " + V1["process"](10);
+print "V2 process: " + V2["process"](10);
+// Expected: V1 process: 11, V2 process: 20
+
+// Test 16: Print error handling simulation
+action safePrint(value) {
+    if (value == null) {
+        print "Cannot print null value";
+        return false;
+    }
+    print value;
+    return true;
+}
+
+safePrint("Valid");
+safePrint(null);
+safePrint(42);
+// Expected: Valid, Cannot print null value, 42
+
+// Test 17: Debug state tracking
+let state = "initial";
+
+action changeState(newState) {
+    let oldState = state;
+    state = newState;
+    print "State changed from " + oldState + " to " + newState;
+}
+
+changeState("loading");
+changeState("ready");
+changeState("complete");
+// Expected: State changed messages
+
+// Test 18: Module versioning pattern
+let ModuleRegistry = {
+    "modules": {},
+    "register": lambda(name, version, impl) => {
+        print "Registering " + name + " v" + version;
+        return true;
+    },
+    "get": lambda(name) => null
+};
+
+ModuleRegistry["register"]("auth", "1.0", {});
+ModuleRegistry["register"]("database", "2.5", {});
+// Expected: Registering auth v1.0, Registering database v2.5
+
+// Test 19: Print with type checking pattern
+action printTyped(value, expectedType) {
+    print "Value: " + value;
+    print "Type check passed";
+}
+
+printTyped(42, "number");
+printTyped("hello", "string");
+printTyped(true, "boolean");
+// Expected: Values and type check messages
+
+// Test 20: Complex module composition
+let CoreModule = {
+    "utils": {
+        "format": lambda(s) => "[" + s + "]"
+    }
+};
+
+let ExtendedModule = {
+    "core": CoreModule,
+    "extended": {
+        "formatAdvanced": lambda(s) => CoreModule["utils"]["format"](s) + "!"
+    }
+};
+
+print ExtendedModule["extended"]["formatAdvanced"]("Test");
+// Expected: [Test]!

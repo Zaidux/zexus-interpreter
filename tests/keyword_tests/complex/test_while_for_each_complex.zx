@@ -1,0 +1,213 @@
+// ============================================
+// COMPLEX TESTS: WHILE, FOR, EACH, IN Keywords
+// ============================================
+// Advanced iteration patterns, algorithms, and edge cases
+
+// Test 1: FizzBuzz with while loop
+let num = 1;
+while (num <= 15) {
+    if (num % 15 == 0) {
+        print "FizzBuzz";
+    } elif (num % 3 == 0) {
+        print "Fizz";
+    } elif (num % 5 == 0) {
+        print "Buzz";
+    } else {
+        print num;
+    }
+    num = num + 1;
+}
+// Expected: 1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz
+
+// Test 2: Bubble sort pattern with nested loops
+let unsorted = [5, 2, 8, 1, 9];
+let len = 5;
+let i = 0;
+while (i < len) {
+    let j = 0;
+    while (j < len - 1) {
+        if (unsorted[j] > unsorted[j + 1]) {
+            let temp = unsorted[j];
+            unsorted[j] = unsorted[j + 1];
+            unsorted[j + 1] = temp;
+        }
+        j = j + 1;
+    }
+    i = i + 1;
+}
+for each element in unsorted {
+    print element;
+}
+// Expected: 1, 2, 5, 8, 9
+
+// Test 3: Matrix iteration with nested for each
+let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+for each row in matrix {
+    for each cell in row {
+        print cell;
+    }
+}
+// Expected: 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+// Test 4: Prime number check with while
+let testNum = 17;
+let isPrime = true;
+let divisor = 2;
+while (divisor < testNum) {
+    if (testNum % divisor == 0) {
+        isPrime = false;
+    }
+    divisor = divisor + 1;
+}
+print isPrime;
+// Expected: true
+
+// Test 5: Fibonacci sequence with while
+let fib1 = 0;
+let fib2 = 1;
+let fibCount = 0;
+print fib1;
+print fib2;
+while (fibCount < 8) {
+    let next = fib1 + fib2;
+    print next;
+    fib1 = fib2;
+    fib2 = next;
+    fibCount = fibCount + 1;
+}
+// Expected: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34
+
+// Test 6: Deep nested loops (3 levels)
+let layer1 = [1, 2];
+let layer2 = [10, 20];
+let layer3 = [100, 200];
+for each a in layer1 {
+    for each b in layer2 {
+        for each c in layer3 {
+            print a + b + c;
+        }
+    }
+}
+// Expected: 111, 211, 121, 221, 112, 212, 122, 222
+
+// Test 7: While with complex state machine
+let state = "start";
+let iterations = 0;
+while (iterations < 10) {
+    if (state == "start") {
+        print "Starting";
+        state = "running";
+    } elif (state == "running") {
+        print "Running";
+        if (iterations > 5) {
+            state = "stopping";
+        }
+    } elif (state == "stopping") {
+        print "Stopping";
+        state = "stopped";
+    } else {
+        print "Stopped";
+    }
+    iterations = iterations + 1;
+}
+// Expected: Starting, Running (5 times), Stopping, Stopped (3 times)
+
+// Test 8: Array filtering pattern
+let values = [1, 5, 10, 15, 20, 25, 30];
+let filtered = [];
+for each val in values {
+    if (val >= 10 && val <= 25) {
+        print "Selected: " + val;
+    }
+}
+// Expected: Selected: 10, Selected: 15, Selected: 20, Selected: 25
+
+// Test 9: Collatz conjecture pattern
+let collatz = 10;
+let steps = 0;
+while (collatz != 1) {
+    print collatz;
+    if (collatz % 2 == 0) {
+        collatz = collatz / 2;
+    } else {
+        collatz = (collatz * 3) + 1;
+    }
+    steps = steps + 1;
+}
+print collatz;
+print "Steps: " + steps;
+// Expected: 10, 5, 16, 8, 4, 2, 1, Steps: 6
+
+// Test 10: Find maximum in array with for each
+let numbers = [42, 17, 93, 26, 88, 11];
+let max = 0;
+for each num in numbers {
+    if (num > max) {
+        max = num;
+    }
+}
+print "Maximum: " + max;
+// Expected: Maximum: 93
+
+// Test 11: Pattern matching with nested loops
+let patterns = [[1, 1], [2, 2], [3, 3]];
+for each pattern in patterns {
+    let matches = true;
+    for each elem in pattern {
+        if (elem != pattern[0]) {
+            matches = false;
+        }
+    }
+    if (matches) {
+        print "Pattern matches";
+    }
+}
+// Expected: Pattern matches (3 times)
+
+// Test 12: While loop with early termination logic
+let search = [10, 20, 30, 40, 50];
+let target = 30;
+let found = false;
+let pos = 0;
+while (pos < 5 && !found) {
+    if (search[pos] == target) {
+        print "Found " + target + " at position " + pos;
+        found = true;
+    }
+    pos = pos + 1;
+}
+// Expected: Found 30 at position 2
+
+// Test 13: Multiplication table with nested for each
+for each i in [1, 2, 3, 4, 5] {
+    for each j in [1, 2, 3, 4, 5] {
+        let product = i * j;
+        if (j == 5) {
+            print product;
+        }
+    }
+}
+// Expected: 5, 10, 15, 20, 25
+
+// Test 14: Running average calculation
+let data = [10, 20, 30, 40, 50];
+let runningSum = 0;
+let count = 0;
+for each value in data {
+    runningSum = runningSum + value;
+    count = count + 1;
+    let average = runningSum / count;
+    print "Average: " + average;
+}
+// Expected: Average: 10, Average: 15, Average: 20, Average: 25, Average: 30
+
+// Test 15: Complex conditional loop termination
+let x = 0;
+let y = 100;
+let z = 50;
+while (x < 20 && y > 80 && z == 50) {
+    print x;
+    x = x + 5;
+    y = y - 5;
+}
+// Expected: 0, 5, 10, 15

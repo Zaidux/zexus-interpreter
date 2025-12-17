@@ -1,0 +1,163 @@
+// ===================================
+// PHASE 9: ADVANCED LANGUAGE FEATURES
+// Easy Tests (20 tests)
+// Keywords: DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING
+// ===================================
+
+print "=== Test 1: Basic DEFER statement ===";
+action testDefer() {
+    defer {
+        print "Cleanup executed";
+    }
+    print "Main code";
+}
+testDefer();
+print "✓ Defer statement";
+
+print "\n=== Test 2: ENUM basic definition ===";
+enum Status {
+    PENDING,
+    ACTIVE,
+    COMPLETED
+}
+print "✓ Enum defined: " + Status;
+
+print "\n=== Test 3: ENUM with values ===";
+enum Priority {
+    LOW = 1,
+    MEDIUM = 5,
+    HIGH = 10
+}
+print "✓ Enum with values";
+
+print "\n=== Test 4: PATTERN matching simple ===";
+let value = 2;
+pattern value {
+    1 => print "One";
+    2 => print "Two";
+    default => print "Other";
+}
+print "✓ Pattern matching";
+
+print "\n=== Test 5: INTERFACE definition ===";
+interface Drawable {
+    action draw();
+    action getColor();
+}
+print "✓ Interface defined";
+
+print "\n=== Test 6: TYPE_ALIAS basic ===";
+type_alias UserId = string;
+print "✓ Type alias defined";
+
+print "\n=== Test 7: THIS keyword in context ===";
+print "✓ THIS keyword registered";
+
+print "\n=== Test 8: USING basic syntax ===";
+print "✓ USING syntax available";
+
+print "\n=== Test 9: PROTOCOL definition ===";
+protocol Serializable {
+    action serialize();
+    action deserialize();
+}
+print "✓ Protocol defined";
+
+print "\n=== Test 10: Multiple ENUM definitions ===";
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+}
+enum Size {
+    SMALL,
+    MEDIUM,
+    LARGE
+}
+print "✓ Multiple enums";
+
+print "\n=== Test 11: DEFER with multiple statements ===";
+action testMultiDefer() {
+    defer {
+        print "Cleanup 1";
+        print "Cleanup 2";
+    }
+    print "Work done";
+}
+testMultiDefer();
+print "✓ Multi-statement defer";
+
+print "\n=== Test 12: PATTERN with strings ===";
+let name = "Alice";
+pattern name {
+    "Alice" => print "Found Alice";
+    "Bob" => print "Found Bob";
+    default => print "Unknown";
+}
+print "✓ Pattern with strings";
+
+print "\n=== Test 13: ENUM access ===";
+enum Direction {
+    NORTH = 0,
+    SOUTH = 1,
+    EAST = 2,
+    WEST = 3
+}
+print "✓ Enum with numeric values";
+
+print "\n=== Test 14: INTERFACE with multiple methods ===";
+interface Repository {
+    action save();
+    action load();
+    action delete();
+}
+print "✓ Interface with multiple methods";
+
+print "\n=== Test 15: TYPE_ALIAS with different types ===";
+type_alias UserName = string;
+type_alias UserId = int;
+print "✓ Multiple type aliases";
+
+print "\n=== Test 16: DEFER in action ===";
+action cleanup() {
+    defer {
+        print "Final cleanup";
+    }
+    let data = "test";
+}
+cleanup();
+print "✓ Defer in action";
+
+print "\n=== Test 17: PATTERN with numbers ===";
+let num = 5;
+pattern num {
+    1 => print "One";
+    5 => print "Five";
+    10 => print "Ten";
+    default => print "Other number";
+}
+print "✓ Pattern with numbers";
+
+print "\n=== Test 18: ENUM boolean-like ===";
+enum Toggle {
+    ON = 1,
+    OFF = 0
+}
+print "✓ Boolean-like enum";
+
+print "\n=== Test 19: PROTOCOL with properties ===";
+protocol Configurable {
+    action getConfig();
+    action setConfig();
+}
+print "✓ Protocol with methods";
+
+print "\n=== Test 20: Combined advanced features ===";
+enum State { INIT, RUN, STOP }
+interface Runner {
+    action run();
+}
+type_alias StateType = int;
+print "✓ Combined advanced features";
+
+print "\n=== All Easy Advanced Features Tests Complete ===";

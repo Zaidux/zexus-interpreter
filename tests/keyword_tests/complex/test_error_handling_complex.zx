@@ -1,0 +1,626 @@
+// ============================================================================
+// COMPLEX LEVEL: TRY/CATCH/REVERT/REQUIRE Keywords Test Suite
+// ============================================================================
+// Testing advanced error handling patterns, edge cases, and real-world scenarios
+// Keywords: TRY, CATCH, REVERT, REQUIRE
+// ============================================================================
+
+print "=== COMPLEX ERROR HANDLING TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Smart contract-style token transfer with comprehensive error handling
+// Expected: Should validate all constraints before executing
+// ============================================================================
+print "Test 1: Token transfer validation";
+let balances = {"Alice": 1000, "Bob": 500, "Charlie": 250};
+
+action tokenTransfer(from, to, amount) {
+    try {
+        // Input validation
+        require(from != null, "Sender required");
+        require(to != null, "Recipient required");
+        require(amount > 0, "Amount must be positive");
+        require(from != to, "Cannot transfer to self");
+        
+        // Balance check (simulated)
+        let hasBalance = true;
+        require(hasBalance, "Insufficient balance");
+        
+        // Execute transfer
+        print "Transfer: " + from + " -> " + to + ": " + amount;
+        return "Success";
+    } catch (error) {
+        return "Transfer failed";
+    }
+}
+
+print tokenTransfer("Alice", "Bob", 100);
+print tokenTransfer("Alice", "Alice", 50);
+print "";
+
+// ============================================================================
+// TEST 2: Recursive function with error handling
+// Expected: Should handle errors in recursive calls
+// ============================================================================
+print "Test 2: Recursive factorial with validation";
+action factorial(n) {
+    try {
+        require(n >= 0, "Negative input not allowed");
+        
+        if (n == 0 || n == 1) {
+            return 1;
+        }
+        return n * factorial(n - 1);
+    } catch (e) {
+        return null;
+    }
+}
+
+print "5! = " + factorial(5);
+print "0! = " + factorial(0);
+print "";
+
+// ============================================================================
+// TEST 3: Error recovery with fallback values
+// Expected: Should provide graceful degradation
+// ============================================================================
+print "Test 3: Error recovery with fallbacks";
+action getConfigValue(config, key, defaultValue) {
+    try {
+        // Simulate config access
+        require(config != null, "Config is null");
+        
+        // Try to get value
+        if (key == "timeout") {
+            return 5000;
+        } elif (key == "retries") {
+            return 3;
+        } else {
+            revert("Key not found");
+        }
+    } catch (e) {
+        return defaultValue;
+    }
+}
+
+let myConfig = {"timeout": 5000, "retries": 3};
+print "Timeout: " + getConfigValue(myConfig, "timeout", 1000);
+print "Unknown: " + getConfigValue(myConfig, "unknown", 999);
+print "";
+
+// ============================================================================
+// TEST 4: Transaction-like pattern with rollback
+// Expected: Should rollback on error
+// ============================================================================
+print "Test 4: Transaction pattern with rollback";
+let accounts = {"Alice": 1000, "Bob": 500};
+
+action executeTransaction(from, to, amount, rollback) {
+    let originalState = "saved"; // Simulate state backup
+    
+    try {
+        require(amount > 0, "Invalid amount");
+        require(amount <= 1000, "Amount too large");
+        
+        // Simulate operations
+        print "Executing transaction...";
+        require(from != to, "Invalid recipient");
+        
+        print "Transaction committed";
+        return "Success";
+    } catch (error) {
+        print "Rolling back transaction";
+        return "Rolled back";
+    }
+}
+
+print executeTransaction("Alice", "Bob", 100, true);
+print executeTransaction("Alice", "Alice", 100, true);
+print "";
+
+// ============================================================================
+// TEST 5: Error handling in higher-order functions
+// Expected: Should propagate or catch errors from callbacks
+// ============================================================================
+print "Test 5: Higher-order function error handling";
+action applyOperation(value, operation) {
+    try {
+        return operation(value);
+    } catch (e) {
+        return "Operation failed";
+    }
+}
+
+let doubler = lambda(x) { return x * 2; };
+let reverter = lambda(x) { 
+    try {
+        if (x < 0) {
+            revert("Negative input");
+        }
+        return x;
+    } catch (e) {
+        return 0;
+    }
+};
+
+print "Double 21: " + applyOperation(21, doubler);
+print "Revert -5: " + applyOperation(-5, reverter);
+print "";
+
+// ============================================================================
+// TEST 6: Multi-level validation pipeline
+// Expected: Should validate through multiple stages
+// ============================================================================
+print "Test 6: Validation pipeline";
+action validateInput(data) {
+    require(data != null, "Data is null");
+    return true;
+}
+
+action validateFormat(data) {
+    require(data != "", "Data is empty");
+    return true;
+}
+
+action validateBusiness(data) {
+    require(data != "invalid", "Business rule violation");
+    return true;
+}
+
+action processWithPipeline(input) {
+    try {
+        validateInput(input);
+        validateFormat(input);
+        validateBusiness(input);
+        return "Processed: " + input;
+    } catch (e) {
+        return "Validation failed";
+    }
+}
+
+print processWithPipeline("valid data");
+print "";
+
+// ============================================================================
+// TEST 7: Error aggregation pattern
+// Expected: Should collect multiple error conditions
+// ============================================================================
+print "Test 7: Error aggregation";
+action validateAll(value) {
+    let errors = [];
+    
+    try {
+        require(value > 0, "Must be positive");
+    } catch (e) {
+        print "Error: Must be positive";
+    }
+    
+    try {
+        require(value < 100, "Must be less than 100");
+    } catch (e) {
+        print "Error: Must be less than 100";
+    }
+    
+    try {
+        require(value != 50, "Cannot be 50");
+    } catch (e) {
+        print "Error: Cannot be 50";
+    }
+    
+    return "Validation complete";
+}
+
+print validateAll(150);
+print validateAll(50);
+print "";
+
+// ============================================================================
+// TEST 8: Nested error contexts with different handlers
+// Expected: Should handle errors at appropriate nesting level
+// ============================================================================
+print "Test 8: Nested error contexts";
+action nestedErrorHandling() {
+    let result = "not set";
+    
+    try {
+        print "Level 1";
+        
+        try {
+            print "Level 2";
+            
+            try {
+                print "Level 3";
+                revert("Deep error");
+            } catch (e3) {
+                print "Caught at level 3";
+                revert("Propagating up");
+            }
+        } catch (e2) {
+            print "Caught at level 2";
+            result = "handled at 2";
+        }
+        
+        result = "completed";
+    } catch (e1) {
+        print "Caught at level 1";
+        result = "handled at 1";
+    }
+    
+    return result;
+}
+
+print "Result: " + nestedErrorHandling();
+print "";
+
+// ============================================================================
+// TEST 9: Conditional error handling based on error type/message
+// Expected: Should handle different error scenarios differently
+// ============================================================================
+print "Test 9: Conditional error handling";
+action handleSpecificErrors(code) {
+    try {
+        if (code == 404) {
+            revert("Not found");
+        } elif (code == 403) {
+            revert("Forbidden");
+        } elif (code == 500) {
+            revert("Server error");
+        }
+        return "OK";
+    } catch (e) {
+        // In real implementation, could inspect error message
+        if (code == 404) {
+            return "Resource not found";
+        } elif (code == 403) {
+            return "Access denied";
+        } else {
+            return "Unknown error";
+        }
+    }
+}
+
+print "Code 200: " + handleSpecificErrors(200);
+print "Code 404: " + handleSpecificErrors(404);
+print "Code 500: " + handleSpecificErrors(500);
+print "";
+
+// ============================================================================
+// TEST 10: Error handling with resource cleanup pattern
+// Expected: Should ensure cleanup happens even on error
+// ============================================================================
+print "Test 10: Resource cleanup pattern";
+action withResource(shouldFail) {
+    let resource = "acquired";
+    print "Resource " + resource;
+    
+    try {
+        if (shouldFail) {
+            revert("Operation failed");
+        }
+        print "Operation succeeded";
+    } catch (e) {
+        print "Operation failed, cleaning up";
+    }
+    
+    // Cleanup always happens
+    print "Resource released";
+    return "Done";
+}
+
+print withResource(false);
+print withResource(true);
+print "";
+
+// ============================================================================
+// TEST 11: Complex require with calculated conditions
+// Expected: Should evaluate complex expressions
+// ============================================================================
+print "Test 11: Complex require conditions";
+action complexValidation(a, b, c) {
+    try {
+        let sum = a + b + c;
+        let avg = sum / 3;
+        require(avg > 10, "Average too low");
+        require(avg < 90, "Average too high");
+        return "Valid average: " + avg;
+    } catch (e) {
+        return "Validation failed";
+    }
+}
+
+print complexValidation(30, 40, 50);
+print complexValidation(5, 5, 5);
+print "";
+
+// ============================================================================
+// TEST 12: Error handling in method chaining pattern
+// Expected: Should handle errors in chain
+// ============================================================================
+print "Test 12: Method chaining with error handling";
+action step1(value) {
+    try {
+        require(value > 0, "Step 1 failed");
+        return value * 2;
+    } catch (e) {
+        return null;
+    }
+}
+
+action step2(value) {
+    try {
+        require(value != null, "Step 2 failed");
+        return value + 10;
+    } catch (e) {
+        return null;
+    }
+}
+
+action step3(value) {
+    try {
+        require(value != null, "Step 3 failed");
+        return value / 2;
+    } catch (e) {
+        return null;
+    }
+}
+
+let result1 = step1(5);
+let result2 = step2(result1);
+let result3 = step3(result2);
+print "Chained result: " + result3;
+print "";
+
+// ============================================================================
+// TEST 13: Retry pattern with error handling
+// Expected: Should attempt operation multiple times
+// ============================================================================
+print "Test 13: Retry pattern";
+let attemptCount = 0;
+
+action unreliableOperation(shouldSucceed) {
+    attemptCount = attemptCount + 1;
+    try {
+        print "Attempt " + attemptCount;
+        if (!shouldSucceed && attemptCount < 3) {
+            revert("Operation failed");
+        }
+        return "Success on attempt " + attemptCount;
+    } catch (e) {
+        return "Failed attempt " + attemptCount;
+    }
+}
+
+print unreliableOperation(false);
+print unreliableOperation(false);
+print unreliableOperation(true);
+attemptCount = 0;
+print "";
+
+// ============================================================================
+// TEST 14: Circuit breaker pattern
+// Expected: Should fail fast after threshold
+// ============================================================================
+print "Test 14: Circuit breaker pattern";
+let failureCount = 0;
+let circuitOpen = false;
+
+action protectedOperation(shouldFail) {
+    try {
+        if (circuitOpen) {
+            revert("Circuit breaker open");
+        }
+        
+        if (shouldFail) {
+            failureCount = failureCount + 1;
+            if (failureCount >= 3) {
+                circuitOpen = true;
+            }
+            revert("Operation failed");
+        }
+        
+        failureCount = 0;
+        return "Success";
+    } catch (e) {
+        return "Blocked or failed";
+    }
+}
+
+print protectedOperation(true);  // Fail 1
+print protectedOperation(true);  // Fail 2
+print protectedOperation(true);  // Fail 3, opens circuit
+print protectedOperation(false); // Blocked by circuit
+print "";
+
+// ============================================================================
+// TEST 15: Error handling with state machines
+// Expected: Should transition states safely
+// ============================================================================
+print "Test 15: State machine with error handling";
+let state = "idle";
+
+action transition(newState) {
+    try {
+        if (state == "idle" && newState == "running") {
+            state = newState;
+            return "Transitioned to running";
+        } elif (state == "running" && newState == "paused") {
+            state = newState;
+            return "Transitioned to paused";
+        } elif (state == "paused" && newState == "running") {
+            state = newState;
+            return "Transitioned to running";
+        } else {
+            revert("Invalid transition");
+        }
+    } catch (e) {
+        return "Transition failed";
+    }
+}
+
+print transition("running");
+print transition("paused");
+print transition("idle"); // Invalid
+print "";
+
+// ============================================================================
+// TEST 16: Complex authorization pattern
+// Expected: Should check multiple permission levels
+// ============================================================================
+print "Test 16: Multi-level authorization";
+let currentUser = "admin";
+let permissions = {"admin": 3, "user": 1, "guest": 0};
+
+action authorize(requiredLevel) {
+    try {
+        let userLevel = 3; // Simulated lookup
+        require(userLevel >= requiredLevel, "Insufficient permissions");
+        return "Authorized";
+    } catch (e) {
+        return "Access denied";
+    }
+}
+
+print "Admin action: " + authorize(3);
+print "User action: " + authorize(1);
+print "";
+
+// ============================================================================
+// TEST 17: Error handling with data transformation pipeline
+// Expected: Should transform data safely
+// ============================================================================
+print "Test 17: Data transformation pipeline";
+action parseInput(raw) {
+    try {
+        require(raw != null, "Input is null");
+        return raw;
+    } catch (e) {
+        return null;
+    }
+}
+
+action validateData(data) {
+    try {
+        require(data != null, "Invalid data");
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+action transformData(data) {
+    try {
+        require(data != null, "No data to transform");
+        return "Transformed: " + data;
+    } catch (e) {
+        return null;
+    }
+}
+
+let input = "raw data";
+let parsed = parseInput(input);
+let validated = validateData(parsed);
+let transformed = transformData(validated);
+print transformed;
+print "";
+
+// ============================================================================
+// TEST 18: Error boundaries for isolated sections
+// Expected: Should isolate errors to specific sections
+// ============================================================================
+print "Test 18: Error boundaries";
+action section1() {
+    try {
+        print "Section 1 executing";
+        return "Section 1 OK";
+    } catch (e) {
+        return "Section 1 failed";
+    }
+}
+
+action section2() {
+    try {
+        print "Section 2 executing";
+        revert("Section 2 error");
+    } catch (e) {
+        return "Section 2 failed";
+    }
+}
+
+action section3() {
+    try {
+        print "Section 3 executing";
+        return "Section 3 OK";
+    } catch (e) {
+        return "Section 3 failed";
+    }
+}
+
+print section1();
+print section2();
+print section3();
+print "";
+
+// ============================================================================
+// TEST 19: Defensive programming with multiple safety checks
+// Expected: Should validate all assumptions
+// ============================================================================
+print "Test 19: Defensive programming";
+action defensiveOperation(input) {
+    try {
+        // Preconditions
+        require(input != null, "Input cannot be null");
+        require(input != "", "Input cannot be empty");
+        
+        // Processing
+        let processed = "Result: " + input;
+        
+        // Postconditions
+        require(processed != null, "Processing failed");
+        
+        return processed;
+    } catch (e) {
+        return "Operation failed safely";
+    }
+}
+
+print defensiveOperation("test data");
+print "";
+
+// ============================================================================
+// TEST 20: Real-world scenario - complete workflow with error handling
+// Expected: Should handle complete business workflow
+// ============================================================================
+print "Test 20: Complete workflow";
+action completeWorkflow(userId, action, data) {
+    try {
+        // Authentication
+        require(userId != null, "Authentication failed");
+        print "User authenticated";
+        
+        // Authorization
+        require(action != "delete", "Action not authorized");
+        print "User authorized";
+        
+        // Validation
+        require(data != null, "Invalid data");
+        print "Data validated";
+        
+        // Business logic
+        require(action == "create" || action == "update", "Unknown action");
+        print "Executing " + action;
+        
+        // Success
+        print "Workflow completed successfully";
+        return "Success: " + action;
+    } catch (error) {
+        print "Workflow failed at validation";
+        return "Workflow failed";
+    }
+}
+
+print completeWorkflow("user123", "create", "payload");
+print completeWorkflow("user123", "delete", "payload");
+print "";
+
+print "=== COMPLEX ERROR HANDLING TESTS COMPLETE ===";

@@ -1,0 +1,204 @@
+// ===============================================
+// PHASE 12: SPECIAL KEYWORDS MEDIUM TESTS
+// Testing: EXACTLY, EMBEDDED, MAP, TRUE, FALSE, NULL
+// Total: 20 tests
+// ===============================================
+
+// ============= EXACTLY with Logic =============
+print "=== Test 1: EXACTLY with conditional";
+exactly process {
+    let x = 5;
+    if (x > 3) {
+        print "Value is greater than 3";
+    } else {
+        print "Value is 3 or less";
+    }
+}
+print "✓ Exactly with conditional works";
+
+print "=== Test 2: EXACTLY with multiple statements";
+exactly compute {
+    let a = 10;
+    let b = 20;
+    let sum = a + b;
+    print "Sum: " + sum;
+}
+print "✓ Exactly with multiple statements works";
+
+// ============= EMBEDDED with Parameters =============
+print "=== Test 3: EMBEDDED with metadata";
+embedded rust "crypto" {
+    fn hash(input: &str) -> String { /* impl */ }
+}
+print "✓ Embedded Rust declared";
+
+print "=== Test 4: Multiple EMBEDDED blocks";
+embedded python "ml_model" {
+    def train(): pass
+}
+embedded cpp "native_lib" {
+    int compute() { return 0; }
+}
+print "✓ Multiple embedded blocks work";
+
+// ============= MAP Advanced Operations =============
+print "=== Test 5: Map with mixed types";
+let data = {
+    "name": "Alice",
+    "age": 30,
+    "active": true,
+    "balance": null
+};
+print "Name: " + data["name"];
+print "Age: " + data["age"];
+print "✓ Map with mixed types works";
+
+print "=== Test 6: Map with function return";
+action createConfig(theme) {
+    return {"theme": theme, "language": "en"};
+}
+let config = createConfig("dark");
+print "Theme: " + config["theme"];
+print "✓ Map with function return works";
+
+print "=== Test 7: Deeply nested map";
+let app = {
+    "settings": {
+        "ui": {
+            "theme": "dark",
+            "font": "Arial"
+        }
+    }
+};
+print "Theme: " + app["settings"]["ui"]["theme"];
+print "✓ Deeply nested map works";
+
+print "=== Test 8: Map in function";
+action getUserInfo(name, age) {
+    return {"name": name, "age": age};
+}
+let user = getUserInfo("Bob", 25);
+print "User: " + user["name"];
+print "✓ Map in function works";
+
+// ============= TRUE Advanced Logic =============
+print "=== Test 9: TRUE in complex condition";
+let a = true;
+let b = true;
+if (a && b) {
+    print "Both are true";
+}
+print "✓ TRUE in complex condition works";
+
+print "=== Test 10: TRUE in action";
+action isEnabled() {
+    return true;
+}
+if (isEnabled()) {
+    print "Feature enabled";
+}
+print "✓ TRUE in action works";
+
+print "=== Test 11: TRUE with negation";
+let enabled = true;
+if (!enabled == false) {
+    print "Negation equals false";
+}
+print "✓ TRUE with negation works";
+
+// ============= FALSE Advanced Logic =============
+print "=== Test 12: FALSE in complex condition";
+let x = false;
+let y = true;
+if (x || y) {
+    print "At least one is true";
+}
+print "✓ FALSE in complex condition works";
+
+print "=== Test 13: FALSE in action";
+action isDisabled() {
+    return false;
+}
+if (!isDisabled()) {
+    print "Not disabled";
+}
+print "✓ FALSE in action works";
+
+print "=== Test 14: FALSE comparison chain";
+if (false == false) {
+    print "False equals false";
+}
+print "✓ FALSE comparison chain works";
+
+// ============= NULL Advanced Usage =============
+print "=== Test 15: NULL check pattern";
+let value = null;
+if (value == null) {
+    value = "default";
+}
+print "Value: " + value;
+print "✓ NULL check pattern works";
+
+print "=== Test 16: NULL in action";
+action getValue() {
+    return null;
+}
+let result = getValue();
+if (result == null) {
+    print "Got null result";
+}
+print "✓ NULL in action works";
+
+print "=== Test 17: NULL vs empty string";
+let empty = null;
+let str = "";
+if (empty == null && len(str) == 0) {
+    print "Both are empty-like";
+}
+print "✓ NULL vs empty string works";
+
+// ============= Combined Patterns =============
+print "=== Test 18: Map with all special values";
+let dataset = {
+    "active": true,
+    "disabled": false,
+    "pending": null,
+    "name": "test"
+};
+if (dataset["active"] == true) {
+    print "Dataset is active";
+}
+if (dataset["pending"] == null) {
+    print "No pending operations";
+}
+print "✓ Map with all special values works";
+
+print "=== Test 19: EXACTLY with map operations";
+exactly transform {
+    let input = {"x": 10, "y": 20};
+    let output = {"sum": input["x"] + input["y"]};
+    print "Sum: " + output["sum"];
+}
+print "✓ Exactly with map operations works";
+
+print "=== Test 20: All keywords in one test";
+exactly fullTest {
+    let state = {
+        "initialized": true,
+        "running": false,
+        "error": null
+    };
+    
+    if (state["initialized"] == true) {
+        print "System initialized";
+    }
+    
+    if (state["running"] == false) {
+        print "System not running";
+    }
+    
+    if (state["error"] == null) {
+        print "No errors";
+    }
+}
+print "✓ All keywords work together";

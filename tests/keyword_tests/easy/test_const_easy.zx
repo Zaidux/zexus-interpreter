@@ -1,0 +1,82 @@
+# Easy Tests for CONST Keyword
+# Testing basic immutable variable functionality
+
+# Test 1: Basic integer const
+const x = 10;
+print x;
+# Expected output: 10
+
+# Test 2: Basic string const
+const name = "Alice";
+print name;
+# Expected output: Alice
+
+# Test 3: Basic boolean const
+const isReady = true;
+print isReady;
+# Expected output: true
+
+# Test 4: Arithmetic expression
+const sum = 5 + 10;
+print sum;
+# Expected output: 15
+
+# Test 5: String concatenation
+const greeting = "Hello" + " " + "World";
+print greeting;
+# Expected output: Hello World
+
+# Test 6: Negative numbers
+const negative = -42;
+print negative;
+# Expected output: -42
+
+# Test 7: Float values
+const pi = 3.14159;
+print pi;
+# Expected output: 3.14159
+
+# Test 8: Null value
+const empty = null;
+print empty;
+# Expected output: null
+
+# Test 9: Boolean false
+const inactive = false;
+print inactive;
+# Expected output: false
+
+# Test 10: Multiple const declarations
+const a = 1;
+const b = 2;
+const c = 3;
+print a;
+print b;
+print c;
+# Expected output: 1, 2, 3
+
+# Test 11: Const from expression
+const x2 = 10;
+const y2 = x2 + 5;
+print y2;
+# Expected output: 15
+
+# Test 12: Comparison result
+const isEqual = 10 == 10;
+print isEqual;
+# Expected output: true
+
+# Test 13: Boolean AND
+const result = true && true;
+print result;
+# Expected output: true
+
+# Test 14: Boolean OR
+const result2 = false || true;
+print result2;
+# Expected output: true
+
+# Test 15: Math operations
+const calculation = (10 + 5) * 2;
+print calculation;
+# Expected output: 30

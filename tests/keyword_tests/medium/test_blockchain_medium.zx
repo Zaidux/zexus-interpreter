@@ -1,0 +1,122 @@
+// ===================================
+// PHASE 7: BLOCKCHAIN & STATE MANAGEMENT
+// Medium Tests (20 tests)
+// Keywords: LEDGER, STATE, TX, HASH, SIGNATURE, VERIFY_SIG, LIMIT, GAS, PERSISTENT, STORAGE
+// ===================================
+
+print "=== Test 1: LEDGER-based account system ===";
+ledger accounts = {};
+print "✓ Ledger accounts initialized";
+
+print "\n=== Test 2: STATE-based counter with operations ===";
+state counter = 0;
+counter = counter + 1;
+counter = counter + 5;
+print "✓ Counter value: " + counter;
+
+print "\n=== Test 3: Multiple LEDGER entries ===";
+ledger userBalances = {"alice": 100, "bob": 50};
+print "✓ Multiple ledger entries";
+
+print "\n=== Test 4: STATE modifications in function ===";
+state globalCount = 0;
+action incrementCount() {
+    globalCount = globalCount + 1;
+    return globalCount;
+}
+let result = incrementCount();
+print "✓ State modified in function: " + result;
+
+print "\n=== Test 5: TX context in action ===";
+action getTxInfo() {
+    return TX.caller;
+}
+let caller = getTxInfo();
+print "✓ TX context accessible in action";
+
+print "\n=== Test 6: HASH chain ===";
+let block1 = hash("genesis", "SHA256");
+let block2 = hash(block1 + "data", "SHA256");
+let block3 = hash(block2 + "more", "SHA256");
+print "✓ Hash chain created: " + block3;
+
+print "\n=== Test 7: Multiple hash algorithms ===";
+let sha256 = hash("test", "SHA256");
+let sha512 = hash("test", "SHA512");
+print "✓ Multiple algorithms work";
+
+print "\n=== Test 8: LEDGER with computed values ===";
+let initialAmount = 1000;
+ledger totalLocked = initialAmount * 10;
+print "✓ Ledger with computation: " + totalLocked;
+
+print "\n=== Test 9: STATE with map operations ===";
+state registry = {"service1": true, "service2": false};
+print "✓ State registry: " + registry;
+
+print "\n=== Test 10: PERSISTENT storage in contract-like pattern ===";
+persistent storage contractOwner = "0x123";
+persistent storage contractBalance = 0;
+print "✓ Persistent contract storage";
+
+print "\n=== Test 11: Conditional STATE updates ===";
+state status = "pending";
+if (status == "pending") {
+    status = "active";
+}
+print "✓ Conditional state update: " + status;
+
+print "\n=== Test 12: LEDGER immutability concept ===";
+ledger immutableRecord = 42;
+// Ledger should track history
+print "✓ Ledger record: " + immutableRecord;
+
+print "\n=== Test 13: Hash-based merkle-like structure ===";
+let leaf1 = hash("data1", "SHA256");
+let leaf2 = hash("data2", "SHA256");
+let root = hash(leaf1 + leaf2, "SHA256");
+print "✓ Merkle-like root: " + root;
+
+print "\n=== Test 14: STATE array operations ===";
+state items = [];
+print "✓ State array initialized";
+
+print "\n=== Test 15: Multiple PERSISTENT declarations ===";
+persistent storage config = {"network": "mainnet"};
+persistent storage version = 1;
+print "✓ Multiple persistent storage";
+
+print "\n=== Test 16: TX properties access ===";
+action checkGasLimit() {
+    let limit = TX.gas_limit;
+    return limit;
+}
+print "✓ TX gas_limit accessible";
+
+print "\n=== Test 17: HASH with different data types ===";
+let numHash = hash("12345", "SHA256");
+let strHash = hash("hello", "SHA256");
+print "✓ Hash different types";
+
+print "\n=== Test 18: STATE with nested maps ===";
+state metadata = {
+    "users": {"alice": 1, "bob": 2},
+    "config": {"debug": false}
+};
+print "✓ Nested state structures";
+
+print "\n=== Test 19: LEDGER and STATE combined ===";
+ledger auditLog = [];
+state currentOperation = "transfer";
+print "✓ Combined ledger and state: " + currentOperation;
+
+print "\n=== Test 20: PERSISTENT with initial complex value ===";
+persistent storage tokenData = {
+    "name": "MyToken",
+    "symbol": "MTK",
+    "decimals": 18,
+    "totalSupply": 1000000
+};
+print "✓ Persistent complex data";
+
+print "\n=== All Medium Blockchain Tests Complete ===";

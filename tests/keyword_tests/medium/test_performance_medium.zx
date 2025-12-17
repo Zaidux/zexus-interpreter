@@ -1,0 +1,175 @@
+// ===================================
+// PHASE 8: PERFORMANCE OPTIMIZATION
+// Medium Tests (20 tests)
+// Keywords: NATIVE, GC, INLINE, BUFFER, SIMD
+// ===================================
+
+print "=== Test 1: GC with memory-intensive operations ===";
+let bigArray = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+gc "collect";
+print "✓ GC after array creation";
+
+print "\n=== Test 2: INLINE with recursive function ===";
+action fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+inline fibonacci;
+let fib5 = fibonacci(5);
+print "✓ Inlined recursive function: " + fib5;
+
+print "\n=== Test 3: BUFFER with multiple writes ===";
+buffer dataBuf allocate(256);
+buffer dataBuf write(0, [1, 2, 3, 4, 5]);
+buffer dataBuf write(10, [10, 20, 30]);
+buffer dataBuf write(20, [100, 200]);
+print "✓ Multiple buffer writes";
+
+print "\n=== Test 4: BUFFER read after multiple writes ===";
+let firstRead = buffer dataBuf read(0, 5);
+let secondRead = buffer dataBuf read(10, 3);
+print "✓ Multiple buffer reads";
+
+print "\n=== Test 5: GC pause and resume cycle ===";
+gc "pause";
+let data1 = [1, 2, 3];
+let data2 = [4, 5, 6];
+gc "resume";
+gc "collect";
+print "✓ GC pause/resume cycle";
+
+print "\n=== Test 6: INLINE multiple interdependent functions ===";
+action add(a, b) { return a + b; }
+action multiply(a, b) { return a * b; }
+action calculate(x) { return multiply(add(x, 5), 2); }
+inline add;
+inline multiply;
+inline calculate;
+let calcResult = calculate(10);
+print "✓ Inlined interdependent functions: " + calcResult;
+
+print "\n=== Test 7: BUFFER string-like operations ===";
+buffer stringBuf allocate(100);
+buffer stringBuf write(0, [72, 101, 108, 108, 111]);
+buffer stringBuf write(5, [32, 87, 111, 114, 108, 100]);
+let message = buffer stringBuf read(0, 11);
+print "✓ Buffer string operations";
+
+print "\n=== Test 8: GC with debug mode ===";
+gc "enable_debug";
+gc "collect";
+gc "disable_debug";
+print "✓ GC debug mode cycle";
+
+print "\n=== Test 9: BUFFER boundary testing ===";
+buffer edgeBuf allocate(10);
+buffer edgeBuf write(0, [255]);
+buffer edgeBuf write(9, [0]);
+let edgeData = buffer edgeBuf read(0, 10);
+print "✓ Buffer boundary operations";
+
+print "\n=== Test 10: INLINE with conditionals ===";
+action maxValue(a, b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+inline maxValue;
+let maximum = maxValue(42, 17);
+print "✓ Inlined conditional function: " + maximum;
+
+print "\n=== Test 11: BUFFER resize pattern ===";
+buffer resizeBuf allocate(50);
+buffer resizeBuf write(0, [1, 2, 3]);
+buffer resizeBuf free();
+buffer resizeBuf allocate(100);
+buffer resizeBuf write(0, [4, 5, 6, 7, 8]);
+print "✓ Buffer resize pattern";
+
+print "\n=== Test 12: GC multiple collect calls ===";
+gc "collect";
+gc "collect";
+gc "collect";
+print "✓ Multiple GC collects";
+
+print "\n=== Test 13: INLINE with nested actions ===";
+action outer(x) {
+    action inner(y) {
+        return y * 2;
+    }
+    return inner(x) + 10;
+}
+inline outer;
+let nestedResult = outer(5);
+print "✓ Inlined nested actions: " + nestedResult;
+
+print "\n=== Test 14: BUFFER copy pattern ===";
+buffer srcBuf allocate(20);
+buffer dstBuf allocate(20);
+buffer srcBuf write(0, [10, 20, 30, 40, 50]);
+let copyData = buffer srcBuf read(0, 5);
+buffer dstBuf write(0, copyData);
+print "✓ Buffer copy pattern";
+
+print "\n=== Test 15: INLINE with return values ===";
+action square(n) { return n * n; }
+action cube(n) { return n * n * n; }
+inline square;
+inline cube;
+let sq = square(5);
+let cb = cube(3);
+print "✓ Inlined with returns: " + sq + ", " + cb;
+
+print "\n=== Test 16: BUFFER sequential operations ===";
+buffer seqBuf allocate(50);
+buffer seqBuf write(0, [1]);
+buffer seqBuf write(1, [2]);
+buffer seqBuf write(2, [3]);
+buffer seqBuf write(3, [4]);
+let seqData = buffer seqBuf read(0, 4);
+print "✓ Sequential buffer operations";
+
+print "\n=== Test 17: GC state management ===";
+gc "pause";
+let temp1 = "data1";
+let temp2 = "data2";
+let temp3 = "data3";
+gc "resume";
+print "✓ GC state management";
+
+print "\n=== Test 18: INLINE with loops ===";
+action sumArray(arr) {
+    let sum = 0;
+    for each item in arr {
+        sum = sum + item;
+    }
+    return sum;
+}
+inline sumArray;
+print "✓ Inlined function with loops";
+
+print "\n=== Test 19: BUFFER cleanup sequence ===";
+buffer dataBuf free();
+buffer edgeBuf free();
+buffer resizeBuf free();
+buffer srcBuf free();
+buffer dstBuf free();
+buffer seqBuf free();
+print "✓ Buffer cleanup sequence";
+
+print "\n=== Test 20: Combined optimization patterns ===";
+gc "pause";
+action optimized(x) { return x * 2 + 5; }
+inline optimized;
+buffer optBuf allocate(64);
+buffer optBuf write(0, [1, 2, 3]);
+gc "resume";
+gc "collect";
+buffer optBuf free();
+print "✓ Combined optimization patterns";
+
+print "\n=== All Medium Performance Tests Complete ===";

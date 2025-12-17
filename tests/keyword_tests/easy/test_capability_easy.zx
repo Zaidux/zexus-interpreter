@@ -1,0 +1,159 @@
+// EASY CAPABILITY & VALIDATION TESTS
+// Testing: CAPABILITY, GRANT, REVOKE, IMMUTABLE, VALIDATE, SANITIZE
+// 20 easy tests covering basic syntax
+
+print "=== EASY CAPABILITY & VALIDATION TESTS ===";
+print "";
+
+// Test 1: Basic capability definition
+print "Test 1: Basic capability";
+capability read_data {
+    "description": "Read data access",
+    "scope": "data"
+};
+print "Capability defined ✅";
+print "";
+
+// Test 2: Another capability
+print "Test 2: Write capability";
+capability write_data {
+    "description": "Write data access",
+    "scope": "data"
+};
+print "Write capability defined ✅";
+print "";
+
+// Test 3: Grant single capability
+print "Test 3: Grant capability";
+grant "user1" read_data;
+print "Capability granted ✅";
+print "";
+
+// Test 4: Grant multiple capabilities
+print "Test 4: Grant multiple";
+grant "user2" read_data, write_data;
+print "Multiple capabilities granted ✅";
+print "";
+
+// Test 5: Revoke single capability
+print "Test 5: Revoke capability";
+revoke "user1" read_data;
+print "Capability revoked ✅";
+print "";
+
+// Test 6: Revoke multiple capabilities
+print "Test 6: Revoke multiple";
+revoke "user2" read_data, write_data;
+print "Multiple capabilities revoked ✅";
+print "";
+
+// Test 7: Basic immutable declaration
+print "Test 7: Basic immutable";
+immutable config = "production";
+print "Immutable variable created ✅";
+print "";
+
+// Test 8: Immutable with number
+print "Test 8: Immutable number";
+immutable maxUsers = 100;
+print "Immutable number created ✅";
+print "";
+
+// Test 9: Mark existing variable immutable
+print "Test 9: Mark immutable";
+let existingVar = "value";
+immutable existingVar;
+print "Variable marked immutable ✅";
+print "";
+
+// Test 10: Basic validate
+print "Test 10: Basic validate";
+let data = "test_data";
+validate data, "string";
+print "Validation passed ✅";
+print "";
+
+// Test 11: Validate with schema
+print "Test 11: Validate with schema";
+let userData = "alice@example.com";
+validate userData, "email";
+print "Email validated ✅";
+print "";
+
+// Test 12: Basic sanitize
+print "Test 12: Basic sanitize";
+let userInput = "<script>alert('xss')</script>";
+let sanitized = sanitize userInput;
+print "Input sanitized ✅";
+print "";
+
+// Test 13: Sanitize with encoding
+print "Test 13: Sanitize with encoding";
+let htmlInput = "<div>Hello</div>";
+let sanitizedHtml = sanitize htmlInput, "html";
+print "HTML sanitized ✅";
+print "";
+
+// Test 14: Multiple capabilities
+print "Test 14: Multiple capabilities";
+capability admin_read {
+    "description": "Admin read",
+    "scope": "admin"
+};
+capability admin_write {
+    "description": "Admin write",
+    "scope": "admin"
+};
+print "Multiple capabilities defined ✅";
+print "";
+
+// Test 15: Grant to admin
+print "Test 15: Grant admin capabilities";
+grant "admin" admin_read, admin_write;
+print "Admin capabilities granted ✅";
+print "";
+
+// Test 16: Immutable boolean
+print "Test 16: Immutable boolean";
+immutable isProduction = true;
+print "Immutable boolean created ✅";
+print "";
+
+// Test 17: Validate number
+print "Test 17: Validate number";
+let age = 25;
+validate age, "integer";
+print "Number validated ✅";
+print "";
+
+// Test 18: Sanitize URL
+print "Test 18: Sanitize URL";
+let urlInput = "http://example.com?param=<script>";
+let sanitizedUrl = sanitize urlInput, "url";
+print "URL sanitized ✅";
+print "";
+
+// Test 19: Capability for specific resource
+print "Test 19: Resource capability";
+capability delete_resource {
+    "description": "Delete resource permission",
+    "scope": "resources"
+};
+grant "moderator" delete_resource;
+print "Resource capability granted ✅";
+print "";
+
+// Test 20: Combined operations
+print "Test 20: Combined operations";
+capability execute_action {
+    "description": "Execute actions",
+    "scope": "actions"
+};
+grant "operator" execute_action;
+immutable operatorRole = "operator";
+let actionData = "execute";
+validate actionData, "string";
+print "Combined operations complete ✅";
+print "";
+
+print "=== EASY CAPABILITY & VALIDATION TESTS COMPLETE ===";

@@ -1,0 +1,159 @@
+// ============================================
+// EASY TESTS: ACTION, FUNCTION, LAMBDA, RETURN
+// ============================================
+// Testing basic function definition and calling
+
+// Test 1: Simple action with no parameters
+action greet() {
+    print "Hello";
+}
+greet();
+// Expected: Hello
+
+// Test 2: Action with return value
+action getMessage() {
+    return "World";
+}
+let msg = getMessage();
+print msg;
+// Expected: World
+
+// Test 3: Action with single parameter
+action double(x) {
+    return x * 2;
+}
+print double(5);
+// Expected: 10
+
+// Test 4: Action with multiple parameters
+action add(a, b) {
+    return a + b;
+}
+print add(3, 7);
+// Expected: 10
+
+// Test 5: Function keyword (alternative syntax)
+function multiply(x, y) {
+    return x * y;
+}
+print multiply(4, 5);
+// Expected: 20
+
+// Test 6: Action with string parameter
+action sayHello(name) {
+    return "Hello, " + name;
+}
+print sayHello("Alice");
+// Expected: Hello, Alice
+
+// Test 7: Action without return (implicit null/void)
+action printNum(n) {
+    print n;
+}
+printNum(42);
+// Expected: 42
+
+// Test 8: Return multiple values simulation
+action getPair() {
+    return [1, 2];
+}
+let pair = getPair();
+print pair[0];
+print pair[1];
+// Expected: 1, 2
+
+// Test 9: Action calling another action
+action addOne(x) {
+    return x + 1;
+}
+action addTwo(x) {
+    return addOne(addOne(x));
+}
+print addTwo(5);
+// Expected: 7
+
+// Test 10: Lambda (anonymous function)
+let square = lambda(x) => x * x;
+print square(6);
+// Expected: 36
+
+// Test 11: Lambda with multiple parameters
+let sum = lambda(a, b) => a + b;
+print sum(10, 20);
+// Expected: 30
+
+// Test 12: Action with boolean return
+action isEven(n) {
+    return n % 2 == 0;
+}
+print isEven(4);
+print isEven(5);
+// Expected: true, false
+
+// Test 13: Action with conditional return
+action max(a, b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+print max(10, 5);
+// Expected: 10
+
+// Test 14: Empty action body
+action doNothing() {
+    return null;
+}
+let result = doNothing();
+print "Done";
+// Expected: Done
+
+// Test 15: Action with local variable
+action calculate() {
+    let x = 10;
+    let y = 20;
+    return x + y;
+}
+print calculate();
+// Expected: 30
+
+// Test 16: Lambda stored in variable
+let triple = lambda(n) => n * 3;
+print triple(7);
+// Expected: 21
+
+// Test 17: Action with string concatenation
+action makeTitle(word) {
+    return "Title: " + word;
+}
+print makeTitle("Test");
+// Expected: Title: Test
+
+// Test 18: Return early from action
+action checkValue(val) {
+    if (val < 0) {
+        return "Negative";
+    }
+    return "Positive";
+}
+print checkValue(-5);
+print checkValue(5);
+// Expected: Negative, Positive
+
+// Test 19: Function with comparison
+function isGreater(x, y) {
+    return x > y;
+}
+print isGreater(10, 5);
+// Expected: true
+
+// Test 20: Nested function calls
+action increment(n) {
+    return n + 1;
+}
+action decrement(n) {
+    return n - 1;
+}
+print increment(decrement(10));
+// Expected: 10

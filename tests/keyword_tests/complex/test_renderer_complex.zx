@@ -1,0 +1,375 @@
+// ===================================
+// PHASE 10: RENDERER & UI KEYWORDS
+// Complex Tests (20 tests)
+// Keywords: SCREEN, COMPONENT, THEME, COLOR, GRAPHICS, CANVAS, ANIMATION, CLOCK
+// ===================================
+
+print "=== Test 1: Multi-screen application ===";
+screen WelcomeScreen {
+    let title = "Welcome";
+    action onEnter() {
+        print "Welcome screen entered";
+    }
+    print "Welcome screen";
+}
+screen DashboardScreen {
+    let widgets = ["chart", "table", "stats"];
+    action loadWidgets() {
+        print "Loading widgets";
+    }
+    print "Dashboard screen";
+}
+screen ProfileScreen {
+    let userData = "user123";
+    print "Profile screen";
+}
+print "✓ Multi-screen app";
+
+print "\n=== Test 2: Advanced COMPONENT system ===";
+component DataTable {
+    let columns = ["ID", "Name", "Status"];
+    let rows = 10;
+    action sortColumn(col) {
+        print "Sorting by: " + col;
+    }
+    action filterRows(criteria) {
+        print "Filtering rows";
+    }
+    print "DataTable component";
+}
+print "✓ Advanced component";
+
+print "\n=== Test 3: Complex THEME system ===";
+theme EnterpriseTheme {
+    let colors_primary = "#0066cc";
+    let colors_secondary = "#6c757d";
+    let fonts_heading = "Helvetica";
+    let fonts_body = "Arial";
+    let spacing_unit = 8;
+    let breakpoint_mobile = 768;
+    let breakpoint_desktop = 1200;
+    print "Enterprise theme loaded";
+}
+print "✓ Complex theme";
+
+print "\n=== Test 4: SCREEN with routing logic ===";
+screen RouterScreen {
+    let currentRoute = "/home";
+    action navigate(path) {
+        print "Navigating to: " + path;
+    }
+    action goBack() {
+        print "Going back";
+    }
+    action goForward() {
+        print "Going forward";
+    }
+    print "Router initialized";
+}
+print "✓ Screen routing logic";
+
+print "\n=== Test 5: COMPONENT lifecycle management ===";
+component LifecycleComponent {
+    action onCreate() {
+        print "Component created";
+    }
+    action onMount() {
+        print "Component mounted";
+    }
+    action onUpdate() {
+        print "Component updated";
+    }
+    action onUnmount() {
+        print "Component unmounted";
+    }
+    action onDestroy() {
+        print "Component destroyed";
+    }
+    print "Lifecycle component";
+}
+print "✓ Component lifecycle";
+
+print "\n=== Test 6: THEME with conditional styling ===";
+theme AdaptiveTheme {
+    let isDarkMode = true;
+    let backgroundColor = "white";
+    let textColor = "black";
+    if (isDarkMode) {
+        backgroundColor = "black";
+        textColor = "white";
+        print "Dark mode applied";
+    }
+    print "Adaptive theme";
+}
+print "✓ Conditional theme";
+
+print "\n=== Test 7: SCREEN with state persistence ===";
+screen PersistentScreen {
+    let sessionData = "session123";
+    let lastVisit = "2024-12-17";
+    action saveState() {
+        print "Saving state";
+    }
+    action restoreState() {
+        print "Restoring state";
+    }
+    print "Persistent screen";
+}
+print "✓ State persistence";
+
+print "\n=== Test 8: COMPONENT communication pattern ===";
+component ParentComponent {
+    let message = "Hello from parent";
+    action sendMessage(msg) {
+        print "Parent sending: " + msg;
+    }
+    print "Parent component";
+}
+component ChildComponent {
+    action receiveMessage(msg) {
+        print "Child received message";
+    }
+    print "Child component";
+}
+print "✓ Component communication";
+
+print "\n=== Test 9: THEME with animation system ===";
+theme AnimationTheme {
+    let transition_fast = 150;
+    let transition_normal = 300;
+    let transition_slow = 500;
+    let easing_default = "ease-in-out";
+    action applyTransition(duration, easing) {
+        print "Transition: " + duration + "ms";
+    }
+    print "Animation theme";
+}
+print "✓ Animation theme";
+
+print "\n=== Test 10: SCREEN with form validation ===";
+screen FormValidationScreen {
+    let formValid = false;
+    action validateField(field, value) {
+        if (value) {
+            print "Field valid: " + field;
+            return true;
+        }
+        return false;
+    }
+    action validateForm() {
+        print "Validating form";
+    }
+    action submitForm() {
+        print "Submitting form";
+    }
+    print "Form validation screen";
+}
+print "✓ Form validation";
+
+print "\n=== Test 11: COMPONENT with props validation ===";
+component ValidatedComponent {
+    let requiredProp = "value";
+    let optionalProp = "";
+    action validateProps() {
+        if (requiredProp) {
+            print "Props valid";
+            return true;
+        }
+        print "Props invalid";
+        return false;
+    }
+    print "Validated component";
+}
+print "✓ Props validation";
+
+print "\n=== Test 12: THEME with responsive breakpoints ===";
+theme ResponsiveDesignTheme {
+    let breakpoint_xs = 0;
+    let breakpoint_sm = 576;
+    let breakpoint_md = 768;
+    let breakpoint_lg = 992;
+    let breakpoint_xl = 1200;
+    let breakpoint_xxl = 1400;
+    action getBreakpoint(width) {
+        if (width < 576) {
+            print "XS breakpoint";
+        }
+        if (width < 768) {
+            print "SM breakpoint";
+        }
+    }
+    print "Responsive theme";
+}
+print "✓ Responsive breakpoints";
+
+print "\n=== Test 13: SCREEN with async data loading ===";
+screen AsyncDataScreen {
+    let loading = true;
+    let error = false;
+    action fetchData() {
+        print "Fetching data...";
+        loading = false;
+        print "Data loaded";
+    }
+    action handleError(err) {
+        error = true;
+        print "Error occurred";
+    }
+    print "Async data screen";
+}
+print "✓ Async data loading";
+
+print "\n=== Test 14: COMPONENT with event handling ===";
+component InteractiveWidget {
+    let clicks = 0;
+    let hovers = 0;
+    action handleClick() {
+        clicks = clicks + 1;
+        print "Clicks: " + clicks;
+    }
+    action handleHover() {
+        hovers = hovers + 1;
+        print "Hovers: " + hovers;
+    }
+    action handleDoubleClick() {
+        print "Double clicked";
+    }
+    print "Interactive widget";
+}
+print "✓ Event handling";
+
+print "\n=== Test 15: THEME with design tokens ===";
+theme DesignSystemTheme {
+    let token_color_brand = "#ff6b6b";
+    let token_color_success = "#51cf66";
+    let token_color_warning = "#ffd43b";
+    let token_color_error = "#ff6b6b";
+    let token_spacing_xs = 4;
+    let token_spacing_sm = 8;
+    let token_spacing_md = 16;
+    let token_spacing_lg = 24;
+    let token_spacing_xl = 32;
+    print "Design system theme";
+}
+print "✓ Design tokens";
+
+print "\n=== Test 16: SCREEN with navigation guards ===";
+screen GuardedScreen {
+    let authenticated = false;
+    action canEnter() {
+        if (authenticated) {
+            print "Access granted";
+            return true;
+        }
+        print "Access denied";
+        return false;
+    }
+    action onEnter() {
+        print "Entering screen";
+    }
+    action onLeave() {
+        print "Leaving screen";
+    }
+    print "Guarded screen";
+}
+print "✓ Navigation guards";
+
+print "\n=== Test 17: COMPONENT with slots and content projection ===";
+component LayoutComponent {
+    let header = "Header content";
+    let main = "Main content";
+    let footer = "Footer content";
+    action renderHeader() {
+        print "Rendering: " + header;
+    }
+    action renderMain() {
+        print "Rendering: " + main;
+    }
+    action renderFooter() {
+        print "Rendering: " + footer;
+    }
+    print "Layout component";
+}
+print "✓ Content projection";
+
+print "\n=== Test 18: THEME with CSS-in-JS pattern ===";
+theme StyledTheme {
+    let button_bg = "#007bff";
+    let button_color = "#ffffff";
+    let button_padding = 12;
+    let button_radius = 4;
+    action getButtonStyle() {
+        print "Button style generated";
+        return "styled-button";
+    }
+    action getCardStyle() {
+        print "Card style generated";
+        return "styled-card";
+    }
+    print "Styled theme";
+}
+print "✓ CSS-in-JS pattern";
+
+print "\n=== Test 19: SCREEN with real-time updates ===";
+screen RealtimeScreen {
+    let connected = false;
+    let lastUpdate = 0;
+    action connect() {
+        connected = true;
+        print "Connected to server";
+    }
+    action disconnect() {
+        connected = false;
+        print "Disconnected";
+    }
+    action onUpdate(data) {
+        print "Received update";
+        lastUpdate = lastUpdate + 1;
+    }
+    print "Realtime screen";
+}
+print "✓ Real-time updates";
+
+print "\n=== Test 20: Complete enterprise UI system ===";
+screen EnterpriseApp {
+    let appName = "Enterprise Dashboard";
+    let version = "2.0.0";
+    action initialize() {
+        print "Initializing app: " + appName;
+    }
+    print "Enterprise app";
+}
+component Navbar {
+    let brand = "Company";
+    let links = ["Home", "Products", "About", "Contact"];
+    action renderNav() {
+        print "Rendering navbar";
+    }
+    print "Navbar";
+}
+component Sidebar {
+    let collapsed = false;
+    action toggle() {
+        collapsed = true;
+        print "Sidebar toggled";
+    }
+    print "Sidebar";
+}
+component MainContent {
+    let activeView = "dashboard";
+    action switchView(view) {
+        activeView = view;
+        print "Switched to: " + view;
+    }
+    print "Main content";
+}
+theme EnterpriseAppTheme {
+    let brand_primary = "#1a73e8";
+    let brand_secondary = "#5f6368";
+    let layout_sidebar_width = 250;
+    let layout_header_height = 64;
+    print "Enterprise theme";
+}
+print "✓ Complete enterprise system";
+
+print "\n=== All Complex Renderer Tests Complete ===";

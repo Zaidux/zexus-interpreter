@@ -1,0 +1,190 @@
+// ===================================
+// PHASE 9: ADVANCED LANGUAGE FEATURES
+// Medium Tests (20 tests)
+// Keywords: DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING
+// ===================================
+
+print "=== Test 1: DEFER with error handling ===";
+action testDeferError() {
+    defer {
+        print "Cleanup always runs";
+    }
+    print "Processing";
+}
+testDeferError();
+print "✓ Defer with error handling";
+
+print "\n=== Test 2: ENUM in conditionals ===";
+enum Status1 {
+    PENDING = 0,
+    ACTIVE = 1,
+    DONE = 2
+}
+print "✓ Enum in conditionals";
+
+print "\n=== Test 3: PATTERN with complex matching ===";
+let input = "start";
+pattern input {
+    "start" => print "Begin";
+    "stop" => print "End";
+    "pause" => print "Wait";
+    default => print "Unknown";
+}
+print "✓ Complex pattern matching";
+
+print "\n=== Test 4: INTERFACE inheritance concept ===";
+interface BaseInterface {
+    action init();
+}
+interface ExtendedInterface {
+    action process();
+}
+print "✓ Interface inheritance concept";
+
+print "\n=== Test 5: TYPE_ALIAS for complex types ===";
+type_alias EmailAddress = string;
+type_alias PhoneNumber = string;
+print "✓ Type aliases for complex types";
+
+print "\n=== Test 6: DEFER in nested functions ===";
+action outer() {
+    action inner() {
+        defer {
+            print "Inner cleanup";
+        }
+        print "Inner work";
+    }
+    inner();
+}
+outer();
+print "✓ Defer in nested functions";
+
+print "\n=== Test 7: PROTOCOL with multiple methods ===";
+protocol DataProcessor {
+    action transform();
+    action validate();
+    action save();
+}
+print "✓ Protocol with multiple methods";
+
+print "\n=== Test 8: ENUM state machine ===";
+enum MachineState {
+    IDLE = 0,
+    RUNNING = 1,
+    PAUSED = 2,
+    STOPPED = 3
+}
+print "✓ Enum state machine";
+
+print "\n=== Test 9: PATTERN with default case ===";
+let value = 999;
+pattern value {
+    1 => print "One";
+    2 => print "Two";
+    default => print "Other";
+}
+print "✓ Pattern with default";
+
+print "\n=== Test 10: INTERFACE for service contract ===";
+interface ServiceContract {
+    action start();
+    action stop();
+    action restart();
+}
+print "✓ Service contract interface";
+
+print "\n=== Test 11: Multiple DEFER in sequence ===";
+action multiDefer() {
+    defer {
+        print "Cleanup 1";
+    }
+    defer {
+        print "Cleanup 2";
+    }
+    print "Main";
+}
+multiDefer();
+print "✓ Multiple defers";
+
+print "\n=== Test 12: ENUM with string values ===";
+enum Environment {
+    DEV = "development",
+    STAGE = "staging",
+    PROD = "production"
+}
+print "✓ Enum with string values";
+
+print "\n=== Test 13: PATTERN with multiple cases ===";
+let code = 200;
+pattern code {
+    200 => print "OK";
+    404 => print "Not Found";
+    500 => print "Error";
+    default => print "Unknown Status";
+}
+print "✓ Pattern with multiple cases";
+
+print "\n=== Test 14: TYPE_ALIAS chain ===";
+type_alias IdType = int;
+type_alias UserIdType = string;
+print "✓ Type alias chain";
+
+print "\n=== Test 15: DEFER resource cleanup ===";
+action resourceTest() {
+    defer {
+        print "Closing resource";
+    }
+    print "Using resource";
+}
+resourceTest();
+print "✓ Defer resource cleanup";
+
+print "\n=== Test 16: PROTOCOL for API contract ===";
+protocol APIContract {
+    action request();
+    action response();
+}
+print "✓ API contract protocol";
+
+print "\n=== Test 17: INTERFACE with properties concept ===";
+interface ConfigurableService {
+    action configure();
+    action getConfig();
+}
+print "✓ Interface with properties";
+
+print "\n=== Test 18: ENUM flags pattern ===";
+enum Permissions {
+    READ = 1,
+    WRITE = 2,
+    EXECUTE = 4,
+    ADMIN = 8
+}
+print "✓ Enum flags pattern";
+
+print "\n=== Test 19: PATTERN nested in action ===";
+action matchValue(val) {
+    pattern val {
+        1 => print "Match 1";
+        2 => print "Match 2";
+        default => print "No match";
+    }
+}
+matchValue(2);
+print "✓ Pattern in action";
+
+print "\n=== Test 20: Combined advanced patterns ===";
+enum TaskStatus {
+    TODO = 0,
+    IN_PROGRESS = 1,
+    COMPLETED = 2
+}
+interface TaskHandler {
+    action execute();
+}
+defer {
+    print "Final cleanup";
+}
+print "✓ Combined advanced patterns";
+
+print "\n=== All Medium Advanced Features Tests Complete ===";

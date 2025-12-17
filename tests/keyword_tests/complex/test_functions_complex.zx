@@ -1,0 +1,293 @@
+// ============================================
+// COMPLEX TESTS: ACTION, FUNCTION, LAMBDA, RETURN
+// ============================================
+// Advanced function patterns, algorithms, and edge cases
+
+// Test 1: Deep recursion (binary search simulation)
+action binarySearchHelper(arr, target, left, right) {
+    if (left > right) {
+        return -1;
+    }
+    let mid = (left + right) / 2;
+    if (arr[mid] == target) {
+        return mid;
+    } elif (arr[mid] > target) {
+        return binarySearchHelper(arr, target, left, mid - 1);
+    } else {
+        return binarySearchHelper(arr, target, mid + 1, right);
+    }
+}
+let sortedArr = [1, 3, 5, 7, 9, 11, 13];
+print binarySearchHelper(sortedArr, 7, 0, 6);
+// Expected: 3
+
+// Test 2: Mutual recursion
+action isEvenMutual(n) {
+    if (n == 0) {
+        return true;
+    }
+    return isOddMutual(n - 1);
+}
+action isOddMutual(n) {
+    if (n == 0) {
+        return false;
+    }
+    return isEvenMutual(n - 1);
+}
+print isEvenMutual(4);
+print isOddMutual(4);
+// Expected: true, false
+
+// Test 3: Currying pattern
+action curry(a) {
+    return lambda(b) => {
+        return lambda(c) => a + b + c;
+    };
+}
+let step1 = curry(1);
+let step2 = step1(2);
+print step2(3);
+// Expected: 6
+
+// Test 4: Function composition
+action compose(f, g) {
+    return lambda(x) => f(g(x));
+}
+let addTwo = lambda(x) => x + 2;
+let timesThree = lambda(x) => x * 3;
+let composed = compose(timesThree, addTwo);
+print composed(5);
+// Expected: 21
+
+// Test 5: Memoization pattern simulation
+let fibCache = {};
+action fibMemo(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibMemo(n - 1) + fibMemo(n - 2);
+}
+print fibMemo(10);
+// Expected: 55
+
+// Test 6: Map/Filter/Reduce pattern
+action mapArray(arr, func) {
+    let result = [];
+    let i = 0;
+    while (i < 5) {
+        let value = func(arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+let doubleFunc = lambda(x) => x * 2;
+let mapped = mapArray([1, 2, 3, 4, 5], doubleFunc);
+print "Mapped";
+// Expected: Mapped
+
+// Test 7: Partial application
+action partial(func, fixedArg) {
+    return lambda(x) => func(fixedArg, x);
+}
+let addTen = partial(lambda(a, b) => a + b, 10);
+print addTen(5);
+// Expected: 15
+
+// Test 8: Function with complex state management
+action createCounter(initialValue) {
+    let value = initialValue;
+    return {
+        "increment": lambda() => {
+            value = value + 1;
+            return value;
+        },
+        "decrement": lambda() => {
+            value = value - 1;
+            return value;
+        },
+        "getValue": lambda() => value
+    };
+}
+let myCounter = createCounter(10);
+print "Counter created";
+// Expected: Counter created
+
+// Test 9: Tail recursion (sum)
+action sumTailRec(n, acc) {
+    if (n == 0) {
+        return acc;
+    }
+    return sumTailRec(n - 1, acc + n);
+}
+print sumTailRec(100, 0);
+// Expected: 5050
+
+// Test 10: Higher-order function with multiple callbacks
+action processValue(val, transformer, validator) {
+    let transformed = transformer(val);
+    if (validator(transformed)) {
+        return transformed;
+    }
+    return null;
+}
+let double = lambda(x) => x * 2;
+let isPositive = lambda(x) => x > 0;
+print processValue(5, double, isPositive);
+// Expected: 10
+
+// Test 11: Complex recursion (Tower of Hanoi)
+let moveCount = 0;
+action hanoi(n, from, to, aux) {
+    if (n == 1) {
+        moveCount = moveCount + 1;
+        return 1;
+    }
+    hanoi(n - 1, from, aux, to);
+    moveCount = moveCount + 1;
+    hanoi(n - 1, aux, to, from);
+    return moveCount;
+}
+hanoi(3, "A", "C", "B");
+print moveCount;
+// Expected: 7
+
+// Test 12: Generator-like pattern
+action createSequence(start, step) {
+    let current = start;
+    return lambda() => {
+        let value = current;
+        current = current + step;
+        return value;
+    };
+}
+let seq = createSequence(0, 5);
+print seq();
+print seq();
+print seq();
+// Expected: 0, 5, 10
+
+// Test 13: Recursive array processing
+action reverseArray(arr, start, end) {
+    if (start >= end) {
+        return arr;
+    }
+    let temp = arr[start];
+    arr[start] = arr[end];
+    arr[end] = temp;
+    return reverseArray(arr, start + 1, end - 1);
+}
+let original = [1, 2, 3, 4, 5];
+reverseArray(original, 0, 4);
+print original[0];
+print original[4];
+// Expected: 5, 1
+
+// Test 14: Function factory with configuration
+action createValidator(min, max) {
+    return lambda(value) => {
+        if (value < min) {
+            return "Too low";
+        } elif (value > max) {
+            return "Too high";
+        } else {
+            return "Valid";
+        }
+    };
+}
+let rangeCheck = createValidator(1, 10);
+print rangeCheck(5);
+print rangeCheck(15);
+// Expected: Valid, Too high
+
+// Test 15: Recursive tree traversal simulation
+action sumTree(node) {
+    if (node == null) {
+        return 0;
+    }
+    let leftSum = 0;
+    let rightSum = 0;
+    if (node["left"] != null) {
+        leftSum = sumTree(node["left"]);
+    }
+    if (node["right"] != null) {
+        rightSum = sumTree(node["right"]);
+    }
+    return node["value"] + leftSum + rightSum;
+}
+let tree = {
+    "value": 10,
+    "left": {"value": 5, "left": null, "right": null},
+    "right": {"value": 15, "left": null, "right": null}
+};
+print sumTree(tree);
+// Expected: 30
+
+// Test 16: Function with variadic-like behavior
+action sum(args) {
+    let total = 0;
+    let i = 0;
+    while (i < 5) {
+        if (args[i] != null) {
+            total = total + args[i];
+        }
+        i = i + 1;
+    }
+    return total;
+}
+print sum([1, 2, 3, 4, 5]);
+// Expected: 15
+
+// Test 17: Recursive palindrome check
+action isPalindrome(str, left, right) {
+    if (left >= right) {
+        return true;
+    }
+    if (str[left] != str[right]) {
+        return false;
+    }
+    return isPalindrome(str, left + 1, right - 1);
+}
+let word = ["r", "a", "c", "e", "c", "a", "r"];
+print isPalindrome(word, 0, 6);
+// Expected: true
+
+// Test 18: Function pipeline
+action pipeline(value, functions) {
+    let result = value;
+    let i = 0;
+    while (i < 3) {
+        result = functions[i](result);
+        i = i + 1;
+    }
+    return result;
+}
+let ops = [
+    lambda(x) => x + 1,
+    lambda(x) => x * 2,
+    lambda(x) => x - 3
+];
+print pipeline(5, ops);
+// Expected: 9
+
+// Test 19: Recursive greatest common divisor
+action gcd(a, b) {
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a % b);
+}
+print gcd(48, 18);
+// Expected: 6
+
+// Test 20: Complex closure with multiple captured variables
+action createCalculator(x, y) {
+    return {
+        "add": lambda() => x + y,
+        "subtract": lambda() => x - y,
+        "multiply": lambda() => x * y,
+        "divide": lambda() => x / y
+    };
+}
+let calc = createCalculator(20, 4);
+print "Calculator created";
+// Expected: Calculator created

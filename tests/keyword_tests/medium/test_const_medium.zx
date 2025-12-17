@@ -1,0 +1,136 @@
+# Medium Tests for CONST Keyword
+# Testing immutability, edge cases, and integration
+
+# Test 1: Const with array
+const numbers = [1, 2, 3, 4, 5];
+print numbers;
+# Expected output: [1, 2, 3, 4, 5]
+
+# Test 2: Const with map
+const person = {"name": "Bob", "age": 30};
+print person;
+# Expected output: {name: Bob, age: 30}
+
+# Test 3: Const with nested structures
+const matrix = [[1, 2], [3, 4]];
+print matrix;
+# Expected output: [[1, 2], [3, 4]]
+
+# Test 4: Ternary operator
+const status = 25 >= 18 ? "adult" : "minor";
+print status;
+# Expected output: adult
+
+# Test 5: Nullish coalescing
+const value = null ?? "default";
+print value;
+# Expected output: default
+
+# Test 6: Function return value
+action calculate(a, b) {
+    return a * b;
+}
+
+const result = calculate(5, 10);
+print result;
+# Expected output: 50
+
+# Test 7: Complex expressions
+const complexCalc = (10 + 5) * 2 - 3 / 3;
+print complexCalc;
+# Expected output: 29
+
+# Test 8: Const in block scope
+if (true) {
+    const blockConst = "I'm in a block";
+    print blockConst;
+}
+# Expected output: I'm in a block
+
+# Test 9: Multiple const in function
+action testFunc() {
+    const local1 = 10;
+    const local2 = 20;
+    const local3 = local1 + local2;
+    return local3;
+}
+
+const funcResult = testFunc();
+print funcResult;
+# Expected output: 30
+
+# Test 10: Const with lambda
+const multiply = lambda(a, b) => a * b;
+const lambdaResult = multiply(6, 7);
+print lambdaResult;
+# Expected output: 42
+
+# Test 11: Logical operations
+const logicalAnd = (10 > 5) && (20 < 30);
+const logicalOr = (10 < 5) || (20 < 30);
+print logicalAnd;
+print logicalOr;
+# Expected output: true, true
+
+# Test 12: String operations
+const firstName = "John";
+const lastName = "Doe";
+const fullName = firstName + " " + lastName;
+print fullName;
+# Expected output: John Doe
+
+# Test 13: Array access
+const myArray = [10, 20, 30, 40];
+const firstElement = myArray[0];
+const lastElement = myArray[3];
+print firstElement;
+print lastElement;
+# Expected output: 10, 40
+
+# Test 14: Map access
+const config = {"theme": "dark", "size": 16};
+const theme = config["theme"];
+print theme;
+# Expected output: dark
+
+# Test 15: Nested function calls
+action square(x) {
+    return x * x;
+}
+
+action double(x) {
+    return x * 2;
+}
+
+const nestedResult = double(square(5));
+print nestedResult;
+# Expected output: 50
+
+# Test 16: Const with comparison chains
+const comparison = (5 < 10) && (10 < 20) && (20 < 30);
+print comparison;
+# Expected output: true
+
+# Test 17: Const in loop (each iteration gets new const)
+for each i in [1, 2, 3] {
+    const loopConst = i * 2;
+    print loopConst;
+}
+# Expected output: 2, 4, 6
+
+# Test 18: Modulo operation
+const remainder = 17 % 5;
+print remainder;
+# Expected output: 2
+
+# Test 19: Division
+const division = 100 / 4;
+print division;
+# Expected output: 25
+
+# Test 20: Const with NOT operator
+const notTrue = !true;
+const notFalse = !false;
+print notTrue;
+print notFalse;
+# Expected output: false, true
