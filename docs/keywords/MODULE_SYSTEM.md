@@ -314,11 +314,12 @@ use "./utils.zx" as utils;
 
 ### Issues Found (December 2025)
 
-1. **External Declarations Don't Auto-Link** (Priority: Medium)
-   - `external functionName;` creates placeholder
-   - Calling unlinked external causes "not found" error
-   - Status: Expected behavior - requires native implementation
-   - Workaround: Ensure native functions are properly linked
+1. **~~External Declarations Don't Auto-Link~~** ✅ **FIXED** (December 18, 2025)
+   - **Root Cause**: Parser expected full syntax `external action name from "module"` but simple syntax `external name;` not supported
+   - **Problem**: Simple syntax not recognized, identifier not created in environment
+   - **Solution**: Added simple syntax support in parse_external_declaration() and ContextStackParser
+   - **Status**: ✅ FULLY WORKING - `external nativeSort;` creates placeholder, accessible in functions
+   - **Verification**: External declarations work, can be passed as arguments to functions
 
 2. **Module System May Not Be Fully Implemented** (Priority: Unknown)
    - Some module features may be incomplete
