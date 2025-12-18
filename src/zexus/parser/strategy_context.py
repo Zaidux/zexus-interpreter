@@ -947,7 +947,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
         while i < len(tokens):
             token = tokens[i]
 
@@ -1888,6 +1888,27 @@ class ContextStackParser:
                 print(f"    📝 Found sandbox statement with {len(body.statements) if body else 0} statements")
                 
                 stmt = SandboxStatement(body=body, policy=None)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == REQUIRE:
+                # Parse REQUIRE statement: require(condition, message) or require condition, message
+                j = i + 1
+                
+                # Collect tokens until semicolon
+                require_tokens = [token]
+                while j < len(tokens) and tokens[j].type != SEMICOLON:
+                    require_tokens.append(tokens[j])
+                    j += 1
+                
+                print(f"    📝 Found require statement: {[t.literal for t in require_tokens]}")
+                
+                # Use the handler to parse it
+                block_info = {'tokens': require_tokens}
+                stmt = self._parse_require_statement(block_info, tokens)
                 if stmt:
                     statements.append(stmt)
                 
@@ -3056,6 +3077,11 @@ class ContextStackParser:
         if tokens[0].type == RETURN:
             parser_debug(f"  🎯 [Generic] Detected return statement")
             return self._parse_return_statement(block_info, all_tokens)
+        
+        # Check if this is a require statement
+        if tokens[0].type == REQUIRE:
+            parser_debug(f"  🎯 [Generic] Detected require statement")
+            return self._parse_require_statement(block_info, all_tokens)
         
         # Check if this is an external declaration
         if tokens[0].type == EXTERNAL:
