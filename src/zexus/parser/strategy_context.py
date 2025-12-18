@@ -84,6 +84,7 @@ class ContextStackParser:
             # BLOCKCHAIN handlers
             LEDGER: self._parse_ledger_statement,
             STATE: self._parse_state_statement,
+            PERSISTENT: self._parse_persistent_statement,
             REQUIRE: self._parse_require_statement,
             REVERT: self._parse_revert_statement,
             LIMIT: self._parse_limit_statement,
@@ -3845,6 +3846,58 @@ class ContextStackParser:
         
         parser_debug(f"  ✅ State: {name.value}")
         return StateStatement(name=name, initial_value=initial_value)
+    
+    def _parse_persistent_statement(self, block_info, all_tokens):
+        """Parse persistent storage NAME = value; statements.
+        
+        Forms:
+          persistent storage config = { "network": "mainnet" };
+          persistent storage balances: map = {};
+          persistent storage owner: string;
+        """
+        parser_debug("🔧 [Context] Parsing persistent statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != PERSISTENT:
+            parser_debug("  ❌ Expected PERSISTENT keyword")
+            return None
+        
+        # Expect STORAGE after PERSISTENT
+        if len(tokens) < 2 or tokens[1].type != STORAGE:
+            parser_debug("  ❌ Expected STORAGE keyword after PERSISTENT")
+            return None
+        
+        # persistent storage NAME = value
+        # persistent storage NAME: TYPE = value
+        if len(tokens) < 3 or tokens[2].type != IDENT:
+            parser_debug("  ❌ Expected identifier after 'persistent storage'")
+            return None
+        
+        name = Identifier(tokens[2].literal)
+        type_annotation = None
+        initial_value = None
+        
+        idx = 3
+        
+        # Check for type annotation (: TYPE)
+        if idx < len(tokens) and tokens[idx].type == COLON:
+            idx += 1
+            if idx < len(tokens) and tokens[idx].type == IDENT:
+                type_annotation = tokens[idx].literal
+                idx += 1
+        
+        # Check for initial value (= expression)
+        if idx < len(tokens) and tokens[idx].type == ASSIGN:
+            idx += 1
+            # Parse value expression (from idx onwards, excluding semicolon)
+            value_tokens = tokens[idx:]
+            if value_tokens and value_tokens[-1].type == SEMICOLON:
+                value_tokens = value_tokens[:-1]
+            
+            initial_value = self._parse_expression(value_tokens) if value_tokens else None
+        
+        parser_debug(f"  ✅ Persistent storage: {name.value}")
+        return PersistentStatement(name=name, type_annotation=type_annotation, initial_value=initial_value)
     
     def _parse_require_statement(self, block_info, all_tokens):
         """Parse require(condition, message) statements."""

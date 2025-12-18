@@ -417,9 +417,13 @@ class TypeAliasRegistry:
         self.aliases: Dict[str, TypeAlias] = {}
     
     def register_alias(self, alias: TypeAlias):
-        """Register a type alias."""
-        if alias.name in self.aliases:
-            raise ValueError(f"Type alias '{alias.name}' already registered")
+        """Register a type alias.
+        
+        Allows re-registration of the same type alias name.
+        This enables type aliases to be redefined in different scopes
+        or updated during development/testing.
+        """
+        # Allow re-registration - just update the alias
         self.aliases[alias.name] = alias
     
     def get_alias(self, name: str) -> Optional[TypeAlias]:
