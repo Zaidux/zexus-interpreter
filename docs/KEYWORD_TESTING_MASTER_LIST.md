@@ -350,13 +350,16 @@ For each keyword:
    - Impact: Minimal - both syntaxes may work
 
 ### MODULE SYSTEM Keyword Errors
-1. **External Functions Don't Auto-Link** (Priority: Medium)
-   - Description: `external functionName;` creates placeholder, calling it causes "not found" error
-   - Test: `external nativeSort; handleExternalResult(nativeSort, data);` fails
-   - Status: Expected behavior - requires native implementation
+1. **~~External Functions Don't Auto-Link~~** ✅ **FIXED** (December 17, 2025)
+   - **Root Cause**: Parser expected full syntax `external action name from "module"` but tests used simple syntax `external name;`
+   - **Problem**: Simple syntax not recognized, fell through to ExpressionStatement, identifier not in environment
+   - **Solution**: Added simple syntax support in parse_external_declaration():
+     * (1) Check if peek_token is IDENT for simple syntax: `external identifier;`
+     * (2) Added EXTERNAL handler in ContextStackParser._parse_generic_block()
+     * (3) Manual parsing creates ExternalDeclaration with empty parameters and module_path
+   - **Fix Location**: src/zexus/parser/parser.py lines 834-845, strategy_context.py lines 3059-3071
+   - **Verification**: `external nativeSort;` creates placeholder builtin, can be passed to functions
    - Files: test_io_modules_complex.zx (Test 12)
-   - Workaround: Ensure native functions are properly linked before calling
-   - Impact: External declarations are placeholders only
 
 ### ACTION/FUNCTION/LAMBDA/RETURN Keyword Errors
 1. **~~Map Returns Display as Empty~~** ✅ **VERIFIED WORKING** (December 17, 2025)
