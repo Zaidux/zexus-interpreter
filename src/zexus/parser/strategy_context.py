@@ -2182,6 +2182,8 @@ class ContextStackParser:
             return self._parse_function_literal(tokens)
         if tokens[0].type == SANDBOX:
             return self._parse_sandbox_expression(tokens)
+        if tokens[0].type == SANITIZE:
+            return self._parse_sanitize_expression(tokens)
 
         # Main expression parser with chaining
         i = 0
@@ -2631,6 +2633,43 @@ class ContextStackParser:
         
         # Return SandboxStatement (can be used as expression that returns value)
         return SandboxStatement(body=body, policy=None)
+
+    def _parse_sanitize_expression(self, tokens):
+        """Parse a sanitize expression from tokens starting with SANITIZE
+        
+        Supports forms:
+          sanitize data, "html"
+          sanitize data, "email"
+          sanitize user_input, encoding_var
+        
+        Returns a SanitizeStatement which can be evaluated as an expression.
+        """
+        print("  🔧 [Sanitize Expression] Parsing sanitize expression")
+        if not tokens or tokens[0].type != SANITIZE:
+            return None
+        
+        # Find comma separating data and encoding
+        comma_idx = -1
+        for i in range(1, len(tokens)):
+            if tokens[i].type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx == -1:
+            # No encoding specified, use default
+            data_tokens = tokens[1:]
+            data = self._parse_expression(data_tokens)
+            encoding = None
+        else:
+            # Parse data and encoding
+            data_tokens = tokens[1:comma_idx]
+            encoding_tokens = tokens[comma_idx+1:]
+            
+            data = self._parse_expression(data_tokens)
+            encoding = self._parse_expression(encoding_tokens)
+        
+        # Return SanitizeStatement (can be used as expression that returns value)
+        return SanitizeStatement(data=data, rules=None, encoding=encoding)
 
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""

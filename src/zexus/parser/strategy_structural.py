@@ -412,8 +412,8 @@ class StructuralAnalyzer:
                         # Exception: allow chained method calls
                         prev = tokens[j-1] if j > 0 else None
                         if not (prev and prev.type == DOT):
-                            # For LET/CONST, allow FUNCTION and SANDBOX as RHS (function/sandbox expressions)
-                            if not (in_assignment and tj.type in {FUNCTION, SANDBOX}):
+                            # For LET/CONST, allow FUNCTION, SANDBOX, and SANITIZE as RHS (expressions)
+                            if not (in_assignment and tj.type in {FUNCTION, SANDBOX, SANITIZE}):
                                 break
 
                     # Always collect tokens
