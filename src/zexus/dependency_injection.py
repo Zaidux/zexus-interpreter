@@ -183,8 +183,10 @@ class DIRegistry:
         return self.containers[module_name]
     
     def get_container(self, module_name: str) -> Optional[DependencyContainer]:
-        """Get dependency container for a module"""
-        return self.containers.get(module_name)
+        """Get dependency container for a module, creating it if it doesn't exist"""
+        if module_name not in self.containers:
+            self.containers[module_name] = DependencyContainer(module_name)
+        return self.containers[module_name]
     
     def provide_dependency(self, module_name: str, dep_name: str, value: Any):
         """Provide a dependency to a module"""
