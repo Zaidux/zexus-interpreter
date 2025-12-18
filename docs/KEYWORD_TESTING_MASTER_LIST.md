@@ -512,14 +512,16 @@ For each keyword:
    - Impact: LOW - Feature exists but confidence level unknown
 
 ### CAPABILITY & VALIDATION Keyword Errors
-1. **VALIDATE Schema Registry Incomplete** (Priority: HIGH)
-   - Description: Schema names not recognized, throws "Unknown schema: string" error
-   - Test: `validate data, "string";` fails with ValueError
-   - Status: Implementation exists but schema registry not initialized or incomplete
+1. **~~VALIDATE Schema Registry Incomplete~~** ✅ **FIXED** (December 17, 2025)
+   - **Root Cause**: ValidationRegistry.__init__ created empty schemas dict, never populated with built-in types
+   - **Problem**: `validate "hello", "string"` threw "ValueError: Unknown schema: string"
+   - **Solution**: Added _register_builtin_schemas() method in ValidationRegistry.__init__:
+     * (1) Registers 10 built-in schemas: string, integer, number, boolean, email, url, phone, uuid, ipv4, ipv6
+     * (2) Uses TypeValidator for basic types (str, int, float, bool)
+     * (3) Uses StandardValidators for patterns (EMAIL, URL, PHONE, UUID, IPV4, IPV6)
+   - **Fix Location**: src/zexus/validation_system.py lines 438-495
+   - **Verification**: All tests pass - string, integer, email validation working correctly
    - Files: test_capability_easy.zx (Test 10, 11, 17)
-   - Impact: HIGH - Validation feature completely unusable
-   - Root Cause: validation_system.py schema registry missing predefined schemas
-   - Expected: Should recognize standard types: string, integer, email, etc.
 
 2. **~~SANITIZE Variable Scope Issues~~** ✅ **FIXED** (December 17, 2025)
    - **Root Cause**: SANITIZE in statement_starters caused structural analyzer to treat it as standalone statement, not as expression in assignment context
