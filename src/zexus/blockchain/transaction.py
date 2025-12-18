@@ -53,6 +53,13 @@ class TransactionContext:
         """Maximum gas allowed for this transaction"""
         return self._gas_limit
     
+    @gas_limit.setter
+    def gas_limit(self, value: int):
+        """Set gas limit (can be changed during execution via LIMIT statement)"""
+        if value < 0:
+            raise ValueError("Gas limit cannot be negative")
+        self._gas_limit = value
+    
     @property
     def gas_used(self) -> int:
         """Gas consumed so far"""
