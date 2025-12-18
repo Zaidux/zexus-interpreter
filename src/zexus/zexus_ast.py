@@ -406,6 +406,19 @@ class AssignmentExpression(Expression):
     def __repr__(self):
         return f"AssignmentExpression(name={self.name}, value={self.value})"
 
+class AwaitExpression(Expression):
+    def __init__(self, expression):
+        self.expression = expression
+
+    def token_literal(self):
+        return "await"
+
+    def string(self):
+        return f"await {self.expression}"
+
+    def __repr__(self):
+        return f"AwaitExpression(expression={self.expression})"
+
 class EmbeddedLiteral(Expression):
     def __init__(self, language, code):
         self.language = language

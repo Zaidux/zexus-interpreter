@@ -78,6 +78,61 @@ class FunctionEvaluatorMixin:
         
         if isinstance(fn, (Action, LambdaFunction)):
             debug_log("  Calling user-defined function")
+            
+            # Check if this is an async action
+            is_async = getattr(fn, 'is_async', False)
+            
+            if is_async:
+                # Create a promise that wraps the async action execution
+                from ..object import Promise
+                
+                def executor(resolve, reject):
+                    """Execute the async action and resolve/reject the promise"""
+                    print(f"[DEBUG] Executor called for async action")
+                    new_env = Environment(outer=fn.env)
+                    
+                    # Bind parameters
+                    for i, param in enumerate(fn.parameters):
+                        if i < len(args):
+                            param_name = param.value if hasattr(param, 'value') else str(param)
+                            new_env.set(param_name, args[i])
+                            print(f"[DEBUG] Bound parameter: {param_name} = {args[i]}")
+                    
+                    try:
+                        # Evaluate the function body
+                        print(f"[DEBUG] Evaluating async action body")
+                        res = self.eval_node(fn.body, new_env)
+                        
+                        print(f"[DEBUG] Async action result: type={type(res).__name__}, res={res}")
+                        
+                        # Unwrap ReturnValue if needed
+                        if isinstance(res, ReturnValue):
+                            result = res.value
+                            print(f"[DEBUG] Unwrapped ReturnValue: {result}, type={type(result).__name__}")
+                        else:
+                            result = res
+                            print(f"[DEBUG] Result (not ReturnValue): {result}, type={type(result).__name__}")
+                        
+                        # Resolve the promise with the result
+                        print(f"[DEBUG] Resolving promise with: {result}")
+                        resolve(result)
+                    except Exception as e:
+                        # Reject the promise with the error
+                        debug_log("  Rejecting promise with", f"{e}")
+                        reject(e)
+                    finally:
+                        # Execute deferred cleanup
+                        if hasattr(self, '_execute_deferred_cleanup'):
+                            self._execute_deferred_cleanup(new_env, [])
+                
+                # Create and return promise
+                print(f"[DEBUG] Creating promise with executor")
+                promise = Promise(executor)
+                print(f"[DEBUG] Promise created, state={promise.state}, value={promise.value}")
+                debug_log("  Created async promise", f"action {fn.name if hasattr(fn, 'name') else 'anonymous'}")
+                return promise
+            
+            # Synchronous function execution
             new_env = Environment(outer=fn.env)
             
             param_names = []

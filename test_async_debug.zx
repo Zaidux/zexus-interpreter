@@ -1,0 +1,13 @@
+print("Test async");
+
+async action getValue() {
+    let x = 42;
+    return x;
+}
+
+print("Calling async action");
+let result = await getValue();
+
+print("Type check:");
+print(result);
+print("Done");

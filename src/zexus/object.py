@@ -129,6 +129,162 @@ class Builtin(Object):
     def inspect(self): return f"<built-in function: {self.name}>"
     def type(self): return "BUILTIN"
 
+# === ASYNC/AWAIT OBJECTS ===
+
+class Promise(Object):
+    """
+    Promise object representing an async operation
+    States: PENDING, FULFILLED, REJECTED
+    """
+    PENDING = "PENDING"
+    FULFILLED = "FULFILLED"
+    REJECTED = "REJECTED"
+    
+    def __init__(self, executor=None):
+        self.state = Promise.PENDING
+        self.value = None
+        self.error = None
+        self.then_callbacks = []
+        self.catch_callbacks = []
+        self.finally_callbacks = []
+        
+        # If executor provided, run it immediately
+        if executor:
+            try:
+                executor(self._resolve, self._reject)
+            except Exception as e:
+                self._reject(e)
+    
+    def _resolve(self, value):
+        """Resolve the promise with a value"""
+        if self.state != Promise.PENDING:
+            return
+        self.state = Promise.FULFILLED
+        self.value = value
+        
+        # Execute then callbacks
+        for callback in self.then_callbacks:
+            try:
+                callback(value)
+            except Exception:
+                pass
+        
+        # Execute finally callbacks
+        for callback in self.finally_callbacks:
+            try:
+                callback()
+            except Exception:
+                pass
+    
+    def _reject(self, error):
+        """Reject the promise with an error"""
+        if self.state != Promise.PENDING:
+            return
+        self.state = Promise.REJECTED
+        self.error = error
+        
+        # Execute catch callbacks
+        for callback in self.catch_callbacks:
+            try:
+                callback(error)
+            except Exception:
+                pass
+        
+        # Execute finally callbacks
+        for callback in self.finally_callbacks:
+            try:
+                callback()
+            except Exception:
+                pass
+    
+    def then(self, callback):
+        """Add a success callback"""
+        if self.state == Promise.FULFILLED:
+            callback(self.value)
+        elif self.state == Promise.PENDING:
+            self.then_callbacks.append(callback)
+        return self
+    
+    def catch(self, callback):
+        """Add an error callback"""
+        if self.state == Promise.REJECTED:
+            callback(self.error)
+        elif self.state == Promise.PENDING:
+            self.catch_callbacks.append(callback)
+        return self
+    
+    def finally_callback(self, callback):
+        """Add a finally callback (runs regardless of outcome)"""
+        if self.state != Promise.PENDING:
+            callback()
+        else:
+            self.finally_callbacks.append(callback)
+        return self
+    
+    def is_resolved(self):
+        """Check if promise is resolved (fulfilled or rejected)"""
+        return self.state != Promise.PENDING
+    
+    def get_value(self):
+        """Get the promise value (blocks if pending)"""
+        if self.state == Promise.FULFILLED:
+            return self.value
+        elif self.state == Promise.REJECTED:
+            raise Exception(f"Promise rejected: {self.error}")
+        else:
+            raise Exception("Promise is still pending")
+    
+    def inspect(self):
+        if self.state == Promise.PENDING:
+            return "Promise { <pending> }"
+        elif self.state == Promise.FULFILLED:
+            value_str = self.value.inspect() if hasattr(self.value, 'inspect') else str(self.value)
+            return f"Promise {{ <fulfilled>: {value_str} }}"
+        else:
+            return f"Promise {{ <rejected>: {self.error} }}"
+    
+    def type(self):
+        return "PROMISE"
+
+
+class Coroutine(Object):
+    """
+    Coroutine object representing an async function execution
+    Wraps a generator/iterator for suspension and resumption
+    """
+    def __init__(self, generator, action):
+        self.generator = generator
+        self.action = action  # The async action that created this coroutine
+        self.is_complete = False
+        self.result = None
+        self.error = None
+    
+    def resume(self, value=None):
+        """Resume coroutine execution, returns (is_done, value/error)"""
+        try:
+            if self.is_complete:
+                return (True, self.result)
+            
+            # Send value to generator and get next yielded value
+            next_value = self.generator.send(value)
+            return (False, next_value)
+        except StopIteration as e:
+            self.is_complete = True
+            self.result = e.value if hasattr(e, 'value') else None
+            return (True, self.result)
+        except Exception as e:
+            self.is_complete = True
+            self.error = e
+            return (True, e)
+    
+    def inspect(self):
+        if self.is_complete:
+            return f"Coroutine {{ <complete>: {self.result} }}"
+        return "Coroutine { <running> }"
+    
+    def type(self):
+        return "COROUTINE"
+
 # === ENTITY OBJECTS ===
 
 class EntityDefinition(Object):

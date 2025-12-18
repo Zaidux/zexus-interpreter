@@ -341,3 +341,86 @@ class ExpressionEvaluatorMixin:
             return self.eval_node(node.right, env, stack_trace)
         
         return left
+
+    def eval_await_expression(self, node, env, stack_trace):
+        """Evaluate await expression: await <expression>
+        
+        Await can handle:
+        1. Promise objects - waits for resolution
+        2. Coroutine objects - resumes until complete
+        3. Async action calls - wraps in Promise
+        4. Regular values - returns immediately
+        """
+        from ..object import Promise, Coroutine, EvaluationError
+        
+        # Evaluate the expression to await
+        awaitable = self.eval_node(node.expression, env, stack_trace)
+        
+        # Check for errors
+        if is_error(awaitable):
+            return awaitable
+        
+        # Handle different awaitable types
+        if hasattr(awaitable, 'type'):
+            obj_type = awaitable.type()
+            
+            # Await a Promise
+            if obj_type == "PROMISE":
+                # Since promises execute immediately in executor, they should be resolved
+                if awaitable.is_resolved():
+                    try:
+                        result = awaitable.get_value()
+                        return result if result is not None else NULL
+                    except Exception as e:
+                        return EvaluationError(f"Promise rejected: {e}")
+                else:
+                    # Promise is still pending - this shouldn't happen with current implementation
+                    # but we can spin-wait briefly
+                    import time
+                    max_wait = 1.0  # 1 second timeout
+                    waited = 0.0
+                    while not awaitable.is_resolved() and waited < max_wait:
+                        time.sleep(0.001)  # 1ms
+                        waited += 0.001
+                    
+                    if awaitable.is_resolved():
+                        try:
+                            result = awaitable.get_value()
+                            return result if result is not None else NULL
+                        except Exception as e:
+                            return EvaluationError(f"Promise rejected: {e}")
+                    else:
+                        return EvaluationError("Await timeout: promise did not resolve")
+            
+            # Await a Coroutine
+            elif obj_type == "COROUTINE":
+                # Resume coroutine until complete
+                while not awaitable.is_complete:
+                    is_done, value = awaitable.resume()
+                    if is_done:
+                        # Check if there was an error
+                        if awaitable.error:
+                            return EvaluationError(f"Coroutine error: {awaitable.error}")
+                        return value if value is not None else NULL
+                    
+                    # If coroutine yielded a value, it might be another awaitable
+                    if hasattr(value, 'type') and value.type() == "PROMISE":
+                        # Wait for the promise
+                        if value.is_resolved():
+                            try:
+                                resume_value = value.get_value()
+                                # Send the value back to the coroutine
+                                is_done, result = awaitable.resume(resume_value)
+                                if is_done:
+                                    return result if result is not None else NULL
+                            except Exception as e:
+                                return EvaluationError(f"Promise error in coroutine: {e}")
+                
+                return awaitable.result if awaitable.result is not None else NULL
+            
+            # Regular value - return immediately
+            else:
+                return awaitable
+        
+        # No type method - return as-is
+        return awaitable

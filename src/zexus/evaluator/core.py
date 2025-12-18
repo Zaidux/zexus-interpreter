@@ -411,6 +411,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  NullishExpression node")
                 return self.eval_nullish_expression(node, env, stack_trace)
             
+            elif node_type == zexus_ast.AwaitExpression:
+                debug_log("  AwaitExpression node")
+                return self.eval_await_expression(node, env, stack_trace)
+            
             elif node_type == zexus_ast.CallExpression:
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)

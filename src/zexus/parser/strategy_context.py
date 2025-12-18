@@ -2230,6 +2230,8 @@ class ContextStackParser:
             return self._parse_sandbox_expression(tokens)
         if tokens[0].type == SANITIZE:
             return self._parse_sanitize_expression(tokens)
+        if tokens[0].type == AWAIT:
+            return self._parse_await_expression(tokens)
 
         # Main expression parser with chaining
         i = 0
@@ -2716,6 +2718,37 @@ class ContextStackParser:
         
         # Return SanitizeStatement (can be used as expression that returns value)
         return SanitizeStatement(data=data, rules=None, encoding=encoding)
+
+    def _parse_await_expression(self, tokens):
+        """Parse an await expression from tokens starting with AWAIT
+        
+        Supports form:
+          await expression
+        
+        Returns an AwaitExpression AST node.
+        """
+        print("  🔧 [Await Expression] Parsing await expression")
+        
+        if not tokens or tokens[0].type != AWAIT:
+            print("  ⚠️  [Await Expression] Expected AWAIT token")
+            return None
+        
+        # Skip AWAIT token
+        expr_tokens = tokens[1:]
+        
+        if not expr_tokens:
+            print("  ⚠️  [Await Expression] Missing expression after await")
+            return None
+        
+        # Parse the expression to await
+        expression = self._parse_expression(expr_tokens)
+        
+        if not expression:
+            print("  ⚠️  [Await Expression] Failed to parse await expression")
+            return None
+        
+        print(f"  ✅ [Await Expression] Successfully parsed: await {type(expression).__name__}")
+        return AwaitExpression(expression)
 
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
