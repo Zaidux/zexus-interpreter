@@ -834,8 +834,19 @@ class UltimateParser:
     def parse_external_declaration(self):
         token = self.cur_token
 
+        # Support simple syntax: external identifier;
+        if self.peek_token_is(IDENT):
+            self.next_token()
+            name = Identifier(self.cur_token.literal)
+            return ExternalDeclaration(
+                name=name,
+                parameters=[],
+                module_path=""
+            )
+        
+        # Full syntax: external action identifier from "module";
         if not self.expect_peek(ACTION):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected 'action' after 'external'")
+            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier or 'action' after 'external'")
             return None
 
         if not self.expect_peek(IDENT):

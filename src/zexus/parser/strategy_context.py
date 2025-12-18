@@ -1105,6 +1105,29 @@ class ContextStackParser:
                 i = j
                 continue
 
+            # EXTERNAL statement heuristic
+            elif token.type == EXTERNAL:
+                j = i + 1
+                # Simple syntax: external identifier;
+                # Full syntax: external action identifier from "module";
+                while j < len(tokens) and tokens[j].type not in [SEMICOLON]:
+                    j += 1
+
+                external_tokens = tokens[i:j]
+                print(f"    📝 Found external statement: {[t.literal for t in external_tokens]}")
+
+                # Parse using the main parser's parse_external_declaration
+                temp_parser = Parser(external_tokens)
+                temp_parser.next_token()
+                stmt = temp_parser.parse_external_declaration()
+                if stmt:
+                    statements.append(stmt)
+                else:
+                    print(f"    ⚠️ Failed to parse external statement")
+
+                i = j
+                continue
+
             # ACTION (function-like) statement heuristic
             elif token.type == ACTION:
                 j = i + 1
@@ -3033,6 +3056,20 @@ class ContextStackParser:
         if tokens[0].type == RETURN:
             parser_debug(f"  🎯 [Generic] Detected return statement")
             return self._parse_return_statement(block_info, all_tokens)
+        
+        # Check if this is an external declaration
+        if tokens[0].type == EXTERNAL:
+            parser_debug(f"  🎯 [Generic] Detected external declaration")
+            # Manual parsing for simple syntax: external identifier;
+            if len(tokens) >= 2 and tokens[1].type == IDENT:
+                name = Identifier(tokens[1].literal)
+                stmt = ExternalDeclaration(
+                    name=name,
+                    parameters=[],
+                    module_path=""
+                )
+                return stmt
+            # Fall through if parsing fails
         
         # Check if it's a function call (identifier followed by parentheses)
         if tokens[0].type == IDENT and len(tokens) >= 2 and tokens[1].type == LPAREN:
