@@ -439,6 +439,61 @@ class ValidationManager:
         self.custom_validators: Dict[str, Validator] = {}
         self.schemas: Dict[str, ValidationSchema] = {}
         self.history: List[Dict[str, Any]] = []
+        
+        # Initialize built-in schemas for common types
+        self._register_builtin_schemas()
+    
+    def _register_builtin_schemas(self):
+        """Register built-in schemas for common data types."""
+        # String type schema
+        self.register_schema("string", ValidationSchema({
+            "_type": TypeValidator(str)
+        }))
+        
+        # Integer type schema
+        self.register_schema("integer", ValidationSchema({
+            "_type": TypeValidator(int)
+        }))
+        
+        # Number type schema (int or float)
+        self.register_schema("number", ValidationSchema({
+            "_type": TypeValidator((int, float))
+        }))
+        
+        # Boolean type schema
+        self.register_schema("boolean", ValidationSchema({
+            "_type": TypeValidator(bool)
+        }))
+        
+        # Email schema (uses standard validator)
+        self.register_schema("email", ValidationSchema({
+            "_value": StandardValidators.EMAIL
+        }))
+        
+        # URL schema (uses standard validator)
+        self.register_schema("url", ValidationSchema({
+            "_value": StandardValidators.URL
+        }))
+        
+        # Phone schema (uses standard validator)
+        self.register_schema("phone", ValidationSchema({
+            "_value": StandardValidators.PHONE
+        }))
+        
+        # UUID schema (uses standard validator)
+        self.register_schema("uuid", ValidationSchema({
+            "_value": StandardValidators.UUID
+        }))
+        
+        # IPv4 schema
+        self.register_schema("ipv4", ValidationSchema({
+            "_value": StandardValidators.IPV4
+        }))
+        
+        # IPv6 schema
+        self.register_schema("ipv6", ValidationSchema({
+            "_value": StandardValidators.IPV6
+        }))
     
     def register_validator(self, name: str, validator: Validator):
         """Register a custom validator."""
