@@ -463,7 +463,21 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 if is_error(obj): 
                     return obj
                 
-                property_name = node.property.value
+                # Safely extract property name - property can be Identifier, IntegerLiteral, or other expression
+                if hasattr(node.property, 'value'):
+                    property_name = node.property.value
+                elif isinstance(node.property, zexus_ast.PropertyAccessExpression):
+                    # Nested property access - evaluate it
+                    prop_result = self.eval_node(node.property, env, stack_trace)
+                    if is_error(prop_result):
+                        return prop_result
+                    property_name = prop_result.inspect() if hasattr(prop_result, 'inspect') else str(prop_result)
+                else:
+                    # Evaluate the property expression to get the key
+                    prop_result = self.eval_node(node.property, env, stack_trace)
+                    if is_error(prop_result):
+                        return prop_result
+                    property_name = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
                 
                 if isinstance(obj, EmbeddedCode):
                     if property_name == "code":

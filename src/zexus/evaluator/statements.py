@@ -201,7 +201,15 @@ class StatementEvaluatorMixin:
             if is_error(obj):
                 return obj
 
-            prop_key = node.name.property.value
+            # Safely extract property key
+            if hasattr(node.name.property, 'value'):
+                prop_key = node.name.property.value
+            else:
+                # Evaluate property expression
+                prop_result = self.eval_node(node.name.property, env, stack_trace)
+                if is_error(prop_result):
+                    return prop_result
+                prop_key = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
 
             # Evaluate value first
             value = self.eval_node(node.value, env, stack_trace)
@@ -693,7 +701,15 @@ class StatementEvaluatorMixin:
             if is_error(obj): 
                 return obj
             
-            prop_key = target_node.property.value  # Assuming Identifier
+            # Safely extract property key
+            if hasattr(target_node.property, 'value'):
+                prop_key = target_node.property.value
+            else:
+                # Evaluate property expression
+                prop_result = self.eval_node(target_node.property, env, stack_trace)
+                if is_error(prop_result):
+                    return prop_result
+                prop_key = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
             
             if isinstance(obj, Map):
                 if prop_key not in obj.pairs: 

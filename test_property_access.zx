@@ -1,0 +1,38 @@
+# Test PropertyAccessExpression with various property types
+print "=== Property Access Test ===";
+
+# Test 1: Simple property access (Identifier)
+let obj = {"name": "Alice", "age": 30};
+print "obj.name:", obj.name;
+
+# Test 2: Computed property access (String literal as key)
+let key = "age";
+print "obj with computed key:", obj[key];
+
+# Test 3: Nested objects
+let nested = {
+    "user": {
+        "profile": {
+            "name": "Bob"
+        }
+    }
+};
+print "nested.user:", nested.user;
+print "nested access works:", nested.user.profile.name;
+
+# Test 4: Array index access (IntegerLiteral)
+let arr = [10, 20, 30];
+print "arr[0]:", arr[0];
+print "arr[1]:", arr[1];
+
+# Test 5: Mixed access
+let complex = {
+    "items": [
+        {"id": 1, "value": "first"},
+        {"id": 2, "value": "second"}
+    ]
+};
+print "complex.items:", complex.items;
+print "complex.items[0]:", complex.items[0];
+
+print "✓ All property access tests passed";

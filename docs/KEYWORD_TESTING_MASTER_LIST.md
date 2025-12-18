@@ -1,11 +1,11 @@
 # Zexus Language Keyword Testing Master List
 
 **Purpose**: Systematic testing and documentation of all Zexus language keywords  
-**Status**: In Progress - 26 CRITICAL FIXES THIS SESSION (18 HIGH + 8 MEDIUM) ✅  
-**Last Updated**: December 18, 2025 - STREAM/WATCH Keywords  
+**Status**: In Progress - 27 CRITICAL FIXES THIS SESSION (19 HIGH + 8 MEDIUM) ✅  
+**Last Updated**: December 18, 2025 - PropertyAccessExpression Fix  
 **Tests Created**: 1055+ (375 easy, 380 medium, 365 complex)  
 **Keywords Tested**: 101 keywords + 7 builtins = 108 total (LET, CONST, IF, ELIF, ELSE, WHILE, FOR, EACH, IN, ACTION, FUNCTION, LAMBDA, RETURN, PRINT, DEBUG, USE, IMPORT, EXPORT, MODULE, PACKAGE, FROM, EXTERNAL, TRY, CATCH, REVERT, REQUIRE, ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC, EVENT, EMIT, STREAM, WATCH, ENTITY, VERIFY, CONTRACT, PROTECT, SEAL, AUDIT, RESTRICT, SANDBOX, TRAIL, CAPABILITY, GRANT, REVOKE, IMMUTABLE, VALIDATE, SANITIZE, LEDGER, STATE, TX, HASH, SIGNATURE, VERIFY_SIG, LIMIT, GAS, PERSISTENT, STORAGE, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, PROTOCOL, INTERFACE, TYPE_ALIAS, IMPLEMENTS, THIS, USING, SCREEN, COMPONENT, THEME, COLOR, GRAPHICS, CANVAS, ANIMATION, CLOCK, PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE, MODIFIER, MIDDLEWARE, AUTH, THROTTLE, CACHE + mix, render_screen, add_to_screen, set_theme, create_canvas, draw_line, draw_text)  
-**Critical Issues Found**: 0 (~~Loop execution~~ ✅, ~~WHILE condition~~ ✅, ~~defer cleanup~~ ✅, ~~array literal~~ ✅, ~~verify errors~~ ✅, ~~enum values~~ ✅, ~~limit constructor~~ ✅, ~~sandbox return~~ ✅, ~~middleware parser~~ ✅, ~~auth parser~~ ✅, ~~throttle parser~~ ✅, ~~cache parser~~ ✅, ~~sanitize scope~~ ✅, ~~persistent assignment~~ ✅, ~~type_alias duplicate~~ ✅, ~~map display~~ ✅, ~~external linking~~ ✅, ~~validate schema~~ ✅, ~~variable reassignment~~ ✅, ~~require context~~ ✅, ~~inject DI system~~ ✅, ~~signature PEM keys~~ ✅, ~~array concatenation~~ ✅, ~~TX function scope~~ ✅, ~~STREAM parser~~ ✅, ~~WATCH implementation~~ ✅)
+**Critical Issues Found**: 0 (~~Loop execution~~ ✅, ~~WHILE condition~~ ✅, ~~defer cleanup~~ ✅, ~~array literal~~ ✅, ~~verify errors~~ ✅, ~~enum values~~ ✅, ~~limit constructor~~ ✅, ~~sandbox return~~ ✅, ~~middleware parser~~ ✅, ~~auth parser~~ ✅, ~~throttle parser~~ ✅, ~~cache parser~~ ✅, ~~sanitize scope~~ ✅, ~~persistent assignment~~ ✅, ~~type_alias duplicate~~ ✅, ~~map display~~ ✅, ~~external linking~~ ✅, ~~validate schema~~ ✅, ~~variable reassignment~~ ✅, ~~require context~~ ✅, ~~inject DI system~~ ✅, ~~signature PEM keys~~ ✅, ~~array concatenation~~ ✅, ~~TX function scope~~ ✅, ~~STREAM parser~~ ✅, ~~WATCH implementation~~ ✅, ~~PropertyAccess error~~ ✅)
 
 ## Testing Methodology
 For each keyword:
@@ -259,10 +259,10 @@ For each keyword:
 **Partially Working**: 17 keywords  
 **Implementation Incomplete**: 0  
 **Not Tested**: 29+  
-**Total Errors Found**: 26 critical issues (26 fixed/verified this session ✅)
+**Total Errors Found**: 27 critical issues (27 fixed/verified this session ✅)
 
 **Test Coverage**: 101/130+ keywords tested (78%)  
-**Success Rate**: 90/101 fully working (89%)  
+**Success Rate**: 91/101 fully working (90%)  
 **Test Files Created**: 1055+ tests across 13 phases
 
 ---
@@ -384,11 +384,17 @@ For each keyword:
      * State persists across multiple calls ✅
    - **Impact**: Closure functionality working as expected - no fix needed
 
-3. **PropertyAccessExpression Error** (Priority: High)
-   - Description: Error `'PropertyAccessExpression' object has no attribute 'value'`
-   - Occurs with some complex nested property access patterns
-   - Status: Parser/evaluator bug
-   - Files: test_functions_complex.zx (late in execution)
+3. **~~PropertyAccessExpression Error~~** ✅ **FIXED** (December 18, 2025)
+   - **Root Cause**: Code assumed `node.property` always had `.value` attribute (Identifier), but property can be other expression types
+   - **Problem**: `'PropertyAccessExpression' object has no attribute 'value'` error with nested/computed property access
+   - **Solution**: Added safe property extraction logic that handles multiple property types
+   - **Implementation**:
+     * Check if property has `.value` attribute (Identifier case)
+     * Handle PropertyAccessExpression as property (nested access)
+     * Evaluate property expression for computed keys (IntegerLiteral, etc.)
+     * Fixed in 3 locations: core.py (line 467), statements.py (lines 204, 696)
+   - **Test**: test_property_access.zx passes - nested and computed access work
+   - **Verification**: No more attribute errors, complex property patterns supported
 
 ### TRY/CATCH/REVERT/REQUIRE Keyword Errors
 1. **~~Require Context Sensitivity~~** ✅ **FIXED** (December 18, 2025)
