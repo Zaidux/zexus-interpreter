@@ -125,9 +125,11 @@ class FunctionEvaluatorMixin:
                         if hasattr(self, '_execute_deferred_cleanup'):
                             self._execute_deferred_cleanup(new_env, [])
                 
-                # Create and return promise
+                # Create and return promise with context propagation
                 print(f"[DEBUG] Creating promise with executor")
-                promise = Promise(executor)
+                # Get stack trace context if available
+                stack_trace = getattr(self, '_current_stack_trace', [])
+                promise = Promise(executor, env=env, stack_trace=stack_trace)
                 print(f"[DEBUG] Promise created, state={promise.state}, value={promise.value}")
                 debug_log("  Created async promise", f"action {fn.name if hasattr(fn, 'name') else 'anonymous'}")
                 return promise

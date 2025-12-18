@@ -140,13 +140,17 @@ class Promise(Object):
     FULFILLED = "FULFILLED"
     REJECTED = "REJECTED"
     
-    def __init__(self, executor=None):
+    def __init__(self, executor=None, env=None, stack_trace=None):
         self.state = Promise.PENDING
         self.value = None
         self.error = None
         self.then_callbacks = []
         self.catch_callbacks = []
         self.finally_callbacks = []
+        
+        # Async context propagation
+        self.env = env  # Environment at promise creation
+        self.stack_trace = stack_trace or []  # Stack trace context
         
         # If executor provided, run it immediately
         if executor:

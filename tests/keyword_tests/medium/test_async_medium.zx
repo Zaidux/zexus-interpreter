@@ -1,40 +1,322 @@
 // ============================================================================
-// MEDIUM LEVEL: ASYNC/AWAIT/CHANNEL/SEND/RECEIVE/ATOMIC Keywords Test Suite
+// MEDIUM LEVEL: ASYNC/AWAIT Keywords Test Suite
 // ============================================================================
-// Testing intermediate async and concurrency patterns
-// Keywords: ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC
-// NOTE: CHANNEL/SEND/RECEIVE/ATOMIC are NOT registered in lexer - will test async/await only
+// Testing intermediate async/await patterns
+// Keywords: ASYNC, AWAIT
+// Tests: Parameters, conditionals, nested calls, error patterns
 // ============================================================================
 
-print "=== MEDIUM ASYNC/CONCURRENCY TESTS ===";
-print "";
+print("=== MEDIUM ASYNC/AWAIT TESTS ===");
+print("");
 
 // ============================================================================
-// TEST 1: ASYNC keyword with action (may not be implemented)
-// Expected: May not be implemented yet
+// TEST 1: Async action calling another async action
+// Expected: Should chain async calls
 // ============================================================================
-print "Test 1: Async action";
-print "ASYNC keyword exists but may not be fully implemented";
-print "";
+print("Test 1: Async calling async");
+async action fetchData() {
+    return 100;
+}
+async action processData() {
+    let data = await fetchData();
+    return data * 2;
+}
+let processed = await processData();
+print("✓ Chained result:", processed);
+print("");
 
 // ============================================================================
-// TEST 2: Testing if ASYNC is recognized as keyword
-// Expected: Should not error on keyword recognition
+// TEST 2: Async with conditional logic
+// Expected: Should handle if/else in async actions
 // ============================================================================
-print "Test 2: ASYNC keyword recognition";
-// Note: Just testing that async doesn't cause syntax errors
-print "Keywords: async, await";
-print "";
+print("Test 2: Async with conditionals");
+async action classify(n) {
+    if n > 50 {
+        return "high";
+    } elif n > 25 {
+        return "medium";
+    } else {
+        return "low";
+    }
+}
+let c1 = await classify(75);
+let c2 = await classify(30);
+let c3 = await classify(10);
+print("✓ Classifications:", c1, c2, c3);
+print("");
 
 // ============================================================================
-// TEST 3-20: Placeholder tests since concurrency features not in lexer
-// Expected: These features need lexer registration
+// TEST 3: Async with loop and accumulation
+// Expected: Should accumulate values in loop
 // ============================================================================
-print "Test 3-20: Concurrency features not available";
-print "CHANNEL, SEND, RECEIVE, ATOMIC keywords exist in token.py";
-print "but are NOT registered in lexer.py keywords dictionary";
-print "These keywords will not be recognized by the lexer";
-print "";
+print("Test 3: Async with loops");
+async action factorial(n) {
+    let result = 1;
+    let i = 1;
+    while i <= n {
+        result = result * i;
+        i = i + 1;
+    }
+    return result;
+}
+let fact5 = await factorial(5);
+print("✓ Factorial(5):", fact5);
+print("");
 
-print "=== MEDIUM ASYNC/CONCURRENCY TESTS COMPLETE ===";
-print "Note: Most concurrency features require lexer registration";
+// ============================================================================
+// TEST 4: Multiple awaits with different types
+// Expected: Should handle different return types
+// ============================================================================
+print("Test 4: Mixed return types");
+async action getInt() { return 42; }
+async action getString() { return "test"; }
+async action getBool() { return true; }
+let intVal = await getInt();
+let strVal = await getString();
+let boolVal = await getBool();
+print("✓ Types:", intVal, strVal, boolVal);
+print("");
+
+// ============================================================================
+// TEST 5: Async with list operations
+// Expected: Should work with lists
+// ============================================================================
+print("Test 5: Async with lists");
+async action sumList(lst) {
+    let total = 0;
+    for item in lst {
+        total = total + item;
+    }
+    return total;
+}
+let listSum = await sumList([1, 2, 3, 4, 5]);
+print("✓ List sum:", listSum);
+print("");
+
+// ============================================================================
+// TEST 6: Async with map operations
+// Expected: Should work with maps/objects
+// ============================================================================
+print("Test 6: Async with maps");
+async action getMapValue(m, key) {
+    return m[key];
+}
+let testMap = {name: "Alice", age: 30};
+let name = await getMapValue(testMap, "name");
+print("✓ Map value:", name);
+print("");
+
+// ============================================================================
+// TEST 7: Async action with early return
+// Expected: Should handle early returns
+// ============================================================================
+print("Test 7: Early return");
+async action findFirst(lst, target) {
+    for item in lst {
+        if item == target {
+            return item;
+        }
+    }
+    return null;
+}
+let found = await findFirst([1, 2, 3, 4, 5], 3);
+print("✓ Found:", found);
+print("");
+
+// ============================================================================
+// TEST 8: Nested async calls (3 levels)
+// Expected: Should handle multiple nesting levels
+// ============================================================================
+print("Test 8: Nested async (3 levels)");
+async action level1() {
+    return 10;
+}
+async action level2() {
+    let val = await level1();
+    return val + 20;
+}
+async action level3() {
+    let val = await level2();
+    return val + 30;
+}
+let nested = await level3();
+print("✓ Nested result:", nested);
+print("");
+
+// ============================================================================
+// TEST 9: Async with string manipulation
+// Expected: Should handle string operations
+// ============================================================================
+print("Test 9: String manipulation");
+async action formatName(first, last) {
+    return first + " " + last;
+}
+let fullName = await formatName("John", "Doe");
+print("✓ Full name:", fullName);
+print("");
+
+// ============================================================================
+// TEST 10: Async with mathematical operations
+// Expected: Should handle complex math
+// ============================================================================
+print("Test 10: Mathematical operations");
+async action quadratic(a, b, c, x) {
+    return a * x * x + b * x + c;
+}
+let result = await quadratic(2, 3, 1, 5);
+print("✓ Quadratic result:", result);
+print("");
+
+// ============================================================================
+// TEST 11: Async with variable scope
+// Expected: Should access outer scope variables
+// ============================================================================
+print("Test 11: Variable scope");
+let multiplier = 10;
+async action useOuter(x) {
+    return x * multiplier;
+}
+let scoped = await useOuter(5);
+print("✓ Scoped result:", scoped);
+print("");
+
+// ============================================================================
+// TEST 12: Async with multiple return paths
+// Expected: Should handle multiple return points
+// ============================================================================
+print("Test 12: Multiple return paths");
+async action checkRange(n) {
+    if n < 0 {
+        return "negative";
+    }
+    if n == 0 {
+        return "zero";
+    }
+    return "positive";
+}
+let r1 = await checkRange(-5);
+let r2 = await checkRange(0);
+let r3 = await checkRange(5);
+print("✓ Ranges:", r1, r2, r3);
+print("");
+
+// ============================================================================
+// TEST 13: Async with helper functions
+// Expected: Should call non-async helpers
+// ============================================================================
+print("Test 13: Async with helpers");
+action helper(x) {
+    return x + 10;
+}
+async action useHelper(x) {
+    let temp = helper(x);
+    return temp * 2;
+}
+let helped = await useHelper(5);
+print("✓ Helper result:", helped);
+print("");
+
+// ============================================================================
+// TEST 14: Async with parameter defaults
+// Expected: Should handle optional parameters
+// ============================================================================
+print("Test 14: Parameter handling");
+async action withDefaults(x, y) {
+    let a = x;
+    let b = y;
+    return a + b;
+}
+let withBoth = await withDefaults(10, 20);
+print("✓ With parameters:", withBoth);
+print("");
+
+// ============================================================================
+// TEST 15: Async with list building
+// Expected: Should build and return lists
+// ============================================================================
+print("Test 15: List building");
+async action buildList(n) {
+    let result = [];
+    let i = 1;
+    while i <= n {
+        result = result + [i];
+        i = i + 1;
+    }
+    return result;
+}
+let builtList = await buildList(5);
+print("✓ Built list:", builtList);
+print("");
+
+// ============================================================================
+// TEST 16: Async with map building
+// Expected: Should build and return maps
+// ============================================================================
+print("Test 16: Map building");
+async action buildMap(key, value) {
+    let m = {};
+    m[key] = value;
+    return m;
+}
+let builtMap = await buildMap("status", "ok");
+print("✓ Built map:", builtMap);
+print("");
+
+// ============================================================================
+// TEST 17: Async with boolean logic
+// Expected: Should handle boolean operations
+// ============================================================================
+print("Test 17: Boolean logic");
+async action checkBoth(a, b) {
+    return a > 5 and b > 5;
+}
+let both = await checkBoth(10, 15);
+print("✓ Both check:", both);
+print("");
+
+// ============================================================================
+// TEST 18: Async with string comparison
+// Expected: Should compare strings
+// ============================================================================
+print("Test 18: String comparison");
+async action matchString(s1, s2) {
+    return s1 == s2;
+}
+let matches = await matchString("test", "test");
+print("✓ Strings match:", matches);
+print("");
+
+// ============================================================================
+// TEST 19: Async with null handling
+// Expected: Should handle null values
+// ============================================================================
+print("Test 19: Null handling");
+async action returnNull(shouldNull) {
+    if shouldNull {
+        return null;
+    }
+    return "value";
+}
+let nullResult = await returnNull(true);
+let valueResult = await returnNull(false);
+print("✓ Null test:", nullResult, valueResult);
+print("");
+
+// ============================================================================
+// TEST 20: Async with computed values
+// Expected: Should compute and return
+// ============================================================================
+print("Test 20: Computed values");
+async action compute() {
+    let a = 5;
+    let b = 10;
+    let c = a + b;
+    let d = c * 2;
+    return d;
+}
+let computed = await compute();
+print("✓ Computed:", computed);
+print("");
+
+print("=== MEDIUM ASYNC/AWAIT TESTS COMPLETE ===");
+print("20 intermediate tests executed!");

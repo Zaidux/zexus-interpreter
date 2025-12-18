@@ -366,13 +366,22 @@ class ExpressionEvaluatorMixin:
             
             # Await a Promise
             if obj_type == "PROMISE":
+                # Propagate stack trace context from promise
+                if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
+                    # Merge promise's stack trace with current context
+                    stack_trace = stack_trace + [f"  at await <promise>"]
+                
                 # Since promises execute immediately in executor, they should be resolved
                 if awaitable.is_resolved():
                     try:
                         result = awaitable.get_value()
                         return result if result is not None else NULL
                     except Exception as e:
-                        return EvaluationError(f"Promise rejected: {e}")
+                        # Propagate error with stack trace context
+                        error_msg = f"Promise rejected: {e}"
+                        if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
+                            error_msg += f"\n  Promise created at: {awaitable.stack_trace}"
+                        return EvaluationError(error_msg)
                 else:
                     # Promise is still pending - this shouldn't happen with current implementation
                     # but we can spin-wait briefly

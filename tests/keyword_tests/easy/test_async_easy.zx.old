@@ -1,0 +1,236 @@
+// ============================================================================
+// EASY LEVEL: ASYNC/AWAIT/CHANNEL/SEND/RECEIVE/ATOMIC Keywords Test Suite
+// ============================================================================
+// Testing basic concurrency and async functionality in Zexus
+// Keywords: ASYNC, AWAIT, CHANNEL, SEND, RECEIVE, ATOMIC
+// Note: Focus on CHANNEL/SEND/RECEIVE/ATOMIC as ASYNC/AWAIT may not be fully implemented
+// ============================================================================
+
+print "=== EASY ASYNC/CONCURRENCY TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Basic channel declaration with integer type
+// Expected: Should create a channel
+// ============================================================================
+print "Test 1: Basic channel declaration";
+channel<integer> numbers;
+print "Channel declared";
+print "";
+
+// ============================================================================
+// TEST 2: Channel with string type annotation
+// Expected: Should create typed channel
+// ============================================================================
+print "Test 2: Typed channel";
+channel<string> strChannel;
+print "Typed channel created";
+print "";
+
+// ============================================================================
+// TEST 3: Basic send to channel
+// Expected: Should send value to channel
+// ============================================================================
+print "Test 3: Send to channel";
+channel<integer> data;
+send(data, 42);
+print "Value sent";
+print "";
+
+// ============================================================================
+// TEST 4: Basic receive from channel
+// Expected: Should receive value from channel
+// ============================================================================
+print "Test 4: Receive from channel";
+channel<string> messages;
+send(messages, "Hello");
+let msg = receive(messages);
+print "Received: " + msg;
+print "";
+
+// ============================================================================
+// TEST 5: Channel with string values
+// Expected: Should handle string messages
+// ============================================================================
+print "Test 5: String channel";
+channel<string> strChan;
+send(strChan, "World");
+let str = receive(strChan);
+print "String: " + str;
+print "";
+
+// ============================================================================
+// TEST 6: Basic atomic operation
+// Expected: Should execute atomically
+// ============================================================================
+print "Test 6: Basic atomic";
+let counter = 0;
+atomic(counter = counter + 1);
+print "Counter: " + counter;
+print "";
+
+// ============================================================================
+// TEST 7: Atomic with multiple operations (block)
+// Expected: Should execute block atomically
+// ============================================================================
+print "Test 7: Atomic block";
+let x = 10;
+let y = 20;
+atomic {
+    x = x + 1;
+    y = y + 1;
+}
+print "X: " + x + ", Y: " + y;
+print "";
+
+// ============================================================================
+// TEST 8: Channel with numeric operations
+// Expected: Should send/receive calculations
+// ============================================================================
+print "Test 8: Numeric channel operations";
+channel<integer> nums;
+let value = 5 * 10;
+send(nums, value);
+let result = receive(nums);
+print "Result: " + result;
+print "";
+
+// ============================================================================
+// TEST 9: Multiple sends to same channel
+// Expected: Should queue messages
+// ============================================================================
+print "Test 9: Multiple sends";
+channel<integer> queue;
+send(queue, 1);
+send(queue, 2);
+send(queue, 3);
+print "Sent 3 values";
+print "First: " + receive(queue);
+print "Second: " + receive(queue);
+print "Third: " + receive(queue);
+print "";
+
+// ============================================================================
+// TEST 10: Atomic with arithmetic
+// Expected: Should safely update value
+// ============================================================================
+print "Test 10: Atomic arithmetic";
+let total = 100;
+atomic(total = total * 2);
+print "Total: " + total;
+print "";
+
+// ============================================================================
+// TEST 11: Channel in function
+// Expected: Should use channel in function context
+// ============================================================================
+print "Test 11: Channel in function";
+action sendMessage(ch, msg) {
+    send(ch, msg);
+    return "Sent";
+}
+
+channel<string> funcChan;
+print sendMessage(funcChan, "Function message");
+print "Received: " + receive(funcChan);
+print "";
+
+// ============================================================================
+// TEST 12: Atomic in function
+// Expected: Should execute atomic operation in function
+// ============================================================================
+print "Test 12: Atomic in function";
+let shared = 0;
+
+action increment() {
+    atomic(shared = shared + 1);
+    return shared;
+}
+
+print "After increment: " + increment();
+print "";
+
+// ============================================================================
+// TEST 13: Channel with boolean values
+// Expected: Should handle boolean messages
+// ============================================================================
+print "Test 13: Boolean channel";
+channel<integer> boolChan;
+send(boolChan, true);
+let flag = receive(boolChan);
+print "Flag: " + flag;
+print "";
+
+// ============================================================================
+// TEST 14: Atomic with subtraction
+// Expected: Should safely decrement
+// ============================================================================
+print "Test 14: Atomic decrement";
+let balance = 1000;
+atomic(balance = balance - 100);
+print "Balance: " + balance;
+print "";
+
+// ============================================================================
+// TEST 15: Channel with null value
+// Expected: Should handle null
+// ============================================================================
+print "Test 15: Null channel";
+channel<integer> nullChan;
+send(nullChan, null);
+let nullVal = receive(nullChan);
+print "Received null: " + (nullVal == null);
+print "";
+
+// ============================================================================
+// TEST 16: Multiple atomic operations in sequence
+// Expected: Should execute all atomically
+// ============================================================================
+print "Test 16: Sequential atomic ops";
+let account = 500;
+atomic(account = account + 100);
+atomic(account = account - 50);
+print "Account: " + account;
+print "";
+
+// ============================================================================
+// TEST 17: Channel with expression
+// Expected: Should evaluate and send expression result
+// ============================================================================
+print "Test 17: Channel with expression";
+channel<integer> exprChan;
+send(exprChan, 10 + 20);
+print "Expr result: " + receive(exprChan);
+print "";
+
+// ============================================================================
+// TEST 18: Atomic with assignment from expression
+// Expected: Should atomically assign calculated value
+// ============================================================================
+print "Test 18: Atomic with expression";
+let price = 50;
+atomic(price = price + (price / 10));
+print "New price: " + price;
+print "";
+
+// ============================================================================
+// TEST 19: Channel with comparison result
+// Expected: Should send boolean comparison result
+// ============================================================================
+print "Test 19: Comparison channel";
+channel<integer> compChan;
+send(compChan, 5 > 3);
+print "Comparison: " + receive(compChan);
+print "";
+
+// ============================================================================
+// TEST 20: Atomic with conditional value
+// Expected: Should atomically assign based on condition
+// ============================================================================
+print "Test 20: Atomic conditional";
+let status = 0;
+atomic(status = (status == 0) ? 1 : 0);
+print "Status: " + status;
+print "";
+
+print "=== EASY ASYNC/CONCURRENCY TESTS COMPLETE ===";
