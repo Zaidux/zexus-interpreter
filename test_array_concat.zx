@@ -1,0 +1,15 @@
+# Test array concatenation operator
+let list = [1, 2];
+print "Initial list:", list;
+
+list = list + [3];
+print "After + [3]:", list;
+
+list = list + [4, 5];
+print "After + [4, 5]:", list;
+
+# Test concatenating two separate lists
+let a = [10, 20];
+let b = [30, 40];
+let c = a + b;
+print "a + b:", c;

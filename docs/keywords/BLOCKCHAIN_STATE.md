@@ -307,24 +307,47 @@ let combined = hash(sha256Sum + sha512Sum, "SHA256");
 signature(data, privateKey, "algorithm")
 ```
 
-**Algorithms**: ECDSA, RSA, etc.
+**Algorithms**: ECDSA, RSA
 
 ### Purpose
-Create digital signatures for authentication and non-repudiation.
+Create digital signatures for authentication and non-repudiation. Supports both testing (mock mode) and production (PEM keys).
 
-### Basic Usage
+### Modes
 
-#### Create Signature
+#### Mock Mode (Testing)
+For non-PEM keys (simple strings), uses HMAC-SHA256 for deterministic signatures.
+**NOT cryptographically secure** - only for testing!
+
 ```zexus
-let privateKey = "private_key_pem";
+let privateKey = "test_key_123";
 let message = "sign this";
 let sig = signature(message, privateKey, "ECDSA");
+// Returns: mock_ecdsa_<hmac_hash>
+```
+
+#### Production Mode (Real Crypto)
+For PEM-formatted keys, uses cryptography library with full ECDSA/RSA support.
+
+```zexus
+let privateKey = "-----BEGIN PRIVATE KEY-----\n...";
+let message = "important data";
+let sig = signature(message, privateKey, "ECDSA");
+// Returns: hex-encoded signature
+```
+
+### Key Generation
+```zexus
+let keypair = generateKeypair("ECDSA");
+let privateKey = keypair["private_key"];
+let publicKey = keypair["public_key"];
 ```
 
 ### Test Results
-❌ **Broken**: Requires valid PEM format keys
-- Error: "Unable to load PEM file"
-- Cryptography library requires proper key format
+✅ **FIXED** (December 18, 2025)
+- Mock mode works with simple strings
+- Production mode works with PEM keys
+- Auto-detects key format (checks for "-----BEGIN")
+- All tests passing
 
 ---
 
@@ -336,18 +359,37 @@ verify_sig(data, signature, publicKey, "algorithm")
 ```
 
 ### Purpose
-Verify digital signatures.
+Verify digital signatures created by SIGNATURE keyword.
 
-### Basic Usage
+### Modes
 
-#### Verify Signature
+#### Mock Mode (Testing)
+Verifies mock signatures with same key used for signing.
+
 ```zexus
-let publicKey = "public_key_pem";
+let key = "test_key_123";
+let message = "data";
+let sig = signature(message, key, "ECDSA");
+let isValid = verify_sig(message, sig, key, "ECDSA");
+// Returns: true
+```
+
+**Note**: In mock mode, "public key" must match "private key" for verification.
+
+#### Production Mode (Real Crypto)
+Verifies real signatures with proper public keys.
+
+```zexus
 let isValid = verify_sig(message, sig, publicKey, "ECDSA");
+// Returns: true if signature valid, false otherwise
 ```
 
 ### Test Results
-🔴 **Untested**: Depends on SIGNATURE working
+✅ **FIXED** (December 18, 2025)
+- Correctly verifies mock signatures
+- Correctly verifies PEM signatures
+- Returns false for invalid signatures
+- All tests passing
 
 ---
 

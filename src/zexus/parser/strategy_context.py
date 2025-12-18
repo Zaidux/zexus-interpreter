@@ -89,6 +89,7 @@ class ContextStackParser:
             REVERT: self._parse_revert_statement,
             LIMIT: self._parse_limit_statement,
             # REACTIVE handlers
+            STREAM: self._parse_stream_statement,
             WATCH: self._parse_watch_statement,
             # POLICY-AS-CODE handlers
             PROTECT: self._parse_protect_statement,
@@ -4028,6 +4029,68 @@ class ContextStackParser:
         parser_debug("  ✅ Limit statement")
         return LimitStatement(amount=gas_limit)
 
+    def _parse_stream_statement(self, block_info, all_tokens):
+        """Parse stream statement.
+        
+        Form: stream name as event_var => { handler }
+        Example: stream clicks as event => { print event.x; }
+        """
+        parser_debug("🔧 [Context] Parsing stream statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != STREAM:
+            parser_debug("  ❌ Expected STREAM keyword")
+            return None
+        
+        # stream name as event_var => { handler }
+        # Find 'as' keyword (or AS token if it exists)
+        as_idx = -1
+        for i, t in enumerate(tokens):
+            if t.literal.lower() == 'as' or t.type == IDENT and t.literal == 'as':
+                as_idx = i
+                break
+        
+        if as_idx == -1:
+            parser_debug("  ❌ Expected 'as' in stream statement")
+            return None
+        
+        # Extract stream name (between STREAM and 'as')
+        stream_name = tokens[1].literal if as_idx > 1 else "unknown"
+        
+        # Extract event variable name (after 'as')
+        event_var = None
+        if as_idx + 1 < len(tokens):
+            event_var = Identifier(value=tokens[as_idx + 1].literal)
+        
+        # Find '=>' arrow
+        arrow_idx = -1
+        for i in range(as_idx + 2, len(tokens)):
+            if tokens[i].literal == '=>':
+                arrow_idx = i
+                break
+        
+        if arrow_idx == -1:
+            parser_debug("  ❌ Expected '=>' in stream statement")
+            return None
+        
+        # Parse handler block (after '=>')
+        handler_tokens = tokens[arrow_idx + 1:]
+        if handler_tokens and handler_tokens[0].type == LBRACE:
+            inner = handler_tokens[1:-1] if handler_tokens[-1].type == RBRACE else handler_tokens[1:]
+            stmts = self._parse_block_statements(inner)
+            handler = BlockStatement()
+            handler.statements = stmts
+        else:
+            parser_debug("  ❌ Expected block after '=>'")
+            return None
+        
+        parser_debug(f"  ✅ Stream statement: {stream_name} as {event_var}")
+        return StreamStatement(
+            stream_name=stream_name,
+            event_var=event_var,
+            handler=handler
+        )
+    
     def _parse_watch_statement(self, block_info, all_tokens):
         """Parse watch statement.
         

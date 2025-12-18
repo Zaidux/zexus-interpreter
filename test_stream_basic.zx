@@ -1,0 +1,17 @@
+# Test STREAM keyword basic functionality
+print "=== STREAM Keyword Test ===";
+
+# Test 1: Basic stream registration
+stream clicks as event => {
+    print "Click event received!";
+}
+
+print "✓ Stream 'clicks' registered";
+
+# Test 2: Stream with event parameter
+stream messages as msg => {
+    print "Message:", msg;
+}
+
+print "✓ Stream 'messages' registered";
+print "✓ STREAM keyword works";

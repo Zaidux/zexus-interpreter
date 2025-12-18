@@ -1,0 +1,10 @@
+action testTX() {
+    print "Inside function:";
+    print TX;
+    print TX.caller;
+    return TX.caller;
+}
+
+print "Calling function...";
+let result = testTX();
+print "Result:", result;

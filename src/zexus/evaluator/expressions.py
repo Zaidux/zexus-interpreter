@@ -16,6 +16,25 @@ class ExpressionEvaluatorMixin:
     
     def eval_identifier(self, node, env):
         debug_log("eval_identifier", f"Looking up: {node.value}")
+        
+        # Special handling for TX - make it globally accessible
+        if node.value == "TX":
+            from ..blockchain.transaction import get_current_tx, create_tx_context
+            tx = get_current_tx()
+            if tx is None:
+                # Auto-create TX context if not exists
+                tx = create_tx_context(caller="system", gas_limit=1000000)
+            # Wrap TX context as a Zexus Map object for property access
+            # Use plain string keys (not String objects) for Map.get() compatibility
+            return Map({
+                "caller": String(tx.caller),
+                "timestamp": Integer(int(tx.timestamp)),
+                "block_hash": String(tx.block_hash),
+                "gas_used": Integer(tx.gas_used),
+                "gas_remaining": Integer(tx.gas_remaining),
+                "gas_limit": Integer(tx.gas_limit)
+            })
+        
         val = env.get(node.value)
         if val:
             debug_log("  Found in environment", f"{node.value} = {val}")
@@ -149,6 +168,12 @@ class ExpressionEvaluatorMixin:
             return self.eval_float_infix(operator, left, right)
         elif isinstance(left, String) and isinstance(right, String):
             return self.eval_string_infix(operator, left, right)
+        
+        # Array Concatenation
+        elif operator == "+" and isinstance(left, List) and isinstance(right, List):
+            # Concatenate two arrays: [1, 2] + [3, 4] = [1, 2, 3, 4]
+            new_elements = left.elements[:] + right.elements[:]
+            return List(new_elements)
         
         # Mixed String Concatenation
         elif operator == "+":
