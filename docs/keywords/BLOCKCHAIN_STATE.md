@@ -29,7 +29,7 @@ Zexus provides blockchain-specific features through LEDGER, STATE, TX, HASH, SIG
 | VERIFY_SIG | ✅ (builtin) | ✅ | ✅ | 🔴 Untested |
 | LIMIT | ✅ | ✅ | ✅ | ✅ Fixed |
 | GAS | ✅ (builtin) | ✅ | ✅ | 🟢 Working |
-| PERSISTENT | ✅ | ✅ | ✅ | 🔴 Broken |
+| PERSISTENT | ✅ | ✅ | ✅ | ✅ Fixed (Dec 17, 2025) |
 | STORAGE | ✅ | ✅ | ✅ | 🟢 Working |
 
 ---
@@ -463,7 +463,11 @@ persistent storage consensusParams = {
 ### Test Results
 ✅ **Working**: Simple persistent storage
 ✅ **Working**: Persistent maps
-❌ **Issue**: Assignment target error with nested maps
+✅ **FIXED** (December 17, 2025): Nested maps now work correctly
+  - Parser handler added for PERSISTENT statements
+  - `persistent storage systemConfig = { "network": "mainnet", "features": {...} }` works
+  - Complex nested structures fully supported
+  - Type annotations work: `persistent storage balances: map = {}`
 
 ---
 

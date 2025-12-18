@@ -22,7 +22,7 @@ Zexus provides capability-based security and data validation features through CA
 | REVOKE | ✅ | ✅ | ✅ | 🟢 Working |
 | IMMUTABLE | ✅ | ✅ | ✅ | 🟢 Working |
 | VALIDATE | ✅ | ✅ | ⚠️ | 🟡 Partial |
-| SANITIZE | ✅ | ✅ | ⚠️ | 🟡 Partial |
+| SANITIZE | ✅ | ✅ | ✅ | 🟢 Working - FIXED ✅ |
 
 ---
 
@@ -479,7 +479,11 @@ let sanitizedUrl = sanitize urlContext, "url";
 ✅ **Working**: Basic sanitization
 ✅ **Working**: HTML encoding
 ✅ **Working**: Multiple encoding types
-⚠️ **Issue**: Sanitized values not accessible in some contexts (variable scope)
+✅ **FIXED** (December 17, 2025): Variable scope issue resolved
+  - SANITIZE now works in assignment expressions
+  - `let clean = sanitize data, "html"` works correctly
+  - Multi-layer sanitization works: `let stage3 = sanitize stage2, "html"`
+  - HTML properly escaped: `<script>` → `&lt;script&gt;`
 
 ---
 
