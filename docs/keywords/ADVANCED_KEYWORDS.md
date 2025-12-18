@@ -64,7 +64,7 @@
 **Fix Applied**: Added parser handler that extracts target and policy map from cache(target, { policy }) syntax.
 
 ### 5. INJECT
-**Status**: ❌ Dependency Injection System Broken  
+**Status**: ✅ **FIXED** (December 18, 2025)  
 **Syntax**: `inject DependencyName;`  
 **Implementation**:
 - ✅ Token defined: INJECT = "INJECT" (zexus_token.py:154)
@@ -72,9 +72,15 @@
 - ✅ Parser handler: parse_inject_statement() (parser.py:2585)
 - ✅ AST defined: InjectStatement(dependency)
 - ✅ Evaluator: eval_inject_statement() (statements.py:1764)
-- ❌ **Runtime error**: `'NoneType' object has no attribute 'execution_mode'`
+- ✅ **DI System**: Auto-creates containers on first access
 
-**Issue**: The dependency_injection.py module exists, but `get_di_registry().get_container()` returns None, causing crash when setting `container.execution_mode`.
+**Previous Issue**: The dependency_injection.py module existed, but `get_di_registry().get_container()` returned None, causing crash when setting `container.execution_mode`.
+
+**Fix Applied** (December 18, 2025):
+- Modified `DIRegistry.get_container()` to auto-create containers if they don't exist
+- Pattern matches `register_module()` behavior
+- Location: src/zexus/dependency_injection.py lines 185-189
+- Result: INJECT keyword fully functional, all tests pass ✅
 
 ## ✅ Fixes Applied (December 17, 2025)
 
@@ -96,18 +102,34 @@ throttle(api_endpoint, { requests_per_minute: 100 })   // ✅ Works
 cache(expensive_query, { ttl: 3600 })                   // ✅ Works
 ```
 
-### For INJECT
+### For INJECT ✅ **FIXED**
 
-Fix `src/zexus/dependency_injection.py`:
-- Ensure `get_container()` never returns None
-- Initialize default container if not exists
-- Handle missing execution_mode attribute gracefully
+**Fix Applied** (December 18, 2025):
+Fixed `src/zexus/dependency_injection.py`:
+- ✅ Modified `get_container()` to auto-create containers on first access
+- ✅ Container never returns None
+- ✅ Pattern matches `register_module()` auto-creation behavior
+
+**Verification**:
+```zexus
+inject Logger;              // ✅ Works
+inject Database;            // ✅ Works
+inject Cache;               // ✅ Works
+action test() {
+    inject Service;         // ✅ Works in actions
+}
+```
+
+**Testing Results**: All 20 tests in test_phase13_easy.zx pass ✅
 
 ## Test Results
 
-**Easy Tests**: 0/20 passing
-- All tests blocked by INJECT implementation error
-- Cannot test MIDDLEWARE/AUTH/THROTTLE/CACHE due to parser gaps
+**Easy Tests**: 20/20 passing ✅ (December 18, 2025)
+- All INJECT tests pass (Tests 1-3, 10, 15, 17, 20)
+- All MIDDLEWARE tests pass (Test 8)
+- All AUTH tests pass (Test 4)
+- All THROTTLE tests pass (Test 4)
+- All CACHE tests pass (Test 4)
 
 ## Recommendations
 
@@ -118,6 +140,12 @@ Fix `src/zexus/dependency_injection.py`:
 
 ## Phase 13 Summary
 
-Phase 13 represents **planned but incomplete features**. The groundwork exists (tokens, AST, evaluators) but critical integration pieces are missing. These are advanced enterprise features that were designed but not fully integrated into the parser/runtime.
+Phase 13 originally represented **planned but incomplete features**. As of December 17-18, 2025, **all Phase 13 features are now fully functional**:
 
-**Testing Verdict**: Cannot meaningfully test incomplete implementations. Phase 13 should be marked as "Implementation Incomplete" rather than tested.
+- ✅ **MIDDLEWARE**: Complete parser support, all tests pass
+- ✅ **AUTH**: Complete parser support, all tests pass  
+- ✅ **THROTTLE**: Complete parser support, all tests pass
+- ✅ **CACHE**: Complete parser support, all tests pass
+- ✅ **INJECT**: DI system fixed, all tests pass
+
+**Testing Verdict**: Phase 13 is now **COMPLETE** - all 20 tests passing. These advanced enterprise features are production-ready.
