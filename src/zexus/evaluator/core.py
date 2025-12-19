@@ -582,9 +582,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     def _initialize_vm(self):
         """Initialize VM components for bytecode execution"""
         try:
-            # Create bytecode compiler
-            self.bytecode_compiler = EvaluatorBytecodeCompiler()
-            debug_log("Evaluator", "VM integration initialized successfully")
+            # Create bytecode compiler with caching enabled
+            self.bytecode_compiler = EvaluatorBytecodeCompiler(
+                use_cache=True,
+                cache_size=1000
+            )
+            # Create VM instance with JIT and optimizer
+            self.vm_instance = VM(use_jit=True, jit_threshold=100, optimization_level=1)
+            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT + optimizer)")
         except Exception as e:
             debug_log("Evaluator", f"Failed to initialize VM: {e}")
             self.use_vm = False
@@ -630,14 +635,18 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             if hasattr(self, 'builtins') and self.builtins:
                 vm_builtins = {k: v for k, v in self.builtins.items()}
             
-            # Create and execute VM
-            vm = VM(builtins=vm_builtins, env=vm_env)
-            result = vm.execute(bytecode, debug=debug_mode)
+            # Use shared VM instance (has JIT, optimizer, etc.)
+            if not self.vm_instance:
+                self.vm_instance = VM(use_jit=True, jit_threshold=100, optimization_level=1)
+            
+            self.vm_instance.builtins = vm_builtins
+            self.vm_instance.env = vm_env
+            result = self.vm_instance.execute(bytecode, debug=debug_mode)
             
             self.vm_stats['vm_executions'] += 1
             
             # Update environment with VM changes
-            self._update_env_from_dict(env, vm.env)
+            self._update_env_from_dict(env, self.vm_instance.env)
             
             # Convert VM result back to evaluator objects
             return self._vm_result_to_evaluator(result)
@@ -707,6 +716,25 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         """Return VM execution statistics"""
         return self.vm_stats.copy()
 
+
+    def get_full_vm_statistics(self):
+        """Get comprehensive statistics from all VM components"""
+        stats = {
+            'evaluator': self.vm_stats.copy(),
+            'cache': None,
+            'jit': None,
+            'optimizer': None
+        }
+        
+        # Cache statistics
+        if self.bytecode_compiler and self.bytecode_compiler.cache:
+            stats['cache'] = self.bytecode_compiler.get_cache_stats()
+        
+        # JIT statistics
+        if self.vm_instance:
+            stats['jit'] = self.vm_instance.get_jit_stats()
+        
+        return stats
 
 # Global Entry Point
 def evaluate(program, env, debug_mode=False, use_vm=True):

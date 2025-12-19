@@ -8,29 +8,73 @@ from typing import Dict, List, Optional
 from .. import zexus_ast
 from ..vm.bytecode import Bytecode, BytecodeBuilder
 
+# Try to import cache (optional dependency)
+try:
+    from ..vm.cache import BytecodeCache
+    CACHE_AVAILABLE = True
+except ImportError:
+    CACHE_AVAILABLE = False
+
 
 class EvaluatorBytecodeCompiler:
     """
     Compiles Zexus AST nodes to bytecode for VM execution.
     Designed to work seamlessly with the evaluator's execution model.
+    
+    Features:
+    - AST to bytecode compilation
+    - Bytecode caching for repeated code
+    - Optimization support
+    - Error tracking
     """
     
-    def __init__(self):
+    def __init__(self, use_cache: bool = True, cache_size: int = 1000):
+        """
+        Initialize bytecode compiler
+        
+        Args:
+            use_cache: Enable bytecode caching
+            cache_size: Maximum cache entries
+        """
         self.builder: Optional[BytecodeBuilder] = None
         self.errors: List[str] = []
         self._loop_stack: List[Dict[str, str]] = []  # Stack of loop labels
+        
+        # Bytecode cache
+        self.cache: Optional[BytecodeCache] = None
+        if use_cache and CACHE_AVAILABLE:
+            self.cache = BytecodeCache(
+                max_size=cache_size,
+                max_memory_mb=50,
+                persistent=False,
+                debug=False
+            )
     
-    def compile(self, node, optimize: bool = True) -> Optional[Bytecode]:
+    def compile(self, node, optimize: bool = True, use_cache: bool = True) -> Optional[Bytecode]:
         """
         Compile an AST node to bytecode.
+        
+        Process:
+        1. Check cache for existing bytecode
+        2. If cache miss, compile AST to bytecode
+        3. Apply optimizations if requested
+        4. Store in cache for future use
         
         Args:
             node: AST node to compile
             optimize: Whether to apply optimizations
+            use_cache: Whether to use cache (default True)
             
         Returns:
             Bytecode object or None if compilation failed
         """
+        # Check cache first
+        if use_cache and self.cache:
+            cached = self.cache.get(node)
+            if cached:
+                return cached
+        
+        # Cache miss - compile
         self.builder = BytecodeBuilder()
         self.errors = []
         
@@ -46,6 +90,11 @@ class EvaluatorBytecodeCompiler:
                 bytecode = self._optimize(bytecode)
             
             bytecode.set_metadata('created_by', 'evaluator')
+            
+            # Store in cache
+            if use_cache and self.cache:
+                self.cache.put(node, bytecode)
+            
             return bytecode
             
         except Exception as e:
@@ -208,6 +257,94 @@ class EvaluatorBytecodeCompiler:
         name_idx = self.builder.bytecode.add_constant(node.name.value)
         self.builder.emit("STORE_FUNC", (name_idx, func_const_idx))
     
+    # === Blockchain Statement Compilation ===
+    
+    def _compile_TxStatement(self, node):
+        """Compile TX statement (transaction block)"""
+        # Emit TX_BEGIN
+        self.builder.emit("TX_BEGIN")
+        
+        # Compile transaction body
+        if hasattr(node, 'body'):
+            self._compile_node(node.body)
+        
+        # Emit TX_COMMIT (success path)
+        self.builder.emit("TX_COMMIT")
+    
+    def _compile_RevertStatement(self, node):
+        """Compile REVERT statement"""
+        # If there's a reason/message, compile it
+        if hasattr(node, 'reason') and node.reason:
+            self._compile_node(node.reason)
+            # Get the reason from stack
+            reason_idx = self.builder.bytecode.add_constant("revert_reason")
+            self.builder.emit("STORE_NAME", reason_idx)
+        
+        # Emit TX_REVERT
+        self.builder.emit("TX_REVERT")
+    
+    def _compile_RequireStatement(self, node):
+        """Compile REQUIRE statement - reverts if condition fails"""
+        # Compile condition
+        if hasattr(node, 'condition'):
+            self._compile_node(node.condition)
+        
+        # Jump if true (condition passes)
+        pass_label = f"require_pass_{id(node)}"
+        self.builder.emit("JUMP_IF_TRUE", None)
+        
+        # Condition failed - revert
+        if hasattr(node, 'message') and node.message:
+            # Compile error message
+            self._compile_node(node.message)
+            msg_idx = self.builder.bytecode.add_constant("require_msg")
+            self.builder.emit("STORE_NAME", msg_idx)
+        
+        self.builder.emit("TX_REVERT")
+        
+        # Pass label
+        self.builder.mark_label(pass_label)
+    
+    def _compile_StateAccessExpression(self, node):
+        """Compile STATE access expression"""
+        # Check if it's a read or write
+        if hasattr(node, 'key'):
+            key = node.key if isinstance(node.key, str) else str(node.key)
+            key_idx = self.builder.bytecode.add_constant(key)
+            
+            if hasattr(node, 'is_write') and node.is_write:
+                # STATE_WRITE - expects value on stack
+                self.builder.emit("STATE_WRITE", key_idx)
+            else:
+                # STATE_READ
+                self.builder.emit("STATE_READ", key_idx)
+    
+    def _compile_LedgerAppendStatement(self, node):
+        """Compile LEDGER append statement"""
+        # Compile the entry to append
+        if hasattr(node, 'entry'):
+            self._compile_node(node.entry)
+        
+        # Emit LEDGER_APPEND
+        self.builder.emit("LEDGER_APPEND")
+    
+    def _compile_GasChargeStatement(self, node):
+        """Compile GAS charge statement"""
+        # Get gas amount
+        if hasattr(node, 'amount'):
+            if isinstance(node.amount, int):
+                amount = node.amount
+            else:
+                # Compile expression for gas amount
+                self._compile_node(node.amount)
+                # For now, assume constant
+                amount = 1
+        else:
+            amount = 1
+        
+        # Emit GAS_CHARGE
+        self.builder.emit("GAS_CHARGE", amount)
+    
     # === Expression Compilation ===
     
     def _compile_Identifier(self, node: zexus_ast.Identifier):
@@ -298,7 +435,35 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_CallExpression(self, node: zexus_ast.CallExpression):
         """Compile function call"""
-        # Compile arguments first
+        # Check for blockchain-specific function calls that have dedicated opcodes
+        if isinstance(node.function, zexus_ast.Identifier):
+            func_name = node.function.value
+            
+            # HASH_BLOCK opcode - hash(block_data)
+            if func_name == "hash" and len(node.arguments) == 1:
+                self._compile_node(node.arguments[0])
+                self.builder.emit("HASH_BLOCK")
+                return
+            
+            # VERIFY_SIGNATURE opcode - verify_sig(signature, message, public_key)
+            if func_name == "verify_sig" and len(node.arguments) == 3:
+                # Compile arguments in stack order: signature, message, public_key
+                for arg in node.arguments:
+                    self._compile_node(arg)
+                self.builder.emit("VERIFY_SIGNATURE")
+                return
+            
+            # MERKLE_ROOT opcode - merkle_root([leaves...])
+            if func_name == "merkle_root" and len(node.arguments) >= 1:
+                # If argument is a list literal, compile elements individually
+                if isinstance(node.arguments[0], zexus_ast.ListLiteral):
+                    leaves = node.arguments[0].elements
+                    for leaf in leaves:
+                        self._compile_node(leaf)
+                    self.builder.emit("MERKLE_ROOT", len(leaves))
+                    return
+        
+        # Compile arguments first (standard call path)
         for arg in node.arguments:
             self._compile_node(arg)
         
@@ -381,6 +546,46 @@ class EvaluatorBytecodeCompiler:
         }
         
         return node_type in supported
+    
+    # ==================== Cache Management ====================
+    
+    def get_cache_stats(self) -> Optional[Dict]:
+        """
+        Get cache statistics
+        
+        Returns:
+            Dictionary with cache stats or None if cache disabled
+        """
+        if self.cache:
+            return self.cache.get_stats()
+        return None
+    
+    def clear_cache(self):
+        """Clear bytecode cache"""
+        if self.cache:
+            self.cache.clear()
+    
+    def invalidate_cache(self, node):
+        """Invalidate cached bytecode for a node"""
+        if self.cache:
+            self.cache.invalidate(node)
+    
+    def reset_cache_stats(self):
+        """Reset cache statistics"""
+        if self.cache:
+            self.cache.reset_stats()
+    
+    def cache_size(self) -> int:
+        """Get current cache size"""
+        if self.cache:
+            return self.cache.size()
+        return 0
+    
+    def cache_memory_usage(self) -> float:
+        """Get cache memory usage in MB"""
+        if self.cache:
+            return self.cache.memory_usage_mb()
+        return 0.0
 
 
 def should_use_vm_for_node(node) -> bool:
