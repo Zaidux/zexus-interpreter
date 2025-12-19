@@ -1,8 +1,0 @@
-print("Test 1: Async action");
-
-async action test() {
-    return 100;
-}
-
-let value = await test();
-print("Value:", value);

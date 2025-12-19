@@ -1,4 +1,0 @@
-let tx = TX;
-print "TX type:", type(tx);
-print "TX value:", tx;
-print "TX.caller:", TX.caller;

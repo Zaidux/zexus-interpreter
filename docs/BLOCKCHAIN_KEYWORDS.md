@@ -496,6 +496,22 @@ contract Validator {
 }
 ```
 
+### With Tolerance Blocks (Enhanced REQUIRE)
+```zexus
+contract VIPValidator {
+    modifier valueCheck(value, caller) {
+        // Standard users need value >= 100, VIP bypass
+        require value >= 100 {
+            if (isVIP(caller)) return true;
+        }
+    }
+    
+    action premiumProcess(value) modifier valueCheck(value, TX.caller) {
+        // Premium processing for VIP or high-value users
+    }
+}
+```
+
 ---
 
 ## Best Practices

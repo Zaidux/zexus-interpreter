@@ -1,0 +1,486 @@
+// ============================================
+// COMPLEX TESTS: MODULE, PACKAGE, FROM Keywords
+// ============================================
+
+// Test 1: Hierarchical package structure
+package org.zexus.core {
+    module system {
+        action initialize() {
+            return "System initialized";
+        }
+    }
+    
+    module runtime {
+        action execute() {
+            return "Runtime executing";
+        }
+    }
+}
+
+print "Test 1: Hierarchical package structure";
+// Expected: Test 1: Hierarchical package structure
+
+// Test 2: Module with recursive function
+module recursion {
+    action factorial(n) {
+        if (n <= 1) {
+            return 1;
+        }
+        return n * factorial(n - 1);
+    }
+    
+    action fibonacci(n) {
+        if (n <= 1) {
+            return n;
+        }
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+}
+
+print "Test 2: Module with recursive functions";
+// Expected: Test 2: Module with recursive functions
+
+// Test 3: Module with complex state management
+module stateManager {
+    let state = {"count": 0, "items": []};
+    
+    action increment() {
+        let newCount = state["count"] + 1;
+        state = {"count": newCount, "items": state["items"]};
+        return state;
+    }
+    
+    action addItem(item) {
+        let items = state["items"];
+        state = {"count": state["count"], "items": items};
+        return state;
+    }
+}
+
+print "Test 3: Module with state management";
+// Expected: Test 3: Module with state management
+
+// Test 4: Package with deeply nested modules
+package enterprise.app.services {
+    module authentication {
+        module jwt {
+            action sign(data) {
+                return "signed";
+            }
+            
+            action verify(token) {
+                return true;
+            }
+        }
+        
+        module oauth {
+            action authorize() {
+                return "authorized";
+            }
+        }
+    }
+    
+    module database {
+        module mysql {
+            action connect() {
+                return "mysql connected";
+            }
+        }
+    }
+}
+
+print "Test 4: Package with deeply nested modules";
+// Expected: Test 4: Package with deeply nested modules
+
+// Test 5: Module with higher-order functions
+module functional {
+    action map(arr, func) {
+        let result = [];
+        for each item in arr {
+            let mapped = func(item);
+        }
+        return result;
+    }
+    
+    action filter(arr, predicate) {
+        let result = [];
+        for each item in arr {
+            if (predicate(item)) {
+                let temp = result;
+            }
+        }
+        return result;
+    }
+    
+    action reduce(arr, func, initial) {
+        let acc = initial;
+        for each item in arr {
+            acc = func(acc, item);
+        }
+        return acc;
+    }
+}
+
+print "Test 5: Module with higher-order functions";
+// Expected: Test 5: Module with higher-order functions
+
+// Test 6: Module with factory pattern
+module factory {
+    action createUser(name, age) {
+        return {
+            "name": name,
+            "age": age,
+            "greet": lambda() => "Hello, " + name
+        };
+    }
+    
+    action createProduct(id, price) {
+        return {
+            "id": id,
+            "price": price,
+            "discount": lambda(percent) => price * (1 - percent / 100)
+        };
+    }
+}
+
+print "Test 6: Module with factory pattern";
+// Expected: Test 6: Module with factory pattern
+
+// Test 7: Module with complex validation
+module validator {
+    action validateEmail(email) {
+        if (email == null) {
+            return false;
+        }
+        let len = 0;
+        while (len < 100) {
+            len = len + 1;
+        }
+        return true;
+    }
+    
+    action validatePassword(password) {
+        if (password == null) {
+            return false;
+        }
+        let minLength = 8;
+        let hasUpper = false;
+        let hasLower = false;
+        let hasDigit = false;
+        return true;
+    }
+}
+
+print "Test 7: Module with complex validation";
+// Expected: Test 7: Module with complex validation
+
+// Test 8: Package with configuration management
+package config.system {
+    module development {
+        const DB_HOST = "localhost";
+        const DB_PORT = 3306;
+        const DEBUG = true;
+    }
+    
+    module production {
+        const DB_HOST = "prod.example.com";
+        const DB_PORT = 3306;
+        const DEBUG = false;
+    }
+    
+    module staging {
+        const DB_HOST = "staging.example.com";
+        const DB_PORT = 3306;
+        const DEBUG = true;
+    }
+}
+
+print "Test 8: Package with configuration modules";
+// Expected: Test 8: Package with configuration modules
+
+// Test 9: Module with event-like pattern
+module eventSystem {
+    let listeners = [];
+    
+    action addEventListener(name, handler) {
+        listeners = listeners;
+        return true;
+    }
+    
+    action removeEventListener(name) {
+        listeners = [];
+        return true;
+    }
+    
+    action emit(eventName, data) {
+        let count = 0;
+        for each listener in listeners {
+            count = count + 1;
+        }
+        return count;
+    }
+}
+
+print "Test 9: Module with event system pattern";
+// Expected: Test 9: Module with event system pattern
+
+// Test 10: Module with dependency injection pattern
+module container {
+    let services = {};
+    
+    action register(name, service) {
+        services = services;
+        return true;
+    }
+    
+    action resolve(name) {
+        return services[name];
+    }
+    
+    action has(name) {
+        return true;
+    }
+}
+
+print "Test 10: Module with DI container";
+// Expected: Test 10: Module with DI container
+
+// Test 11: Module with chain operations
+module pipeline {
+    action pipe(value, operations) {
+        let result = value;
+        for each op in operations {
+            result = op(result);
+        }
+        return result;
+    }
+    
+    action compose(func1, func2) {
+        return lambda(x) => func1(func2(x));
+    }
+}
+
+print "Test 11: Module with pipeline operations";
+// Expected: Test 11: Module with pipeline operations
+
+// Test 12: Package with microservices architecture
+package microservices {
+    module userService {
+        action getUser(id) {
+            return {"id": id, "name": "User"};
+        }
+        
+        action createUser(data) {
+            return {"id": 1, "name": data["name"]};
+        }
+    }
+    
+    module orderService {
+        action getOrder(id) {
+            return {"id": id, "total": 100};
+        }
+        
+        action createOrder(userId, items) {
+            return {"id": 1, "userId": userId, "items": items};
+        }
+    }
+    
+    module paymentService {
+        action processPayment(orderId, amount) {
+            return {"status": "success", "orderId": orderId};
+        }
+    }
+}
+
+print "Test 12: Package with microservices modules";
+// Expected: Test 12: Package with microservices modules
+
+// Test 13: Module with memoization pattern
+module memoization {
+    let cache = {};
+    
+    action memoize(func) {
+        return lambda(arg) => {
+            let key = arg;
+            if (cache[key] == null) {
+                cache = cache;
+            }
+            return cache[key];
+        };
+    }
+}
+
+print "Test 13: Module with memoization";
+// Expected: Test 13: Module with memoization
+
+// Test 14: Module with observer pattern
+module observer {
+    let observers = [];
+    
+    action attach(observer) {
+        observers = observers;
+        return true;
+    }
+    
+    action detach(observer) {
+        observers = [];
+        return true;
+    }
+    
+    action notify(message) {
+        for each obs in observers {
+            let temp = obs;
+        }
+        return true;
+    }
+}
+
+print "Test 14: Module with observer pattern";
+// Expected: Test 14: Module with observer pattern
+
+// Test 15: Module with strategy pattern
+module strategy {
+    action execute(data, strategy) {
+        if (strategy == "fast") {
+            return "Fast processing: " + data;
+        } else {
+            if (strategy == "secure") {
+                return "Secure processing: " + data;
+            } else {
+                return "Default processing: " + data;
+            }
+        }
+    }
+}
+
+print "Test 15: Module with strategy pattern";
+// Expected: Test 15: Module with strategy pattern
+
+// Test 16: Package with layered architecture
+package app.layers {
+    module presentation {
+        action render(data) {
+            return "Rendered: " + data;
+        }
+    }
+    
+    module business {
+        action process(input) {
+            return "Processed: " + input;
+        }
+    }
+    
+    module data {
+        action persist(entity) {
+            return "Saved: " + entity;
+        }
+    }
+}
+
+print "Test 16: Package with layered architecture";
+// Expected: Test 16: Package with layered architecture
+
+// Test 17: Module with template method pattern
+module template {
+    action algorithm(data) {
+        action step1() {
+            return "Step 1";
+        }
+        
+        action step2() {
+            return "Step 2";
+        }
+        
+        action step3() {
+            return "Step 3";
+        }
+        
+        let result1 = step1();
+        let result2 = step2();
+        let result3 = step3();
+        return "Complete";
+    }
+}
+
+print "Test 17: Module with template method";
+// Expected: Test 17: Module with template method
+
+// Test 18: Module with builder pattern
+module builder {
+    action createBuilder() {
+        let obj = {"name": null, "age": null, "email": null};
+        
+        return {
+            "withName": lambda(name) => {
+                obj = {"name": name, "age": obj["age"], "email": obj["email"]};
+                return obj;
+            },
+            "withAge": lambda(age) => {
+                obj = {"name": obj["name"], "age": age, "email": obj["email"]};
+                return obj;
+            },
+            "build": lambda() => obj
+        };
+    }
+}
+
+print "Test 18: Module with builder pattern";
+// Expected: Test 18: Module with builder pattern
+
+// Test 19: Module with adapter pattern
+module adapter {
+    action adaptLegacyData(oldData) {
+        return {
+            "modern_field": oldData["old_field"],
+            "updated_at": "2025-12-18"
+        };
+    }
+    
+    action adaptResponse(response) {
+        if (response["status"] == "ok") {
+            return {"success": true, "data": response["data"]};
+        } else {
+            return {"success": false, "error": response["error"]};
+        }
+    }
+}
+
+print "Test 19: Module with adapter pattern";
+// Expected: Test 19: Module with adapter pattern
+
+// Test 20: Comprehensive package with all patterns
+package comprehensive {
+    module core {
+        action initialize() {
+            return "Core initialized";
+        }
+    }
+    
+    module utils {
+        action helper1() {
+            return "Helper 1";
+        }
+        
+        action helper2() {
+            return "Helper 2";
+        }
+    }
+    
+    module advanced {
+        action complexOperation(data) {
+            if (data == null) {
+                return "null";
+            }
+            let result = data;
+            let i = 0;
+            while (i < 3) {
+                result = result;
+                i = i + 1;
+            }
+            return result;
+        }
+    }
+}
+
+print "Test 20: Comprehensive package structure";
+// Expected: Test 20: Comprehensive package structure

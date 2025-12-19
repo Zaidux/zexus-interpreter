@@ -1,0 +1,31 @@
+print("=== ASYNC/AWAIT Demo ===");
+print("");
+
+// Simple async action
+async action fetchUser(id) {
+    print("  Fetching user", id, "...");
+    return "User-" + id;
+}
+
+// Async action with computation
+async action calculateScore(base, bonus) {
+    let total = base + bonus;
+    return total * 10;
+}
+
+// Nested async calls
+async action processData() {
+    let user = await fetchUser(42);
+    print("  Got user:", user);
+    let score = await calculateScore(5, 3);
+    print("  Calculated score:", score);
+    return user + " has score " + score;
+}
+
+// Execute
+print("Starting async operations...");
+let result = await processData();
+print("");
+print("Final result:", result);
+print("");
+print("=== Demo Complete ===");

@@ -1,0 +1,156 @@
+# Register VM Advanced Tests (Medium)
+# Tests complex register allocation and nested arithmetic
+
+print "=== REGISTER VM ADVANCED TESTS ==="
+
+# Test 1: Nested arithmetic expressions
+print "\n[Test 1] Nested expressions"
+let a = 5
+let b = 3
+let c = 2
+let result = (a + b) * c
+print result
+# Expected: 16 (8 * 2)
+
+# Test 2: Complex multi-operation expression
+print "\n[Test 2] Complex expression"
+let x = 10
+let y = 5
+let z = 3
+let complex = (x - y) * (y + z)
+print complex
+# Expected: 40 (5 * 8)
+
+# Test 3: Deeply nested expressions
+print "\n[Test 3] Deep nesting"
+let n1 = 2
+let n2 = 3
+let n3 = 4
+let n4 = 5
+let nested = ((n1 + n2) * n3) - n4
+print nested
+# Expected: 15 ((5 * 4) - 5)
+
+# Test 4: Register pressure (many variables)
+print "\n[Test 4] Many variables"
+let v1 = 1
+let v2 = 2
+let v3 = 3
+let v4 = 4
+let v5 = 5
+let v6 = 6
+let v7 = 7
+let v8 = 8
+let v9 = 9
+let v10 = 10
+let total = v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10
+print total
+# Expected: 55
+
+# Test 5: Arithmetic in loops
+print "\n[Test 5] Loop arithmetic"
+let sum = 0
+let i = 1
+while (i <= 5) {
+    sum = sum + i
+    i = i + 1
+}
+print sum
+# Expected: 15 (1+2+3+4+5)
+
+# Test 6: Function with arithmetic
+print "\n[Test 6] Function arithmetic"
+function calculate(x, y) {
+    return (x * y) + (x - y)
+}
+let result6 = calculate(10, 5)
+print result6
+# Expected: 55 ((10*5) + (10-5))
+
+# Test 7: Recursive function (factorial)
+print "\n[Test 7] Recursive factorial"
+function factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+let fact5 = factorial(5)
+print fact5
+# Expected: 120
+
+# Test 8: Multiple return values via array
+print "\n[Test 8] Array arithmetic"
+let arr = [10, 20, 30]
+let arr_sum = arr[0] + arr[1] + arr[2]
+print arr_sum
+# Expected: 60
+
+# Test 9: Conditional arithmetic
+print "\n[Test 9] Conditional math"
+let score = 85
+let bonus = 0
+if (score >= 80) {
+    bonus = score * 0.1
+}
+print bonus
+# Expected: 8.5
+
+# Test 10: Division and modulo
+print "\n[Test 10] Division and modulo"
+let dividend = 17
+let divisor = 5
+let quot = dividend / divisor
+let rem = dividend % divisor
+print quot
+print rem
+# Expected: 3.4 (or 3), 2
+
+# Test 11: Power operation
+print "\n[Test 11] Power operation"
+let base = 2
+let exp = 8
+let power = base ** exp
+print power
+# Expected: 256
+
+# Test 12: Chained comparisons
+print "\n[Test 12] Chained comparisons"
+let min = 5
+let mid = 10
+let max = 15
+if (min < mid && mid < max) {
+    print "Ordered correctly"
+}
+# Expected: "Ordered correctly"
+
+# Test 13: Variable shadowing
+print "\n[Test 13] Variable shadowing"
+let outer = 100
+function test_shadow() {
+    let outer = 200
+    return outer
+}
+print outer
+print test_shadow()
+# Expected: 100, 200
+
+# Test 14: Arithmetic with negative numbers
+print "\n[Test 14] Negative numbers"
+let pos = 50
+let neg = -30
+let result14 = pos + neg
+print result14
+# Expected: 20
+
+# Test 15: Complex boolean expression
+print "\n[Test 15] Boolean arithmetic"
+let flag1 = true
+let flag2 = false
+let flag3 = true
+if (flag1 && (flag2 || flag3)) {
+    print "Logic works"
+}
+# Expected: "Logic works"
+
+print "\n=== ALL ADVANCED TESTS COMPLETE ==="

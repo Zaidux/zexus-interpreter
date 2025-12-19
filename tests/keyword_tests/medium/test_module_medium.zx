@@ -1,0 +1,282 @@
+// ============================================
+// MEDIUM TESTS: MODULE, PACKAGE, FROM Keywords
+// ============================================
+
+// Test 1: Module with private modifier
+module database {
+    private action connect() {
+        return "Connected";
+    }
+    
+    action query(sql) {
+        return "Query: " + sql;
+    }
+}
+
+print "Test 1: Module with private/public functions";
+// Expected: Test 1: Module with private/public functions
+
+// Test 2: Module with constants and functions
+module config {
+    const API_URL = "https://api.example.com";
+    const TIMEOUT = 5000;
+    
+    action getUrl() {
+        return API_URL;
+    }
+}
+
+print "Test 2: Module with constants and functions";
+// Expected: Test 2: Module with constants and functions
+
+// Test 3: Package declaration
+package myapp {
+    module auth {
+        action login(user) {
+            return "Logged in: " + user;
+        }
+    }
+}
+
+print "Test 3: Package with nested module";
+// Expected: Test 3: Package with nested module
+
+// Test 4: Module with complex logic
+module calculator {
+    action calculate(a, b, op) {
+        if (op == "add") {
+            return a + b;
+        } else {
+            if (op == "sub") {
+                return a - b;
+            } else {
+                return 0;
+            }
+        }
+    }
+}
+
+print "Test 4: Module with complex logic";
+// Expected: Test 4: Module with complex logic
+
+// Test 5: Module with array operations
+module arrayUtils {
+    action sum(arr) {
+        let total = 0;
+        for each item in arr {
+            total = total + item;
+        }
+        return total;
+    }
+}
+
+print "Test 5: Module with array operations";
+// Expected: Test 5: Module with array operations
+
+// Test 6: Module with map operations
+module mapUtils {
+    action keys(map) {
+        return ["name", "age"];
+    }
+    
+    action values(map) {
+        return [map["name"], map["age"]];
+    }
+}
+
+print "Test 6: Module with map operations";
+// Expected: Test 6: Module with map operations
+
+// Test 7: Package with dotted name
+package com.example.app {
+    let version = "2.0";
+}
+
+print "Test 7: Package with dotted name";
+// Expected: Test 7: Package with dotted name
+
+// Test 8: Module with nested functions
+module processor {
+    action process(data) {
+        action validate(item) {
+            return true;
+        }
+        return validate(data);
+    }
+}
+
+print "Test 8: Module with nested functions";
+// Expected: Test 8: Module with nested functions
+
+// Test 9: Module with closure
+module counter {
+    action makeCounter() {
+        let count = 0;
+        return action() {
+            count = count + 1;
+            return count;
+        };
+    }
+}
+
+print "Test 9: Module with closure";
+// Expected: Test 9: Module with closure
+
+// Test 10: Multiple modules
+module math {
+    action add(a, b) {
+        return a + b;
+    }
+}
+
+module string {
+    action concat(a, b) {
+        return a + b;
+    }
+}
+
+module array {
+    action length(arr) {
+        return 0;
+    }
+}
+
+print "Test 10: Multiple modules declared";
+// Expected: Test 10: Multiple modules declared
+
+// Test 11: Module with modifiers
+module secure {
+    internal action internalFunc() {
+        return "internal";
+    }
+    
+    public action publicFunc() {
+        return "public";
+    }
+}
+
+print "Test 11: Module with internal/public modifiers";
+// Expected: Test 11: Module with internal/public modifiers
+
+// Test 12: Module with lambda
+module functional {
+    let double = lambda(x) => x * 2;
+    let triple = lambda(x) => x * 3;
+}
+
+print "Test 12: Module with lambda expressions";
+// Expected: Test 12: Module with lambda expressions
+
+// Test 13: Module with try-catch
+module errorHandler {
+    action safeExecute(func) {
+        try {
+            return func();
+        } catch (e) {
+            return "Error handled";
+        }
+    }
+}
+
+print "Test 13: Module with try-catch";
+// Expected: Test 13: Module with try-catch
+
+// Test 14: Package with multiple modules
+package framework {
+    module http {
+        action get(url) {
+            return "GET " + url;
+        }
+    }
+    
+    module database {
+        action connect(host) {
+            return "Connected to " + host;
+        }
+    }
+}
+
+print "Test 14: Package with multiple modules";
+// Expected: Test 14: Package with multiple modules
+
+// Test 15: Module with while loop
+module looper {
+    action countTo(n) {
+        let i = 0;
+        while (i < n) {
+            i = i + 1;
+        }
+        return i;
+    }
+}
+
+print "Test 15: Module with while loop";
+// Expected: Test 15: Module with while loop
+
+// Test 16: Module with for-each
+module iterator {
+    action process(items) {
+        let count = 0;
+        for each item in items {
+            count = count + 1;
+        }
+        return count;
+    }
+}
+
+print "Test 16: Module with for-each loop";
+// Expected: Test 16: Module with for-each loop
+
+// Test 17: Module with nested if-else
+module decider {
+    action decide(value) {
+        if (value > 10) {
+            if (value > 20) {
+                return "large";
+            } else {
+                return "medium";
+            }
+        } else {
+            return "small";
+        }
+    }
+}
+
+print "Test 17: Module with nested conditionals";
+// Expected: Test 17: Module with nested conditionals
+
+// Test 18: Module with let and const mix
+module constants {
+    const PI = 3.14159;
+    let radius = 10;
+    
+    action area() {
+        return PI * radius * radius;
+    }
+}
+
+print "Test 18: Module with let and const";
+// Expected: Test 18: Module with let and const
+
+// Test 19: Empty package
+package empty {
+}
+
+print "Test 19: Empty package declared";
+// Expected: Test 19: Empty package declared
+
+// Test 20: Module with multiple return paths
+module branching {
+    action classify(n) {
+        if (n < 0) {
+            return "negative";
+        }
+        if (n == 0) {
+            return "zero";
+        }
+        return "positive";
+    }
+}
+
+print "Test 20: Module with multiple returns";
+// Expected: Test 20: Module with multiple returns

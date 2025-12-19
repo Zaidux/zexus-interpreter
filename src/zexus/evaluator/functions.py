@@ -481,6 +481,28 @@ class FunctionEvaluatorMixin:
             return File.list_directory(a[0])
         
         # Debug
+        def _debug(*a):
+            """Simple debug function that works like print"""
+            if len(a) == 0:
+                return EvaluationError("debug() requires at least 1 argument")
+            msg = a[0]
+            # Convert to string representation
+            if isinstance(msg, String):
+                output = msg.value
+            elif isinstance(msg, (Integer, Float)):
+                output = str(msg.value)
+            elif isinstance(msg, BooleanObj):
+                output = "true" if msg.value else "false"
+            elif msg == NULL:
+                output = "null"
+            elif isinstance(msg, (List, Map)):
+                output = msg.inspect()
+            else:
+                output = str(msg)
+            # Output with DEBUG prefix
+            print(f"[DEBUG] {output}", flush=True)
+            return msg  # Return the original value for use in expressions
+        
         def _debug_log(*a):
             if len(a) == 0: 
                 return EvaluationError("debug_log() requires at least a message")
@@ -585,6 +607,7 @@ class FunctionEvaluatorMixin:
             "file_write_json": Builtin(_write_json, "file_write_json"),
             "file_append": Builtin(_append, "file_append"),
             "file_list_dir": Builtin(_list_dir, "file_list_dir"),
+            "debug": Builtin(_debug, "debug"),
             "debug_log": Builtin(_debug_log, "debug_log"),
             "debug_trace": Builtin(_debug_trace, "debug_trace"),
             "string": Builtin(_string, "string"),
@@ -602,6 +625,9 @@ class FunctionEvaluatorMixin:
         
         # Register blockchain builtins
         self._register_blockchain_builtins()
+        
+        # Register verification helper builtins
+        self._register_verification_builtins()
     
     def _register_concurrency_builtins(self):
         """Register concurrency operations as builtin functions"""
@@ -1233,4 +1259,235 @@ class FunctionEvaluatorMixin:
             "create_canvas": Builtin(builtin_create_canvas, "create_canvas"),
             "draw_line": Builtin(builtin_draw_line, "draw_line"),
             "draw_text": Builtin(builtin_draw_text, "draw_text"),
+        })
+    
+    def _register_verification_builtins(self):
+        """Register verification helper functions for VERIFY keyword"""
+        import re
+        import os
+        
+        def _is_email(*a):
+            """Check if string is valid email format"""
+            if len(a) != 1:
+                return EvaluationError("is_email() takes 1 argument")
+            
+            val = a[0]
+            email_str = val.value if isinstance(val, String) else str(val)
+            
+            # Simple email validation pattern
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            is_valid = bool(re.match(pattern, email_str))
+            return TRUE if is_valid else FALSE
+        
+        def _is_url(*a):
+            """Check if string is valid URL format"""
+            if len(a) != 1:
+                return EvaluationError("is_url() takes 1 argument")
+            
+            val = a[0]
+            url_str = val.value if isinstance(val, String) else str(val)
+            
+            # Simple URL validation pattern
+            pattern = r'^https?://[^\s/$.?#].[^\s]*$'
+            is_valid = bool(re.match(pattern, url_str))
+            return TRUE if is_valid else FALSE
+        
+        def _is_phone(*a):
+            """Check if string is valid phone number format"""
+            if len(a) != 1:
+                return EvaluationError("is_phone() takes 1 argument")
+            
+            val = a[0]
+            phone_str = val.value if isinstance(val, String) else str(val)
+            
+            # Remove common separators
+            clean = re.sub(r'[\s\-\(\)\.]', '', phone_str)
+            
+            # Check if it's digits and reasonable length
+            is_valid = clean.isdigit() and 10 <= len(clean) <= 15
+            return TRUE if is_valid else FALSE
+        
+        def _is_numeric(*a):
+            """Check if string contains only numbers"""
+            if len(a) != 1:
+                return EvaluationError("is_numeric() takes 1 argument")
+            
+            val = a[0]
+            if isinstance(val, (Integer, Float)):
+                return TRUE
+            
+            str_val = val.value if isinstance(val, String) else str(val)
+            
+            try:
+                float(str_val)
+                return TRUE
+            except ValueError:
+                return FALSE
+        
+        def _is_alpha(*a):
+            """Check if string contains only alphabetic characters"""
+            if len(a) != 1:
+                return EvaluationError("is_alpha() takes 1 argument")
+            
+            val = a[0]
+            str_val = val.value if isinstance(val, String) else str(val)
+            
+            is_valid = str_val.isalpha()
+            return TRUE if is_valid else FALSE
+        
+        def _is_alphanumeric(*a):
+            """Check if string contains only alphanumeric characters"""
+            if len(a) != 1:
+                return EvaluationError("is_alphanumeric() takes 1 argument")
+            
+            val = a[0]
+            str_val = val.value if isinstance(val, String) else str(val)
+            
+            is_valid = str_val.isalnum()
+            return TRUE if is_valid else FALSE
+        
+        def _matches_pattern(*a):
+            """Check if string matches regex pattern: matches_pattern(value, pattern)"""
+            if len(a) != 2:
+                return EvaluationError("matches_pattern() takes 2 arguments: value, pattern")
+            
+            val = a[0]
+            pattern_obj = a[1]
+            
+            str_val = val.value if isinstance(val, String) else str(val)
+            pattern = pattern_obj.value if isinstance(pattern_obj, String) else str(pattern_obj)
+            
+            try:
+                is_valid = bool(re.match(pattern, str_val))
+                return TRUE if is_valid else FALSE
+            except Exception as e:
+                return EvaluationError(f"Pattern matching error: {str(e)}")
+        
+        def _env_get(*a):
+            """Get environment variable: env_get("VAR_NAME") or env_get("VAR_NAME", "default")"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("env_get() takes 1 or 2 arguments: var_name, [default]")
+            
+            var_name_obj = a[0]
+            var_name = var_name_obj.value if isinstance(var_name_obj, String) else str(var_name_obj)
+            
+            default = a[1] if len(a) == 2 else None
+            
+            value = os.environ.get(var_name)
+            
+            if value is None:
+                return default if default is not None else NULL
+            
+            return String(value)
+        
+        def _env_set(*a):
+            """Set environment variable: env_set("VAR_NAME", "value")"""
+            if len(a) != 2:
+                return EvaluationError("env_set() takes 2 arguments: var_name, value")
+            
+            var_name_obj = a[0]
+            value_obj = a[1]
+            
+            var_name = var_name_obj.value if isinstance(var_name_obj, String) else str(var_name_obj)
+            value = value_obj.value if isinstance(value_obj, String) else str(value_obj)
+            
+            os.environ[var_name] = value
+            return TRUE
+        
+        def _env_exists(*a):
+            """Check if environment variable exists: env_exists("VAR_NAME")"""
+            if len(a) != 1:
+                return EvaluationError("env_exists() takes 1 argument: var_name")
+            
+            var_name_obj = a[0]
+            var_name = var_name_obj.value if isinstance(var_name_obj, String) else str(var_name_obj)
+            
+            exists = var_name in os.environ
+            return TRUE if exists else FALSE
+        
+        def _password_strength(*a):
+            """Check password strength: password_strength(password) -> "weak"/"medium"/"strong" """
+            if len(a) != 1:
+                return EvaluationError("password_strength() takes 1 argument")
+            
+            val = a[0]
+            password = val.value if isinstance(val, String) else str(val)
+            
+            score = 0
+            length = len(password)
+            
+            # Length check
+            if length >= 8:
+                score += 1
+            if length >= 12:
+                score += 1
+            
+            # Complexity checks
+            if re.search(r'[a-z]', password):
+                score += 1
+            if re.search(r'[A-Z]', password):
+                score += 1
+            if re.search(r'[0-9]', password):
+                score += 1
+            if re.search(r'[^a-zA-Z0-9]', password):
+                score += 1
+            
+            if score <= 2:
+                return String("weak")
+            elif score <= 4:
+                return String("medium")
+            else:
+                return String("strong")
+        
+        def _sanitize_input(*a):
+            """Sanitize user input by removing dangerous characters"""
+            if len(a) != 1:
+                return EvaluationError("sanitize_input() takes 1 argument")
+            
+            val = a[0]
+            input_str = val.value if isinstance(val, String) else str(val)
+            
+            # Remove potentially dangerous characters
+            # Remove HTML tags
+            sanitized = re.sub(r'<[^>]+>', '', input_str)
+            # Remove script tags
+            sanitized = re.sub(r'<script[^>]*>.*?</script>', '', sanitized, flags=re.IGNORECASE)
+            # Remove SQL injection patterns
+            sanitized = re.sub(r'(;|--|\'|\"|\bOR\b|\bAND\b)', '', sanitized, flags=re.IGNORECASE)
+            
+            return String(sanitized)
+        
+        def _validate_length(*a):
+            """Validate string length: validate_length(value, min, max)"""
+            if len(a) != 3:
+                return EvaluationError("validate_length() takes 3 arguments: value, min, max")
+            
+            val = a[0]
+            min_len_obj = a[1]
+            max_len_obj = a[2]
+            
+            str_val = val.value if isinstance(val, String) else str(val)
+            min_len = min_len_obj.value if isinstance(min_len_obj, Integer) else int(min_len_obj)
+            max_len = max_len_obj.value if isinstance(max_len_obj, Integer) else int(max_len_obj)
+            
+            length = len(str_val)
+            is_valid = min_len <= length <= max_len
+            
+            return TRUE if is_valid else FALSE
+        
+        # Register verification builtins
+        self.builtins.update({
+            "is_email": Builtin(_is_email, "is_email"),
+            "is_url": Builtin(_is_url, "is_url"),
+            "is_phone": Builtin(_is_phone, "is_phone"),
+            "is_numeric": Builtin(_is_numeric, "is_numeric"),
+            "is_alpha": Builtin(_is_alpha, "is_alpha"),
+            "is_alphanumeric": Builtin(_is_alphanumeric, "is_alphanumeric"),
+            "matches_pattern": Builtin(_matches_pattern, "matches_pattern"),
+            "env_get": Builtin(_env_get, "env_get"),
+            "env_set": Builtin(_env_set, "env_set"),
+            "env_exists": Builtin(_env_exists, "env_exists"),
+            "password_strength": Builtin(_password_strength, "password_strength"),
+            "sanitize_input": Builtin(_sanitize_input, "sanitize_input"),
+            "validate_length": Builtin(_validate_length, "validate_length"),
         })

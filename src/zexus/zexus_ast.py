@@ -500,9 +500,9 @@ class EntityStatement(Statement):
 
 
 class VerifyStatement(Statement):
-    """Verify security checks - supports two forms:
+    """Verify security checks - supports multiple forms:
     
-    Simple assertion (like require):
+    Simple assertion:
         verify condition, "error message"
     
     Complex verification wrapper:
@@ -511,8 +511,40 @@ class VerifyStatement(Statement):
             check_balance(amount),
             check_whitelist(recipient)
         ])
+    
+    Data/format verification:
+        verify:data input matches email_pattern, "Invalid email"
+        verify:data input is_type "string", "Must be string"
+    
+    Access control (blocks on failure):
+        verify:access user.role == "admin" {
+            log_unauthorized_access(user);
+            block_request();
+        }
+    
+    Database verification:
+        verify:db user_id exists_in "users", "User not found"
+        verify:db email unique_in "users", "Email already exists"
+    
+    Environment variable verification:
+        verify:env "API_KEY" is_set, "API_KEY not configured"
+        verify:env "DEBUG_MODE" equals "false", "Debug mode must be disabled"
+    
+    Custom logic block:
+        verify condition {
+            // Custom actions on failure
+            log_error("Verification failed");
+            send_alert(admin);
+            return false;
+        }
+    
+    Pattern matching:
+        verify:pattern email matches "/^[a-z]+@[a-z]+\.[a-z]+$/", "Invalid format"
     """
-    def __init__(self, condition=None, message=None, target=None, conditions=None, error_handler=None):
+    def __init__(self, condition=None, message=None, target=None, conditions=None, 
+                 error_handler=None, mode=None, pattern=None, db_table=None, 
+                 db_query=None, env_var=None, expected_value=None, 
+                 logic_block=None, action_block=None, verify_type=None):
         # Simple assertion form
         self.condition = condition          # Boolean condition to check
         self.message = message              # Error message if condition fails
@@ -521,9 +553,22 @@ class VerifyStatement(Statement):
         self.target = target                # Function/action to verify
         self.conditions = conditions        # List of verification conditions
         self.error_handler = error_handler  # Optional error handling action
+        
+        # Extended forms
+        self.mode = mode                    # Verification mode: 'data', 'access', 'db', 'env', 'pattern'
+        self.pattern = pattern              # Pattern for pattern matching
+        self.db_table = db_table            # Database table name
+        self.db_query = db_query            # Database query/condition
+        self.env_var = env_var              # Environment variable name
+        self.expected_value = expected_value # Expected value for comparisons
+        self.logic_block = logic_block      # Custom logic block (BlockStatement)
+        self.action_block = action_block    # Action block on failure
+        self.verify_type = verify_type      # Type check: 'email', 'number', 'string', etc.
 
     def __repr__(self):
-        return f"VerifyStatement(target={self.target}, conditions={len(self.conditions)})"
+        if self.mode:
+            return f"VerifyStatement(mode={self.mode}, condition={self.condition})"
+        return f"VerifyStatement(target={self.target}, conditions={len(self.conditions) if self.conditions else 0})"
 
 
 class ProtectStatement(Statement):
@@ -1245,17 +1290,68 @@ class RevertStatement(Statement):
 
 
 class RequireStatement(Statement):
-    """Require statement - Conditional revert
+    """Require statement - Prerequisites, dependencies, and resource requirements
     
-    require(balance >= amount);
-    require(TX.caller == owner, "Only owner");
-    require(balance >= amount, "Insufficient funds");
+    Basic requirement:
+        require(balance >= amount);
+        require(TX.caller == owner, "Only owner");
+        require(balance >= amount, "Insufficient funds");
+    
+    With conditional tolerance logic:
+        require balance >= 0.1 {
+            // Tolerance logic - allow exceptions
+            if (user.isVIP) {
+                print "VIP user - waiving requirement";
+            } else {
+                return false;
+            }
+        }
+    
+    File/module dependencies:
+        require "math_plus.zx" imported, "Math module required";
+        require module "database" available, "Database unavailable";
+    
+    Resource requirements:
+        require:balance amount >= minimum, "Insufficient funds";
+        require:gas available >= needed, "Insufficient gas";
+    
+    Multiple conditions with fallback:
+        require amount >= 100 || (user.subscribed && amount >= 10), "Minimum not met";
+    
+    Prerequisite checking:
+        require:prereq user.authenticated, "Login required";
+        require:prereq file.exists("config.json"), "Config file missing";
     """
-    def __init__(self, condition, message=None):
-        self.condition = condition  # Expression: condition that must be true
-        self.message = message  # Optional Expression: error message if false
+    def __init__(self, condition, message=None, tolerance_block=None, requirement_type=None,
+                 resource_name=None, minimum_value=None, file_path=None, module_name=None,
+                 fallback_condition=None, prereq_list=None):
+        # Basic form
+        self.condition = condition          # Expression: condition that must be true
+        self.message = message              # Optional Expression: error message if false
+        
+        # Conditional tolerance
+        self.tolerance_block = tolerance_block  # BlockStatement: tolerance/fallback logic
+        
+        # Requirement types
+        self.requirement_type = requirement_type  # 'balance', 'gas', 'prereq', 'file', 'module'
+        
+        # Resource requirements
+        self.resource_name = resource_name  # Resource identifier (balance, gas, etc.)
+        self.minimum_value = minimum_value  # Minimum required value
+        
+        # File/module dependencies
+        self.file_path = file_path          # Required file path
+        self.module_name = module_name      # Required module name
+        
+        # Fallback/alternative conditions
+        self.fallback_condition = fallback_condition  # Alternative condition if primary fails
+        
+        # Prerequisites list
+        self.prereq_list = prereq_list or []  # List of prerequisites
 
     def __repr__(self):
+        if self.requirement_type:
+            return f"RequireStatement(type={self.requirement_type}, condition={self.condition})"
         return f"RequireStatement(condition={self.condition}, msg={self.message})"
 
 

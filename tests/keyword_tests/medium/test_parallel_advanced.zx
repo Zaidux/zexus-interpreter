@@ -1,0 +1,322 @@
+# Zexus Parallel VM - Advanced Tests
+#
+# Tests advanced parallel VM features including chunking strategies,
+# dependency detection, and load balancing.
+
+action test_large_independent_computations() {
+    # Test: Many independent computations (good for parallelization)
+    print("Testing large independent computations...")
+    
+    # Create 50 independent variables
+    let vars = []
+    for i in range(50) {
+        let value = i * 10 + i * i
+        vars.append(value)
+    }
+    
+    # Verify first few
+    assert vars[0] == 0, "vars[0] incorrect"      # 0*10 + 0*0 = 0
+    assert vars[1] == 11, "vars[1] incorrect"     # 1*10 + 1*1 = 11
+    assert vars[2] == 24, "vars[2] incorrect"     # 2*10 + 2*2 = 24
+    
+    print("✓ Large independent computations passed")
+    return true
+}
+
+action test_nested_loops() {
+    # Test: Nested loops with dependencies
+    print("Testing nested loops...")
+    
+    let matrix = []
+    for i in range(10) {
+        let row = []
+        for j in range(10) {
+            row.append(i * j)
+        }
+        matrix.append(row)
+    }
+    
+    # Verify some values
+    assert matrix[0][0] == 0, "matrix[0][0] incorrect"
+    assert matrix[5][5] == 25, "matrix[5][5] incorrect"
+    assert matrix[9][9] == 81, "matrix[9][9] incorrect"
+    
+    print("✓ Nested loops passed")
+    return true
+}
+
+action test_fibonacci_sequence() {
+    # Test: Fibonacci with dependencies
+    print("Testing Fibonacci sequence...")
+    
+    let fib = [0, 1]
+    for i in range(2, 15) {
+        let next = fib[i-1] + fib[i-2]
+        fib.append(next)
+    }
+    
+    # Verify known Fibonacci numbers
+    assert fib[5] == 5, "fib[5] incorrect"
+    assert fib[10] == 55, "fib[10] incorrect"
+    assert fib[14] == 377, "fib[14] incorrect"
+    
+    print("✓ Fibonacci sequence passed")
+    return true
+}
+
+action test_accumulator_pattern() {
+    # Test: Accumulator pattern with sequential dependencies
+    print("Testing accumulator pattern...")
+    
+    let accumulator = 0
+    let values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    
+    for value in values {
+        accumulator = accumulator + value
+    }
+    
+    assert accumulator == 55, "Accumulator sum incorrect"
+    
+    # Test with multiplier
+    let product = 1
+    for value in [2, 3, 4, 5] {
+        product = product * value
+    }
+    
+    assert product == 120, "Product accumulator incorrect"
+    
+    print("✓ Accumulator pattern passed")
+    return true
+}
+
+action test_chunking_boundaries() {
+    # Test: Operations at chunking boundaries
+    print("Testing chunking boundaries...")
+    
+    # Create operations that span multiple chunks (chunk_size typically 50)
+    let results = []
+    
+    # 100 operations to ensure multiple chunks
+    for i in range(100) {
+        let calc = i + (i * 2) + (i * 3)  # i + 2i + 3i = 6i
+        results.append(calc)
+    }
+    
+    # Verify values across chunk boundaries
+    assert results[0] == 0, "results[0] incorrect"
+    assert results[25] == 150, "results[25] incorrect"  # 6 * 25
+    assert results[50] == 300, "results[50] incorrect"  # 6 * 50
+    assert results[75] == 450, "results[75] incorrect"  # 6 * 75
+    assert results[99] == 594, "results[99] incorrect"  # 6 * 99
+    
+    print("✓ Chunking boundaries handled correctly")
+    return true
+}
+
+action test_variable_scope_across_chunks() {
+    # Test: Variable scope and visibility across chunks
+    print("Testing variable scope...")
+    
+    # Define variables in first chunk
+    let global_a = 100
+    let global_b = 200
+    let global_c = 300
+    
+    # Many operations to create new chunks
+    let temp = []
+    for i in range(60) {
+        temp.append(i)
+    }
+    
+    # Use variables from first chunk in later chunk
+    let sum = global_a + global_b + global_c
+    assert sum == 600, "Cross-chunk variable access failed"
+    
+    print("✓ Variable scope across chunks passed")
+    return true
+}
+
+action test_conditional_branches() {
+    # Test: Conditional branches (typically sequential)
+    print("Testing conditional branches...")
+    
+    let results = []
+    for i in range(20) {
+        if i % 2 == 0 {
+            results.append(i * 2)
+        } else {
+            results.append(i * 3)
+        }
+    }
+    
+    assert results[0] == 0, "results[0] incorrect"     # even: 0*2
+    assert results[1] == 3, "results[1] incorrect"     # odd: 1*3
+    assert results[10] == 20, "results[10] incorrect"  # even: 10*2
+    assert results[11] == 33, "results[11] incorrect"  # odd: 11*3
+    
+    print("✓ Conditional branches passed")
+    return true
+}
+
+action test_function_calls_in_loop() {
+    # Test: Function calls within loops
+    print("Testing function calls...")
+    
+    action square(n) {
+        return n * n
+    }
+    
+    action cube(n) {
+        return n * n * n
+    }
+    
+    let squares = []
+    let cubes = []
+    
+    for i in range(10) {
+        squares.append(square(i))
+        cubes.append(cube(i))
+    }
+    
+    assert squares[5] == 25, "square(5) incorrect"
+    assert cubes[3] == 27, "cube(3) incorrect"
+    
+    print("✓ Function calls in loops passed")
+    return true
+}
+
+action test_complex_expressions() {
+    # Test: Complex nested expressions
+    print("Testing complex expressions...")
+    
+    let a = 10
+    let b = 20
+    let c = 30
+    
+    let result1 = (a + b) * c - (a * b) / (c - a)
+    let result2 = ((a * 2) + (b * 3)) * ((c / 10) + 5)
+    let result3 = (a * b * c) / ((a + b) * 2)
+    
+    # Just verify they execute without errors
+    assert result1 > 0, "result1 calculation failed"
+    assert result2 > 0, "result2 calculation failed"
+    assert result3 > 0, "result3 calculation failed"
+    
+    print("✓ Complex expressions passed")
+    return true
+}
+
+action test_read_after_write_dependencies() {
+    # Test: RAW (Read-After-Write) dependencies
+    print("Testing RAW dependencies...")
+    
+    let x = 10
+    let y = x + 5   # RAW: reads x after it's written
+    let z = y * 2   # RAW: reads y after it's written
+    let w = z - x   # RAW: reads z after it's written
+    
+    assert x == 10, "x incorrect"
+    assert y == 15, "y incorrect"
+    assert z == 30, "z incorrect"
+    assert w == 20, "w incorrect"
+    
+    print("✓ RAW dependencies handled correctly")
+    return true
+}
+
+action test_write_after_read_dependencies() {
+    # Test: WAR (Write-After-Read) dependencies
+    print("Testing WAR dependencies...")
+    
+    let value = 100
+    let old_value = value      # Read value
+    value = 200                # Write value after reading
+    let diff = value - old_value
+    
+    assert old_value == 100, "old_value incorrect"
+    assert value == 200, "value incorrect"
+    assert diff == 100, "diff incorrect"
+    
+    print("✓ WAR dependencies handled correctly")
+    return true
+}
+
+action test_write_after_write_dependencies() {
+    # Test: WAW (Write-After-Write) dependencies
+    print("Testing WAW dependencies...")
+    
+    let counter = 0
+    counter = 10      # First write
+    counter = 20      # Second write
+    counter = 30      # Third write
+    
+    assert counter == 30, "Final counter value incorrect"
+    
+    print("✓ WAW dependencies handled correctly")
+    return true
+}
+
+action test_parallel_array_operations() {
+    # Test: Array operations that could be parallelized
+    print("Testing parallel array operations...")
+    
+    let array = []
+    for i in range(50) {
+        array.append(i * 2)
+    }
+    
+    # Independent array element operations
+    let transformed = []
+    for element in array {
+        transformed.append(element + 100)
+    }
+    
+    assert transformed[0] == 100, "transformed[0] incorrect"
+    assert transformed[25] == 150, "transformed[25] incorrect"
+    assert transformed[49] == 198, "transformed[49] incorrect"
+    
+    print("✓ Parallel array operations passed")
+    return true
+}
+
+action test_mixed_arithmetic() {
+    # Test: Mixed arithmetic operations
+    print("Testing mixed arithmetic...")
+    
+    let int_ops = 10 + 20 - 5 * 2 / 2
+    let float_like = 100 / 4 + 25 * 2
+    let power_ops = 2 ** 8 + 3 ** 3
+    
+    # Just verify execution
+    assert int_ops > 0, "int_ops failed"
+    assert float_like > 0, "float_like failed"
+    assert power_ops > 0, "power_ops failed"
+    
+    print("✓ Mixed arithmetic passed")
+    return true
+}
+
+action test_all() {
+    print("=== Parallel VM Advanced Tests ===\n")
+    
+    test_large_independent_computations()
+    test_nested_loops()
+    test_fibonacci_sequence()
+    test_accumulator_pattern()
+    test_chunking_boundaries()
+    test_variable_scope_across_chunks()
+    test_conditional_branches()
+    test_function_calls_in_loop()
+    test_complex_expressions()
+    test_read_after_write_dependencies()
+    test_write_after_read_dependencies()
+    test_write_after_write_dependencies()
+    test_parallel_array_operations()
+    test_mixed_arithmetic()
+    
+    print("\n=== All advanced tests passed! ===")
+    return true
+}
+
+# Run all tests
+test_all()

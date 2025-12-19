@@ -5,10 +5,15 @@ The `const` keyword in Zexus is used to declare **immutable (constant) variables
 
 ## Syntax
 
+Zexus supports **three syntax variations** for constant declaration:
+
 ```zexus
-const variable_name = value;
-const variable_name : value;    // Alternative syntax (colon instead of equals)
+const variable_name = value;              // Standard assignment
+const variable_name : value;              // Colon syntax (alternative)
+const variable_name : Type = value;       // Type annotation with assignment
 ```
+
+**All three syntaxes are fully supported as of December 18, 2025!**
 
 **Note**: The semicolon at the end is optional in Zexus.
 
@@ -123,11 +128,15 @@ let mutableVar = 10;
 mutableVar = 20;    // ✅ Allowed
 ```
 
-## Scope Rules
+## Scope Rules ⚠️ IMPORTANT
 
-Constants follow lexical (block) scoping, just like `let`:
+**Zexus uses FUNCTION-LEVEL SCOPING, not block-level scoping!**
 
-### Function Scope
+Constants follow the same scoping rules as `let` variables:
+
+### Function Scope ✅
+Functions create new scopes:
+
 ```zexus
 action example() {
     const localConst = "I'm local";
@@ -138,39 +147,88 @@ example();
 print localConst;    // ❌ Error: localConst is not defined
 ```
 
-### Block Scope
-```zexus
-if (true) {
-    const blockConst = "I'm in a block";
-    print blockConst;    // ✅ Works
-}
-
-print blockConst;    // ❌ Error: blockConst is not defined
-```
-
-### Loop Scope
-```zexus
-for each i in [1, 2, 3] {
-    const loopConst = i * 2;
-    print loopConst;    // New const for each iteration
-}
-
-print loopConst;    // ❌ Error: loopConst is not defined
-```
-
-## Shadowing Behavior
-
-**Important**: In Zexus, const variables **cannot be shadowed** by another const in nested scopes with the same name:
+### Block Scope ❌
+**Blocks do NOT create new scopes - attempting to declare const with same name causes error:**
 
 ```zexus
 const x = 10;
 
 if (true) {
-    const x = 20;    // ❌ Error: Cannot reassign const variable 'x'
+    const x = 20;  // ❌ Error: "Cannot reassign const variable 'x'"
 }
 ```
 
-**Workaround**: Use different variable names in nested scopes:
+**This is because blocks share the same scope, so redeclaring const x is seen as reassignment!**
+
+**Workaround - Use different names:**
+
+```zexus
+const outerValue = 10;
+
+if (true) {
+    const innerValue = 20;  // ✅ Works - different name
+    print innerValue;
+}
+```
+
+**Or use a function:**
+
+```zexus
+const x = 10;
+
+action test() {
+    const x = 20;  // ✅ Works - function creates new scope
+    print x;       // 20
+}
+
+test();
+print x;  // 10 (unchanged)
+```
+
+### Loop Scope ❌
+**Loops do NOT create new scopes:**
+
+```zexus
+for each i in [1, 2, 3] {
+    const loopConst = i * 2;  // ❌ Error on second iteration!
+    // Trying to redeclare loopConst in same scope
+}
+```
+
+## Shadowing Behavior ⚠️ BY DESIGN
+
+**Const variables cannot be shadowed in blocks/loops because Zexus uses function-level scoping!**
+
+### Why This Happens
+
+Blocks and IF/WHILE/FOR statements **do NOT create new scopes** in Zexus. They all share the same environment as their parent scope. Therefore:
+
+```zexus
+const x = 10;
+
+if (true) {
+    const x = 20;    // ❌ Error: "Cannot reassign const variable 'x'"
+    // This is seen as trying to redeclare x in the SAME scope!
+}
+```
+
+### Shadowing ONLY Works in Functions
+
+```zexus
+const x = 10;
+
+action test() {
+    const x = 20;  // ✅ Works - function creates new scope
+    print x;       // 20
+}
+
+test();
+print x;  // 10 (unchanged)
+```
+
+### Workarounds
+
+**Option 1: Use different variable names:**
 
 ```zexus
 const outerValue = 10;
@@ -179,6 +237,21 @@ if (true) {
     const innerValue = 20;    // ✅ Works
 }
 ```
+
+**Option 2: Wrap in a function:**
+
+```zexus
+const x = 10;
+
+action process() {
+    const x = 20;  // ✅ Creates new scope
+    // Do work with local x
+}
+
+process();
+```
+
+**This behavior is consistent across LET and CONST - it's a core Zexus design decision.**
 
 ## Common Patterns
 
@@ -478,4 +551,11 @@ The `const` keyword is essential for writing safe, maintainable Zexus code. It d
 **Related Keywords**: LET, IMMUTABLE, ASSIGN, IDENT  
 **Category**: Variable Declaration  
 **Status**: ✅ Fully Implemented  
-**Last Updated**: December 16, 2025
+**Last Updated**: December 18, 2025
+
+### Recent Updates (Dec 18, 2025)
+- ✅ Added colon syntax support: `const x : 42;`
+- ✅ Documented function-level scoping behavior
+- ✅ Clarified why block-level shadowing doesn't work
+- ✅ Added workarounds and best practices
+- ✅ Updated all syntax variations with type annotations

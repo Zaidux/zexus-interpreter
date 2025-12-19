@@ -1,0 +1,188 @@
+# Zexus Parallel VM - Basic Tests
+#
+# Tests basic parallel VM functionality and automatic chunking.
+# These tests verify that the parallel VM can handle simple operations.
+
+action test_parallel_initialization() {
+    # Test: Create and initialize parallel VM components
+    
+    # The parallel VM should automatically chunk large bytecode
+    # For demonstration, we'll create large operations
+    let result = 0
+    
+    # Simple sequential operations (too small for parallelization)
+    for i in range(10) {
+        result = result + i
+    }
+    
+    # Verify result
+    assert result == 45, "Sequential sum failed"
+    print("✓ Sequential operations work correctly")
+    
+    return true
+}
+
+action test_independent_operations() {
+    # Test: Independent operations that can be parallelized
+    
+    # Create multiple independent variables
+    let a = 10 + 20
+    let b = 30 + 40
+    let c = 50 + 60
+    let d = 70 + 80
+    let e = 90 + 100
+    
+    # These operations are independent and could be parallelized
+    assert a == 30, "Operation a failed"
+    assert b == 70, "Operation b failed"
+    assert c == 110, "Operation c failed"
+    assert d == 150, "Operation d failed"
+    assert e == 190, "Operation e failed"
+    
+    print("✓ Independent operations executed correctly")
+    return true
+}
+
+action test_simple_data_dependency() {
+    # Test: Simple data dependencies
+    
+    # These operations have dependencies and must execute in order
+    let x = 5
+    let y = x + 10  # Depends on x
+    let z = y * 2   # Depends on y
+    
+    assert x == 5, "x value incorrect"
+    assert y == 15, "y value incorrect"
+    assert z == 30, "z value incorrect"
+    
+    print("✓ Data dependencies handled correctly")
+    return true
+}
+
+action test_mixed_operations() {
+    # Test: Mix of independent and dependent operations
+    
+    # Independent
+    let a = 100
+    let b = 200
+    
+    # Dependent
+    let c = a + b  # Depends on a and b
+    let d = c * 2  # Depends on c
+    
+    # Independent again
+    let e = 500
+    let f = 600
+    
+    assert c == 300, "c value incorrect"
+    assert d == 600, "d value incorrect"
+    assert e == 500, "e value incorrect"
+    assert f == 600, "f value incorrect"
+    
+    print("✓ Mixed operations executed correctly")
+    return true
+}
+
+action test_loop_operations() {
+    # Test: Loop operations (typically not parallelizable)
+    
+    let sum = 0
+    let product = 1
+    
+    # Sequential loop
+    for i in range(1, 6) {
+        sum = sum + i
+        product = product * i
+    }
+    
+    assert sum == 15, "Sum calculation failed"  # 1+2+3+4+5
+    assert product == 120, "Product calculation failed"  # 1*2*3*4*5
+    
+    print("✓ Loop operations handled correctly")
+    return true
+}
+
+action test_arithmetic_chains() {
+    # Test: Long arithmetic chains
+    
+    let result = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10
+    assert result == 55, "Arithmetic chain failed"
+    
+    let calc = (10 + 20) * (30 + 40)
+    assert calc == 2100, "Nested arithmetic failed"
+    
+    print("✓ Arithmetic chains executed correctly")
+    return true
+}
+
+action test_variable_updates() {
+    # Test: Variable updates and dependencies
+    
+    let value = 10
+    value = value + 5   # Update in place
+    value = value * 2   # Another update
+    value = value - 10  # Final update
+    
+    assert value == 20, "Variable updates failed"  # ((10+5)*2)-10 = 20
+    
+    print("✓ Variable updates handled correctly")
+    return true
+}
+
+action test_comparison_operations() {
+    # Test: Comparison operations
+    
+    let x = 10
+    let y = 20
+    
+    let is_less = x < y
+    let is_equal = x == y
+    let is_greater = x > y
+    
+    assert is_less == true, "Less than comparison failed"
+    assert is_equal == false, "Equality comparison failed"
+    assert is_greater == false, "Greater than comparison failed"
+    
+    print("✓ Comparison operations work correctly")
+    return true
+}
+
+action test_logical_operations() {
+    # Test: Logical operations
+    
+    let a = true
+    let b = false
+    
+    let and_result = a && b
+    let or_result = a || b
+    let not_a = !a
+    let not_b = !b
+    
+    assert and_result == false, "AND operation failed"
+    assert or_result == true, "OR operation failed"
+    assert not_a == false, "NOT a failed"
+    assert not_b == true, "NOT b failed"
+    
+    print("✓ Logical operations work correctly")
+    return true
+}
+
+action test_all() {
+    print("=== Parallel VM Basic Tests ===\n")
+    
+    test_parallel_initialization()
+    test_independent_operations()
+    test_simple_data_dependency()
+    test_mixed_operations()
+    test_loop_operations()
+    test_arithmetic_chains()
+    test_variable_updates()
+    test_comparison_operations()
+    test_logical_operations()
+    
+    print("\n=== All basic tests passed! ===")
+    return true
+}
+
+# Run all tests
+test_all()

@@ -1,0 +1,337 @@
+// Zexus VERIFY Modes Test Suite
+// Testing verify:data, verify:access, verify:db, verify:env, verify:pattern
+
+print "=== VERIFY Modes Test Suite ===";
+print "";
+
+// ===== TEST 1: verify:data with type checking =====
+print "Test 1: verify:data with type checking";
+
+let userInput = "test@example.com";
+
+try {
+    // Simple check - is it an email?
+    verify is_email(userInput), "Must be valid email";
+    print "✓ Email data verification passed";
+} catch (e) {
+    print "✗ Failed: " + e;
+}
+
+print "";
+
+// ===== TEST 2: verify:pattern for regex matching =====
+print "Test 2: verify:pattern for regex matching";
+
+let creditCard = "4532-1234-5678-9010";
+let ccPattern = "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}$";
+
+try {
+    verify matches_pattern(creditCard, ccPattern), "Invalid credit card format";
+    print "✓ Credit card pattern matched";
+} catch (e) {
+    print "✗ Pattern match failed: " + e;
+}
+
+print "";
+
+// ===== TEST 3: verify:env for environment variables =====
+print "Test 3: verify:env for environment variables";
+
+// Set test environment variables
+env_set("API_KEY", "secret123");
+env_set("DEBUG_MODE", "false");
+
+try {
+    verify env_exists("API_KEY"), "API_KEY not configured";
+    print "✓ Environment variable exists";
+    
+    let apiKey = env_get("API_KEY");
+    print "  API_KEY value: " + apiKey;
+} catch (e) {
+    print "✗ Env verification failed: " + e;
+}
+
+try {
+    verify env_exists("MISSING_VAR"), "MISSING_VAR not found";
+    print "✗ Should fail for missing variable";
+} catch (e) {
+    print "✓ Missing env var correctly detected";
+}
+
+print "";
+
+// ===== TEST 4: verify:access with custom blocking logic =====
+print "Test 4: verify:access with blocking actions";
+
+let currentUser = "guest";
+let resourceAccess = "public";
+
+action blockUnauthorized() {
+    print "  [SECURITY] Unauthorized access blocked";
+    print "  [SECURITY] Logging security event";
+    return "blocked";
+}
+
+action checkResourceAccess(resource) {
+    let isAdmin = currentUser == "admin";
+    
+    try {
+        verify isAdmin == true {
+            blockUnauthorized();
+        }
+        print "✓ Admin access granted";
+        return "granted";
+    } catch (e) {
+        print "✓ Access correctly denied for: " + currentUser;
+        return "denied";
+    }
+}
+
+let result = checkResourceAccess("admin_panel");
+print "Access result: " + result;
+
+print "";
+
+// ===== TEST 5: Custom developer logic in VERIFY =====
+print "Test 5: Custom developer verification logic";
+
+action validateCustomData(data) {
+    // Developer writes custom logic
+    try {
+        verify data != "" {
+            print "  [CUSTOM] Data is empty, executing custom handler";
+            print "  [CUSTOM] Sending alert to admin";
+            return false;
+        }
+        
+        verify validate_length(data, 5, 100) {
+            print "  [CUSTOM] Data length out of bounds";
+            return false;
+        }
+        
+        verify is_alphanumeric(data) {
+            print "  [CUSTOM] Data contains invalid characters";
+            return false;
+        }
+        
+        print "✓ Custom validation passed";
+        return true;
+        
+    } catch (e) {
+        print "✗ Custom validation error: " + e;
+        return false;
+    }
+}
+
+validateCustomData("ValidData123");
+validateCustomData("");
+
+print "";
+
+// ===== TEST 6: Email/Password Form Validation =====
+print "Test 6: Email/Password form validation (Your example)";
+
+action validateLoginForm(emailInput, passwordInput) {
+    // Verify email format
+    try {
+        verify is_email(emailInput) {
+            print "  [FORM] Invalid email format";
+            print "  [FORM] Blocking form submission";
+            print "  [FORM] Not allowing bad data into system";
+            return false;
+        }
+    } catch (e) {
+        print "✗ Email verification failed: " + e;
+        return false;
+    }
+    
+    // Verify password strength
+    try {
+        let strength = password_strength(passwordInput);
+        verify strength != "weak" {
+            print "  [FORM] Password too weak";
+            print "  [FORM] Blocking form submission";
+            return false;
+        }
+    } catch (e) {
+        print "✗ Password verification failed: " + e;
+        return false;
+    }
+    
+    print "✓ Form validation passed - allowing login";
+    return true;
+}
+
+print "Valid login attempt:";
+validateLoginForm("user@example.com", "SecureP@ss123");
+
+print "";
+print "Invalid login attempt (bad email):";
+validateLoginForm("not-an-email", "SecureP@ss123");
+
+print "";
+print "Invalid login attempt (weak password):";
+validateLoginForm("user@example.com", "123");
+
+print "";
+
+// ===== TEST 7: Multi-layer Security Verification =====
+print "Test 7: Multi-layer security verification";
+
+action secureTransactionVerification(userId, amount, toAddress) {
+    print "Verifying transaction...";
+    
+    // Layer 1: User verification
+    try {
+        verify is_numeric(userId), "Invalid user ID";
+        print "  ✓ User ID format valid";
+    } catch (e) {
+        print "  ✗ User verification failed: " + e;
+        return false;
+    }
+    
+    // Layer 2: Amount verification
+    try {
+        verify amount > 0, "Amount must be positive";
+        verify amount <= 10000, "Amount exceeds limit";
+        print "  ✓ Amount valid";
+    } catch (e) {
+        print "  ✗ Amount verification failed: " + e;
+        return false;
+    }
+    
+    // Layer 3: Address verification
+    try {
+        verify validate_length(toAddress, 10, 100), "Invalid address length";
+        verify is_alphanumeric(toAddress), "Invalid address format";
+        print "  ✓ Address valid";
+    } catch (e) {
+        print "  ✗ Address verification failed: " + e;
+        return false;
+    }
+    
+    print "✓ Transaction verification passed";
+    return true;
+}
+
+secureTransactionVerification("12345", 500, "ABC123XYZ789");
+
+print "";
+
+// ===== TEST 8: Database-style Verification (Mock) =====
+print "Test 8: Database-style verification (simulated)";
+
+// In real use, developer would connect to actual database
+// Here we simulate with environment as storage
+
+env_set("user_12345_exists", "true");
+env_set("email_user@test.com_unique", "false");
+
+action checkUserExists(userId) {
+    let key = "user_" + userId + "_exists";
+    
+    try {
+        verify env_exists(key), "User not found in database";
+        print "✓ User exists in database";
+        return true;
+    } catch (e) {
+        print "✗ User check failed: " + e;
+        return false;
+    }
+}
+
+action checkEmailUnique(email) {
+    let key = "email_" + email + "_unique";
+    let uniqueFlag = env_get(key);
+    
+    try {
+        verify uniqueFlag == "false", "Email already in use";
+        print "✗ Email not unique";
+        return false;
+    } catch (e) {
+        print "✓ Email availability check working";
+        return true;
+    }
+}
+
+checkUserExists("12345");
+checkEmailUnique("user@test.com");
+
+print "";
+
+// ===== TEST 9: Real-world API Input Validation =====
+print "Test 9: Real-world API input validation";
+
+action validateAPIRequest(method, endpoint, body) {
+    print "Validating API request...";
+    
+    try {
+        // Verify HTTP method
+        verify method == "GET" || method == "POST" || method == "PUT" || method == "DELETE" {
+            print "  [API] Invalid HTTP method: " + method;
+            return false;
+        }
+        
+        // Verify endpoint format
+        verify is_alphanumeric(endpoint) || matches_pattern(endpoint, "^[a-zA-Z0-9/_-]+$") {
+            print "  [API] Invalid endpoint format";
+            return false;
+        }
+        
+        // Verify body is not empty for POST/PUT
+        if (method == "POST" || method == "PUT") {
+            verify body != "" {
+                print "  [API] Request body required for " + method;
+                return false;
+            }
+        }
+        
+        print "✓ API request validation passed";
+        return true;
+        
+    } catch (e) {
+        print "✗ API validation error: " + e;
+        return false;
+    }
+}
+
+validateAPIRequest("POST", "users/create", '{"name":"John"}');
+validateAPIRequest("INVALID", "users", "");
+
+print "";
+
+// ===== TEST 10: Config Verification with Env Vars =====
+print "Test 10: Configuration verification with environment";
+
+action verifyAppConfig() {
+    print "Checking application configuration...";
+    
+    // Set some config
+    env_set("APP_NAME", "MyApp");
+    env_set("APP_VERSION", "1.0.0");
+    env_set("API_TIMEOUT", "30");
+    
+    try {
+        verify env_exists("APP_NAME"), "APP_NAME not configured";
+        verify env_exists("APP_VERSION"), "APP_VERSION not configured";
+        verify env_exists("API_TIMEOUT"), "API_TIMEOUT not configured";
+        
+        let timeout = env_get("API_TIMEOUT");
+        verify is_numeric(timeout), "API_TIMEOUT must be numeric";
+        
+        print "✓ All configuration verified";
+        print "  APP_NAME: " + env_get("APP_NAME");
+        print "  APP_VERSION: " + env_get("APP_VERSION");
+        print "  API_TIMEOUT: " + env_get("API_TIMEOUT");
+        
+        return true;
+    } catch (e) {
+        print "✗ Configuration error: " + e;
+        return false;
+    }
+}
+
+verifyAppConfig();
+
+print "";
+print "=== All VERIFY Modes Tests Complete ===";

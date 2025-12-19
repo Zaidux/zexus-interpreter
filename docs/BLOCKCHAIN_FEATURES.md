@@ -369,6 +369,11 @@ action massUpdate(accounts) limit 1000000 {
 ```zexus
 require(condition);
 require(condition, "Error message");
+
+// Enhanced: Tolerance blocks for conditional bypasses
+require condition {
+    // Tolerance logic: return truthy to bypass requirement
+}
 ```
 
 #### Examples
@@ -388,6 +393,16 @@ require(TX.timestamp >= unlock_time, "Still locked");
 
 // Check address
 require(recipient != TX.caller, "Cannot send to self");
+
+// VIP bypass for minimum balance
+require balance >= 0.5 {
+    if (isVIP(TX.caller)) return true;
+}
+
+// Loyalty points waive minimum purchase
+require amount >= 100 {
+    if (loyaltyPoints[TX.caller] >= 1000) return true;
+}
 ```
 
 ### The `revert` Statement

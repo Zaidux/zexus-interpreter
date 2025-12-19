@@ -41,13 +41,16 @@ class AwaitExpression(Expression):
 
 **Promise Class**
 - States: PENDING, FULFILLED, REJECTED
-- Executor pattern: `Promise(executor_function)`
+- Executor pattern: `Promise(executor_function, env, stack_trace)`
+- **Context Propagation**: Tracks environment and stack trace at creation
 - Methods:
   * `_resolve(value)` - Resolve with a value
   * `_reject(error)` - Reject with an error
   * `then(callback)` - Add success callback
   * `catch(callback)` - Add error callback
   * `finally_callback(callback)` - Add finally callback
+  * `is_resolved()` - Check if promise is resolved
+  * `get_value()` - Get resolved value or raise error
   * `is_resolved()` - Check if resolved
   * `get_value()` - Get resolved value
 - Callbacks execute immediately if already resolved
@@ -127,6 +130,47 @@ class AwaitExpression(Expression):
 - Exports EventLoop, Task, utility functions
 - Clean API for async operations
 - Import shortcuts
+
+### 7. Async Context Propagation (ADDED)
+
+**Problem Solved:**
+When async operations cross await boundaries, execution context (environment variables, stack traces) must be preserved for proper debugging and error reporting.
+
+**Implementation:**
+
+**Promise Context Tracking**
+```python
+class Promise(Object):
+    def __init__(self, executor=None, env=None, stack_trace=None):
+        # ... state fields ...
+        self.env = env  # Environment at promise creation
+        self.stack_trace = stack_trace or []  # Stack trace context
+```
+
+**Context Passing in Async Actions**
+```python
+# When creating promise from async action
+stack_trace = getattr(self, '_current_stack_trace', [])
+promise = Promise(executor, env=env, stack_trace=stack_trace)
+```
+
+**Context Propagation in Await**
+```python
+# Await expression propagates context
+if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
+    stack_trace = stack_trace + [f"  at await <promise>"]
+    
+# Errors include promise creation context
+error_msg = f"Promise rejected: {e}"
+if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
+    error_msg += f"\n  Promise created at: {awaitable.stack_trace}"
+```
+
+**Benefits:**
+- Error messages show where promises were created
+- Stack traces maintain continuity across async boundaries
+- Environment context preserved for closures
+- Debugging async code becomes much easier
 
 ## Architecture
 

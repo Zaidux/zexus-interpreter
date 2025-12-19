@@ -1,0 +1,115 @@
+// ============================================
+// EASY TESTS: MODULE, PACKAGE, FROM Keywords
+// ============================================
+
+// Test 1: Basic module declaration
+module mathOps {
+    action add(a, b) {
+        return a + b;
+    }
+    
+    action subtract(a, b) {
+        return a - b;
+    }
+}
+
+print "Test 1: Basic module declared";
+// Expected: Test 1: Basic module declared
+
+// Test 2: Access module members
+module calculator {
+    action multiply(x, y) {
+        return x * y;
+    }
+}
+
+print "Test 2: Module calculator declared";
+// Expected: Test 2: Module calculator declared
+
+// Test 3: Module with variables
+module constants {
+    let pi = 3.14159;
+    let e = 2.71828;
+}
+
+print "Test 3: Module with constants";
+// Expected: Test 3: Module with constants
+
+// Test 4: Module with simple function
+module greeter {
+    action sayHello() {
+        return "Hello, World!";
+    }
+}
+
+print "Test 4: Greeter module declared";
+// Expected: Test 4: Greeter module declared
+
+// Test 5: Module with multiple functions
+module utils {
+    action double(n) {
+        return n * 2;
+    }
+    
+    action triple(n) {
+        return n * 3;
+    }
+}
+
+print "Test 5: Utils module declared";
+// Expected: Test 5: Utils module declared
+
+// Test 6: Empty module
+module empty {
+}
+
+print "Test 6: Empty module declared";
+// Expected: Test 6: Empty module declared
+
+// Test 7: Module with let statements
+module data {
+    let name = "Zexus";
+    let version = "1.0";
+}
+
+print "Test 7: Data module declared";
+// Expected: Test 7: Data module declared
+
+// Test 8: Module with conditional
+module logic {
+    action isPositive(n) {
+        if (n > 0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+print "Test 8: Logic module declared";
+// Expected: Test 8: Logic module declared
+
+// Test 9: Module with loop
+module looper {
+    action countToThree() {
+        let i = 0;
+        while (i < 3) {
+            i = i + 1;
+        }
+        return i;
+    }
+}
+
+print "Test 9: Looper module declared";
+// Expected: Test 9: Looper module declared
+
+// Test 10: Nested data in module
+module config {
+    let settings = {
+        "theme": "dark",
+        "fontSize": 12
+    };
+}
+
+print "Test 10: Config module declared";
+// Expected: Test 10: Config module declared

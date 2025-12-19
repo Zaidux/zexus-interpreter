@@ -377,7 +377,7 @@ class Lexer:
             "embedded": EMBEDDED,
             "export": EXPORT,
             "lambda": LAMBDA,
-            "debug": DEBUG,      # NEW: Debug keyword
+            "debug": DEBUG,      # DUAL-MODE: Works as both statement (debug x;) and function (debug(x))
             "try": TRY,          # NEW: Try keyword  
             "catch": CATCH,      # NEW: Catch keyword
             "external": EXTERNAL, # NEW: External keyword

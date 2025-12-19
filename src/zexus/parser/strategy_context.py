@@ -56,6 +56,8 @@ class ContextStackParser:
             'let_statement': self._parse_let_statement_block,
             'const_statement': self._parse_const_statement_block,
             'print_statement': self._parse_print_statement_block,
+            'debug_statement': self._parse_debug_statement_block,
+            DEBUG: self._parse_debug_statement_block,
             'assignment_statement': self._parse_assignment_statement,
             'function_call_statement': self._parse_function_call_statement,
             'entity_statement': self._parse_entity_statement_block,
@@ -233,27 +235,40 @@ class ContextStackParser:
         variable_name = tokens[1].literal
         parser_debug(f"  📝 Variable: {variable_name}")
 
-        # Check for type annotation (name: Type = value)
+        # Check for type annotation (name: Type = value) or colon syntax (name : value)
         type_annotation = None
+        colon_as_assign = False
         if len(tokens) > 2 and tokens[2].type == COLON:
+            # Check if next token is IDENT (type annotation) or value (colon syntax)
             if len(tokens) > 3 and tokens[3].type == IDENT:
-                type_annotation = tokens[3].literal
-                parser_debug(f"  📝 Type annotation: {type_annotation}")
+                # Could be type annotation - check if followed by =
+                if len(tokens) > 4 and tokens[4].type == ASSIGN:
+                    # Type annotation: let x : Type = value
+                    type_annotation = tokens[3].literal
+                    parser_debug(f"  📝 Type annotation: {type_annotation}")
+                else:
+                    # Colon as assignment: let x : identifier_value
+                    colon_as_assign = True
+                    parser_debug(f"  📝 Colon assignment syntax detected")
             else:
-                parser_debug("  ❌ Invalid let statement: expected type after colon")
+                # Colon as assignment: let x : 42
+                colon_as_assign = True
+                parser_debug(f"  📝 Colon assignment syntax detected")
+
+        # Find equals sign or use colon as assignment
+        if colon_as_assign:
+            equals_index = 2  # Treat colon as equals
+        else:
+            start_index = 4 if type_annotation else 2
+            equals_index = -1
+            for i in range(start_index, len(tokens)):
+                if tokens[i].type == ASSIGN:
+                    equals_index = i
+                    break
+
+            if equals_index == -1:
+                parser_debug("  ❌ Invalid let statement: no assignment operator")
                 return None
-
-        # Find equals sign (skip type annotation if present)
-        start_index = 4 if type_annotation else 2
-        equals_index = -1
-        for i in range(start_index, len(tokens)):
-            if tokens[i].type == ASSIGN:
-                equals_index = i
-                break
-
-        if equals_index == -1:
-            parser_debug("  ❌ Invalid let statement: no assignment operator")
-            return None
 
         # Collect RHS tokens with proper nesting support
         value_tokens = []
@@ -277,7 +292,10 @@ class ContextStackParser:
                 # Allow method chains but stop at other statement starters
                 if t.type in {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
-                    if not (prev and prev.type == DOT):  # Allow if part of method chain
+                    # Allow if part of method chain OR if DEBUG followed by ( (function call)
+                    allow_method_chain = prev and prev.type == DOT
+                    allow_debug_call = t.type == DEBUG and j + 1 < len(tokens) and tokens[j + 1].type == LPAREN
+                    if not (allow_method_chain or allow_debug_call):
                         break
 
             value_tokens.append(t)
@@ -402,6 +420,39 @@ class ContextStackParser:
             expression = StringLiteral("")
 
         return PrintStatement(expression)
+
+    def _parse_debug_statement_block(self, block_info, all_tokens):
+        """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
+        
+        Note: This handles 'debug x;' (statement mode).
+        Function mode 'debug(x)' is handled via call expression parsing.
+        """
+        parser_debug("🔧 [Context] Parsing debug statement")
+        tokens = block_info['tokens']
+
+        # Check if this is actually a function call: debug(...)
+        if len(tokens) >= 2 and tokens[1].type == LPAREN:
+            parser_debug("  ℹ️ DEBUG followed by ( - treating as function call expression")
+            # This should be parsed as a CallExpression, not a DebugStatement
+            # Return the expression directly
+            expression = self._parse_expression(tokens)
+            return ExpressionStatement(expression) if expression else None
+
+        # Otherwise, it's a statement: debug value;
+        if len(tokens) < 2:
+            parser_debug("  ❌ DEBUG statement requires a value")
+            return None
+
+        expression_tokens = tokens[1:]
+        expression = self._parse_expression(expression_tokens)
+
+        if expression is None:
+            parser_debug("  ❌ Could not parse DEBUG statement value")
+            return None
+
+        # Import DebugStatement from zexus_ast
+        from ..zexus_ast import DebugStatement
+        return DebugStatement(value=expression)
 
     def _parse_assignment_statement(self, block_info, all_tokens):
         """Parse assignment statement - RETURNS AssignmentExpression"""
@@ -1896,16 +1947,33 @@ class ContextStackParser:
                 continue
 
             elif token.type == REQUIRE:
-                # Parse REQUIRE statement: require(condition, message) or require condition, message
+                # Parse REQUIRE statement: require(condition, message) or require condition { tolerance_block }
                 j = i + 1
                 
-                # Collect tokens until semicolon
+                # Collect tokens until semicolon OR until after tolerance block closes
                 require_tokens = [token]
-                while j < len(tokens) and tokens[j].type != SEMICOLON:
-                    require_tokens.append(tokens[j])
+                brace_nest = 0
+                while j < len(tokens):
+                    tj = tokens[j]
+                    
+                    # Track brace nesting for tolerance blocks
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                    
+                    require_tokens.append(tj)
                     j += 1
+                    
+                    # Stop at semicolon when not inside braces
+                    if tj.type == SEMICOLON and brace_nest == 0:
+                        break
+                    
+                    # Stop after tolerance block closes (if there was one)
+                    if brace_nest == 0 and len(require_tokens) > 1 and require_tokens[-2].type == RBRACE:
+                        break
                 
-                print(f"    📝 Found require statement: {[t.literal for t in require_tokens]}")
+                print(f"    📝 Found require statement with {len(require_tokens)} tokens: {[t.literal for t in require_tokens[:20]]}")
                 
                 # Use the handler to parse it
                 block_info = {'tokens': require_tokens}
@@ -2261,8 +2329,8 @@ class ContextStackParser:
                     return inner if inner else StringLiteral("")
                 return StringLiteral("")
 
-            elif t.type == IDENT or t.type in {SEND, RECEIVE}:  # Identifier or function call (including concurrency keywords)
-                name = t.literal
+            elif t.type == IDENT or t.type in {SEND, RECEIVE, DEBUG}:  # Identifier or function call (including concurrency/debug keywords)
+                name = t.literal if t.type == IDENT else ("send" if t.type == SEND else ("receive" if t.type == RECEIVE else "debug"))
                 i += 1
                 # Check for immediate function call
                 if i < n and tokens[i].type == LPAREN:
@@ -3997,29 +4065,186 @@ class ContextStackParser:
         return PersistentStatement(name=name, type_annotation=type_annotation, initial_value=initial_value)
     
     def _parse_require_statement(self, block_info, all_tokens):
-        """Parse require(condition, message) statements."""
+        """Parse require statement with enhanced features.
+        
+        Forms:
+        1. require(condition, message)
+        2. require condition, message
+        3. require condition { tolerance_block }
+        4. require:type condition, message
+        5. require \"file.zx\" imported, message
+        6. require module \"name\" available, message
+        """
+        print(f"⚙️ [REQUIRE PARSER] Starting to parse require statement")
         parser_debug("🔧 [Context] Parsing require statement")
         tokens = block_info.get('tokens', [])
+        print(f"⚙️ [REQUIRE PARSER] Have {len(tokens)} tokens")
         
-        if not tokens or tokens[0].type != REQUIRE or (len(tokens) > 1 and tokens[1].type != LPAREN):
-            parser_debug("  ❌ Expected require()")
+        if not tokens or tokens[0].type != REQUIRE:
+            parser_debug("  ❌ Expected REQUIRE keyword")
             return None
         
-        # Extract tokens between LPAREN and RPAREN
-        inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[2:]
+        # Check for requirement type: require:balance, require:gas, etc.
+        requirement_type = None
+        start_idx = 1
+        if len(tokens) > 1 and tokens[1].type == COLON:
+            if len(tokens) > 2 and tokens[2].type == IDENT:
+                requirement_type = tokens[2].literal
+                start_idx = 3
+                parser_debug(f"  📌 Requirement type: {requirement_type}")
         
-        # Split by comma to get condition and optional message
-        args = self._parse_argument_list(inner)
+        # Check for tolerance block: look for LBRACE after condition
+        # We want the FIRST LBRACE (not nested inside the condition)
+        tolerance_block = None
+        block_start = None
+        paren_depth = 0
+        for i in range(start_idx, len(tokens)):
+            if tokens[i].type == LPAREN:
+                paren_depth += 1
+            elif tokens[i].type == RPAREN:
+                paren_depth -= 1
+            elif tokens[i].type == LBRACE and paren_depth == 0:
+                block_start = i
+                break
         
-        if not args:
-            parser_debug("  ❌ require needs at least one argument")
+        if block_start is not None:
+            print(f"⚙️ [REQUIRE PARSER] Found LBRACE at index {block_start}")
+            # Extract and parse tolerance block
+            block_tokens = tokens[block_start:]
+            tokens = tokens[:block_start]  # Remove block from main tokens
+            print(f"⚙️ [REQUIRE PARSER] Block tokens: {[t.literal for t in block_tokens[:10]]}")
+            
+            # Parse as BlockStatement: strip outer braces and parse statements
+            if block_tokens and block_tokens[0].type == LBRACE:
+                # Remove outer braces
+                inner_tokens = block_tokens[1:]
+                if inner_tokens and inner_tokens[-1].type == RBRACE:
+                    inner_tokens = inner_tokens[:-1]
+                print(f"⚙️ [REQUIRE PARSER] Inner tokens (no braces): {len(inner_tokens)} tokens")
+                
+                # Parse statements inside the block
+                print(f"⚙️ [REQUIRE PARSER] About to call _parse_block_statements")
+                statements = self._parse_block_statements(inner_tokens)
+                print(f"⚙️ [REQUIRE PARSER] Got {len(statements) if statements else 0} statements back")
+                tolerance_block = BlockStatement()
+                tolerance_block.statements = statements
+                print(f"⚙️ [REQUIRE PARSER] Created BlockStatement with {len(statements)} statements")
+                parser_debug(f"  🧩 Found tolerance block with {len(statements)} statements")
+            else:
+                tolerance_block = None
+        
+        # Check for file/module dependencies
+        file_path = None
+        module_name = None
+        
+        # Pattern: require \"file.zx\" imported
+        if start_idx < len(tokens) and tokens[start_idx].type == STRING:
+            file_path = tokens[start_idx].literal
+            start_idx += 1
+            # Look for 'imported' keyword
+            if start_idx < len(tokens) and tokens[start_idx].type == IDENT and tokens[start_idx].literal == 'imported':
+                start_idx += 1
+                # Look for comma and message
+                message = None
+                if start_idx < len(tokens) and tokens[start_idx].type == COMMA:
+                    start_idx += 1
+                    if start_idx < len(tokens):
+                        message_tokens = tokens[start_idx:]
+                        message = self._parse_expression(message_tokens)
+                
+                parser_debug(f"  ✅ File dependency: {file_path}")
+                return RequireStatement(
+                    condition=None,
+                    message=message,
+                    file_path=file_path,
+                    requirement_type='file'
+                )
+        
+        # Pattern: require module \"name\" available
+        if start_idx < len(tokens) and tokens[start_idx].type == IDENT and tokens[start_idx].literal == 'module':
+            start_idx += 1
+            if start_idx < len(tokens) and tokens[start_idx].type == STRING:
+                module_name = tokens[start_idx].literal
+                start_idx += 1
+                # Look for 'available' keyword
+                if start_idx < len(tokens) and tokens[start_idx].type == IDENT and tokens[start_idx].literal == 'available':
+                    start_idx += 1
+                    # Look for comma and message
+                    message = None
+                    if start_idx < len(tokens) and tokens[start_idx].type == COMMA:
+                        start_idx += 1
+                        if start_idx < len(tokens):
+                            message_tokens = tokens[start_idx:]
+                            message = self._parse_expression(message_tokens)
+                    
+                    parser_debug(f"  ✅ Module dependency: {module_name}")
+                    return RequireStatement(
+                        condition=None,
+                        message=message,
+                        module_name=module_name,
+                        requirement_type='module'
+                    )
+        
+        # Check for parenthesized form: require(condition, message)
+        if start_idx < len(tokens) and tokens[start_idx].type == LPAREN:
+            # Extract tokens between LPAREN and RPAREN
+            inner = tokens[start_idx+1:-1] if len(tokens) > start_idx+1 and tokens[-1].type == RPAREN else tokens[start_idx+1:]
+            
+            # Split by comma to get condition and optional message
+            args = self._parse_argument_list(inner)
+            
+            if not args:
+                parser_debug("  ❌ require() needs at least one argument")
+                return None
+            
+            condition = args[0]
+            message = args[1] if len(args) > 1 else None
+            
+            parser_debug(f"  ✅ Require() with {len(args)} arguments")
+            return RequireStatement(
+                condition=condition,
+                message=message,
+                tolerance_block=tolerance_block,
+                requirement_type=requirement_type
+            )
+        
+        # Non-parenthesized form: require condition, message
+        # Find comma for message
+        comma_idx = None
+        paren_depth = 0
+        for i, tok in enumerate(tokens[start_idx:], start_idx):
+            if tok.type in {LPAREN, LBRACKET}:
+                paren_depth += 1
+            elif tok.type in {RPAREN, RBRACKET}:
+                paren_depth -= 1
+            elif tok.type == COMMA and paren_depth == 0:
+                comma_idx = i
+                break
+        
+        if comma_idx:
+            cond_tokens = tokens[start_idx:comma_idx]
+            msg_tokens = tokens[comma_idx+1:]
+            condition = self._parse_expression(cond_tokens) if cond_tokens else None
+            message = self._parse_expression(msg_tokens) if msg_tokens else None
+        else:
+            cond_tokens = tokens[start_idx:]
+            condition = self._parse_expression(cond_tokens) if cond_tokens else None
+            message = None
+        
+        if not condition:
+            parser_debug("  ❌ require needs a condition")
             return None
         
-        condition = args[0]
-        message = args[1] if len(args) > 1 else None
-        
-        parser_debug(f"  ✅ Require with {len(args)} arguments")
-        return RequireStatement(condition=condition, message=message)
+        parser_debug(f"  ✅ Require statement")
+        print(f"⚙️ [REQUIRE PARSER] Creating RequireStatement with tolerance_block={type(tolerance_block).__name__ if tolerance_block else 'None'}")
+        stmt = RequireStatement(
+            condition=condition,
+            message=message,
+            tolerance_block=tolerance_block,
+            requirement_type=requirement_type
+        )
+        print(f"⚙️ [REQUIRE PARSER] Created stmt.tolerance_block={type(stmt.tolerance_block).__name__ if stmt.tolerance_block else 'None'}")
+        return stmt
     
     def _parse_revert_statement(self, block_info, all_tokens):
         """Parse revert(reason) statements."""
@@ -4448,17 +4673,27 @@ class ContextStackParser:
         return CacheStatement(target=target, policy=policy)
 
     def _parse_verify_statement(self, block_info, all_tokens):
-        """Parse verify statement.
+        """Parse verify statement with extended syntax.
         
         Forms:
         1. verify condition, "message"
         2. verify (condition)
         3. verify(target, [conditions])
+        4. verify:mode condition, "message"
+        5. verify condition { logic_block }
+        6. verify:data value matches pattern, "message"
+        7. verify:db value exists_in "table", "message"
+        8. verify:env "VAR" is_set, "message"
+        9. verify:access condition { action_block }
         
         Examples:
         - verify false, "Access denied"
         - verify (TX.caller == self.owner)
-        - verify(transfer_funds, [check_auth()])
+        - verify:data email matches email_pattern, "Invalid email"
+        - verify:access user.role == "admin" { block_request(); }
+        - verify:db user_id exists_in "users", "User not found"
+        - verify:env "API_KEY" is_set, "API_KEY required"
+        - verify condition { log_error("Failed"); return false; }
         """
         parser_debug("🔧 [Context] Parsing verify statement")
         tokens = block_info.get('tokens', [])
@@ -4467,10 +4702,47 @@ class ContextStackParser:
             parser_debug("  ❌ Expected VERIFY keyword")
             return None
         
+        # Check for mode syntax: verify:mode
+        mode = None
+        start_idx = 1
+        if len(tokens) > 1 and tokens[1].type == COLON:
+            # Extract mode
+            if len(tokens) > 2 and tokens[2].type == IDENT:
+                mode = tokens[2].literal
+                start_idx = 3
+                parser_debug(f"  📌 Detected mode: {mode}")
+        
+        # Check for logic block at the end
+        logic_block = None
+        block_start = None
+        for i in range(len(tokens) - 1, -1, -1):
+            if tokens[i].type == LBRACE:
+                block_start = i
+                break
+        
+        if block_start:
+            # Extract and parse logic block
+            block_tokens = tokens[block_start:]
+            tokens = tokens[:block_start]  # Remove block from main tokens
+            logic_block = self._parse_block_statement({'tokens': block_tokens}, all_tokens)
+            parser_debug(f"  🧩 Found logic block")
+        
+        # Parse based on mode
+        if mode == 'data':
+            return self._parse_verify_data(tokens[start_idx:], logic_block)
+        elif mode == 'access':
+            return self._parse_verify_access(tokens[start_idx:], logic_block)
+        elif mode == 'db':
+            return self._parse_verify_db(tokens[start_idx:], logic_block)
+        elif mode == 'env':
+            return self._parse_verify_env(tokens[start_idx:], logic_block)
+        elif mode == 'pattern':
+            return self._parse_verify_pattern(tokens[start_idx:], logic_block)
+        
         # Check for comma-separated format: verify condition, message
         comma_idx = None
         paren_depth = 0
-        for i, tok in enumerate(tokens[1:], 1):
+        for i, tok in enumerate(tokens[start_idx:], start_idx):
             if tok.type in {LPAREN, LBRACKET}:
                 paren_depth += 1
             elif tok.type in {RPAREN, RBRACKET}:
@@ -4481,17 +4753,17 @@ class ContextStackParser:
         
         if comma_idx:
             # Format: verify condition, message
-            cond_tokens = tokens[1:comma_idx]
+            cond_tokens = tokens[start_idx:comma_idx]
             msg_tokens = tokens[comma_idx+1:]
             
             condition = self._parse_expression(cond_tokens) if cond_tokens else None
             message = self._parse_expression(msg_tokens) if msg_tokens else None
             
             parser_debug(f"  ✅ Verify statement (simple assertion) with message")
-            return VerifyStatement(condition=condition, message=message)
+            return VerifyStatement(condition=condition, message=message, logic_block=logic_block)
         else:
             # Format: verify (condition) or verify(target, [...])
-            inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[1:]
+            inner = tokens[2:-1] if len(tokens) > 2 and tokens[-1].type == RPAREN else tokens[start_idx:]
             
             condition = self._parse_expression(inner) if inner else None
             
@@ -4500,7 +4772,253 @@ class ContextStackParser:
                 return None
             
             parser_debug("  ✅ Verify statement (parenthesized)")
-            return VerifyStatement(condition=condition)
+            return VerifyStatement(condition=condition, logic_block=logic_block)
+    
+    def _parse_verify_data(self, tokens, logic_block):
+        """Parse verify:data - data/format verification"""
+        parser_debug("  📊 Parsing verify:data")
+        # Format: verify:data value matches pattern, "message"
+        #         verify:data value is_type "string", "message"
+        
+        # Find keywords: matches, is_type, exists_in, etc.
+        keyword_idx = None
+        keyword = None
+        for i, tok in enumerate(tokens):
+            if tok.type == IDENT and tok.literal in ['matches', 'is_type', 'is', 'equals']:
+                keyword_idx = i
+                keyword = tok.literal
+                break
+        
+        if not keyword_idx:
+            parser_debug("  ❌ No data verification keyword found")
+            return None
+        
+        value_tokens = tokens[:keyword_idx]
+        value_expr = self._parse_expression(value_tokens) if value_tokens else None
+        
+        # Find comma for message
+        comma_idx = None
+        for i, tok in enumerate(tokens[keyword_idx+1:], keyword_idx+1):
+            if tok.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx:
+            pattern_tokens = tokens[keyword_idx+1:comma_idx]
+            message_tokens = tokens[comma_idx+1:]
+        else:
+            pattern_tokens = tokens[keyword_idx+1:]
+            message_tokens = []
+        
+        pattern = self._parse_expression(pattern_tokens) if pattern_tokens else None
+        message = self._parse_expression(message_tokens) if message_tokens else None
+        
+        parser_debug(f"  ✅ verify:data with keyword '{keyword}'")
+        return VerifyStatement(
+            mode='data',
+            condition=value_expr,
+            pattern=pattern,
+            message=message,
+            logic_block=logic_block,
+            verify_type=keyword
+        )
+    
+    def _parse_verify_access(self, tokens, logic_block):
+        """Parse verify:access - access control with blocking"""
+        parser_debug("  🔒 Parsing verify:access")
+        # Format: verify:access condition { block }
+        
+        # Find comma if present
+        comma_idx = None
+        for i, tok in enumerate(tokens):
+            if tok.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx:
+            cond_tokens = tokens[:comma_idx]
+            message_tokens = tokens[comma_idx+1:]
+            message = self._parse_expression(message_tokens) if message_tokens else None
+        else:
+            cond_tokens = tokens
+            message = None
+        
+        condition = self._parse_expression(cond_tokens) if cond_tokens else None
+        
+        parser_debug(f"  ✅ verify:access with action block")
+        return VerifyStatement(
+            mode='access',
+            condition=condition,
+            message=message,
+            action_block=logic_block
+        )
+    
+    def _parse_verify_db(self, tokens, logic_block):
+        """Parse verify:db - database verification"""
+        parser_debug("  🗄️ Parsing verify:db")
+        # Format: verify:db value exists_in "table", "message"
+        #         verify:db value unique_in "table", "message"
+        
+        # Find keywords: exists_in, unique_in
+        keyword_idx = None
+        keyword = None
+        for i, tok in enumerate(tokens):
+            if tok.type == IDENT and tok.literal in ['exists_in', 'unique_in', 'matches_in']:
+                keyword_idx = i
+                keyword = tok.literal
+                break
+        
+        if not keyword_idx:
+            parser_debug("  ❌ No db verification keyword found")
+            return None
+        
+        value_tokens = tokens[:keyword_idx]
+        value_expr = self._parse_expression(value_tokens) if value_tokens else None
+        
+        # Find commas
+        comma_indices = []
+        for i, tok in enumerate(tokens[keyword_idx+1:], keyword_idx+1):
+            if tok.type == COMMA:
+                comma_indices.append(i)
+        
+        # Parse table and message
+        if len(comma_indices) >= 1:
+            table_tokens = tokens[keyword_idx+1:comma_indices[0]]
+            message_tokens = tokens[comma_indices[0]+1:] if len(comma_indices) > 0 else []
+        else:
+            table_tokens = tokens[keyword_idx+1:]
+            message_tokens = []
+        
+        table = self._parse_expression(table_tokens) if table_tokens else None
+        message = self._parse_expression(message_tokens) if message_tokens else None
+        
+        parser_debug(f"  ✅ verify:db with keyword '{keyword}'")
+        return VerifyStatement(
+            mode='db',
+            condition=value_expr,
+            db_table=table,
+            db_query=keyword,  # exists_in, unique_in, etc.
+            message=message,
+            logic_block=logic_block
+        )
+    
+    def _parse_verify_env(self, tokens, logic_block):
+        """Parse verify:env - environment variable verification"""
+        parser_debug("  🌍 Parsing verify:env")
+        # Format: verify:env "VAR_NAME" is_set, "message"
+        #         verify:env "VAR_NAME" equals "value", "message"
+        
+        # Find keywords: is_set, equals, matches
+        keyword_idx = None
+        keyword = None
+        for i, tok in enumerate(tokens):
+            if tok.type == IDENT and tok.literal in ['is_set', 'equals', 'matches', 'exists']:
+                keyword_idx = i
+                keyword = tok.literal
+                break
+        
+        if not keyword_idx:
+            # Simple form: verify:env "VAR_NAME", "message"
+            comma_idx = None
+            for i, tok in enumerate(tokens):
+                if tok.type == COMMA:
+                    comma_idx = i
+                    break
+            
+            if comma_idx:
+                var_tokens = tokens[:comma_idx]
+                msg_tokens = tokens[comma_idx+1:]
+            else:
+                var_tokens = tokens
+                msg_tokens = []
+            
+            env_var = self._parse_expression(var_tokens) if var_tokens else None
+            message = self._parse_expression(msg_tokens) if msg_tokens else None
+            
+            parser_debug(f"  ✅ verify:env (simple check)")
+            return VerifyStatement(
+                mode='env',
+                env_var=env_var,
+                message=message,
+                logic_block=logic_block,
+                verify_type='is_set'
+            )
+        
+        # Complex form with keyword
+        var_tokens = tokens[:keyword_idx]
+        env_var = self._parse_expression(var_tokens) if var_tokens else None
+        
+        # Find comma
+        comma_idx = None
+        for i, tok in enumerate(tokens[keyword_idx+1:], keyword_idx+1):
+            if tok.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx:
+            expected_tokens = tokens[keyword_idx+1:comma_idx]
+            message_tokens = tokens[comma_idx+1:]
+        else:
+            expected_tokens = tokens[keyword_idx+1:]
+            message_tokens = []
+        
+        expected_value = self._parse_expression(expected_tokens) if expected_tokens else None
+        message = self._parse_expression(message_tokens) if message_tokens else None
+        
+        parser_debug(f"  ✅ verify:env with keyword '{keyword}'")
+        return VerifyStatement(
+            mode='env',
+            env_var=env_var,
+            expected_value=expected_value,
+            message=message,
+            logic_block=logic_block,
+            verify_type=keyword
+        )
+    
+    def _parse_verify_pattern(self, tokens, logic_block):
+        """Parse verify:pattern - pattern matching verification"""
+        parser_debug("  🎯 Parsing verify:pattern")
+        # Format: verify:pattern value matches "/regex/", "message"
+        
+        # Find 'matches' keyword
+        matches_idx = None
+        for i, tok in enumerate(tokens):
+            if tok.type == IDENT and tok.literal == 'matches':
+                matches_idx = i
+                break
+        
+        if not matches_idx:
+            parser_debug("  ❌ No 'matches' keyword found")
+            return None
+        
+        value_tokens = tokens[:matches_idx]
+        value_expr = self._parse_expression(value_tokens) if value_tokens else None
+        
+        # Find comma
+        comma_idx = None
+        for i, tok in enumerate(tokens[matches_idx+1:], matches_idx+1):
+            if tok.type == COMMA:
+                comma_idx = i
+                break
+        
+        if comma_idx:
+            pattern_tokens = tokens[matches_idx+1:comma_idx]
+            message_tokens = tokens[comma_idx+1:]
+        else:
+            pattern_tokens = tokens[matches_idx+1:]
+            message_tokens = []
+        
+        pattern = self._parse_expression(pattern_tokens) if pattern_tokens else None
+        message = self._parse_expression(message_tokens) if message_tokens else None
+        
+        parser_debug(f"  ✅ verify:pattern")
+        return VerifyStatement(
+            mode='pattern',
+            condition=value_expr,
+            pattern=pattern,
+            message=message,
+            logic_block=logic_block
+        )
 
     def _parse_restrict_statement(self, block_info, all_tokens):
         """Parse restrict statement (already exists in AST).

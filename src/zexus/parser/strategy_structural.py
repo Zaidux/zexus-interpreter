@@ -358,7 +358,8 @@ class StructuralAnalyzer:
                 continue
 
             # Statement-like tokens: try to collect tokens up to a statement boundary
-            if t.type in statement_starters:
+            # DUAL-MODE DEBUG: skip if debug( ) which is a function call, not statement
+            if t.type in statement_starters and not (t.type == DEBUG and i + 1 < n and tokens[i + 1].type == LPAREN):
                 start_idx = i
                 stmt_tokens = [t]  # Start with the statement starter token
                 j = i + 1
@@ -412,8 +413,11 @@ class StructuralAnalyzer:
                         # Exception: allow chained method calls
                         prev = tokens[j-1] if j > 0 else None
                         if not (prev and prev.type == DOT):
-                            # For LET/CONST, allow FUNCTION, SANDBOX, and SANITIZE as RHS (expressions)
-                            if not (in_assignment and tj.type in {FUNCTION, SANDBOX, SANITIZE}):
+                            # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE as RHS (expressions)
+                            # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
+                            allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
+                            allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
+                            if not (in_assignment and (allow_in_assignment or allow_debug_call)):
                                 break
 
                     # Always collect tokens
@@ -429,6 +433,12 @@ class StructuralAnalyzer:
                                 # Found else/elif - continue collecting
                                 found_brace_block = False
                                 continue
+                        
+                        # REQUIRE tolerance block: the {...} is part of the statement, not separate
+                        # Don't break yet - the brace block is the tolerance logic
+                        if t.type == REQUIRE:
+                            found_brace_block = False
+                            continue
                         
                         break
 

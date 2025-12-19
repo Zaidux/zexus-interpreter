@@ -59,7 +59,7 @@ while (i < 1000) {
 
 [Learn more about VM integration →](VM_INTEGRATION_SUMMARY.md)
 
-### 🔐 Security & Policy-as-Code
+### 🔐 Security & Policy-as-Code (✨ VERIFY Enhanced!)
 ```zexus
 # Define security policies declaratively
 protect(transfer_funds, {
@@ -69,8 +69,21 @@ protect(transfer_funds, {
     allowed_ips: ["10.0.0.0/8"]
 }, "strict")
 
-# Runtime verification
-verify(user.is_authenticated and user.has_permission("transfer"))
+# Enhanced runtime verification with custom logic
+verify is_email(email) {
+    log_error("Invalid email attempt");
+    block_submission();
+}
+
+# Access control with blocking
+verify userRole == "admin" {
+    log_unauthorized_access(user);
+    block_request();
+}
+
+# Database and environment verification
+verify:db userId exists_in "users", "User not found"
+verify:env "API_KEY" is_set, "API_KEY not configured"
 
 # Data constraints
 restrict(amount, {
@@ -78,6 +91,7 @@ restrict(amount, {
     type: "integer"
 })
 ```
+**NEW**: VERIFY now includes email/URL/phone validation, pattern matching, database checks, environment variables, input sanitization, and custom logic blocks! [See VERIFY Guide →](docs/VERIFY_ENHANCEMENT_GUIDE.md)
 
 ### ⛓️ Native Blockchain Support
 ```zexus

@@ -974,8 +974,14 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_verify_statement(self, node, env, stack_trace):
-        """Evaluate VERIFY statement - supports simple assertion and complex wrapper forms"""
+        """Evaluate VERIFY statement - supports multiple forms including extended modes"""
         from .utils import is_truthy as check_truthy
+        import os
+        import re
+        
+        # Handle extended verification modes
+        if node.mode:
+            return self._eval_verify_mode(node, env, stack_trace)
         
         # Simple assertion form: verify condition, "message"
         if node.condition is not None:
@@ -990,6 +996,12 @@ class StatementEvaluatorMixin:
                     msg_val = self.eval_node(node.message, env, stack_trace)
                     if not is_error(msg_val):
                         error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+                
+                # Execute logic block if provided
+                if node.logic_block:
+                    block_result = self.eval_node(node.logic_block, env, stack_trace)
+                    if is_error(block_result):
+                        return block_result
                 
                 return EvaluationError(error_msg)
             
@@ -1021,6 +1033,325 @@ class StatementEvaluatorMixin:
         
         # Neither form provided
         return EvaluationError("Invalid VERIFY statement: requires condition or target")
+    
+    def _eval_verify_mode(self, node, env, stack_trace):
+        """Evaluate verify statement with specific mode (data, access, db, env, pattern)"""
+        from .utils import is_truthy as check_truthy
+        import os
+        import re
+        from ..object import Boolean, String
+        
+        mode = node.mode
+        
+        # verify:data - Data/format verification
+        if mode == 'data':
+            return self._eval_verify_data(node, env, stack_trace)
+        
+        # verify:access - Access control with blocking
+        elif mode == 'access':
+            return self._eval_verify_access(node, env, stack_trace)
+        
+        # verify:db - Database verification
+        elif mode == 'db':
+            return self._eval_verify_db(node, env, stack_trace)
+        
+        # verify:env - Environment variable verification
+        elif mode == 'env':
+            return self._eval_verify_env(node, env, stack_trace)
+        
+        # verify:pattern - Pattern matching
+        elif mode == 'pattern':
+            return self._eval_verify_pattern(node, env, stack_trace)
+        
+        return EvaluationError(f"Unknown verification mode: {mode}")
+    
+    def _eval_verify_data(self, node, env, stack_trace):
+        """Evaluate verify:data - data/format verification"""
+        from .utils import is_truthy as check_truthy
+        import re
+        from ..object import Boolean, String
+        
+        # Evaluate the value to verify
+        value_val = self.eval_node(node.condition, env, stack_trace)
+        if is_error(value_val):
+            return value_val
+        
+        value = value_val.value if hasattr(value_val, 'value') else str(value_val)
+        verify_type = node.verify_type
+        
+        # Evaluate pattern/expected value
+        pattern_val = self.eval_node(node.pattern, env, stack_trace) if node.pattern else None
+        if pattern_val and is_error(pattern_val):
+            return pattern_val
+        
+        pattern = pattern_val.value if pattern_val and hasattr(pattern_val, 'value') else str(pattern_val) if pattern_val else None
+        
+        # Perform verification based on type
+        is_valid = False
+        
+        if verify_type == 'matches':
+            # Pattern matching
+            if pattern:
+                try:
+                    is_valid = bool(re.match(pattern, str(value)))
+                except:
+                    is_valid = False
+        
+        elif verify_type == 'is_type' or verify_type == 'is':
+            # Type checking
+            type_map = {
+                'string': str,
+                'number': (int, float),
+                'integer': int,
+                'float': float,
+                'boolean': bool,
+                'bool': bool,
+                'email': lambda v: '@' in str(v) and '.' in str(v),
+            }
+            if pattern in type_map:
+                expected_type = type_map[pattern]
+                if callable(expected_type):
+                    is_valid = expected_type(value)
+                else:
+                    is_valid = isinstance(value, expected_type)
+        
+        elif verify_type == 'equals':
+            # Equality check
+            is_valid = str(value) == str(pattern)
+        
+        # Handle verification failure
+        if not is_valid:
+            error_msg = "Data verification failed"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if not is_error(msg_val):
+                    error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+            
+            # Execute logic block if provided
+            if node.logic_block:
+                block_result = self.eval_node(node.logic_block, env, stack_trace)
+                if is_error(block_result):
+                    return block_result
+            
+            return EvaluationError(error_msg)
+        
+        return Boolean(True)
+    
+    def _eval_verify_access(self, node, env, stack_trace):
+        """Evaluate verify:access - access control with blocking actions"""
+        from .utils import is_truthy as check_truthy
+        from ..object import Boolean
+        
+        # Evaluate access condition
+        condition_val = self.eval_node(node.condition, env, stack_trace)
+        if is_error(condition_val):
+            return condition_val
+        
+        # Check if access should be granted
+        if not check_truthy(condition_val):
+            error_msg = "Access denied"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if not is_error(msg_val):
+                    error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+            
+            # Execute action block (blocking actions)
+            if node.action_block:
+                block_result = self.eval_node(node.action_block, env, stack_trace)
+                # Don't return error from block - it's for logging/actions
+                # The access denial itself is the error
+            
+            # Block access by returning error
+            return EvaluationError(error_msg)
+        
+        return Boolean(True)
+    
+    def _eval_verify_db(self, node, env, stack_trace):
+        """Evaluate verify:db - database verification"""
+        from ..object import Boolean, String
+        
+        # Evaluate value to check
+        value_val = self.eval_node(node.condition, env, stack_trace)
+        if is_error(value_val):
+            return value_val
+        
+        value = value_val.value if hasattr(value_val, 'value') else str(value_val)
+        
+        # Evaluate table name
+        table_val = self.eval_node(node.db_table, env, stack_trace) if node.db_table else None
+        if table_val and is_error(table_val):
+            return table_val
+        
+        table = table_val.value if table_val and hasattr(table_val, 'value') else str(table_val) if table_val else None
+        
+        # Get database query type
+        query_type = node.db_query  # exists_in, unique_in, matches_in
+        
+        # Try to get database connection from environment
+        # This allows users to inject their own database handlers
+        db_handler = env.get('__db_handler__') if hasattr(env, 'get') else None
+        
+        is_valid = False
+        
+        if db_handler and hasattr(db_handler, query_type):
+            # Use custom database handler
+            try:
+                result = getattr(db_handler, query_type)(table, value)
+                is_valid = bool(result)
+            except Exception as e:
+                return EvaluationError(f"Database verification error: {str(e)}")
+        else:
+            # Fallback: Check if persistence module is available
+            try:
+                from ..persistence import get_storage_backend
+                storage = get_storage_backend()
+                
+                if query_type == 'exists_in':
+                    # Check if value exists
+                    key = f"{table}:{value}"
+                    result = storage.get(key)
+                    is_valid = result is not None
+                
+                elif query_type == 'unique_in':
+                    # Check if value is unique (doesn't exist)
+                    key = f"{table}:{value}"
+                    result = storage.get(key)
+                    is_valid = result is None
+                
+                elif query_type == 'matches_in':
+                    # Custom query - requires db_handler
+                    return EvaluationError(f"Database query '{query_type}' requires custom db_handler")
+            
+            except Exception as e:
+                # No database available - treat as verification failure
+                is_valid = False
+        
+        # Handle verification failure
+        if not is_valid:
+            error_msg = "Database verification failed"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if not is_error(msg_val):
+                    error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+            
+            # Execute logic block if provided
+            if node.logic_block:
+                block_result = self.eval_node(node.logic_block, env, stack_trace)
+                if is_error(block_result):
+                    return block_result
+            
+            return EvaluationError(error_msg)
+        
+        return Boolean(True)
+    
+    def _eval_verify_env(self, node, env, stack_trace):
+        """Evaluate verify:env - environment variable verification"""
+        import os
+        from ..object import Boolean, String
+        
+        # Evaluate env var name
+        var_val = self.eval_node(node.env_var, env, stack_trace)
+        if is_error(var_val):
+            return var_val
+        
+        var_name = var_val.value if hasattr(var_val, 'value') else str(var_val)
+        verify_type = node.verify_type or 'is_set'
+        
+        # Get environment variable value
+        env_value = os.environ.get(var_name)
+        
+        is_valid = False
+        
+        if verify_type == 'is_set' or verify_type == 'exists':
+            # Check if env var is set
+            is_valid = env_value is not None
+        
+        elif verify_type == 'equals':
+            # Check if env var equals expected value
+            expected_val = self.eval_node(node.expected_value, env, stack_trace) if node.expected_value else None
+            if expected_val and is_error(expected_val):
+                return expected_val
+            
+            expected = expected_val.value if expected_val and hasattr(expected_val, 'value') else str(expected_val) if expected_val else None
+            is_valid = env_value == expected
+        
+        elif verify_type == 'matches':
+            # Pattern matching on env var value
+            import re
+            pattern_val = self.eval_node(node.expected_value, env, stack_trace) if node.expected_value else None
+            if pattern_val and is_error(pattern_val):
+                return pattern_val
+            
+            pattern = pattern_val.value if pattern_val and hasattr(pattern_val, 'value') else str(pattern_val) if pattern_val else None
+            
+            if env_value and pattern:
+                try:
+                    is_valid = bool(re.match(pattern, env_value))
+                except:
+                    is_valid = False
+        
+        # Handle verification failure
+        if not is_valid:
+            error_msg = f"Environment variable verification failed: {var_name}"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if not is_error(msg_val):
+                    error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+            
+            # Execute logic block if provided
+            if node.logic_block:
+                block_result = self.eval_node(node.logic_block, env, stack_trace)
+                if is_error(block_result):
+                    return block_result
+            
+            return EvaluationError(error_msg)
+        
+        return Boolean(True)
+    
+    def _eval_verify_pattern(self, node, env, stack_trace):
+        """Evaluate verify:pattern - pattern matching verification"""
+        import re
+        from ..object import Boolean
+        
+        # Evaluate value to match
+        value_val = self.eval_node(node.condition, env, stack_trace)
+        if is_error(value_val):
+            return value_val
+        
+        value = value_val.value if hasattr(value_val, 'value') else str(value_val)
+        
+        # Evaluate pattern
+        pattern_val = self.eval_node(node.pattern, env, stack_trace) if node.pattern else None
+        if pattern_val and is_error(pattern_val):
+            return pattern_val
+        
+        pattern = pattern_val.value if pattern_val and hasattr(pattern_val, 'value') else str(pattern_val) if pattern_val else None
+        
+        # Perform pattern matching
+        is_valid = False
+        if pattern:
+            try:
+                is_valid = bool(re.match(pattern, str(value)))
+            except Exception as e:
+                return EvaluationError(f"Pattern matching error: {str(e)}")
+        
+        # Handle verification failure
+        if not is_valid:
+            error_msg = "Pattern verification failed"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if not is_error(msg_val):
+                    error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+            
+            # Execute logic block if provided
+            if node.logic_block:
+                block_result = self.eval_node(node.logic_block, env, stack_trace)
+                if is_error(block_result):
+                    return block_result
+            
+            return EvaluationError(error_msg)
+        
+        return Boolean(True)
     
     def eval_protect_statement(self, node, env, stack_trace):
         """Evaluate PROTECT statement with full policy engine integration."""
@@ -1225,12 +1556,21 @@ class StatementEvaluatorMixin:
         if is_error(val): 
             return val
         
-        from ..object import Debug
-        s = String(str(val))
-        Debug.log(s)
+        from ..object import Debug, String, Integer, Float, Boolean
+        # Convert to human-readable string
+        if isinstance(val, String):
+            message = val.value
+        elif isinstance(val, (Integer, Float)):
+            message = str(val.value)
+        elif isinstance(val, Boolean):
+            message = "true" if val.value else "false"
+        else:
+            message = val.inspect() if hasattr(val, 'inspect') else str(val)
+        
+        Debug.log(message)
         try:
             ctx = get_security_context()
-            ctx.emit_event('debug', {'value': s.value})
+            ctx.emit_event('debug', {'value': message})
         except Exception:
             pass
         return NULL
@@ -2315,34 +2655,190 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_require_statement(self, node, env, stack_trace):
-        """Evaluate require statement - assert condition or revert.
+        """Evaluate require statement - prerequisites, dependencies, resources.
         
-        require(balance >= amount);
-        require(TX.caller == owner, "Only owner");
+        Basic:
+            require(balance >= amount);
+            require(TX.caller == owner, "Only owner");
+        
+        With tolerance:
+            require balance >= 0.1 { tolerance_logic() }
+        
+        File/Module dependencies:
+            require \"file.zx\" imported, \"File required\";
+            require module \"db\" available, \"Database required\";
+        
+        Resource requirements:
+            require:balance amount >= minimum;
+            require:gas available >= needed;
         """
-        debug_log("eval_require_statement", "Checking condition")
+        debug_log("eval_require_statement", "Checking requirement")
+        
+        # Handle file dependencies
+        if node.requirement_type == 'file' and node.file_path:
+            return self._eval_require_file(node, env, stack_trace)
+        
+        # Handle module dependencies
+        if node.requirement_type == 'module' and node.module_name:
+            return self._eval_require_module(node, env, stack_trace)
+        
+        # Handle resource requirements
+        if node.requirement_type in ['balance', 'gas', 'prereq']:
+            return self._eval_require_resource(node, env, stack_trace)
+        
+        # Standard condition requirement
+        if node.condition:
+            # Evaluate condition
+            condition = self.eval_node(node.condition, env, stack_trace)
+            if is_error(condition):
+                return condition
+            
+            # Check if condition is true
+            if not is_truthy(condition):
+                # Execute tolerance block if provided (for conditional allowances)
+                if node.tolerance_block:
+                    print(f"⚡ TOLERANCE BLOCK: type={type(node.tolerance_block).__name__}")
+                    debug_log("eval_require_statement", "Condition failed - executing tolerance logic")
+                    tolerance_result = self.eval_node(node.tolerance_block, env, stack_trace)
+                    print(f"⚡ TOLERANCE RESULT: type={type(tolerance_result).__name__}")
+                    
+                    # Check if tolerance logic allows proceeding
+                    if is_error(tolerance_result):
+                        return tolerance_result
+                    
+                    # Unwrap ReturnValue if present
+                    from ..object import ReturnValue
+                    if isinstance(tolerance_result, ReturnValue):
+                        print(f"⚡ UNWRAPPING ReturnValue")
+                        tolerance_result = tolerance_result.value
+                        print(f"⚡ UNWRAPPED VALUE: {tolerance_result}")
+                    
+                    # If tolerance block returns true/truthy, allow it
+                    if is_truthy(tolerance_result):
+                        print(f"⚡ TOLERANCE APPROVED")
+                        debug_log("eval_require_statement", "Tolerance logic approved - allowing requirement")
+                        return NULL
+                    
+                    # If tolerance block returns false, requirement still fails
+                    print(f"⚡ TOLERANCE REJECTED")
+                    debug_log("eval_require_statement", "Tolerance logic rejected - requirement fails")
+                    # Fall through to error below
+                
+                # Evaluate error message
+                message = "Requirement not met"
+                if node.message:
+                    msg_val = self.eval_node(node.message, env, stack_trace)
+                    if isinstance(msg_val, String):
+                        message = msg_val.value
+                    elif not is_error(msg_val):
+                        message = str(msg_val.inspect() if hasattr(msg_val, 'inspect') else msg_val)
+                
+                # Trigger revert
+                debug_log("eval_require_statement", f"REVERT: {message}")
+                return EvaluationError(f"Requirement failed: {message}", stack_trace=stack_trace)
+            
+            debug_log("eval_require_statement", "Requirement satisfied")
+            return NULL
+        
+        # No condition or special type
+        return EvaluationError("Invalid require statement: missing condition")
+    
+    def _eval_require_file(self, node, env, stack_trace):
+        """Evaluate file dependency requirement."""
+        from ..object import Boolean, String
+        import os
+        
+        file_path = node.file_path
+        debug_log("_eval_require_file", f"Checking if {file_path} is imported")
+        
+        # Check if file was imported
+        # Look for the file in imported modules
+        imported_files = env.get('__imported_files__') if hasattr(env, 'get') else set()
+        
+        # Also check if file exists
+        file_exists = os.path.exists(file_path)
+        file_imported = file_path in imported_files if isinstance(imported_files, set) else False
+        
+        if not file_imported and not file_exists:
+            message = f"Required file '{file_path}' not imported"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if isinstance(msg_val, String):
+                    message = msg_val.value
+            
+            return EvaluationError(f"File dependency: {message}", stack_trace=stack_trace)
+        
+        debug_log("_eval_require_file", f"File {file_path} available")
+        return NULL
+    
+    def _eval_require_module(self, node, env, stack_trace):
+        """Evaluate module dependency requirement."""
+        from ..object import Boolean, String
+        
+        module_name = node.module_name
+        debug_log("_eval_require_module", f"Checking if module '{module_name}' is available")
+        
+        # Check if module is loaded/available
+        # Look in environment for the module
+        module_available = False
+        
+        if hasattr(env, 'get'):
+            module_obj = env.get(module_name)
+            module_available = module_obj is not None
+        
+        # Also check Python sys.modules for Python modules
+        if not module_available:
+            import sys
+            module_available = module_name in sys.modules
+        
+        if not module_available:
+            message = f"Required module '{module_name}' not available"
+            if node.message:
+                msg_val = self.eval_node(node.message, env, stack_trace)
+                if isinstance(msg_val, String):
+                    message = msg_val.value
+            
+            return EvaluationError(f"Module dependency: {message}", stack_trace=stack_trace)
+        
+        debug_log("_eval_require_module", f"Module '{module_name}' available")
+        return NULL
+    
+    def _eval_require_resource(self, node, env, stack_trace):
+        """Evaluate resource requirement (balance, gas, prerequisites)."""
+        from ..object import Boolean, String
+        
+        req_type = node.requirement_type
+        debug_log("_eval_require_resource", f"Checking {req_type} requirement")
         
         # Evaluate condition
         condition = self.eval_node(node.condition, env, stack_trace)
         if is_error(condition):
             return condition
         
-        # Check if condition is true
+        # Check condition
         if not is_truthy(condition):
-            # Evaluate error message if provided
-            message = "Requirement failed"
+            # Execute tolerance block if provided
+            if node.tolerance_block:
+                debug_log("_eval_require_resource", f"{req_type} requirement not met - checking tolerance")
+                tolerance_result = self.eval_node(node.tolerance_block, env, stack_trace)
+                
+                if is_error(tolerance_result):
+                    return tolerance_result
+                
+                if is_truthy(tolerance_result):
+                    debug_log("_eval_require_resource", f"Tolerance approved for {req_type}")
+                    return NULL
+            
+            # Requirement not met
+            message = f"{req_type.capitalize()} requirement not met"
             if node.message:
                 msg_val = self.eval_node(node.message, env, stack_trace)
                 if isinstance(msg_val, String):
                     message = msg_val.value
-                elif not is_error(msg_val):
-                    message = str(msg_val.inspect() if hasattr(msg_val, 'inspect') else msg_val)
             
-            # Trigger revert
-            debug_log("eval_require_statement", f"REVERT: {message}")
-            return EvaluationError(f"Transaction reverted: {message}", stack_trace=stack_trace)
+            return EvaluationError(f"Resource requirement: {message}", stack_trace=stack_trace)
         
-        debug_log("eval_require_statement", "Requirement passed")
+        debug_log("_eval_require_resource", f"{req_type} requirement satisfied")
         return NULL
     
     def eval_revert_statement(self, node, env, stack_trace):

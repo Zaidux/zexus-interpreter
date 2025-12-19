@@ -1,0 +1,87 @@
+# Register VM Basic Tests (Easy)
+# Tests fundamental register operations for Phase 5
+
+print "=== REGISTER VM BASIC TESTS ==="
+
+# Test 1: Simple register load and print
+print "\n[Test 1] Simple load"
+let x = 42
+print x
+# Expected: 42
+
+# Test 2: Basic arithmetic - addition
+print "\n[Test 2] Basic addition"
+let a = 10
+let b = 20
+let sum = a + b
+print sum
+# Expected: 30
+
+# Test 3: Basic arithmetic - subtraction
+print "\n[Test 3] Basic subtraction"
+let c = 50
+let d = 30
+let diff = c - d
+print diff
+# Expected: 20
+
+# Test 4: Basic arithmetic - multiplication
+print "\n[Test 4] Basic multiplication"
+let e = 7
+let f = 6
+let product = e * f
+print product
+# Expected: 42
+
+# Test 5: Basic arithmetic - division
+print "\n[Test 5] Basic division"
+let g = 100
+let h = 10
+let quotient = g / h
+print quotient
+# Expected: 10
+
+# Test 6: Variable reassignment
+print "\n[Test 6] Variable reassignment"
+let count = 5
+print count
+count = 10
+print count
+# Expected: 5, 10
+
+# Test 7: Chained arithmetic
+print "\n[Test 7] Chained arithmetic"
+let x1 = 5
+let y1 = 3
+let z1 = 2
+let result1 = x1 + y1 + z1
+print result1
+# Expected: 10
+
+# Test 8: Mixed operations
+print "\n[Test 8] Mixed operations"
+let num1 = 10
+let num2 = 5
+let result2 = num1 + num2 * 2
+print result2
+# Expected: 20 (5 * 2 = 10, 10 + 10 = 20)
+
+# Test 9: Comparison operations
+print "\n[Test 9] Comparisons"
+let val1 = 10
+let val2 = 20
+if (val1 < val2) {
+    print "10 < 20 is true"
+}
+# Expected: "10 < 20 is true"
+
+# Test 10: Equality check
+print "\n[Test 10] Equality"
+let eq1 = 42
+let eq2 = 42
+if (eq1 == eq2) {
+    print "Values are equal"
+}
+# Expected: "Values are equal"
+
+print "\n=== ALL BASIC TESTS COMPLETE ==="

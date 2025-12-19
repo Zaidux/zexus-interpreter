@@ -1,0 +1,35 @@
+print "Test 1: Basic true";
+verify true, "Should pass";
+print "✓ Test 1 passed";
+
+print "";
+print "Test 2: Basic false (should throw error)";
+try {
+    verify false, "Expected failure";
+    print "✗ Should not reach here";
+} catch (e) {
+    print "✓ Caught error: " + e;
+}
+
+print "";
+print "Test 3: Email validation";
+try {
+    verify is_email("user@test.com"), "Invalid email";
+    print "✓ Email valid";
+} catch (e) {
+    print "✗ Email check failed";
+}
+
+print "";
+print "Test 4: Custom logic block";
+try {
+    verify false {
+        print "  [CUSTOM] Running custom logic";
+    }
+    print "✗ Should not reach here";
+} catch (e) {
+    print "✓ Custom logic executed, error caught";
+}
+
+print "";
+print "Done!";

@@ -1,0 +1,231 @@
+# Register VM Stress Tests (Complex)
+# Tests register spilling, high register pressure, and performance
+
+print "=== REGISTER VM STRESS TESTS ==="
+
+# Test 1: Extreme register pressure (20+ variables)
+print "\n[Test 1] Extreme register pressure"
+let r1 = 1
+let r2 = 2
+let r3 = 3
+let r4 = 4
+let r5 = 5
+let r6 = 6
+let r7 = 7
+let r8 = 8
+let r9 = 9
+let r10 = 10
+let r11 = 11
+let r12 = 12
+let r13 = 13
+let r14 = 14
+let r15 = 15
+let r16 = 16
+let r17 = 17
+let r18 = 18
+let r19 = 19
+let r20 = 20
+let mega_sum = r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + 
+               r11 + r12 + r13 + r14 + r15 + r16 + r17 + r18 + r19 + r20
+print mega_sum
+# Expected: 210
+
+# Test 2: Heavy arithmetic loop (1000 iterations)
+print "\n[Test 2] Heavy loop"
+let loop_sum = 0
+let counter = 1
+while (counter <= 100) {
+    loop_sum = loop_sum + counter
+    counter = counter + 1
+}
+print loop_sum
+# Expected: 5050
+
+# Test 3: Fibonacci sequence (register-intensive)
+print "\n[Test 3] Fibonacci"
+function fib(n) {
+    if (n <= 1) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+let fib10 = fib(10)
+print fib10
+# Expected: 55
+
+# Test 4: Matrix-like computation
+print "\n[Test 4] Matrix-like computation"
+let m11 = 1
+let m12 = 2
+let m21 = 3
+let m22 = 4
+let n11 = 5
+let n12 = 6
+let n21 = 7
+let n22 = 8
+let result11 = (m11 * n11) + (m12 * n21)
+let result12 = (m11 * n12) + (m12 * n22)
+let result21 = (m21 * n11) + (m22 * n21)
+let result22 = (m21 * n12) + (m22 * n22)
+print result11
+print result12
+print result21
+print result22
+# Expected: 19, 22, 43, 50
+
+# Test 5: Deep recursion
+print "\n[Test 5] Deep recursion"
+function sum_to_n(n) {
+    if (n == 0) {
+        return 0
+    }
+    return n + sum_to_n(n - 1)
+}
+let deep_sum = sum_to_n(50)
+print deep_sum
+# Expected: 1275
+
+# Test 6: Nested loops with arithmetic
+print "\n[Test 6] Nested loops"
+let outer_sum = 0
+let i = 1
+while (i <= 10) {
+    let j = 1
+    while (j <= 10) {
+        outer_sum = outer_sum + (i * j)
+        j = j + 1
+    }
+    i = i + 1
+}
+print outer_sum
+# Expected: 3025
+
+# Test 7: Complex expression tree
+print "\n[Test 7] Expression tree"
+let a1 = 2
+let b1 = 3
+let c1 = 4
+let d1 = 5
+let e1 = 6
+let tree_result = ((a1 + b1) * (c1 - d1)) + ((e1 * a1) / b1)
+print tree_result
+# Expected: -1 ((5 * -1) + 4)
+
+# Test 8: String concatenation stress
+print "\n[Test 8] String operations"
+let s1 = "Hello"
+let s2 = " "
+let s3 = "World"
+let s4 = "!"
+let message = s1 + s2 + s3 + s4
+print message
+# Expected: "Hello World!"
+
+# Test 9: Array manipulation stress
+print "\n[Test 9] Array stress"
+let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let arr_sum = 0
+let idx = 0
+while (idx < 10) {
+    arr_sum = arr_sum + arr[idx]
+    idx = idx + 1
+}
+print arr_sum
+# Expected: 55
+
+# Test 10: Power calculation stress
+print "\n[Test 10] Power calculations"
+let powers_sum = 0
+let p = 0
+while (p <= 5) {
+    powers_sum = powers_sum + (2 ** p)
+    p = p + 1
+}
+print powers_sum
+# Expected: 63 (1+2+4+8+16+32)
+
+# Test 11: Register spilling scenario
+print "\n[Test 11] Register spilling"
+let s1 = 1
+let s2 = 2
+let s3 = 3
+let s4 = 4
+let s5 = 5
+let s6 = 6
+let s7 = 7
+let s8 = 8
+let s9 = 9
+let s10 = 10
+let s11 = 11
+let s12 = 12
+let s13 = 13
+let s14 = 14
+let s15 = 15
+let s16 = 16
+let s17 = 17  # Should cause spilling on 16-register VM
+let s18 = 18
+let spill_result = s1 + s18
+print spill_result
+# Expected: 19
+
+# Test 12: Factorial performance
+print "\n[Test 12] Factorial stress"
+function fact(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+let fact10 = fact(10)
+print fact10
+# Expected: 3628800
+
+# Test 13: Prime number calculation
+print "\n[Test 13] Prime calculation"
+function is_prime(n) {
+    if (n <= 1) {
+        return false
+    }
+    let div = 2
+    while (div * div <= n) {
+        if (n % div == 0) {
+            return false
+        }
+        div = div + 1
+    }
+    return true
+}
+print is_prime(17)
+print is_prime(18)
+# Expected: true, false
+
+# Test 14: Memory intensive computation
+print "\n[Test 14] Memory intensive"
+let mem1 = [1, 2, 3]
+let mem2 = [4, 5, 6]
+let mem3 = [7, 8, 9]
+let cross_sum = (mem1[0] * mem2[0]) + (mem1[1] * mem2[1]) + (mem1[2] * mem2[2])
+print cross_sum
+# Expected: 32 (4+10+18)
+
+# Test 15: Ultimate stress test
+print "\n[Test 15] Ultimate stress"
+function stress_compute(n) {
+    let result = 0
+    let i = 0
+    while (i < n) {
+        let j = 0
+        while (j < n) {
+            result = result + (i * j)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return result
+}
+let stress = stress_compute(10)
+print stress
+# Expected: 2025
+
+print "\n=== ALL STRESS TESTS COMPLETE ==="
+print "Register VM handled extreme conditions successfully!"

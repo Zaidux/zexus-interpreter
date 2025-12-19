@@ -16,6 +16,7 @@ from typing import List, Any, Dict, Tuple, Optional, Union
 import asyncio
 import importlib
 import types
+import time
 
 # Try to use renderer backend
 try:
@@ -25,6 +26,14 @@ except Exception:
 	_BACKEND_AVAILABLE = False
 	_BACKEND = None
 
+# JIT compiler import
+try:
+	from .jit import JITCompiler
+	_JIT_AVAILABLE = True
+except Exception:
+	_JIT_AVAILABLE = False
+	JITCompiler = None
+
 # NEW: mutable cell used for proper closure capture semantics
 class Cell:
 	def __init__(self, value):
@@ -33,7 +42,7 @@ class Cell:
 		return f"<Cell {self.value!r}>"
 
 class VM:
-	def __init__(self, builtins: Dict[str, Any] = None, env: Dict[str, Any] = None, parent_env: Dict[str, Any] = None):
+	def __init__(self, builtins: Dict[str, Any] = None, env: Dict[str, Any] = None, parent_env: Dict[str, Any] = None, use_jit: bool = True, jit_threshold: int = 100, use_memory_manager: bool = False, max_heap_mb: int = 100):
 		# builtins: mapping name -> Builtin wrapper or callable
 		self.builtins = builtins or {}
 		# env: runtime environment for variables, modules, screens, etc.
@@ -47,6 +56,22 @@ class VM:
 		self._task_counter = 0
 		# closure cell mapping (name -> Cell) for this VM frame (used when VM itself is used as closure store)
 		self._closure_cells: Dict[str, Cell] = {}
+		
+		# JIT compilation support
+		self.use_jit = use_jit and _JIT_AVAILABLE
+		self.jit_compiler = JITCompiler(hot_threshold=jit_threshold, debug=False) if self.use_jit else None
+		self._execution_times: Dict[str, float] = {}  # Track execution times for profiling
+		
+		# Memory management support (Phase 7)
+		self.use_memory_manager = use_memory_manager
+		self.memory_manager = None
+		if use_memory_manager:
+			from .memory_manager import create_memory_manager
+			self.memory_manager = create_memory_manager(
+				max_heap_mb=max_heap_mb,
+				gc_threshold=1000
+			)
+		self._managed_objects: Dict[str, int] = {}  # variable_name -> object_id
 
 	# Public entry: accept either high-level ops list or low-level Bytecode object
 	def execute(self, code: Union[List[Tuple], Any], debug: bool = False):
@@ -60,6 +85,102 @@ class VM:
 			if debug:
 				print("[VM] Running high-level ops list")
 			return asyncio.run(self._run_high_level_ops(code, debug))
+		return None
+	
+	def get_jit_stats(self) -> Dict[str, Any]:
+		"""Get JIT compilation statistics"""
+		if self.use_jit and self.jit_compiler:
+			return self.jit_compiler.get_stats()
+		return {
+			'jit_enabled': False,
+			'message': 'JIT compiler not available or disabled'
+		}
+	
+	def clear_jit_cache(self):
+		"""Clear JIT compilation cache"""
+		if self.use_jit and self.jit_compiler:
+			self.jit_compiler.clear_cache()
+	
+	def get_memory_stats(self) -> Dict[str, Any]:
+		"""Get memory management statistics (Phase 7)"""
+		if self.use_memory_manager and self.memory_manager:
+			return self.memory_manager.get_stats()
+		return {
+			'memory_manager_enabled': False,
+			'message': 'Memory manager not enabled'
+		}
+	
+	def collect_garbage(self, force: bool = False) -> Dict[str, Any]:
+		"""Trigger garbage collection (Phase 7)
+		
+		Args:
+			force: Force collection even if threshold not reached
+		
+		Returns:
+			Dictionary with collection results
+		"""
+		if self.use_memory_manager and self.memory_manager:
+			collected, gc_time = self.memory_manager.collect_garbage(force=force)
+			return {
+				'collected': collected,
+				'gc_time': gc_time,
+				'stats': self.memory_manager.get_stats()
+			}
+		return {
+			'collected': 0,
+			'gc_time': 0.0,
+			'message': 'Memory manager not enabled'
+		}
+	
+	def get_memory_report(self) -> str:
+		"""Get detailed memory report (Phase 7)"""
+		if self.use_memory_manager and self.memory_manager:
+			return self.memory_manager.get_memory_report()
+		return "Memory manager not enabled"
+	
+	def _allocate_managed(self, value: Any, name: str = None, root: bool = False) -> int:
+		"""Allocate object with memory manager (Phase 7)
+		
+		Args:
+			value: Object to allocate
+			name: Variable name (for tracking)
+			root: Mark as root (prevent GC)
+		
+		Returns:
+			Object ID
+		"""
+		if not self.use_memory_manager or not self.memory_manager:
+			return -1
+		
+		# Deallocate old value if variable exists
+		if name and name in self._managed_objects:
+			old_id = self._managed_objects[name]
+			self.memory_manager.deallocate(old_id)
+		
+		# Allocate new value
+		obj_id = self.memory_manager.allocate(value, root=root)
+		
+		if name:
+			self._managed_objects[name] = obj_id
+		
+		return obj_id
+	
+	def _get_managed(self, name: str) -> Any:
+		"""Get managed object value (Phase 7)
+		
+		Args:
+			name: Variable name
+		
+		Returns:
+			Object value or None
+		"""
+		if not self.use_memory_manager or not self.memory_manager:
+			return None
+		
+		obj_id = self._managed_objects.get(name)
+		if obj_id is not None:
+			return self.memory_manager.get(obj_id)
+		
 		return None
 
 	# -----------------------
@@ -173,6 +294,41 @@ class VM:
 	# Low-level stack VM
 	# -----------------------
 	async def _run_stack_bytecode(self, bytecode, debug=False):
+		# JIT Compilation: Check if this code is hot and should be JIT compiled
+		if self.use_jit and self.jit_compiler:
+			import time as time_module
+			start_time = time_module.time()
+			
+			# Track execution for hot path detection
+			self.jit_compiler.track_execution(bytecode)
+			
+			bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
+			
+			# Check if we have a JIT-compiled version (from cache)
+			jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
+			
+			# If not compiled yet and hot enough, compile it
+			if jit_function is None and self.jit_compiler.should_compile(bytecode_hash):
+				jit_function = self.jit_compiler.compile_hot_path(bytecode)
+			
+			# Execute JIT-compiled version if available
+			if jit_function:
+				self.jit_compiler.stats.cache_hits += 1
+				# Execute via JIT-compiled native code
+				stack = []
+				try:
+					result = jit_function(self, stack, self.env)
+					execution_time = time_module.time() - start_time
+					self._execution_times[bytecode_hash] = execution_time
+					self.jit_compiler.stats.jit_executions += 1
+					if debug:
+						print(f"⚡ JIT: Executed in {execution_time:.6f}s")
+					return result
+				except Exception as e:
+					if debug:
+						print(f"❌ JIT: Execution failed, falling back to bytecode: {e}")
+					# Fall through to normal bytecode execution
+		
 		consts = list(getattr(bytecode, "constants", []))
 		instrs = list(getattr(bytecode, "instructions", []))
 		ip = 0
@@ -266,6 +422,9 @@ class VM:
 				val = stack.pop() if stack else None
 				# Respect closure cells and lexical semantics
 				_store(name, val)
+				# Memory management: allocate if enabled (Phase 7)
+				if self.use_memory_manager and val is not None:
+					self._allocate_managed(val, name=name, root=False)
 			elif op == "POP":
 				if stack:
 					stack.pop()
@@ -486,6 +645,173 @@ class VM:
 					if not hasattr(obj, m):
 						ok = False; missing.append(m)
 				stack.append((ok, missing))
+			
+			# ========================================
+			# BLOCKCHAIN-SPECIFIC OPCODES (110-119)
+			# ========================================
+			elif op == "HASH_BLOCK":
+				# Hash block data on stack using SHA-256
+				# Stack: [block_data] -> [hash_string]
+				import hashlib
+				block_data = stack.pop() if stack else ""
+				# Convert to string if needed
+				if not isinstance(block_data, (str, bytes)):
+					block_data = str(block_data)
+				if isinstance(block_data, str):
+					block_data = block_data.encode('utf-8')
+				hash_result = hashlib.sha256(block_data).hexdigest()
+				stack.append(hash_result)
+			
+			elif op == "VERIFY_SIGNATURE":
+				# Verify cryptographic signature
+				# Stack: [signature, message, public_key] -> [True/False]
+				# For now, delegate to VERIFY_SIG keyword implementation
+				if len(stack) >= 3:
+					public_key = stack.pop()
+					message = stack.pop()
+					signature = stack.pop()
+					# Call existing verify_sig implementation
+					verify_fn = self.builtins.get("verify_sig") or self.env.get("verify_sig")
+					if verify_fn:
+						result = await self._invoke_callable_or_funcdesc(verify_fn, [signature, message, public_key])
+						stack.append(result)
+					else:
+						# Fallback: assume valid if signature matches message hash
+						import hashlib
+						msg_hash = hashlib.sha256(str(message).encode()).hexdigest()
+						stack.append(signature == msg_hash)
+				else:
+					stack.append(False)
+			
+			elif op == "MERKLE_ROOT":
+				# Calculate Merkle tree root
+				# operand: leaf_count
+				# Stack: [leaf1, leaf2, ..., leafN] -> [merkle_root]
+				import hashlib
+				leaf_count = operand if operand is not None else 0
+				if leaf_count <= 0:
+					stack.append("")
+				else:
+					leaves = [stack.pop() for _ in range(leaf_count)][::-1] if len(stack) >= leaf_count else []
+					# Convert leaves to hashes
+					hashes = []
+					for leaf in leaves:
+						if not isinstance(leaf, (str, bytes)):
+							leaf = str(leaf)
+						if isinstance(leaf, str):
+							leaf = leaf.encode('utf-8')
+						hashes.append(hashlib.sha256(leaf).hexdigest())
+					
+					# Build Merkle tree
+					while len(hashes) > 1:
+						if len(hashes) % 2 != 0:
+							hashes.append(hashes[-1])  # Duplicate last hash
+						new_hashes = []
+						for i in range(0, len(hashes), 2):
+							combined = (hashes[i] + hashes[i+1]).encode('utf-8')
+							new_hashes.append(hashlib.sha256(combined).hexdigest())
+						hashes = new_hashes
+					
+					merkle_root = hashes[0] if hashes else ""
+					stack.append(merkle_root)
+			
+			elif op == "STATE_READ":
+				# Read from blockchain state
+				# operand: key_const_idx
+				# Stack: [] -> [value]
+				key = const(operand)
+				blockchain_state = self.env.setdefault("_blockchain_state", {})
+				value = blockchain_state.get(key, None)
+				stack.append(value)
+			
+			elif op == "STATE_WRITE":
+				# Write to blockchain state (only in TX context)
+				# operand: key_const_idx
+				# Stack: [value] -> []
+				key = const(operand)
+				value = stack.pop() if stack else None
+				# Check if we're in a transaction
+				in_tx = self.env.get("_in_transaction", False)
+				if in_tx:
+					tx_state = self.env.setdefault("_tx_pending_state", {})
+					tx_state[key] = value
+				else:
+					# Direct write if not in TX (for testing)
+					blockchain_state = self.env.setdefault("_blockchain_state", {})
+					blockchain_state[key] = value
+			
+			elif op == "TX_BEGIN":
+				# Begin transaction context
+				# Stack: [] -> []
+				self.env["_in_transaction"] = True
+				self.env["_tx_pending_state"] = {}
+				self.env["_tx_snapshot"] = dict(self.env.get("_blockchain_state", {}))
+			
+			elif op == "TX_COMMIT":
+				# Commit transaction
+				# Stack: [] -> []
+				if self.env.get("_in_transaction", False):
+					# Merge pending state into blockchain state
+					blockchain_state = self.env.setdefault("_blockchain_state", {})
+					tx_state = self.env.get("_tx_pending_state", {})
+					blockchain_state.update(tx_state)
+					# Clear transaction state
+					self.env["_in_transaction"] = False
+					self.env["_tx_pending_state"] = {}
+					self.env["_tx_snapshot"] = {}
+			
+			elif op == "TX_REVERT":
+				# Revert transaction (rollback)
+				# operand: optional reason_const_idx
+				# Stack: [] -> []
+				if self.env.get("_in_transaction", False):
+					# Restore snapshot
+					snapshot = self.env.get("_tx_snapshot", {})
+					self.env["_blockchain_state"] = dict(snapshot)
+					# Clear transaction state
+					self.env["_in_transaction"] = False
+					self.env["_tx_pending_state"] = {}
+					self.env["_tx_snapshot"] = {}
+					# Log revert reason if provided
+					if operand is not None:
+						reason = const(operand)
+						if debug:
+							print(f"[VM] Transaction reverted: {reason}")
+			
+			elif op == "GAS_CHARGE":
+				# Deduct gas from execution limit
+				# operand: gas_amount
+				# Stack: [] -> []
+				gas_amount = operand if operand is not None else 0
+				current_gas = self.env.get("_gas_remaining", float('inf'))
+				if current_gas != float('inf'):
+					new_gas = current_gas - gas_amount
+					if new_gas < 0:
+						# Out of gas - revert transaction
+						if self.env.get("_in_transaction", False):
+							# Trigger revert
+							self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+							self.env["_in_transaction"] = False
+							self.env["_tx_pending_state"] = {}
+							self.env["_tx_snapshot"] = {}
+						if debug:
+							print(f"[VM] Out of gas! Required: {gas_amount}, Remaining: {current_gas}")
+						# Push error indicator
+						stack.append({"error": "OutOfGas", "required": gas_amount, "remaining": current_gas})
+						return stack[-1] if stack else None
+					self.env["_gas_remaining"] = new_gas
+			
+			elif op == "LEDGER_APPEND":
+				# Append entry to immutable ledger
+				# Stack: [entry] -> []
+				entry = stack.pop() if stack else None
+				ledger = self.env.setdefault("_ledger", [])
+				# Add timestamp if not present
+				if isinstance(entry, dict) and "timestamp" not in entry:
+					import time
+					entry["timestamp"] = time.time()
+				ledger.append(entry)
+			
 			else:
 				# unknown opcode: ignore
 				if debug:

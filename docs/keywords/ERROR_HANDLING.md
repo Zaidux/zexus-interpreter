@@ -273,10 +273,17 @@ action executeTransaction(from, to, amount) {
 require(condition);                              // Basic assertion
 require(condition, "Error message");             // With message
 require(complex && expression, "Description");   // Complex condition
+
+// Enhanced: Tolerance blocks for conditional bypasses
+require condition {
+    // Tolerance logic: if this returns truthy, bypass the requirement
+}
 ```
 
 ### Purpose
 The `require` keyword is a guard clause that validates conditions. If the condition is false, it triggers a revert. This is a common pattern in smart contracts for input validation and state checking.
+
+**Enhanced Feature**: Tolerance blocks allow you to define conditional bypass logic for VIP users, loyalty programs, emergency overrides, and multi-tier requirements.
 
 ### Basic Usage
 
@@ -342,6 +349,52 @@ require(value != 0, "Value cannot be zero");
 // Range checks
 require(value >= min, "Below minimum");
 require(value <= max, "Above maximum");
+```
+
+### Tolerance Block Feature
+
+#### VIP Fee Waiver
+```zexus
+action processPayment(balance, isVIP) {
+    // Standard users need 0.1 BNB, but VIP users bypass this
+    require balance >= 0.1 {
+        if (isVIP) return true;
+    }
+    print "Payment processed";
+}
+```
+
+#### Loyalty Discount Bypass
+```zexus
+action processOrder(amount, loyaltyPoints) {
+    // Minimum purchase $100, but 500+ loyalty points bypass this
+    require amount >= 100 {
+        if (loyaltyPoints >= 500) return true;
+    }
+    print "Order placed";
+}
+```
+
+#### Emergency Override
+```zexus
+action systemAccess(isAdmin, emergency, maintenanceMode) {
+    // Maintenance blocks access, but admin in emergency can bypass
+    require !maintenanceMode {
+        if (isAdmin && emergency) return true;
+    }
+    print "Access granted";
+}
+```
+
+#### Multi-Tier Requirements
+```zexus
+action accessPremiumFeature(balance, tier) {
+    // Need 1.0 ETH, but gold/platinum tiers bypass
+    require balance >= 1.0 {
+        if (tier == "gold" || tier == "platinum") return true;
+    }
+    print "Premium feature unlocked";
+}
 ```
 
 ### Smart Contract Patterns

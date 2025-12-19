@@ -1,0 +1,136 @@
+# Zexus Parallel VM - Stress Tests
+# Tests extreme parallelization scenarios
+
+action test_massive_independent_ops() {
+    print("Testing 200 independent operations...")
+    let results = []
+    for i in range(200) {
+        results.append(i * i + i)
+    }
+    assert len(results) == 200, "Results count incorrect"
+    print("✓ Massive independent ops passed")
+    return true
+}
+
+action test_deep_dependency_chain() {
+    print("Testing deep dependency chain...")
+    let val = 1
+    for i in range(100) {
+        val = val + 1
+    }
+    assert val == 101, "Chain calculation failed"
+    print("✓ Deep dependency chain passed")
+    return true
+}
+
+action test_wide_parallelism() {
+    print("Testing wide parallelism (100 parallel branches)...")
+    let branches = []
+    for i in range(100) {
+        let calc = (i * 10) + (i * i)
+        branches.append(calc)
+    }
+    assert len(branches) == 100, "Branch count incorrect"
+    print("✓ Wide parallelism passed")
+    return true
+}
+
+action test_matrix_operations() {
+    print("Testing matrix operations...")
+    let matrix = []
+    for i in range(20) {
+        let row = []
+        for j in range(20) {
+            row.append(i * 20 + j)
+        }
+        matrix.append(row)
+    }
+    assert len(matrix) == 20, "Matrix size incorrect"
+    print("✓ Matrix operations passed")
+    return true
+}
+
+action test_recursive_computation() {
+    print("Testing recursive-like computations...")
+    action fib(n) {
+        if n <= 1 {
+            return n
+        }
+        return fib(n-1) + fib(n-2)
+    }
+    let result = fib(15)
+    assert result == 610, "Fibonacci calculation failed"
+    print("✓ Recursive computation passed")
+    return true
+}
+
+action test_extreme_chunking() {
+    print("Testing extreme chunking (500 operations)...")
+    let total = 0
+    for i in range(500) {
+        total = total + (i % 10)
+    }
+    assert total > 0, "Extreme chunking failed"
+    print("✓ Extreme chunking passed")
+    return true
+}
+
+action test_high_register_pressure() {
+    print("Testing high register pressure...")
+    let v1=1, v2=2, v3=3, v4=4, v5=5
+    let v6=6, v7=7, v8=8, v9=9, v10=10
+    let v11=11, v12=12, v13=13, v14=14, v15=15
+    let sum = v1+v2+v3+v4+v5+v6+v7+v8+v9+v10+v11+v12+v13+v14+v15
+    assert sum == 120, "High register pressure failed"
+    print("✓ High register pressure passed")
+    return true
+}
+
+action test_mixed_control_flow() {
+    print("Testing mixed control flow...")
+    let results = []
+    for i in range(100) {
+        if i % 3 == 0 {
+            results.append(i * 2)
+        } elif i % 3 == 1 {
+            results.append(i * 3)
+        } else {
+            results.append(i * 4)
+        }
+    }
+    assert len(results) == 100, "Control flow results incorrect"
+    print("✓ Mixed control flow passed")
+    return true
+}
+
+action test_parallel_reductions() {
+    print("Testing parallel reductions...")
+    let sum = 0
+    let product = 1
+    for i in range(1, 21) {
+        sum = sum + i
+        product = product * (i % 5 + 1)
+    }
+    assert sum == 210, "Sum reduction failed"
+    print("✓ Parallel reductions passed")
+    return true
+}
+
+action test_all() {
+    print("=== Parallel VM Stress Tests ===\n")
+    
+    test_massive_independent_ops()
+    test_deep_dependency_chain()
+    test_wide_parallelism()
+    test_matrix_operations()
+    test_recursive_computation()
+    test_extreme_chunking()
+    test_high_register_pressure()
+    test_mixed_control_flow()
+    test_parallel_reductions()
+    
+    print("\n=== All stress tests passed! ===")
+    return true
+}
+
+test_all()

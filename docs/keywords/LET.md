@@ -5,10 +5,15 @@ The `let` keyword in Zexus is used to declare **mutable variables**. Variables d
 
 ## Syntax
 
+Zexus supports **three syntax variations** for variable declaration:
+
 ```zexus
-let variable_name = value;
-let variable_name : value;    // Alternative syntax (colon instead of equals)
+let variable_name = value;              // Standard assignment
+let variable_name : value;              // Colon syntax (alternative)
+let variable_name : Type = value;       // Type annotation with assignment
 ```
+
+**All three syntaxes are fully supported as of December 18, 2025!**
 
 **Note**: The semicolon at the end is optional in Zexus.
 
@@ -103,11 +108,15 @@ const immutableVar = 10;
 immutableVar = 20;  // ❌ Error: Cannot reassign const variable
 ```
 
-## Scope Rules
+## Scope Rules ⚠️ IMPORTANT
 
-Variables declared with `let` follow lexical (block) scoping:
+**Zexus uses FUNCTION-LEVEL SCOPING, not block-level scoping!**
 
-### Function Scope
+This is a key design decision that makes Zexus different from many modern languages:
+
+### Function Scope ✅
+Functions create new scopes:
+
 ```zexus
 action example() {
     let localVar = "I'm local";
@@ -118,25 +127,60 @@ example();
 print localVar;    // ❌ Error: localVar is not defined
 ```
 
-### Block Scope
+### Block Scope ❌
+**Blocks do NOT create new scopes:**
+
 ```zexus
+let x = 10;
+print x;  // 10
+
 if (true) {
-    let blockVar = "I'm in a block";
-    print blockVar;    // ✅ Works
+    let x = 20;  // ⚠️ This REASSIGNS the outer x, doesn't shadow it!
+    print x;     // 20
 }
 
-print blockVar;    // ❌ Error: blockVar is not defined
+print x;  // 20 (the value changed!)
 ```
 
-### Loop Scope
+**To shadow a variable, use a function:**
+
 ```zexus
-for each i in [1, 2, 3] {
-    let loopVar = i * 2;
-    print loopVar;    // Works for each iteration
+let x = 10;
+print x;  // 10
+
+action test() {
+    let x = 20;  // ✅ This creates a NEW variable in function scope
+    print x;     // 20
 }
 
-print loopVar;    // ❌ Error: loopVar is not defined
+test();
+print x;  // 10 (outer x unchanged)
 ```
+
+### Loop Scope ❌
+**Loops also do NOT create new scopes:**
+
+```zexus
+let i = 100;
+
+for each i in [1, 2, 3] {
+    print i;  // 1, 2, 3 (overwrites outer i)
+}
+
+print i;  // 3 (i was modified by the loop!)
+```
+
+### Why This Matters
+
+**DO:**
+- Use functions to create isolated scopes
+- Use unique variable names in the same scope
+- Be aware that blocks/loops share the outer scope
+
+**DON'T:**
+- Expect block-level scoping like in JavaScript, Python, or Rust
+- Reuse variable names in nested blocks expecting shadowing
+- Assume loop variables are local to the loop
 
 ## Common Patterns
 
@@ -199,18 +243,26 @@ let x = null;
 let x = 0;
 ```
 
-### 2. Shadowing
-Variables in inner scopes can shadow outer variables:
+### 2. Shadowing ⚠️
+**Shadowing only works in FUNCTIONS, not blocks!**
 
 ```zexus
+// ❌ DOES NOT WORK - blocks don't create scopes
 let x = 10;
-
 if (true) {
-    let x = 20;      // Different variable (shadows outer x)
+    let x = 20;      // This REASSIGNS outer x!
     print x;         // Output: 20
 }
+print x;            // Output: 20 (x was changed!)
 
-print x;            // Output: 10 (outer x is unchanged)
+// ✅ WORKS - functions create scopes
+let x = 10;
+action test() {
+    let x = 20;      // This creates a new variable
+    print x;         // Output: 20
+}
+test();
+print x;            // Output: 10 (outer x unchanged)
 ```
 
 ### 3. Type Mismatch (with type annotations)
@@ -376,4 +428,10 @@ Remember: Use `let` for mutable data and `const` for immutable data. This makes 
 **Related Keywords**: CONST, ASSIGN, IDENT, TYPE_ALIAS  
 **Category**: Variable Declaration  
 **Status**: ✅ Fully Implemented  
-**Last Updated**: December 16, 2025
+**Last Updated**: December 18, 2025
+
+### Recent Updates (Dec 18, 2025)
+- ✅ Added colon syntax support: `let x : 42;`
+- ✅ Documented function-level scoping behavior
+- ✅ Clarified shadowing limitations (functions only)
+- ✅ Updated all syntax variations with type annotations

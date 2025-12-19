@@ -727,6 +727,7 @@ class Environment:
 
     def set_const(self, name, val):
         """Set a constant (immutable) variable"""
+        # Only check CURRENT scope for const shadowing - allow shadowing in nested scopes
         if name in self.store and name in self.const_vars:
             from .object import EvaluationError
             raise ValueError(f"Cannot reassign const variable '{name}'")

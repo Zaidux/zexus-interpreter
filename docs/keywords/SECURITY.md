@@ -103,67 +103,343 @@ entity Permission {
 
 ---
 
-## VERIFY Keyword
+## VERIFY Keyword ✨ **ENHANCED** (December 19, 2025)
 
 ### Syntax
 ```zexus
 // Simple assertion form
 verify condition, "error message";
 
-// Complex wrapper form (less tested)
+// Custom logic block form
+verify condition {
+    // Custom developer logic on failure
+    log_error("Verification failed");
+    send_alert(admin);
+}
+
+// Data verification modes
+verify:data value matches pattern, "error message";
+verify:data value is_type "email", "error message";
+
+// Access control mode (blocks access)
+verify:access condition {
+    block_request();
+    log_unauthorized_access();
+}
+
+// Database verification mode
+verify:db value exists_in "table", "error message";
+verify:db value unique_in "table", "error message";
+
+// Environment variable mode
+verify:env "VAR_NAME" is_set, "error message";
+verify:env "VAR_NAME" equals "expected", "error message";
+
+// Pattern matching mode
+verify:pattern value matches "regex", "error message";
+
+// Complex wrapper form
 verify(target, [conditions...]);
 ```
 
 ### Purpose
-Runtime assertion and validation. Throws error if condition is false.
+**Enhanced verification system** that validates data, controls access, checks databases, verifies environment variables, and allows custom developer logic. Goes beyond simple assertions to provide comprehensive security and validation gates.
+
+### Core Capabilities
+
+1. **Data Verification** - Validate formats, types, patterns
+2. **Access Control** - Block unauthorized access with custom actions
+3. **Database Checks** - Verify data exists/unique in database
+4. **Environment Validation** - Check configuration and env vars
+5. **Custom Logic** - Developer-defined verification logic in `{}`
+6. **Pattern Matching** - Regex validation for any format
+7. **Security Gates** - Prevent bad data from entering system
 
 ### Basic Usage
 
-#### Simple Verification
+#### Simple Verification (Original)
 ```zexus
 let age = 25;
 verify age > 18, "Must be adult";
 ```
 
-#### Verification with AND/OR
+#### Email & Password Validation (Your Example)
 ```zexus
-verify x > 0 && y > 0, "Both must be positive";
-verify role == "admin" || role == "moderator", "Insufficient permissions";
+action validateLoginForm(email, password) {
+    // Verify email format - if wrong, block and don't allow bad data
+    verify is_email(email) {
+        print "[FORM] Invalid email format";
+        print "[FORM] Blocking form submission";
+        print "[FORM] Not allowing bad data into system";
+        return false;
+    }
+    
+    // Verify password strength
+    let strength = password_strength(password);
+    verify strength != "weak" {
+        print "[FORM] Password too weak";
+        print "[FORM] Access denied";
+        return false;
+    }
+    
+    print "✓ Login allowed";
+    return true;
+}
+```
+
+### Data Verification Mode
+
+#### Email Validation
+```zexus
+let email = "user@example.com";
+verify is_email(email), "Invalid email format";
+```
+
+#### URL Validation
+```zexus
+let url = "https://example.com";
+verify is_url(url), "Invalid URL format";
+```
+
+#### Phone Number Validation
+```zexus
+let phone = "123-456-7890";
+verify is_phone(phone), "Invalid phone number";
+```
+
+#### Type Checking
+```zexus
+verify is_numeric(userInput), "Must be a number";
+verify is_alphanumeric(code), "Code must be alphanumeric";
+verify is_alpha(name), "Name must contain only letters";
+```
+
+#### Length Validation
+```zexus
+verify validate_length(username, 3, 20), "Username length invalid";
+```
+
+#### Password Strength
+```zexus
+let strength = password_strength(password);
+verify strength == "strong", "Password not strong enough";
+```
+
+### Access Control Mode
+
+#### Block Unauthorized Access
+```zexus
+let userRole = "guest";
+
+verify userRole == "admin" {
+    log_unauthorized_access(user);
+    block_request();
+    send_security_alert(admin);
+}
+```
+
+#### Custom Blocking Logic
+```zexus
+action checkResourceAccess(user, resource) {
+    verify user.hasPermission(resource) {
+        print "[SECURITY] Access denied for: " + user.id;
+        print "[SECURITY] Resource: " + resource;
+        audit_log("unauthorized_access", user);
+        // Access blocked - bad input never enters system
+    }
+}
+```
+
+### Database Verification Mode
+
+#### Check if User Exists
+```zexus
+// Developer can inject custom database handler
+verify:db userId exists_in "users", "User not found";
+```
+
+#### Check Email Uniqueness
+```zexus
+verify:db email unique_in "users", "Email already in use";
+```
+
+#### Custom Database Logic
+```zexus
+// In your code, inject a db_handler:
+// env.set('__db_handler__', myDatabaseHandler);
+
+// Then use verify:db
+verify:db transactionId exists_in "transactions", "Transaction not found";
+```
+
+### Environment Variable Mode
+
+#### Check Configuration
+```zexus
+verify env_exists("API_KEY"), "API_KEY not configured";
+verify env_exists("DEBUG_MODE"), "DEBUG_MODE not set";
+```
+
+#### Validate Environment Values
+```zexus
+let debugMode = env_get("DEBUG_MODE");
+verify debugMode == "false", "Debug mode must be disabled in production";
+```
+
+#### Configuration Verification
+```zexus
+action verifyAppConfig() {
+    verify env_exists("API_KEY"), "API_KEY missing";
+    verify env_exists("DATABASE_URL"), "DATABASE_URL missing";
+    
+    let timeout = env_get("API_TIMEOUT");
+    verify is_numeric(timeout), "API_TIMEOUT must be numeric";
+}
+```
+
+### Pattern Matching Mode
+
+#### Validate Formats with Regex
+```zexus
+let zipcode = "12345";
+verify matches_pattern(zipcode, "^[0-9]{5}$"), "Invalid zipcode";
+```
+
+#### Credit Card Validation
+```zexus
+let cc = "4532-1234-5678-9010";
+verify matches_pattern(cc, "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}$"), "Invalid CC format";
+```
+
+### Custom Logic Blocks
+
+#### Developer-Defined Verification
+```zexus
+verify condition {
+    // Write any custom logic here
+    log_error("Verification failed");
+    send_email(admin, "Security alert");
+    increment_failure_count();
+    return false;
+}
+```
+
+#### Multi-Step Verification
+```zexus
+action validateTransaction(amount, balance) {
+    verify amount > 0 {
+        print "[VALIDATION] Amount must be positive";
+        log_transaction_error(amount);
+    }
+    
+    verify balance >= amount {
+        print "[VALIDATION] Insufficient balance";
+        notify_user("Insufficient funds");
+    }
+    
+    verify amount <= 10000 {
+        print "[VALIDATION] Amount exceeds daily limit";
+        flag_for_review(amount);
+    }
+}
 ```
 
 ### Advanced Patterns
 
-#### Verification in Functions
+#### Multi-Layer Security Gate
 ```zexus
-action validatePayment(amount, balance) {
-    verify amount > 0, "Amount must be positive";
-    verify balance >= amount, "Insufficient balance";
-    verify amount <= 10000, "Amount exceeds limit";
-    return balance - amount;
+action secureAPIRequest(method, endpoint, body, apiKey) {
+    // Layer 1: Method validation
+    verify method == "GET" || method == "POST" {
+        print "[API] Invalid HTTP method";
+        return false;
+    }
+    
+    // Layer 2: API key verification
+    verify env_get("VALID_API_KEY") == apiKey {
+        print "[API] Invalid API key";
+        log_security_event("invalid_api_key");
+        return false;
+    }
+    
+    // Layer 3: Endpoint validation
+    verify matches_pattern(endpoint, "^[a-zA-Z0-9/_-]+$") {
+        print "[API] Invalid endpoint format";
+        return false;
+    }
+    
+    // Layer 4: Body sanitization
+    if (method == "POST") {
+        let cleanBody = sanitize_input(body);
+        verify cleanBody == body {
+            print "[API] Request body contains dangerous characters";
+            return false;
+        }
+    }
+    
+    print "✓ API request validated";
+    return true;
 }
 ```
 
-#### Layered Verification
+#### User Registration Validation
 ```zexus
-action validateTransaction(from, to, amount) {
-    // Layer 1: Basic validation
-    verify from != "", "Sender required";
-    verify to != "", "Recipient required";
-    verify amount > 0, "Amount must be positive";
+action validateUserRegistration(email, password, username) {
+    verify is_email(email), "Invalid email format";
+    verify password_strength(password) != "weak", "Password too weak";
+    verify validate_length(username, 3, 20), "Username length invalid";
+    verify is_alphanumeric(username), "Username must be alphanumeric";
     
-    // Layer 2: Business rules
-    verify from != to, "Cannot transfer to self";
-    verify amount <= 100000, "Exceeds transfer limit";
-    
-    return "Valid";
+    // All checks passed
+    return true;
 }
 ```
 
-#### Conditional Verification
+#### Input Sanitization & Verification
 ```zexus
-if (resource == "admin_panel") {
-    verify permissions == "admin", "Admin access required";
+action processUserInput(input) {
+    // Sanitize first
+    let clean = sanitize_input(input);
+    
+    // Then verify it wasn't malicious
+    verify clean == input {
+        print "[SECURITY] Malicious input detected";
+        print "[SECURITY] Original: " + input;
+        print "[SECURITY] Input blocked from system";
+        log_security_event("xss_attempt");
+        return false;
+    }
+    
+    // Safe to process
+    return clean;
 }
+```
+
+### Builtin Helper Functions
+
+Zexus provides built-in verification helpers:
+
+```zexus
+// Format validators
+is_email(value)              // Email format
+is_url(value)                // URL format  
+is_phone(value)              // Phone number format
+is_numeric(value)            // Numeric check
+is_alpha(value)              // Alphabetic only
+is_alphanumeric(value)       // Alphanumeric only
+
+// Pattern matching
+matches_pattern(value, regex) // Custom regex matching
+
+// Environment variables
+env_get(name, default)       // Get env var with optional default
+env_set(name, value)         // Set env var
+env_exists(name)             // Check if env var exists
+
+// Security helpers
+password_strength(password)  // Returns "weak"/"medium"/"strong"
+sanitize_input(value)        // Remove dangerous characters
+validate_length(value, min, max) // Check string length bounds
 ```
 
 ### Test Results
@@ -171,13 +447,26 @@ if (resource == "admin_panel") {
 ✅ **Working**: Verify with AND/OR operators
 ✅ **Working**: Verify in functions
 ✅ **Working**: Multiple sequential verifies
+✅ **Working**: Custom logic blocks with `{}`
+✅ **Working**: Data verification mode (email, URL, phone, patterns)
+✅ **Working**: Access control with blocking actions
+✅ **Working**: Database verification (exists_in, unique_in)
+✅ **Working**: Environment variable verification
+✅ **Working**: Pattern matching with regex
+✅ **Working**: Input sanitization and validation
+✅ **Working**: Multi-layer security gates
 ✅ **FIXED** (Dec 17, 2025): Verify with false condition now properly halts execution
 ✅ **FIXED** (Dec 17, 2025): Custom error messages with comma syntax work correctly
+✨ **ENHANCED** (Dec 19, 2025): Full verification system with modes, custom logic, and security gates
 
-**Fix Details:**
-- Parser updated to handle comma-separated syntax: `verify condition, "message"`
-- Evaluator changed from `Error` to `EvaluationError` (only type recognized by `is_error()`)
-- Files: strategy_context.py lines 3841-3895, statements.py lines 960-1008
+**Enhancement Details:**
+- Added verification modes: `data`, `access`, `db`, `env`, `pattern`
+- Custom logic blocks support with `{}`
+- 13+ builtin helper functions for validation
+- Database integration support (developer can inject custom handlers)
+- Environment variable verification
+- Input sanitization and security gates
+- Files: zexus_ast.py, strategy_context.py, statements.py, functions.py
 
 ---
 

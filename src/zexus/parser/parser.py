@@ -473,9 +473,10 @@ class UltimateParser:
             elif self.cur_token_is(STATE):
                 print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
                 node = self.parse_state_statement()
-            elif self.cur_token_is(REQUIRE):
-                print(f"[PARSE_STMT] Matched REQUIRE", file=sys.stderr, flush=True)
-                node = self.parse_require_statement()
+            # REQUIRE is now handled by ContextStackParser for enhanced syntax support
+            # elif self.cur_token_is(REQUIRE):
+            #     print(f"[PARSE_STMT] Matched REQUIRE", file=sys.stderr, flush=True)
+            #     node = self.parse_require_statement()
             elif self.cur_token_is(REVERT):
                 print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
                 node = self.parse_revert_statement()
@@ -811,23 +812,26 @@ class UltimateParser:
         )
 
     def parse_debug_statement(self):
+        """Parse debug - dual mode: statement (debug x;) or function call (debug(x))
+        
+        When debug is followed by (, it's treated as a function call expression.
+        This allows debug(x) to return the value, while debug x; logs without returning.
+        """
         token = self.cur_token
-        self.next_token()
-
-        # TOLERANT: Accept both debug expr and debug(expr)
-        if self.cur_token_is(LPAREN):
+        
+        # DUAL-MODE: If followed by (, treat as identifier for function call
+        # This allows: let x = debug(42); to work
+        if self.peek_token_is(LPAREN):
+            # Advance past DEBUG token so infix parsing can work
             self.next_token()
-            value = self.parse_expression(LOWEST)
-            if not value:
-                self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug('")
-                return None
-            if self.cur_token_is(RPAREN):
-                self.next_token()
-        else:
-            value = self.parse_expression(LOWEST)
-            if not value:
-                self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
-                return None
+            return Identifier(value="debug")
+        
+        # Otherwise, it's a debug statement (debug x;)
+        self.next_token()
+        value = self.parse_expression(LOWEST)
+        if not value:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
+            return None
 
         return DebugStatement(value=value)
 
@@ -2048,12 +2052,18 @@ class UltimateParser:
         return stmt
 
     def parse_expression(self, precedence):
-        if self.cur_token.type not in self.prefix_parse_fns:
+        # Special handling for DEBUG token in expression context
+        # If DEBUG is followed by (, treat it as identifier for function call
+        # Otherwise, it will be parsed as a debug statement
+        if self.cur_token.type == DEBUG and self.peek_token_is(LPAREN):
+            # Convert DEBUG token to identifier in function call context
+            left_exp = Identifier(value="debug")
+        elif self.cur_token.type not in self.prefix_parse_fns:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Unexpected token '{self.cur_token.literal}'")
             return None
-
-        prefix = self.prefix_parse_fns[self.cur_token.type]
-        left_exp = prefix()
+        else:
+            prefix = self.prefix_parse_fns[self.cur_token.type]
+            left_exp = prefix()
 
         if left_exp is None:
             return None
@@ -2075,6 +2085,10 @@ class UltimateParser:
         return left_exp
 
     def parse_identifier(self):
+        # Allow DEBUG keyword to be used as identifier in expression contexts
+        # This enables debug(value) function calls while keeping debug value; statements
+        if self.cur_token.type == DEBUG:
+            return Identifier(value="debug")
         return Identifier(value=self.cur_token.literal)
 
     def parse_integer_literal(self):

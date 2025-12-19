@@ -145,32 +145,55 @@ print "Line 3";
 
 ## DEBUG Keyword
 
-### Syntax
+### Syntax (DUAL-MODE)
+
+DEBUG supports two modes:
+
+**Function Mode** (returns value):
 ```zexus
-debug expression;
+let x = debug(expression);  // Returns the value for use in expressions
+print debug(42);            // Can be used anywhere a value is expected
 ```
 
-**Note**: Some versions may require parentheses: `debug(expression)`
+**Statement Mode** (logs with metadata):
+```zexus
+debug expression;  // Logs value with metadata (line numbers, context)
+```
 
 ### Basic Usage
 
-#### Simple Debug
+#### Function Mode (Returns Value)
 ```zexus
-debug "Debug message";
-// Output: [DEBUG] Debug message
+// Use in variable assignment
+let x = debug(42);
+// Output: [DEBUG] 42
+// x now equals 42
+
+// Use in expressions
+print debug(10 + 20);
+// Output: [DEBUG] 30
+//        30
+
+// Chain with other operations
+let result = debug(5 * 5) + 10;
+// Output: [DEBUG] 25
+// result = 35
 ```
 
-#### Debug Variables
+#### Statement Mode (Logs with Metadata)
 ```zexus
+// Simple debug
 let x = 42;
 debug x;
-// Output: [DEBUG] 42
-```
+// Output: 🔍 DEBUG: 42
 
-#### Debug Expressions
-```zexus
+// Debug expressions
 debug 10 + 20;
-// Output: [DEBUG] 30
+// Output: 🔍 DEBUG: 30
+
+// Debug strings
+debug "Debug message";
+// Output: 🔍 DEBUG: Debug message
 ```
 
 ### Advanced Debug Usage
@@ -227,13 +250,15 @@ print "Back to normal";
 
 ### Debug vs Print Comparison
 
-| Feature | PRINT | DEBUG |
-|---------|-------|-------|
-| **Purpose** | User-facing output | Developer diagnostics |
-| **Output Format** | Plain value | [DEBUG] prefix + value |
-| **When to Use** | Final program output | Development/troubleshooting |
-| **Production** | Keep for user messages | Remove or disable |
-| **Visibility** | Always shown | May have debug levels/filters |
+| Feature | PRINT | DEBUG (Function) | DEBUG (Statement) |
+|---------|-------|------------------|------------------|
+| **Purpose** | User-facing output | Return value + log | Developer diagnostics |
+| **Output Format** | Plain value | [DEBUG] prefix | 🔍 DEBUG: prefix |
+| **Returns Value** | No (statement) | Yes | No (statement) |
+| **Use in Expressions** | No | Yes | No |
+| **When to Use** | Final program output | Debug + use value | Development only |
+| **Production** | Keep for user messages | Remove or disable | Remove or disable |
+| **Metadata** | None | Basic logging | Enhanced (future) |
 
 ---
 
@@ -304,6 +329,32 @@ action process() {
     // Do work
     log("Process complete");
     print "Done";
+}
+```
+
+### Pattern 6: Dual-Mode DEBUG Usage
+```zexus
+// Function mode - use return value
+action calculate(x) {
+    let doubled = debug(x * 2);  // Logs and returns value
+    return doubled;
+}
+
+// Statement mode - just log
+action validate(data) {
+    debug data;  // Logs with metadata
+    if (data > 0) {
+        return true;
+    }
+    return false;
+}
+
+// Mixed usage
+action process(input) {
+    debug input;                    // Statement: logs input
+    let normalized = debug(input * 1.5);  // Function: logs and returns
+    debug normalized;               // Statement: logs result
+    return normalized;
 }
 ```
 
@@ -531,11 +582,12 @@ action process(input) {
 
 ### Issues Found (December 2025)
 
-1. **Debug May Require Parentheses** (Priority: Low)
-   - Some syntax modes require `debug(expr)` instead of `debug expr`
-   - Parser warnings: "Use parentheses with debug statements"
-   - Status: Syntax variation, both may work
-   - Workaround: Use parentheses for consistency
+1. **~~Debug May Require Parentheses~~** ✅ **RESOLVED** (December 18, 2025)
+   - **Status**: DUAL-MODE implementation complete
+   - **Solution**: Both `debug(expr)` and `debug expr;` now work
+   - **Function Mode**: `debug(42)` returns value, usable in expressions
+   - **Statement Mode**: `debug x;` logs with metadata
+   - **Implementation**: Parser detects parentheses and routes accordingly
 
 2. **Print in Loops Sometimes Skipped** (Priority: High)
    - Related to loop execution issues (WHILE/FOR bugs)
@@ -615,7 +667,21 @@ print.to("output.txt", message);
 
 **Related Keywords**: STRING, CONCAT (for formatting)  
 **Category**: I/O Operations  
-**Status**: 🟢 Working (print fully functional, debug mostly functional)  
+**Status**: ✅ Fully Working (print fully functional, debug dual-mode complete)  
 **Tests Created**: 20 easy, 20 medium, 20 complex  
 **Documentation**: Complete  
-**Last Updated**: December 16, 2025
+**Last Updated**: December 18, 2025
+
+### DEBUG Implementation Details
+
+**Dual-Mode System**:
+- **Function Mode**: `debug(x)` - Parser returns Identifier, creates CallExpression
+- **Statement Mode**: `debug x;` - Parser creates DebugStatement
+- **Detection**: Parser checks if DEBUG token followed by LPAREN
+- **Files Modified**:
+  * Lexer: Restored DEBUG keyword (lexer.py:380)
+  * Parser: Dual-mode logic (parser.py:813-831)
+  * Context Strategy: Call expression support (strategy_context.py:2267)
+  * Structural Analyzer: Assignment RHS support (strategy_structural.py:416)
+  * Evaluator: Function returns value, statement logs with metadata
+- **Test Files**: test_debug_minimal.zx, test_debug_statement.zx, test_debug_dual.zx
