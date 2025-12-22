@@ -51,6 +51,15 @@ try:
 except ImportError:
     _PARALLEL_VM_AVAILABLE = False
 
+# Profiler (Phase 8)
+try:
+    from .profiler import InstructionProfiler, ProfilingLevel
+    _PROFILER_AVAILABLE = True
+except ImportError:
+    _PROFILER_AVAILABLE = False
+    InstructionProfiler = None
+    ProfilingLevel = None
+
 # Renderer Backend
 try:
     from renderer import backend as _BACKEND
@@ -97,7 +106,9 @@ class VM:
         chunk_size: int = 50,
         num_registers: int = 16,
         hybrid_mode: bool = True,
-        debug: bool = False
+        debug: bool = False,
+        enable_profiling: bool = False,
+        profiling_level: str = "DETAILED"
     ):
         """
         Initialize the enhanced VM.
@@ -145,6 +156,20 @@ class VM:
                 max_heap_mb=max_heap_mb,
                 gc_threshold=1000
             )
+
+        # --- Profiler (Phase 8) ---
+        self.enable_profiling = enable_profiling and _PROFILER_AVAILABLE
+        self.profiler = None
+        if self.enable_profiling:
+            try:
+                level = getattr(ProfilingLevel, profiling_level, ProfilingLevel.DETAILED)
+                self.profiler = InstructionProfiler(level=level)
+                if debug:
+                    print(f"[VM] Profiler enabled: {profiling_level}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable profiler: {e}")
+                self.enable_profiling = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -595,9 +620,20 @@ class VM:
             self.env[name] = value
 
         # 3. Execution Loop
+        prev_ip = None
         while ip < len(instrs):
             op, operand = instrs[ip]
             if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack}")
+            
+            # Profile instruction (if enabled) - start timing
+            instr_start_time = None
+            if self.enable_profiling and self.profiler and self.profiler.enabled:
+                if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
+                    instr_start_time = time.perf_counter()
+                # Record instruction (count only for BASIC level)
+                self.profiler.record_instruction(ip, op, operand, prev_ip, len(stack))
+            
+            prev_ip = ip
             ip += 1
 
             # --- Basic Stack Ops ---
@@ -923,6 +959,11 @@ class VM:
             else:
                 if debug: print(f"[VM] Unknown Opcode: {op}")
 
+            # Record instruction timing (if profiling enabled)
+            if instr_start_time is not None and self.profiler:
+                elapsed = time.perf_counter() - instr_start_time
+                self.profiler.measure_instruction(ip, elapsed)
+
         return stack[-1] if stack else None
 
     # ==================== Helpers ====================
@@ -1003,6 +1044,35 @@ class VM:
             results['modes']['register'] = {'total': t_reg, 'speedup': t_stack/t_reg}
             
         return results
+    
+    # ==================== Profiler Interface ====================
+    
+    def start_profiling(self):
+        """Start profiling session"""
+        if self.profiler:
+            self.profiler.start()
+    
+    def stop_profiling(self):
+        """Stop profiling session"""
+        if self.profiler:
+            self.profiler.stop()
+    
+    def get_profiling_report(self, format: str = 'text', top_n: int = 20) -> str:
+        """Get profiling report"""
+        if self.profiler:
+            return self.profiler.generate_report(format=format, top_n=top_n)
+        return "Profiling not enabled"
+    
+    def get_profiling_summary(self) -> Dict[str, Any]:
+        """Get profiling summary statistics"""
+        if self.profiler:
+            return self.profiler.get_summary()
+        return {'error': 'Profiling not enabled'}
+    
+    def reset_profiler(self):
+        """Reset profiler statistics"""
+        if self.profiler:
+            self.profiler.reset()
 
 # ==================== Factory Functions ====================
 
