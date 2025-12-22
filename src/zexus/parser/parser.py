@@ -380,6 +380,9 @@ class UltimateParser:
             elif self.cur_token_is(TRAIL):
                 print(f"[PARSE_STMT] Matched TRAIL", file=sys.stderr, flush=True)
                 node = self.parse_trail_statement()
+            elif self.cur_token_is(TX):
+                print(f"[PARSE_STMT] Matched TX", file=sys.stderr, flush=True)
+                node = self.parse_tx_statement()
             elif self.cur_token_is(NATIVE):
                 print(f"[PARSE_STMT] Matched NATIVE", file=sys.stderr, flush=True)
                 node = self.parse_native_statement()
@@ -1296,6 +1299,31 @@ class UltimateParser:
             self.next_token()
 
         return TrailStatement(trail_type=trail_type, filter_key=filter_key)
+
+    def parse_tx_statement(self):
+        """Parse transaction block statement.
+        
+        Syntax:
+            tx {
+                balance = balance - amount;
+                recipient_balance = recipient_balance + amount;
+            }
+        """
+        # Consume 'tx' keyword
+        self.next_token()
+        
+        # Expect opening brace
+        if not self.cur_token_is(LBRACE):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' after 'tx'")
+            return None
+        
+        # Parse block body
+        body = self.parse_block_statement()
+        
+        if body is None:
+            return None
+        
+        return TxStatement(body=body)
 
     def parse_native_statement(self):
         """Parse native statement for calling C/C++ code.

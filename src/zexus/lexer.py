@@ -438,8 +438,9 @@ class Lexer:
             "ledger": LEDGER,           # Immutable state ledger
             "state": STATE,             # State management
             "revert": REVERT,           # Revert transaction
+            "tx": TX,                   # Transaction block
             "limit": LIMIT,             # Gas/resource limit
-            # NOTE: hash, signature, verify_sig, tx, gas are BUILTINS, not keywords
+            # NOTE: hash, signature, verify_sig, gas are BUILTINS, not keywords
             # NEW: Persistent storage keywords
             "persistent": PERSISTENT,   # NEW: Persistent keyword
             "storage": STORAGE,         # NEW: Storage keyword

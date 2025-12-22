@@ -376,7 +376,27 @@ class VM:
                 if obj_id in collected_ids:
                     del self._managed_objects[name]
             return {'collected': collected, 'gc_time': gc_time}
-        return {'collected': 0, 'message': 'Memory manager disabled'}
+        
+        # Fallback: Manual environment cleanup for non-managed memory
+        # Clear variables that are no longer referenced
+        if force:
+            initial_count = len(self.env)
+            # Keep only builtins and parent env references
+            keys_to_remove = []
+            for key in list(self.env.keys()):
+                # Don't remove special keys or builtins
+                if not key.startswith('_') and key not in self.builtins:
+                    keys_to_remove.append(key)
+            
+            # Remove temporary variables
+            for key in keys_to_remove:
+                del self.env[key]
+            
+            cleared = initial_count - len(self.env)
+            return {'collected': cleared, 'message': 'Environment variables cleared'}
+        
+        return {'collected': 0, 'message': 'Memory manager disabled or not forced'}
+
 
     def _allocate_managed(self, value: Any, name: str = None, root: bool = False) -> int:
         if not self.use_memory_manager or not self.memory_manager: return -1

@@ -2279,8 +2279,12 @@ class ContextStackParser:
             return StringLiteral("")
 
         # Special cases first
-        # Handle unary prefix minus (e.g., -3, -x)
-        # We do this before other checks so negative numbers are parsed as PrefixExpression
+        # Handle unary prefix operators (!, -, etc.)
+        if tokens[0].type == BANG:
+            # Parse the remainder as the operand of the NOT expression
+            right_expr = self._parse_expression(tokens[1:]) if len(tokens) > 1 else Boolean(True)
+            return PrefixExpression("!", right_expr)
+        
         if tokens[0].type == MINUS:
             # Parse the remainder as the operand of the prefix expression
             right_expr = self._parse_expression(tokens[1:]) if len(tokens) > 1 else IntegerLiteral(0)

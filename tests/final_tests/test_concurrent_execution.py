@@ -141,7 +141,7 @@ class TestConcurrentExecution(unittest.TestCase):
         for t in threads:
             t.join()
         
-        print(f"\n\ud83e\udde0 CONCURRENT MEMORY ACCESS:")
+        print(f"\n[MEMORY] CONCURRENT MEMORY ACCESS:")
         print(f"   Workers: {len(threads)}")
         print(f"   Successes: {len([r for r in shared_results if r[1] == 'success'])}")
         print(f"   Errors: {len(errors)}")

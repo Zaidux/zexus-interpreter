@@ -126,6 +126,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.TrailStatement:
                 return self.eval_trail_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.TxStatement:
+                return self.eval_tx_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.EntityStatement:
                 return self.eval_entity_statement(node, env, stack_trace)
             

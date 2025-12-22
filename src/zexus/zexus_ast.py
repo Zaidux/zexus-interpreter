@@ -62,6 +62,20 @@ class BlockStatement(Statement):
     def __repr__(self):
         return f"BlockStatement(statements={len(self.statements)})"
 
+class TxStatement(Statement):
+    """Transaction block statement - executes statements in transactional context
+    
+    tx {
+        balance = balance - amount;
+        recipient_balance = recipient_balance + amount;
+    }
+    """
+    def __init__(self, body):
+        self.body = body  # BlockStatement
+
+    def __repr__(self):
+        return f"TxStatement(body={self.body})"
+
 class PrintStatement(Statement):
     def __init__(self, value): 
         self.value = value

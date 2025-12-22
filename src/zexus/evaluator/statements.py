@@ -934,6 +934,24 @@ class StatementEvaluatorMixin:
 
         return Map(trail_config)
     
+    def eval_tx_statement(self, node, env, stack_trace):
+        """Evaluate transaction block - executes statements in transactional context.
+        
+        For now, this simply executes the block body.
+        In a full blockchain implementation, this would:
+        - Create a transaction context
+        - Track state changes
+        - Support rollback on failure
+        - Emit transaction events
+        """
+        debug_log("eval_tx_statement", "Executing transaction block")
+        
+        # Execute the transaction body
+        result = self.eval_block_statement(node.body, env, stack_trace)
+        
+        # Return the result of the last statement in the block
+        return result if result is not None else NULL
+    
     def eval_contract_statement(self, node, env, stack_trace):
         storage = {}
         for sv in node.storage_vars:
