@@ -459,38 +459,43 @@ class RegisterVM:
         self.stats['stack_ops'] += 1
         
         # Implement minimal stack operations for hybrid mode
-        if opcode == Opcode.LOAD_CONST:
+        if opcode == "LOAD_CONST" or opcode == Opcode.LOAD_CONST:
             const_idx = inst[1]
             self.stack.append(self.constants[const_idx])
         
-        elif opcode == Opcode.STORE_NAME:
+        elif opcode == "STORE_NAME" or opcode == Opcode.STORE_NAME:
             var_name = inst[1]
             value = self.stack.pop()
             self.env[var_name] = value
         
-        elif opcode == Opcode.LOAD_NAME:
+        elif opcode == "LOAD_NAME" or opcode == Opcode.LOAD_NAME:
             var_name = inst[1]
             self.stack.append(self.env.get(var_name))
         
-        elif opcode == Opcode.ADD:
+        elif opcode == "ADD" or opcode == Opcode.ADD:
             b, a = self.stack.pop(), self.stack.pop()
             self.stack.append(a + b)
         
-        elif opcode == Opcode.SUB:
+        elif opcode == "SUB" or opcode == Opcode.SUB:
             b, a = self.stack.pop(), self.stack.pop()
             self.stack.append(a - b)
         
-        elif opcode == Opcode.MUL:
+        elif opcode == "MUL" or opcode == Opcode.MUL:
             b, a = self.stack.pop(), self.stack.pop()
             self.stack.append(a * b)
         
-        elif opcode == Opcode.DIV:
+        elif opcode == "DIV" or opcode == Opcode.DIV:
             b, a = self.stack.pop(), self.stack.pop()
             self.stack.append(a / b)
         
-        elif opcode == Opcode.PRINT:
+        elif opcode == "PRINT" or opcode == Opcode.PRINT:
             value = self.stack.pop() if self.stack else None
             print(value)
+        
+        elif opcode == "RETURN" or opcode == Opcode.RETURN:
+            # Store return value in r15 for consistency
+            if self.stack:
+                self.registers.write(15, self.stack.pop())
         
         else:
             if self.debug:

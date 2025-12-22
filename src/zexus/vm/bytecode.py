@@ -342,6 +342,86 @@ class BytecodeBuilder:
         """Emit LEDGER_APPEND - expects entry on stack"""
         return self.emit("LEDGER_APPEND")
     
+    # Convenience methods for test compatibility
+    def emit_load_const(self, value: Any) -> int:
+        """Emit LOAD_CONST instruction (alias for emit_constant)"""
+        return self.emit_constant(value)
+    
+    def emit_load_name(self, name: str) -> int:
+        """Emit LOAD_NAME instruction (alias for emit_load)"""
+        return self.emit_load(name)
+    
+    def emit_store_name(self, name: str) -> int:
+        """Emit STORE_NAME instruction (alias for emit_store)"""
+        return self.emit_store(name)
+    
+    def emit_add(self) -> int:
+        """Emit ADD instruction"""
+        return self.emit("ADD")
+    
+    def emit_sub(self) -> int:
+        """Emit SUB instruction"""
+        return self.emit("SUB")
+    
+    def emit_mul(self) -> int:
+        """Emit MUL instruction"""
+        return self.emit("MUL")
+    
+    def emit_div(self) -> int:
+        """Emit DIV instruction"""
+        return self.emit("DIV")
+    
+    def emit_pow(self) -> int:
+        """Emit POW instruction"""
+        return self.emit("POW")
+    
+    def emit_mod(self) -> int:
+        """Emit MOD instruction"""
+        return self.emit("MOD")
+    
+    def emit_eq(self) -> int:
+        """Emit EQ instruction"""
+        return self.emit("EQ")
+    
+    def emit_lt(self) -> int:
+        """Emit LT instruction"""
+        return self.emit("LT")
+    
+    def emit_gt(self) -> int:
+        """Emit GT instruction"""
+        return self.emit("GT")
+    
+    def emit_pop(self) -> int:
+        """Emit POP instruction"""
+        return self.emit("POP")
+    
+    def emit_return(self) -> int:
+        """Emit RETURN instruction"""
+        return self.emit("RETURN")
+    
+    def emit_spawn(self, operand: Any = None) -> int:
+        """Emit SPAWN instruction"""
+        return self.emit("SPAWN", operand)
+    
+    def emit_await(self) -> int:
+        """Emit AWAIT instruction"""
+        return self.emit("AWAIT")
+    
+    def emit_register_event(self, event_data: Tuple[str, str]) -> int:
+        """Emit REGISTER_EVENT instruction"""
+        event_name_idx = self.bytecode.add_constant(event_data[0])
+        handler_idx = self.bytecode.add_constant(event_data[1])
+        return self.emit("REGISTER_EVENT", (event_name_idx, handler_idx))
+    
+    def emit_emit_event(self, event_name: str) -> int:
+        """Emit EMIT_EVENT instruction"""
+        event_idx = self.bytecode.add_constant(event_name)
+        return self.emit("EMIT_EVENT", (event_idx,))
+    
+    def emit_label(self, label: str):
+        """Alias for mark_label - for compatibility"""
+        return self.mark_label(label)
+    
     def build(self) -> Bytecode:
         """Finalize and return the bytecode"""
         self.resolve_labels()

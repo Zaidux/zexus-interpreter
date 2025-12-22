@@ -43,5 +43,6 @@
       "comments": false,
       "strings": false
     }
-  }
+  },
+  "python.analysis.typeCheckingMode": "strict"
 }

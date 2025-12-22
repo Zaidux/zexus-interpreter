@@ -119,7 +119,10 @@ class VM:
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
+        self._jit_lock = None  # Thread lock for JIT compilation
         if self.use_jit:
+            import threading
+            self._jit_lock = threading.Lock()
             self.jit_compiler = JITCompiler(
                 hot_threshold=jit_threshold,
                 optimization_level=1,
@@ -134,7 +137,10 @@ class VM:
         self.use_memory_manager = use_memory_manager and _MEMORY_MANAGER_AVAILABLE
         self.memory_manager = None
         self._managed_objects: Dict[str, int] = {}
+        self._memory_lock = None  # Thread lock for memory operations
         if self.use_memory_manager:
+            import threading
+            self._memory_lock = threading.Lock()
             self.memory_manager = create_memory_manager(
                 max_heap_mb=max_heap_mb,
                 gc_threshold=1000
@@ -248,10 +254,18 @@ class VM:
     def _execute_register(self, bytecode, debug: bool = False):
         """Execute using register-based VM"""
         try:
+            # Ensure register VM has current environment and builtins
             self._register_vm.env = self.env.copy()
             self._register_vm.builtins = self.builtins.copy()
-            self._register_vm._parent_env = self._parent_env
-            return self._register_vm.execute(bytecode)
+            if hasattr(self._register_vm, '_parent_env'):
+                self._register_vm._parent_env = self._parent_env
+            
+            result = self._register_vm.execute(bytecode)
+            
+            # Sync back environment changes
+            self.env.update(self._register_vm.env)
+            
+            return result
         except Exception as e:
             if debug: print(f"[VM Register] Failed: {e}, falling back to stack")
             return asyncio.run(self._run_stack_bytecode(bytecode, debug))
@@ -281,37 +295,77 @@ class VM:
     def _track_execution_for_jit(self, bytecode, execution_time: float, execution_mode: VMMode):
         if not self.use_jit or not self.jit_compiler: return
         
-        hot_path_info = self.jit_compiler.track_execution(bytecode, execution_time)
-        bytecode_hash = getattr(hot_path_info, 'bytecode_hash', None) or self.jit_compiler._hash_bytecode(bytecode)
+        with self._jit_lock:
+            hot_path_info = self.jit_compiler.track_execution(bytecode, execution_time)
+            bytecode_hash = getattr(hot_path_info, 'bytecode_hash', None) or self.jit_compiler._hash_bytecode(bytecode)
+            
+            if bytecode_hash not in self._jit_execution_stats:
+                self._jit_execution_stats[bytecode_hash] = []
+            self._jit_execution_stats[bytecode_hash].append(execution_time)
+            
+            # Check if should compile (outside lock to avoid holding during compilation)
+            should_compile = self.jit_compiler.should_compile(bytecode_hash)
         
-        if bytecode_hash not in self._jit_execution_stats:
-            self._jit_execution_stats[bytecode_hash] = []
-        self._jit_execution_stats[bytecode_hash].append(execution_time)
-        
-        if self.jit_compiler.should_compile(bytecode_hash):
+        # Compile outside the lock to prevent blocking other executions
+        if should_compile:
             if self.debug: print(f"[VM JIT] Compiling hot path: {bytecode_hash[:8]}")
-            self.jit_compiler.compile_hot_path(bytecode)
+            with self._jit_lock:
+                # Double-check it hasn't been compiled by another thread
+                if self.jit_compiler.should_compile(bytecode_hash):
+                    self.jit_compiler.compile_hot_path(bytecode)
 
     def get_jit_stats(self) -> Dict[str, Any]:
         if self.use_jit and self.jit_compiler:
             stats = self.jit_compiler.get_stats()
             stats['vm_hot_paths_tracked'] = len(self._jit_execution_stats)
+            stats['jit_enabled'] = True
             return stats
         return {'jit_enabled': False}
 
     def clear_jit_cache(self):
         if self.use_jit and self.jit_compiler:
-            self.jit_compiler.clear_cache()
-            self._jit_execution_stats.clear()
+            with self._jit_lock:
+                self.jit_compiler.clear_cache()
+                self._jit_execution_stats.clear()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get comprehensive VM statistics"""
+        stats = {
+            'execution_count': self._execution_count,
+            'total_execution_time': self._total_execution_time,
+            'mode_usage': self._mode_usage.copy(),
+            'jit_enabled': self.use_jit,
+            'memory_manager_enabled': self.use_memory_manager
+        }
+        
+        if self.use_jit:
+            stats['jit_stats'] = self.get_jit_stats()
+        
+        if self.use_memory_manager:
+            stats['memory_stats'] = self.get_memory_stats()
+        
+        return stats
 
     # ==================== Memory Management API ====================
 
     def get_memory_stats(self) -> Dict[str, Any]:
         if self.use_memory_manager and self.memory_manager:
-            stats = self.memory_manager.get_stats()
-            stats['managed_objects_count'] = len(self._managed_objects)
+            with self._memory_lock:
+                stats = self.memory_manager.get_stats()
+                stats['managed_objects_count'] = len(self._managed_objects)
             return stats
         return {'memory_manager_enabled': False}
+    
+    def get_memory_report(self) -> str:
+        """Get detailed memory report"""
+        if self.use_memory_manager and self.memory_manager:
+            stats = self.get_memory_stats()
+            report = f"Memory Manager Report:\n"
+            report += f"  Managed Objects: {stats.get('managed_objects_count', 0)}\n"
+            report += f"  Total Allocations: {stats.get('total_allocations', 0)}\n"
+            report += f"  Active Objects: {stats.get('active_objects', 0)}\n"
+            return report
+        return "Memory manager disabled"
 
     def collect_garbage(self, force: bool = False) -> Dict[str, Any]:
         if self.use_memory_manager and self.memory_manager:
@@ -327,20 +381,22 @@ class VM:
     def _allocate_managed(self, value: Any, name: str = None, root: bool = False) -> int:
         if not self.use_memory_manager or not self.memory_manager: return -1
         try:
-            if name and name in self._managed_objects:
-                self.memory_manager.deallocate(self._managed_objects[name])
-            obj_id = self.memory_manager.allocate(value, root=root)
-            if name: self._managed_objects[name] = obj_id
-            return obj_id
+            with self._memory_lock:
+                if name and name in self._managed_objects:
+                    self.memory_manager.deallocate(self._managed_objects[name])
+                obj_id = self.memory_manager.allocate(value, root=root)
+                if name: self._managed_objects[name] = obj_id
+                return obj_id
         except Exception:
             return -1
 
     def _get_managed(self, name: str) -> Any:
         if not self.use_memory_manager or not self.memory_manager: return None
-        obj_id = self._managed_objects.get(name)
-        if obj_id is not None:
-            return self.memory_manager.get(obj_id)
-        return None
+        with self._memory_lock:
+            obj_id = self._managed_objects.get(name)
+            if obj_id is not None:
+                return self.memory_manager.get(obj_id)
+            return None
 
     # ==================== Core Execution: High-Level Ops ====================
 
@@ -371,11 +427,17 @@ class VM:
                 elif code == "LET":
                     _, name, val_op = op
                     val = self._eval_hl_op(val_op)
+                    # If val is a coroutine, await it
+                    if asyncio.iscoroutine(val) or isinstance(val, asyncio.Future):
+                        val = await val
                     self.env[name] = val
                     last = None
                 elif code == "EXPR":
                     _, expr_op = op
                     last = self._eval_hl_op(expr_op)
+                    # If last is a coroutine, await it
+                    if asyncio.iscoroutine(last) or isinstance(last, asyncio.Future):
+                        last = await last
                 elif code == "REGISTER_EVENT":
                     _, name, props = op
                     self._events.setdefault(name, [])
@@ -419,7 +481,16 @@ class VM:
             return None
         if tag == "CALL_BUILTIN":
             name = op[1]; args = [self._eval_hl_op(a) for a in op[2]]
-            return asyncio.run(self._call_builtin_async(name, args)) # Note: Recursive async in blocking context warning
+            # Return a coroutine instead of calling asyncio.run() - let caller handle await
+            target = self.builtins.get(name) or self.env.get(name)
+            if asyncio.iscoroutinefunction(target):
+                return target(*args)
+            elif callable(target):
+                result = target(*args)
+                if asyncio.iscoroutine(result):
+                    return result
+                return result
+            return None
         if tag == "MAP": return {k: self._eval_hl_op(v) for k, v in op[1].items()}
         if tag == "LIST": return [self._eval_hl_op(e) for e in op[1]]
         return None
@@ -427,17 +498,19 @@ class VM:
     # ==================== Core Execution: Stack Bytecode ====================
 
     async def _run_stack_bytecode(self, bytecode, debug=False):
-        # 1. JIT Check
+        # 1. JIT Check (with thread safety)
         if self.use_jit and self.jit_compiler:
-            bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
-            jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
+            with self._jit_lock:
+                bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
+                jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
             
             if jit_function:
                 try:
                     start_t = time.perf_counter()
                     stack = []
                     result = jit_function(self, stack, self.env)
-                    self.jit_compiler.record_execution_time(bytecode_hash, time.perf_counter() - start_t, ExecutionTier.JIT_NATIVE)
+                    with self._jit_lock:
+                        self.jit_compiler.record_execution_time(bytecode_hash, time.perf_counter() - start_t, ExecutionTier.JIT_NATIVE)
                     if debug: print(f"[VM JIT] Executed cached function")
                     return result
                 except Exception as e:
@@ -565,15 +638,33 @@ class VM:
             elif op == "DIV":
                 b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
                 stack.append(a / b if b != 0 else 0)
+            elif op == "MOD":
+                b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                stack.append(a % b if b != 0 else 0)
+            elif op == "POW":
+                b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                stack.append(a ** b)
+            elif op == "NEG":
+                a = stack.pop() if stack else 0
+                stack.append(-a)
             elif op == "EQ":
                 b = stack.pop() if stack else None; a = stack.pop() if stack else None
                 stack.append(a == b)
-            elif op == "GT":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                stack.append(a > b)
+            elif op == "NEQ":
+                b = stack.pop() if stack else None; a = stack.pop() if stack else None
+                stack.append(a != b)
             elif op == "LT":
                 b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
                 stack.append(a < b)
+            elif op == "GT":
+                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                stack.append(a > b)
+            elif op == "LTE":
+                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                stack.append(a <= b)
+            elif op == "GTE":
+                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                stack.append(a >= b)
             elif op == "NOT":
                 a = stack.pop() if stack else False
                 stack.append(not a)
@@ -621,15 +712,35 @@ class VM:
                 stack.append(task_handle)
 
             elif op == "AWAIT":
-                top = stack.pop() if stack else None
-                if isinstance(top, str) and top in self._tasks:
-                    res = await self._tasks[top]
-                    stack.append(res)
-                elif asyncio.iscoroutine(top) or isinstance(top, asyncio.Future):
-                    res = await top
-                    stack.append(res)
-                else:
-                    stack.append(top)
+                # Keep popping until we find a task to await
+                result_found = False
+                temp_stack = []
+                
+                while stack and not result_found:
+                    top = stack.pop()
+                    
+                    if isinstance(top, str) and top in self._tasks:
+                        res = await self._tasks[top]
+                        # Push back any non-task values we skipped
+                        for val in reversed(temp_stack):
+                            stack.append(val)
+                        stack.append(res)
+                        result_found = True
+                    elif asyncio.iscoroutine(top) or isinstance(top, asyncio.Future):
+                        res = await top
+                        # Push back any non-task values we skipped
+                        for val in reversed(temp_stack):
+                            stack.append(val)
+                        stack.append(res)
+                        result_found = True
+                    else:
+                        # Not a task, save it and keep looking
+                        temp_stack.append(top)
+                
+                # If no task was found, put everything back
+                if not result_found:
+                    for val in reversed(temp_stack):
+                        stack.append(val)
 
             elif op == "REGISTER_EVENT":
                 event_name = const(operand[0]) if isinstance(operand, (list,tuple)) else const(operand)
