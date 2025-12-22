@@ -1,5 +1,14 @@
+import unittest
 import threading
 import concurrent.futures
+from zexus.vm.vm import VM
+from zexus.vm.bytecode import BytecodeBuilder
+
+# Check if JIT is available
+try:
+    JIT_AVAILABLE = True
+except:
+    JIT_AVAILABLE = False
 
 class TestConcurrentExecution(unittest.TestCase):
     """Test VM in concurrent scenarios"""
@@ -94,3 +103,48 @@ class TestConcurrentExecution(unittest.TestCase):
         
         self.assertEqual(success_count, len(results), 
                          "All concurrent JIT compilations should succeed")
+    
+    def test_concurrent_memory_access(self):
+        """Test concurrent access to shared VM memory is safe"""
+        shared_results = []
+        errors = []
+        
+        def memory_worker(worker_id):
+            try:
+                vm = VM(debug=False)
+                for i in range(50):
+                    builder = BytecodeBuilder()
+                    builder.emit_load_const(worker_id * 100 + i)
+                    builder.emit_store_name(f"worker_{worker_id}_var_{i}")
+                    builder.emit_load_name(f"worker_{worker_id}_var_{i}")
+                    builder.emit_return()
+                    
+                    bytecode = builder.build()
+                    result = vm.execute(bytecode)
+                    expected = worker_id * 100 + i
+                    if result != expected:
+                        errors.append(f"Worker {worker_id} iteration {i}: got {result}, expected {expected}")
+                
+                shared_results.append((worker_id, "success"))
+            except Exception as e:
+                errors.append(f"Worker {worker_id} error: {e}")
+                shared_results.append((worker_id, "failed"))
+        
+        # Run multiple workers
+        import threading
+        threads = []
+        for i in range(8):
+            t = threading.Thread(target=memory_worker, args=(i,))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
+        
+        print(f"\n\ud83e\udde0 CONCURRENT MEMORY ACCESS:")
+        print(f"   Workers: {len(threads)}")
+        print(f"   Successes: {len([r for r in shared_results if r[1] == 'success'])}")
+        print(f"   Errors: {len(errors)}")
+        
+        self.assertEqual(len(errors), 0, f"Memory safety issues: {errors[:5]}")
+        self.assertEqual(len(shared_results), len(threads))
