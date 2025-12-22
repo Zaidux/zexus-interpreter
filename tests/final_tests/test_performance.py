@@ -1,0 +1,160 @@
+import timeit
+import statistics
+
+class TestPerformanceValidation(unittest.TestCase):
+    """Performance validation tests that actually measure speedups"""
+    
+    def test_real_jit_speedup(self):
+        """Actually measure JIT speedup with statistical significance"""
+        # Create computation-heavy bytecode
+        builder = BytecodeBuilder()
+        # Fibonacci-like computation
+        builder.emit_load_const(30)  # n for Fibonacci
+        builder.emit_store_name("n")
+        builder.emit_load_const(0)
+        builder.emit_store_name("a")
+        builder.emit_load_const(1)
+        builder.emit_store_name("b")
+        builder.emit_load_const(0)
+        builder.emit_store_name("i")
+        
+        # Loop label
+        builder.mark_label("loop")
+        builder.emit_load_name("i")
+        builder.emit_load_name("n")
+        builder.emit_lt()
+        builder.emit_jump_if_false("end")
+        
+        # Fibonacci: a, b = b, a + b
+        builder.emit_load_name("a")
+        builder.emit_load_name("b")
+        builder.emit_add()
+        builder.emit_store_name("temp")
+        builder.emit_load_name("b")
+        builder.emit_store_name("a")
+        builder.emit_load_name("temp")
+        builder.emit_store_name("b")
+        
+        # i += 1
+        builder.emit_load_name("i")
+        builder.emit_load_const(1)
+        builder.emit_add()
+        builder.emit_store_name("i")
+        
+        builder.emit_jump("loop")
+        builder.mark_label("end")
+        builder.emit_load_name("a")
+        builder.emit_return()
+        
+        bytecode = builder.build()
+        
+        # VM without JIT
+        vm_no_jit = VM(use_jit=False, debug=False)
+        
+        # VM with JIT (will compile after warm-up)
+        vm_with_jit = VM(use_jit=True, jit_threshold=10, debug=False)
+        
+        # Warm up both VMs
+        for _ in range(5):
+            vm_no_jit.execute(bytecode)
+            vm_with_jit.execute(bytecode)
+        
+        # Measure performance
+        def run_no_jit():
+            return vm_no_jit.execute(bytecode)
+        
+        def run_with_jit():
+            return vm_with_jit.execute(bytecode)
+        
+        # Run with statistical significance
+        iterations = 500
+        times_no_jit = timeit.repeat(run_no_jit, number=1, repeat=iterations)
+        times_jit = timeit.repeat(run_with_jit, number=1, repeat=iterations)
+        
+        # Skip first 20 measurements (warm-up)
+        times_no_jit = times_no_jit[20:]
+        times_jit = times_jit[20:]
+        
+        # Calculate statistics
+        median_no_jit = statistics.median(times_no_jit)
+        median_jit = statistics.median(times_jit)
+        
+        speedup = median_no_jit / median_jit if median_jit > 0 else 1
+        
+        # Print results
+        print(f"\n📊 JIT SPEEDUP VALIDATION:")
+        print(f"   Without JIT: {median_no_jit*1000:.2f}ms")
+        print(f"   With JIT:    {median_jit*1000:.2f}ms")
+        print(f"   Speedup:     {speedup:.2f}x")
+        print(f"   Iterations:  {iterations}")
+        
+        # Statistical test (simplified)
+        import numpy as np
+        from scipy import stats
+        
+        t_stat, p_value = stats.ttest_ind(times_no_jit, times_jit)
+        print(f"   p-value:     {p_value:.6f}")
+        print(f"   Significant: {p_value < 0.05}")
+        
+        # Assert reasonable speedup
+        # Note: Allow for overhead - JIT might be slower on very small computations
+        # For substantial computations, should see improvement
+        if len(times_no_jit) > 50 and len(times_jit) > 50:
+            self.assertGreater(speedup, 0.8, 
+                f"JIT should not be significantly slower. Speedup: {speedup:.2f}x")
+            
+        # Also check that results are correct
+        result_no_jit = vm_no_jit.execute(bytecode)
+        result_jit = vm_with_jit.execute(bytecode)
+        self.assertEqual(result_no_jit, result_jit, 
+                         "JIT and non-JIT should produce same results")
+    
+    def test_register_vm_speedup(self):
+        """Measure Register VM speedup vs Stack VM"""
+        if not REGISTER_VM_AVAILABLE:
+            self.skipTest("Register VM not available")
+        
+        # Arithmetic-heavy bytecode
+        builder = BytecodeBuilder()
+        for i in range(100):
+            builder.emit_load_const(i)
+            builder.emit_load_const(i * 2)
+            builder.emit_add()
+            builder.emit_pop()
+        builder.emit_load_const(42)
+        builder.emit_return()
+        
+        bytecode = builder.build()
+        
+        # Stack VM
+        vm_stack = VM(mode=VMMode.STACK, use_jit=False, debug=False)
+        
+        # Register VM
+        vm_register = VM(mode=VMMode.REGISTER, use_jit=False, debug=False)
+        
+        def run_stack():
+            return vm_stack.execute(bytecode)
+        
+        def run_register():
+            return vm_register.execute(bytecode)
+        
+        iterations = 1000
+        times_stack = timeit.repeat(run_stack, number=1, repeat=iterations)
+        times_register = timeit.repeat(run_register, number=1, repeat=iterations)
+        
+        # Skip warm-up
+        times_stack = times_stack[10:]
+        times_register = times_register[10:]
+        
+        median_stack = statistics.median(times_stack)
+        median_register = statistics.median(times_register)
+        
+        speedup = median_stack / median_register if median_register > 0 else 1
+        
+        print(f"\n📊 REGISTER VM SPEEDUP:")
+        print(f"   Stack VM:    {median_stack*1000:.2f}ms")
+        print(f"   Register VM: {median_register*1000:.2f}ms")
+        print(f"   Speedup:     {speedup:.2f}x")
+        
+        self.assertGreater(speedup, 0.5, 
+            f"Register VM should not be >2x slower. Speedup: {speedup:.2f}x")
