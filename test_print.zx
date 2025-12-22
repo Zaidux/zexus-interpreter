@@ -1,0 +1,4 @@
+let x = 42;
+print("Value:", x);
+print("Value:" x);
+print("Value:", "test", 123);

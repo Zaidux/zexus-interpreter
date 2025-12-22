@@ -628,15 +628,24 @@ class VM:
             # --- Arithmetic & Logic ---
             elif op == "ADD":
                 b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                # Auto-unwrap evaluator objects
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
                 stack.append(a + b)
             elif op == "SUB":
                 b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
                 stack.append(a - b)
             elif op == "MUL":
                 b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
                 stack.append(a * b)
             elif op == "DIV":
                 b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
                 stack.append(a / b if b != 0 else 0)
             elif op == "MOD":
                 b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
@@ -694,6 +703,17 @@ class VM:
                 idx = stack.pop(); obj = stack.pop()
                 try: stack.append(obj[idx] if obj is not None else None)
                 except: stack.append(None)
+            elif op == "GET_LENGTH":
+                obj = stack.pop()
+                try:
+                    if obj is None:
+                        stack.append(0)
+                    elif hasattr(obj, '__len__'):
+                        stack.append(len(obj))
+                    else:
+                        stack.append(0)
+                except:
+                    stack.append(0)
 
             # --- Async & Events ---
             elif op == "SPAWN":

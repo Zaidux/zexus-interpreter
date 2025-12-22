@@ -11,22 +11,23 @@ async action fetchData() {
 
 // Call async action (returns a Coroutine)
 let coroutine = fetchData();
-print("Coroutine created:", coroutine);
+print("Coroutine created: " + coroutine.inspect());
 
 // Await the coroutine
 let result = await coroutine;
-print("Result:", result);
+print("Result: " + string(result));
+print("Coroutine after completion: " + coroutine.inspect());
 
 print("\n=== Test 2: Async Action with Parameters ===");
 
 async action calculate(x, y) {
-    print("  Calculating:", x, "+", y);
+    print("  Calculating: " + string(x) + " + " + string(y));
     return x + y;
 }
 
 let sum_coroutine = calculate(10, 20);
 let sum = await sum_coroutine;
-print("Sum:", sum);
+print("Sum: " + string(sum));
 
 print("\n=== Test 3: Multiple Awaits ===");
 
@@ -38,6 +39,6 @@ let v1 = await getValue(5);
 let v2 = await getValue(10);
 let v3 = await getValue(15);
 
-print("Values:", v1, v2, v3);
+print("Values: " + string(v1) + " " + string(v2) + " " + string(v3));
 
 print("\n=== All Tests Complete ===");

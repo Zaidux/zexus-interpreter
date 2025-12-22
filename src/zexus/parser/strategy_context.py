@@ -2914,17 +2914,28 @@ class ContextStackParser:
         )
 
     def _parse_action_statement_context(self, block_info, all_tokens):
-        """Parse action statement: action name(params) { body }"""
+        """Parse action statement: [async] action name(params) { body }"""
         tokens = block_info.get('tokens', [])
-        if not tokens or tokens[0].type != ACTION:
+        if not tokens:
             return None
+        
+        # Check for async modifier
+        is_async = False
+        i = 0
+        if tokens[i].type == ASYNC:
+            is_async = True
+            i += 1
+        
+        # Now expect ACTION keyword
+        if i >= len(tokens) or tokens[i].type != ACTION:
+            return None
+        i += 1
         
         # Extract action name (next IDENT after ACTION)
         name = None
         params = []
         body_tokens = []
         
-        i = 1
         while i < len(tokens):
             if tokens[i].type == IDENT:
                 name = Identifier(tokens[i].literal)
@@ -2967,7 +2978,8 @@ class ContextStackParser:
         return ActionStatement(
             name=name or Identifier('anonymous'),
             parameters=params,
-            body=body
+            body=body,
+            is_async=is_async
         )
 
     def _parse_function_statement_context(self, block_info, all_tokens):

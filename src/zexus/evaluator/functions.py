@@ -83,12 +83,11 @@ class FunctionEvaluatorMixin:
             is_async = getattr(fn, 'is_async', False)
             
             if is_async:
-                # Create a promise that wraps the async action execution
-                from ..object import Promise
+                # Create a coroutine that lazily executes the async action
+                from ..object import Coroutine
                 
-                def executor(resolve, reject):
-                    """Execute the async action and resolve/reject the promise"""
-                    print(f"[DEBUG] Executor called for async action")
+                def async_generator():
+                    """Generator that executes the async action body"""
                     new_env = Environment(outer=fn.env)
                     
                     # Bind parameters
@@ -96,43 +95,34 @@ class FunctionEvaluatorMixin:
                         if i < len(args):
                             param_name = param.value if hasattr(param, 'value') else str(param)
                             new_env.set(param_name, args[i])
-                            print(f"[DEBUG] Bound parameter: {param_name} = {args[i]}")
+                    
+                    # Yield control first (makes it a true generator)
+                    yield None
                     
                     try:
                         # Evaluate the function body
-                        print(f"[DEBUG] Evaluating async action body")
                         res = self.eval_node(fn.body, new_env)
-                        
-                        print(f"[DEBUG] Async action result: type={type(res).__name__}, res={res}")
                         
                         # Unwrap ReturnValue if needed
                         if isinstance(res, ReturnValue):
                             result = res.value
-                            print(f"[DEBUG] Unwrapped ReturnValue: {result}, type={type(result).__name__}")
                         else:
                             result = res
-                            print(f"[DEBUG] Result (not ReturnValue): {result}, type={type(result).__name__}")
                         
-                        # Resolve the promise with the result
-                        print(f"[DEBUG] Resolving promise with: {result}")
-                        resolve(result)
-                    except Exception as e:
-                        # Reject the promise with the error
-                        debug_log("  Rejecting promise with", f"{e}")
-                        reject(e)
-                    finally:
                         # Execute deferred cleanup
                         if hasattr(self, '_execute_deferred_cleanup'):
                             self._execute_deferred_cleanup(new_env, [])
+                        
+                        # Return the result (will be caught by StopIteration)
+                        return result
+                    except Exception as e:
+                        # Re-raise exception to be caught by coroutine
+                        raise e
                 
-                # Create and return promise with context propagation
-                print(f"[DEBUG] Creating promise with executor")
-                # Get stack trace context if available
-                stack_trace = getattr(self, '_current_stack_trace', [])
-                promise = Promise(executor, env=env, stack_trace=stack_trace)
-                print(f"[DEBUG] Promise created, state={promise.state}, value={promise.value}")
-                debug_log("  Created async promise", f"action {fn.name if hasattr(fn, 'name') else 'anonymous'}")
-                return promise
+                # Create and return coroutine
+                gen = async_generator()
+                coroutine = Coroutine(gen, fn)
+                return coroutine
             
             # Synchronous function execution
             new_env = Environment(outer=fn.env)
@@ -260,6 +250,13 @@ class FunctionEvaluatorMixin:
                 found = any(elem.value == target.value for elem in obj.elements 
                           if hasattr(elem, 'value') and hasattr(target, 'value'))
                 return TRUE if found else FALSE
+        
+        # === Coroutine Methods ===
+        from ..object import Coroutine
+        if isinstance(obj, Coroutine):
+            if method_name == "inspect":
+                # Return string representation of coroutine state
+                return String(obj.inspect())
         
         # === Map Methods ===
         if isinstance(obj, Map):

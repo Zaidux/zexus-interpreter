@@ -1588,7 +1588,11 @@ class StatementEvaluatorMixin:
     def eval_action_statement(self, node, env, stack_trace):
         action = Action(node.parameters, node.body, env)
         
-        # Apply modifiers if present
+        # Check for direct is_async attribute (from UltimateParser)
+        if hasattr(node, 'is_async') and node.is_async:
+            action.is_async = True
+        
+        # Apply modifiers if present (from standard parser)
         modifiers = getattr(node, 'modifiers', [])
         if modifiers:
             # Set modifier flags on the action object

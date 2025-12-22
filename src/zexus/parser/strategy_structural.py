@@ -31,12 +31,15 @@ class StructuralAnalyzer:
         # helper sets for stopping heuristics (mirrors context parser)
         stop_types = {SEMICOLON, RBRACE}
         
+        # Modifier tokens that should be merged with the following statement
+        modifier_tokens = {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}
+        
         # Statement starters (keywords that begin a new statement)
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
               LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
-              RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
+              RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
@@ -357,12 +360,56 @@ class StructuralAnalyzer:
                 i = next_idx
                 continue
 
+            # Modifier tokens: merge with the following statement
+            if t.type in modifier_tokens:
+                start_idx = i
+                modifier_list = []
+                
+                # Collect consecutive modifiers
+                while i < n and tokens[i].type in modifier_tokens:
+                    modifier_list.append(tokens[i])
+                    i += 1
+                
+                # Skip EOF/whitespace
+                while i < n and tokens[i].type == EOF:
+                    i += 1
+                
+                # If followed by a statement starter, continue to statement parsing
+                # by falling through to the elif below
+                if i < n and tokens[i].type in statement_starters:
+                    # Update t to point to the statement starter
+                    t = tokens[i]
+                    start_idx_orig = start_idx  # Remember where modifiers started
+                    # Don't increment i - let the statement parsing handle it
+                else:
+                    # Modifiers without a following statement - treat as expression
+                    self.blocks[block_id] = {
+                        'id': block_id,
+                        'type': 'statement',
+                        'subtype': modifier_list[0].type,
+                        'tokens': modifier_list,
+                        'start_token': modifier_list[0],
+                        'start_index': start_idx,
+                        'end_index': start_idx + len(modifier_list)
+                    }
+                    block_id += 1
+                    i = start_idx + len(modifier_list)
+                    continue
+            
             # Statement-like tokens: try to collect tokens up to a statement boundary
             # DUAL-MODE DEBUG: skip if debug( ) which is a function call, not statement
             if t.type in statement_starters and not (t.type == DEBUG and i + 1 < n and tokens[i + 1].type == LPAREN):
-                start_idx = i
-                stmt_tokens = [t]  # Start with the statement starter token
-                j = i + 1
+                # Check if we just processed modifiers
+                if 'modifier_list' in locals() and start_idx < i:
+                    # Start from modifier position, include modifiers in stmt_tokens
+                    stmt_start_idx = start_idx
+                    stmt_tokens = modifier_list + [t]
+                    j = i + 1
+                    del modifier_list  # Clear for next iteration
+                else:
+                    stmt_start_idx = i
+                    stmt_tokens = [t]  # Start with the statement starter token
+                    j = i + 1
                 nesting = 0  # Track nesting level for (), [], {}
                 found_brace_block = False  # Did we encounter a { ... } block?
                 found_colon_block = False  # Did we encounter a : (tolerable syntax)?
@@ -454,8 +501,8 @@ class StructuralAnalyzer:
                         'type': 'statement', 
                         'subtype': t.type,
                         'tokens': filtered_stmt_tokens,
-                        'start_token': tokens[start_idx],
-                        'start_index': start_idx,
+                        'start_token': tokens[stmt_start_idx],
+                        'start_index': stmt_start_idx,
                         'end_index': j,
                         'parent': None
                     }
@@ -465,7 +512,7 @@ class StructuralAnalyzer:
                             lit_preview = ' '.join([tk.literal for tk in filtered_stmt_tokens[:8] if getattr(tk, 'literal', None)])
                         except Exception:
                             lit_preview = ''
-                        print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[start_idx].type} preview={lit_preview}")
+                        print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[stmt_start_idx].type} preview={lit_preview}")
                     block_id += 1
                 i = j
                 continue

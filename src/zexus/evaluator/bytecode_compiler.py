@@ -213,9 +213,63 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_ForEachStatement(self, node: zexus_ast.ForEachStatement):
         """Compile for-each loop"""
-        # For now, mark as not supported in bytecode
-        # This requires more complex runtime support
-        self.errors.append("ForEach not yet supported in bytecode compilation")
+        start_label = f"foreach_start_{id(node)}"
+        end_label = f"foreach_end_{id(node)}"
+        
+        # Track loop labels for break/continue
+        self._loop_stack.append({'start': start_label, 'end': end_label})
+        
+        # Compile the iterable
+        self._compile_node(node.iterable)
+        
+        # Get iterator (for now, assume it's already iterable)
+        # Store iterator in a temp variable
+        iter_var = f"_iter_{id(node)}"
+        self.builder.emit_store(iter_var)
+        
+        # Get length/count for iteration
+        self.builder.emit_load(iter_var)
+        self.builder.emit("GET_LENGTH")  # Should push length onto stack
+        index_var = f"_index_{id(node)}"
+        self.builder.emit_constant(0)
+        self.builder.emit_store(index_var)
+        
+        # Loop start
+        self.builder.mark_label(start_label)
+        
+        # Check if index < length
+        self.builder.emit_load(index_var)
+        self.builder.emit_load(iter_var)
+        self.builder.emit("GET_LENGTH")
+        self.builder.emit("LT")  # index < length
+        self.builder.emit_jump_if_false(end_label)
+        
+        # Get current element
+        self.builder.emit_load(iter_var)
+        self.builder.emit_load(index_var)
+        self.builder.emit("INDEX")  # Get element at index
+        
+        # Store in loop variable
+        item_name = node.item.value if hasattr(node.item, 'value') else str(node.item)
+        self.builder.emit_store(item_name)
+        
+        # Compile body
+        self._compile_node(node.body)
+        
+        # Increment index
+        self.builder.emit_load(index_var)
+        self.builder.emit_constant(1)
+        self.builder.emit("ADD")
+        self.builder.emit_store(index_var)
+        
+        # Jump back to start
+        self.builder.emit_jump(start_label)
+        
+        # Loop end
+        self.builder.mark_label(end_label)
+        self._loop_stack.pop()
+        
+        # For-each doesn't return a value
         self.builder.emit_constant(None)
     
     def _compile_BlockStatement(self, node: zexus_ast.BlockStatement):
@@ -256,6 +310,23 @@ class EvaluatorBytecodeCompiler:
         func_const_idx = self.builder.bytecode.add_constant(func_desc)
         name_idx = self.builder.bytecode.add_constant(node.name.value)
         self.builder.emit("STORE_FUNC", (name_idx, func_const_idx))
+    
+    def _compile_FunctionStatement(self, node: zexus_ast.FunctionStatement):
+        """Compile function definition (same as action)"""
+        # Reuse action compilation logic
+        self._compile_ActionStatement(node)
+    
+    def _compile_PrintStatement(self, node: zexus_ast.PrintStatement):
+        """Compile print statement"""
+        # Compile the value to print
+        if hasattr(node, 'value') and node.value:
+            self._compile_node(node.value)
+        else:
+            # Empty print
+            self.builder.emit_constant("")
+        
+        # Emit PRINT opcode
+        self.builder.emit("PRINT")
     
     # === Blockchain Statement Compilation ===
     
@@ -493,10 +564,10 @@ class EvaluatorBytecodeCompiler:
         """Compile assignment expression"""
         # Compile the value
         self._compile_node(node.value)
-        # Store to target
-        if isinstance(node.target, zexus_ast.Identifier):
+        # Store to name
+        if isinstance(node.name, zexus_ast.Identifier):
             self.builder.emit("DUP")  # Keep value on stack
-            self.builder.emit_store(node.target.value)
+            self.builder.emit_store(node.name.value)
         else:
             self.errors.append(
                 "Complex assignment targets not yet supported in bytecode")
@@ -538,8 +609,9 @@ class EvaluatorBytecodeCompiler:
         # List of supported node types
         supported = {
             'Program', 'ExpressionStatement', 'LetStatement', 'ConstStatement',
-            'ReturnStatement', 'IfStatement', 'WhileStatement', 'BlockStatement',
-            'ActionStatement', 'Identifier', 'IntegerLiteral', 'FloatLiteral',
+            'ReturnStatement', 'IfStatement', 'WhileStatement', 'ForEachStatement',
+            'BlockStatement', 'ActionStatement', 'FunctionStatement', 'PrintStatement',
+            'Identifier', 'IntegerLiteral', 'FloatLiteral',
             'StringLiteral', 'Boolean', 'ListLiteral', 'MapLiteral',
             'InfixExpression', 'PrefixExpression', 'CallExpression',
             'AwaitExpression', 'AssignmentExpression', 'IndexExpression'

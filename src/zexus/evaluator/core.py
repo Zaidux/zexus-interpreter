@@ -587,9 +587,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 use_cache=True,
                 cache_size=1000
             )
-            # Create VM instance with JIT and optimizer
-            self.vm_instance = VM(use_jit=True, jit_threshold=100, optimization_level=1)
-            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT + optimizer)")
+            # Create VM instance with JIT enabled
+            self.vm_instance = VM(use_jit=True, jit_threshold=100)
+            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT)")
         except Exception as e:
             debug_log("Evaluator", f"Failed to initialize VM: {e}")
             self.use_vm = False
@@ -637,7 +637,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             # Use shared VM instance (has JIT, optimizer, etc.)
             if not self.vm_instance:
-                self.vm_instance = VM(use_jit=True, jit_threshold=100, optimization_level=1)
+                self.vm_instance = VM(use_jit=True, jit_threshold=100)
             
             self.vm_instance.builtins = vm_builtins
             self.vm_instance.env = vm_env
@@ -660,9 +660,26 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         """Convert Environment object to dict for VM"""
         result = {}
         try:
+            from ..object import String, Integer, Float, Boolean, List, Map, NULL
+            
+            def to_python(obj):
+                """Convert evaluator object to Python primitive"""
+                if obj is NULL or obj is None:
+                    return None
+                elif isinstance(obj, (String, Integer, Float, Boolean)):
+                    return obj.value
+                elif isinstance(obj, List):
+                    return [to_python(e) for e in obj.elements]
+                elif isinstance(obj, Map):
+                    return {k: to_python(v) for k, v in obj.pairs.items()}
+                else:
+                    # Return as-is for complex objects
+                    return obj
+            
             # Get all variables from environment
             if hasattr(env, 'store') and isinstance(env.store, dict):
-                result.update(env.store)
+                for k, v in env.store.items():
+                    result[k] = to_python(v)
             
             # Get outer environment if available
             if hasattr(env, 'outer') and env.outer:
@@ -680,21 +697,38 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         """Update Environment object from VM's dict"""
         try:
             for key, value in vm_env.items():
-                # Only update if value changed
+                # Convert VM result back to evaluator object
+                evaluator_value = self._vm_result_to_evaluator(value)
+                # Update environment
                 if hasattr(env, 'set'):
-                    env.set(key, value)
+                    env.set(key, evaluator_value)
                 elif hasattr(env, 'store'):
-                    env.store[key] = value
+                    env.store[key] = evaluator_value
         except Exception as e:
             debug_log("_update_env_from_dict", f"Error: {e}")
     
     def _vm_result_to_evaluator(self, result):
         """Convert VM result to evaluator object"""
-        # For now, pass through
-        # Future: convert to proper evaluator objects (String, List, etc.)
+        from ..object import String, Integer, Float, Boolean, List, Map, NULL
+        
         if result is None:
             return NULL
-        return result
+        elif isinstance(result, bool):
+            return Boolean(result)
+        elif isinstance(result, int):
+            return Integer(result)
+        elif isinstance(result, float):
+            return Float(result)
+        elif isinstance(result, str):
+            return String(result)
+        elif isinstance(result, list):
+            return List([self._vm_result_to_evaluator(e) for e in result])
+        elif isinstance(result, dict):
+            converted = {k: self._vm_result_to_evaluator(v) for k, v in result.items()}
+            return Map(converted)
+        else:
+            # Return as-is for complex objects
+            return result
     
     def eval_with_vm_support(self, node, env, stack_trace=None, debug_mode=False):
         """

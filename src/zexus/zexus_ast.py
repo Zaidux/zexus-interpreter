@@ -161,13 +161,15 @@ class ThemeStatement(Statement):
         return f"ThemeStatement(name={self.name}, properties={self.properties})"
 
 class ActionStatement(Statement):
-    def __init__(self, name, parameters, body):
+    def __init__(self, name, parameters, body, is_async=False):
         self.name = name
         self.parameters = parameters
         self.body = body
+        self.is_async = is_async
 
     def __repr__(self):
-        return f"ActionStatement(name={self.name}, parameters={len(self.parameters)})"
+        async_str = "async " if self.is_async else ""
+        return f"ActionStatement({async_str}name={self.name}, parameters={len(self.parameters)})"
 
 class FunctionStatement(Statement):
     def __init__(self, name, parameters, body):

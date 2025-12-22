@@ -1,0 +1,12 @@
+print("=== Debug Async Test ===");
+
+async action getData() {
+    print("Inside getData");
+    return 42;
+}
+
+let coro = getData();
+print("Coroutine type:", coro);
+print("About to await...");
+let result = await coro;
+print("Result after await:", result);

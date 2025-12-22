@@ -283,7 +283,10 @@ class Coroutine(Object):
     
     def inspect(self):
         if self.is_complete:
-            return f"Coroutine {{ <complete>: {self.result} }}"
+            if self.result is not None:
+                result_str = self.result.inspect() if hasattr(self.result, 'inspect') else str(self.result)
+                return f"Coroutine {{ <complete>: {result_str} }}"
+            return "Coroutine { <complete>: null }"
         return "Coroutine { <running> }"
     
     def type(self):
