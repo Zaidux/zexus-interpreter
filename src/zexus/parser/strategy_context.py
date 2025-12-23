@@ -4,6 +4,13 @@ from ..zexus_ast import *
 from ..config import config as zexus_config
 from types import SimpleNamespace # Helper for AST node creation
 
+# Import Parser for nested parsing (needed for LOG statement)
+# Note: This is imported at runtime to avoid circular dependency
+def get_parser_class():
+    """Lazy import Parser class to avoid circular dependency"""
+    from .parser import Parser
+    return Parser
+
 # Local helper to control debug printing according to user config
 def ctx_debug(msg, data=None, level='debug'):
     try:
@@ -16,9 +23,12 @@ def ctx_debug(msg, data=None, level='debug'):
     else:
         print(f"🔍 [CTX DEBUG] {msg}")
 
-# Helper function for parser debug output
+# Helper function for parser debug output - OPTIMIZED
 def parser_debug(msg):
-    if zexus_config.should_log('debug'):
+    # OPTIMIZATION: Check config flag to avoid string formatting overhead
+    if hasattr(zexus_config, 'enable_parser_debug') and zexus_config.enable_parser_debug:
+        print(msg)
+    elif zexus_config.should_log('debug'):
         print(msg)
 
 # Helper class to create objects that behave like AST nodes (dot notation access)
@@ -797,7 +807,7 @@ class ContextStackParser:
     def _parse_use_statement_block(self, block_info, all_tokens):
         """Enhanced use statement parser that handles both syntax styles"""
         tokens = block_info['tokens']
-        print(f"    📝 Found use statement: {[t.literal for t in tokens]}")
+        parser_debug(f"    📝 Found use statement: {[t.literal for t in tokens]}")
 
         # Check for brace syntax: use { Name1, Name2 } from './module.zx'
         has_braces = any(t.type == LBRACE for t in tokens)
@@ -838,7 +848,7 @@ class ContextStackParser:
                 if is_from:
                     if i + 1 < len(tokens) and tokens[i + 1].type == STRING:
                         file_path = tokens[i + 1].literal
-                        print(f"    📝 Found import path: {file_path}")
+                        parser_debug(f"    📝 Found import path: {file_path}")
                     break
 
         return UseStatement(
@@ -999,18 +1009,53 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
+        
+        # Safety: track loop iterations to prevent infinite loops
+        max_iterations = len(tokens) * 10  # Very generous limit
+        iteration_count = 0
+        last_i = -1
+        
         while i < len(tokens):
+            iteration_count += 1
+            if iteration_count > max_iterations:
+                parser_debug(f"⚠️ WARNING: Excessive iterations ({iteration_count}) in _parse_block_statements, possible infinite loop")
+                parser_debug(f"   Current i={i}, len(tokens)={len(tokens)}, token={tokens[i].type if i < len(tokens) else 'EOF'}")
+                break
+            
+            # Detect if we're stuck (i hasn't changed)
+            if i == last_i:
+                parser_debug(f"⚠️ WARNING: Parser stuck at position {i}, token type {tokens[i].type}")
+                i += 1  # Force progress
+                continue
+            last_i = i
+            
             token = tokens[i]
 
             # PRINT statement heuristic
             if token.type == PRINT:
                 j = i + 1
-                while j < len(tokens) and tokens[j].type not in [SEMICOLON, LBRACE, RBRACE]:
+                nesting = 0
+                while j < len(tokens):
+                    t = tokens[j]
+                    if t.type in [LPAREN, LBRACKET, LBRACE]:
+                        nesting += 1
+                    elif t.type in [RPAREN, RBRACKET, RBRACE]:
+                        nesting -= 1
+                        # Stop after closing the top-level expression
+                        if nesting <= 0:
+                            j += 1  # Include the closing paren
+                            break
+                    elif nesting == 0 and t.type in [SEMICOLON]:
+                        break
+                    # Stop at statement keywords when not nested
+                    elif nesting == 0 and t.type in statement_starters and j > i + 1:
+                        break
                     j += 1
 
                 print_tokens = tokens[i:j]
-                print(f"    📝 Found print statement: {[t.literal for t in print_tokens]}")
+                if zexus_config.enable_debug_logs:
+                    parser_debug(f"    📝 Found print statement: {[t.literal for t in print_tokens]}")
 
                 if len(print_tokens) > 1:
                     # Fast-path: if the print contains exactly a single string literal
@@ -1040,13 +1085,18 @@ class ContextStackParser:
                         if nesting < 0:
                             break
                     
+                    # Stop at semicolon or when we hit another statement keyword (at nesting 0)
                     if nesting == 0 and t.type == SEMICOLON:
+                        break
+                    
+                    # Stop when we hit another statement starter (at nesting 0)
+                    if nesting == 0 and t.type in statement_starters and j > i + 1:
                         break
                     
                     j += 1
 
                 let_tokens = tokens[i:j]
-                print(f"    📝 Found let statement: {[t.literal for t in let_tokens]}")
+                parser_debug(f"    📝 Found let statement: {[t.literal for t in let_tokens]}")
 
                 if len(let_tokens) >= 4 and let_tokens[1].type == IDENT:
                     var_name = let_tokens[1].literal
@@ -1085,7 +1135,7 @@ class ContextStackParser:
                     j += 1
 
                 use_tokens = tokens[i:j]
-                print(f"    📝 Found use statement (heuristic): {[t.literal for t in use_tokens]}")
+                parser_debug(f"    📝 Found use statement (heuristic): {[t.literal for t in use_tokens]}")
 
                 # Reuse the sophisticated parser
                 block_info = {'tokens': use_tokens}
@@ -1116,7 +1166,7 @@ class ContextStackParser:
                         j += 1
 
                 export_tokens = tokens[i:j]
-                print(f"    📝 Found export statement: {[t.literal for t in export_tokens]}")
+                parser_debug(f"    📝 Found export statement: {[t.literal for t in export_tokens]}")
 
                 # Extract identifier names from the token slice (tolerant)
                 names = []
@@ -1166,9 +1216,10 @@ class ContextStackParser:
                     j += 1
 
                 external_tokens = tokens[i:j]
-                print(f"    📝 Found external statement: {[t.literal for t in external_tokens]}")
+                parser_debug(f"    📝 Found external statement: {[t.literal for t in external_tokens]}")
 
-                # Parse using the main parser's parse_external_declaration
+                # Parse using the main parser's parse_external_declaration (lazy import Parser)
+                Parser = get_parser_class()
                 temp_parser = Parser(external_tokens)
                 temp_parser.next_token()
                 stmt = temp_parser.parse_external_declaration()
@@ -1204,7 +1255,7 @@ class ContextStackParser:
                             break
                     j += 1
 
-                print(f"    📝 Found action statement: {[t.literal for t in stmt_tokens]}")
+                parser_debug(f"    📝 Found action statement: {[t.literal for t in stmt_tokens]}")
 
                 # Extract name, params and body
                 action_name = None
@@ -1293,7 +1344,7 @@ class ContextStackParser:
                             break
                     j += 1
 
-                print(f"    📝 Found function statement: {[t.literal for t in stmt_tokens]}")
+                parser_debug(f"    📝 Found function statement: {[t.literal for t in stmt_tokens]}")
 
                 # Extract name, params and body
                 function_name = None
@@ -1362,7 +1413,7 @@ class ContextStackParser:
                             break
                     j += 1
                 
-                print(f"    📝 Found module statement: {[t.literal for t in stmt_tokens]}")
+                parser_debug(f"    📝 Found module statement: {[t.literal for t in stmt_tokens]}")
                 
                 module_name = None
                 body_block = BlockStatement()
@@ -1407,7 +1458,7 @@ class ContextStackParser:
                             break
                     j += 1
                 
-                print(f"    📝 Found package statement: {[t.literal for t in stmt_tokens]}")
+                parser_debug(f"    📝 Found package statement: {[t.literal for t in stmt_tokens]}")
                 
                 package_name = ""
                 k = 1
@@ -1455,12 +1506,39 @@ class ContextStackParser:
                             break
                     j += 1
                 
-                print(f"    📝 Found watch statement: {[t.literal for t in stmt_tokens]}")
+                parser_debug(f"    📝 Found watch statement: {[t.literal for t in stmt_tokens]}")
                 
                 block_info = {'tokens': stmt_tokens}
                 stmt = self._parse_watch_statement(block_info, tokens)
                 if stmt:
                     statements.append(stmt)
+                
+                i = j
+                continue
+            
+            # LOG statement heuristic: log > filename
+            elif token.type == LOG:
+                j = i + 1
+                # Expect > symbol
+                if j < len(tokens) and tokens[j].type == GT:
+                    j += 1
+                    # Get filepath (can be STRING or IDENT)
+                    if j < len(tokens) and tokens[j].type in [STRING, IDENT]:
+                        filepath_token = tokens[j]
+                        parser_debug(f"    📝 Found log statement: log > {filepath_token.literal}")
+                        
+                        # Create a simple string literal or identifier expression
+                        if filepath_token.type == STRING:
+                            filepath_expr = StringLiteral(filepath_token.literal)
+                        else:
+                            filepath_expr = Identifier(filepath_token.literal)
+                        
+                        statements.append(LogStatement(filepath_expr))
+                        j += 1
+                    else:
+                        parser_debug(f"    ⚠️ Expected filepath after 'log >'")
+                else:
+                    parser_debug(f"    ⚠️ Expected '>' after 'log'")
                 
                 i = j
                 continue
@@ -1814,7 +1892,7 @@ class ContextStackParser:
                     # Recursively parse body statements
                     body_block.statements = self._parse_block_statements(body_tokens)
                 
-                print(f"    📝 Found while statement with {len(body_block.statements)} body statements")
+                parser_debug(f"    📝 Found while statement with {len(body_block.statements)} body statements")
                 
                 stmt = WhileStatement(condition=condition, body=body_block)
                 if stmt:
@@ -1872,7 +1950,7 @@ class ContextStackParser:
                             # Recursively parse body statements
                             body_block.statements = self._parse_block_statements(body_tokens)
                         
-                        print(f"    📝 Found for each statement with {len(body_block.statements)} body statements")
+                        parser_debug(f"    📝 Found for each statement with {len(body_block.statements)} body statements")
                         
                         stmt = ForEachStatement(
                             item=Identifier(item_name if item_name else 'item'),
@@ -1911,7 +1989,7 @@ class ContextStackParser:
                     # Recursively parse code block statements
                     code_block.statements = self._parse_block_statements(block_tokens)
                 
-                print(f"    📝 Found defer statement with {len(code_block.statements)} statements")
+                parser_debug(f"    📝 Found defer statement with {len(code_block.statements)} statements")
                 
                 stmt = DeferStatement(code_block=code_block)
                 if stmt:
@@ -1960,7 +2038,7 @@ class ContextStackParser:
                     if j < len(tokens) and tokens[j].type == RBRACE:
                         j += 1  # Skip closing brace
                 
-                print(f"    📝 Found enum '{enum_name}' with {len(members)} members")
+                parser_debug(f"    📝 Found enum '{enum_name}' with {len(members)} members")
                 
                 stmt = EnumStatement(enum_name, members)
                 if stmt:
@@ -1996,7 +2074,7 @@ class ContextStackParser:
                     body = BlockStatement()
                     body.statements = body_statements
                 
-                print(f"    📝 Found sandbox statement with {len(body.statements) if body else 0} statements")
+                parser_debug(f"    📝 Found sandbox statement with {len(body.statements) if body else 0} statements")
                 
                 stmt = SandboxStatement(body=body, policy=None)
                 if stmt:
@@ -2032,7 +2110,7 @@ class ContextStackParser:
                     if brace_nest == 0 and len(require_tokens) > 1 and require_tokens[-2].type == RBRACE:
                         break
                 
-                print(f"    📝 Found require statement with {len(require_tokens)} tokens: {[t.literal for t in require_tokens[:20]]}")
+                parser_debug(f"    📝 Found require statement with {len(require_tokens)} tokens: {[t.literal for t in require_tokens[:20]]}")
                 
                 # Use the handler to parse it
                 block_info = {'tokens': require_tokens}

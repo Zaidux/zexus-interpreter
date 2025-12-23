@@ -1,0 +1,16 @@
+# test_hot_reload_callback.zx - Test hot reload with callback
+
+print("Testing watch_and_reload() with callback...")
+
+action on_change(filepath) {
+    print("🔄 File changed: " + filepath)
+}
+
+if true {
+    let result = watch_and_reload([__file__], 0.5, on_change)
+    print("Watching: " + string(result))
+    print("Modify this file to test...")
+    sleep(3)
+}
+
+print("Done")

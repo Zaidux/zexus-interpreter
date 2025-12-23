@@ -1,0 +1,60 @@
+# test_signal_handlers_enhanced.zx - Test enhanced signal handling
+
+print("=== Testing Enhanced Signal Handling ===")
+print("")
+
+let sigint_count = 0
+let sigterm_count = 0
+let received_signals = []
+
+# Handler 1 for SIGINT - receives signal name
+action handler1(sig_name) {
+    sigint_count = sigint_count + 1
+    print("Handler 1 received: " + sig_name)
+    received_signals = received_signals + [sig_name]
+}
+
+# Handler 2 for SIGINT - also receives signal name
+action handler2(sig_name) {
+    print("Handler 2 also received: " + sig_name)
+}
+
+# Handler for SIGTERM
+action term_handler(sig_name) {
+    sigterm_count = sigterm_count + 1
+    print("TERM handler received: " + sig_name)
+}
+
+if is_main() {
+    print("Test 1: Multiple handlers for same signal")
+    signal_handler("SIGINT", handler1)
+    signal_handler("SIGINT", handler2)
+    print("  ✅ Registered 2 handlers for SIGINT")
+    print("")
+    
+    print("Test 2: Different handlers for different signals")
+    signal_handler("SIGTERM", term_handler)
+    print("  ✅ Registered handler for SIGTERM")
+    print("")
+    
+    print("Test 3: Handlers receive signal name as argument")
+    print("  Signal handlers will receive the signal name when triggered")
+    print("")
+    
+    print("To test manually:")
+    print("  - Press Ctrl+C to trigger SIGINT handlers")
+    print("  - Both handler1 and handler2 should execute")
+    print("  - Each handler receives 'SIGINT' as argument")
+    print("")
+    print("Running for 3 seconds...")
+    
+    # Keep program running to test signal handling
+    sleep(3)
+    
+    print("")
+    print("Test summary:")
+    print("  SIGINT count: " + string(sigint_count))
+    print("  Signals received: " + string(received_signals))
+}
+
+print("Done")

@@ -893,6 +893,21 @@ class WatchStatement(Statement):
         return f"WatchStatement(watch={self.watched_expr})"
 
 
+class LogStatement(Statement):
+    """Log statement - Redirect output to file
+    
+    log > output.txt
+    log > /path/to/file.txt
+    
+    Redirects subsequent print output to the specified file.
+    """
+    def __init__(self, filepath):
+        self.filepath = filepath  # Expression: path to log file
+    
+    def __repr__(self):
+        return f"LogStatement(filepath={self.filepath})"
+
+
 # NEW: Capability-based security statements
 
 class CapabilityStatement(Statement):

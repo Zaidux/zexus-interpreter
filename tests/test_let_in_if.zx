@@ -1,0 +1,24 @@
+# test_let_in_if.zx - Test let inside if blocks
+
+print("Testing let in if blocks...")
+
+if true {
+    let x = 42
+    print("x inside if: " + string(x))
+}
+
+print("Test 2: let with function call result")
+if true {
+    let result = len([1, 2, 3])
+    print("result: " + string(result))
+}
+
+print("Test 3: Multiple lets in if")
+if true {
+    let a = 1
+    let b = 2
+    let c = a + b
+    print("c = " + string(c))
+}
+
+print("All tests complete")

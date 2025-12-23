@@ -456,6 +456,7 @@ class Lexer:
             "enum": ENUM,               # Advanced: type-safe enumerations
             "stream": STREAM,           # Advanced: event streaming
             "watch": WATCH,             # Advanced: reactive state management
+            "log": LOG,                 # Output logging to file
             "inject": INJECT,           # Advanced: dependency injection
             "validate": VALIDATE,       # Data validation
             "sanitize": SANITIZE,       # Data sanitization

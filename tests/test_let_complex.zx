@@ -1,0 +1,31 @@
+# test_let_complex.zx - Test let with complex assignments
+
+print("Test 1: Simple let in if")
+if true {
+    let x = 5
+    print("x = " + string(x))
+}
+
+print("Test 2: Let with list")
+if true {
+    let nums = [1, 2, 3]
+    print("nums = " + string(nums))
+}
+
+print("Test 3: Let with map")
+if true {
+    let obj = {name: "test"}
+    print("obj = " + string(obj))
+}
+
+print("Test 4: Let with list of maps")
+if true {
+    let items = [
+        {id: 1},
+        {id: 2}
+    ]
+    print("items = " + string(items))
+    print("len = " + string(len(items)))
+}
+
+print("Done")

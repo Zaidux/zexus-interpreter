@@ -139,7 +139,9 @@ def run(ctx, file, args):
             console.print(f"🔍 [bold blue]Detected syntax style:[/bold blue] {syntax_style}")
         
         # Validate syntax
+        console.print("[dim]Validating syntax...[/dim]", end="")
         validation_result = validator.validate_code(source_code, syntax_style)
+        console.print(" [green]done[/green]")
         if not validation_result['is_valid']:
             console.print(f"[bold yellow]⚠️  Syntax warnings: {validation_result['error_count']} issue(s) found[/bold yellow]")
             for suggestion in validation_result['suggestions']:

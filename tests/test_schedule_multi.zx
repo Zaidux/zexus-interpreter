@@ -1,0 +1,22 @@
+# test_schedule_multi.zx - Test multiple scheduled tasks
+
+print("Testing multiple tasks...")
+
+action task1 {
+    print("Task 1 executed!")
+}
+
+action task2 {
+    print("Task 2 executed!")
+}
+
+if true {
+    let result = schedule([
+        {interval: 1, action: task1},
+        {interval: 2, action: task2}
+    ])
+    print("Scheduled: " + string(result))
+    sleep(3)
+}
+
+print("Done")

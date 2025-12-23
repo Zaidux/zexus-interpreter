@@ -1,0 +1,15 @@
+# test_schedule_simple.zx - Simple schedule test
+
+action test_task {
+    print("Task executed!")
+}
+
+print("Testing schedule()...")
+
+if true {
+    let result = schedule([{interval: 1, action: test_task}])
+    print("Scheduled! Result: " + string(result))
+    sleep(2)
+}
+
+print("Done")

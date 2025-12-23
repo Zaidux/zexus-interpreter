@@ -27,6 +27,7 @@ DEFAULT_RUNTIME = {
     'syntax_style': 'auto',
     'enable_advanced_parsing': True,
     'enable_debug_logs': False,
+    'enable_parser_debug': False,  # OPTIMIZATION: Disable parser debug output for speed
     # Legacy runtime flags expected by older modules
     'use_hybrid_compiler': True,
     'fallback_to_interpreter': True,

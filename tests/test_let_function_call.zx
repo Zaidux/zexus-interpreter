@@ -1,0 +1,23 @@
+# test_let_function_call.zx - Test let with function calls
+
+action get_number {
+    return 42
+}
+
+action get_list {
+    return [1, 2, 3]
+}
+
+print("Test 1: Let with simple function call")
+if true {
+    let result = get_number()
+    print("result = " + string(result))
+}
+
+print("Test 2: Let with list function call")
+if true {
+    let items = get_list()
+    print("items = " + string(items))
+}
+
+print("Done")

@@ -103,6 +103,8 @@ class StatementEvaluatorMixin:
                             pass
                     # Execute deferred cleanup before returning
                     self._execute_deferred_cleanup(env, stack_trace)
+                    # Restore stdout before returning
+                    self._restore_stdout(env)
                     return res
                 result = res
             
@@ -111,6 +113,8 @@ class StatementEvaluatorMixin:
         finally:
             # Always execute deferred cleanup when block exits (normal or error)
             self._execute_deferred_cleanup(env, stack_trace)
+            # Restore stdout to previous state (scope-aware)
+            self._restore_stdout(env)
     
     def eval_expression_statement(self, node, env, stack_trace):
         return self.eval_node(node.expression, env, stack_trace)
@@ -391,6 +395,74 @@ class StatementEvaluatorMixin:
             dep_env.add_watcher(name, reaction_callback)
             
         return NULL
+
+    def eval_log_statement(self, node, env, stack_trace):
+        """
+        Evaluates a LOG statement: log > filepath
+        Redirects subsequent print output to the specified file.
+        Output is automatically restored when the current block exits.
+        """
+        import sys
+        import os
+        
+        # 1. Evaluate the filepath expression
+        filepath_obj = self.eval_node(node.filepath, env, stack_trace)
+        if is_error(filepath_obj):
+            return filepath_obj
+        
+        # 2. Convert to string
+        if hasattr(filepath_obj, 'value'):
+            filepath = str(filepath_obj.value)
+        else:
+            filepath = str(filepath_obj)
+        
+        # 3. Normalize path (handle relative paths relative to CWD)
+        if not os.path.isabs(filepath):
+            filepath = os.path.join(os.getcwd(), filepath)
+        
+        # 4. Open file for writing (append mode)
+        try:
+            log_file = open(filepath, 'a')
+        except Exception as e:
+            return new_error(f"Cannot open log file '{filepath}': {e}", stack_trace)
+        
+        # 5. Save current stdout state for restoration
+        if not hasattr(env, '_stdout_stack'):
+            env._stdout_stack = []
+        env._stdout_stack.append(sys.stdout)
+        
+        # 6. Redirect stdout to this file
+        sys.stdout = log_file
+        
+        # 7. Store the file handle for cleanup
+        if not hasattr(env, '_log_files'):
+            env._log_files = []
+        env._log_files.append(log_file)
+        
+        return NULL
+
+    def _restore_stdout(self, env):
+        """Restore stdout to previous state and close log file (scope-aware)"""
+        import sys
+        
+        # Restore stdout if we have a saved state
+        if hasattr(env, '_stdout_stack') and env._stdout_stack:
+            previous_stdout = env._stdout_stack.pop()
+            
+            # Close current log file if it's a file object
+            if hasattr(sys.stdout, 'close') and sys.stdout != sys.__stdout__:
+                try:
+                    sys.stdout.flush()
+                    sys.stdout.close()
+                except Exception:
+                    pass
+            
+            # Restore previous stdout
+            sys.stdout = previous_stdout
+            
+            # Remove from log files list
+            if hasattr(env, '_log_files') and env._log_files:
+                env._log_files.pop()
 
     # === MODULE LOADING (FULL LOGIC) ===
     

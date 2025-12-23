@@ -1,0 +1,15 @@
+// Test LOG statement scope - output should be restored after action
+
+print("Before action - console");
+
+action calculate {
+    a = 10;
+    b = 20;
+    
+    log > "test_output.txt";
+    print("Inside action: " + (a + b));
+}
+
+calculate();
+
+print("After action - console");

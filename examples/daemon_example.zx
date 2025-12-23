@@ -1,0 +1,33 @@
+# daemon_example.zx - Example of a daemon process
+# This file demonstrates how to create a background daemon
+
+print("Daemon Example - Background Service")
+print("")
+
+# Simple counter that increments every second
+let counter = 0
+
+action background_task {
+    counter = counter + 1
+    # In a real daemon, this would log to a file since stdout is redirected
+    # For now we'll just increment silently
+}
+
+if is_main() {
+    print("Starting background service...")
+    print("This would normally run as a daemon")
+    print("")
+    
+    # Uncomment to actually daemonize:
+    # daemonize("/tmp/my_daemon")
+    
+    # Schedule background task
+    schedule([{interval: 1, action: background_task}])
+    
+    print("Background task scheduled")
+    print("Running for 5 seconds as demo...")
+    sleep(5)
+    
+    print("Counter value: " + string(counter))
+    print("✅ Daemon example complete")
+}

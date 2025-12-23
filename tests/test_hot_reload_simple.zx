@@ -1,0 +1,11 @@
+# test_hot_reload_simple.zx - Simple hot reload test
+
+print("Testing watch_and_reload()...")
+
+if true {
+    let result = watch_and_reload([__file__], 1.0)
+    print("Result: " + string(result))
+    sleep(2)
+}
+
+print("Done")

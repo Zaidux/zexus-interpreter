@@ -244,6 +244,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  WatchStatement node")
                 return self.eval_watch_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.LogStatement:
+                debug_log("  LogStatement node")
+                return self.eval_log_statement(node, env, stack_trace)
+            
             # === NEW SECURITY STATEMENTS ===
             elif node_type == zexus_ast.CapabilityStatement:
                 debug_log("  CapabilityStatement node", f"capability {node.name}")

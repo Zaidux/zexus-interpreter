@@ -1297,6 +1297,290 @@ class FunctionEvaluatorMixin:
             self._signal_handlers[signal_name].append(callback)
             return NULL
         
+        def _schedule(*a):
+            """
+            Schedule multiple tasks with different intervals to run in parallel.
+            
+            Usage:
+                schedule([
+                    {interval: 1, action: check_queue},
+                    {interval: 5, action: save_state},
+                    {interval: 60, action: cleanup}
+                ])
+            
+            Returns: List of task IDs
+            """
+            if len(a) != 1:
+                return EvaluationError("schedule() requires a list of task definitions")
+            
+            tasks_arg = a[0]
+            if not isinstance(tasks_arg, List):
+                return EvaluationError("schedule() argument must be a list")
+            
+            import threading
+            import time as time_module
+            
+            task_ids = []
+            
+            for i, task_def in enumerate(tasks_arg.elements):
+                if not isinstance(task_def, Map):
+                    return EvaluationError(f"Task {i} must be a map with 'interval' and 'action' keys")
+                
+                # Extract interval and action - map keys can be strings or String objects
+                interval_obj = None
+                action_obj = None
+                
+                for key, value in task_def.pairs.items():
+                    key_str = key if isinstance(key, str) else (key.value if hasattr(key, 'value') else str(key))
+                    if key_str == "interval":
+                        interval_obj = value
+                    elif key_str == "action":
+                        action_obj = value
+                
+                if not interval_obj or not action_obj:
+                    return EvaluationError(f"Task {i} must have 'interval' and 'action' keys")
+                
+                if isinstance(interval_obj, (Integer, Float)):
+                    interval = float(interval_obj.value)
+                else:
+                    return EvaluationError(f"Task {i} interval must be a number")
+                
+                if not isinstance(action_obj, (Action, LambdaFunction)):
+                    return EvaluationError(f"Task {i} action must be a function")
+                
+                # Create task thread
+                task_id = f"task_{i}_{id(action_obj)}"
+                task_ids.append(String(task_id))
+                
+                def task_worker(action, interval_sec, task_id):
+                    """Worker function that runs the task at specified interval"""
+                    while True:
+                        try:
+                            time_module.sleep(interval_sec)
+                            result = self.apply_function(action, [])
+                            if is_error(result):
+                                print(f"⚠️  Task {task_id} error: {result.message}")
+                        except Exception as e:
+                            print(f"⚠️  Task {task_id} exception: {str(e)}")
+                            break
+                
+                # Start thread in daemon mode so it exits when main program exits
+                thread = threading.Thread(
+                    target=task_worker,
+                    args=(action_obj, interval, task_id),
+                    daemon=True
+                )
+                thread.start()
+            
+            return List(task_ids)
+        
+        def _sleep(*args):
+            """
+            Sleep for specified seconds.
+            
+            Usage:
+                sleep(2)      # Sleep for 2 seconds
+                sleep(0.5)    # Sleep for 0.5 seconds
+            """
+            if len(args) != 1:
+                return EvaluationError("sleep() requires exactly 1 argument (seconds)")
+            
+            seconds_arg = args[0]
+            if isinstance(seconds_arg, (Integer, Float)):
+                try:
+                    time_module.sleep(float(seconds_arg.value))
+                    return NULL
+                except Exception as e:
+                    return EvaluationError(f"sleep() error: {str(e)}")
+            else:
+                return EvaluationError("sleep() argument must be a number")
+        
+        def _daemonize(*args):
+            """
+            Run the current process as a background daemon.
+            
+            Detaches from terminal and runs in background. On Unix systems, this
+            performs a double fork to properly daemonize. On Windows, it's a no-op.
+            
+            Usage:
+                if is_main() {
+                    daemonize()
+                    # Now running as daemon
+                    run(my_server_task)
+                }
+            
+            Optional arguments:
+                daemonize()              # Use defaults
+                daemonize(working_dir)   # Set working directory
+            """
+            import os
+            import sys
+            
+            # Check if we're on a Unix-like system
+            if not hasattr(os, 'fork'):
+                return EvaluationError("daemonize() is only supported on Unix-like systems")
+            
+            # Get optional working directory
+            working_dir = None
+            if len(args) > 0:
+                if isinstance(args[0], String):
+                    working_dir = args[0].value
+                else:
+                    return EvaluationError("daemonize() working_dir must be a string")
+            
+            try:
+                # First fork
+                pid = os.fork()
+                if pid > 0:
+                    # Parent process - exit
+                    sys.exit(0)
+            except OSError as e:
+                return EvaluationError(f"First fork failed: {str(e)}")
+            
+            # Decouple from parent environment
+            os.chdir(working_dir if working_dir else '/')
+            os.setsid()
+            os.umask(0)
+            
+            # Second fork to prevent acquiring a controlling terminal
+            try:
+                pid = os.fork()
+                if pid > 0:
+                    # Parent of second fork - exit
+                    sys.exit(0)
+            except OSError as e:
+                return EvaluationError(f"Second fork failed: {str(e)}")
+            
+            # Redirect standard file descriptors to /dev/null
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+            # Open /dev/null
+            dev_null = os.open(os.devnull, os.O_RDWR)
+            
+            # Redirect stdin, stdout, stderr
+            os.dup2(dev_null, sys.stdin.fileno())
+            os.dup2(dev_null, sys.stdout.fileno())
+            os.dup2(dev_null, sys.stderr.fileno())
+            
+            # Close the dev_null file descriptor
+            if dev_null > 2:
+                os.close(dev_null)
+            
+            return NULL
+        
+        def _watch_and_reload(*args):
+            """
+            Watch files for changes and reload modules automatically.
+            Useful for development to see code changes without restarting.
+            
+            Usage:
+                watch_and_reload([__file__])                    # Watch current file
+                watch_and_reload([file1, file2])                # Watch multiple files
+                watch_and_reload([__file__], 1.0)               # Custom check interval
+                watch_and_reload([__file__], 1.0, my_callback)  # With callback
+            
+            Returns: Map with watch info
+            """
+            import os
+            import time as time_module
+            import threading
+            
+            if len(args) < 1:
+                return EvaluationError("watch_and_reload() requires at least 1 argument (files)")
+            
+            # Parse arguments
+            files_arg = args[0]
+            check_interval = 1.0  # Default: check every second
+            reload_callback = None
+            
+            if not isinstance(files_arg, List):
+                return EvaluationError("watch_and_reload() files must be a list")
+            
+            if len(args) >= 2:
+                interval_obj = args[1]
+                if isinstance(interval_obj, (Integer, Float)):
+                    check_interval = float(interval_obj.value)
+                else:
+                    return EvaluationError("watch_and_reload() interval must be a number")
+            
+            if len(args) >= 3:
+                callback_obj = args[2]
+                if isinstance(callback_obj, (Action, LambdaFunction)):
+                    reload_callback = callback_obj
+                else:
+                    return EvaluationError("watch_and_reload() callback must be a function")
+            
+            # Extract file paths
+            file_paths = []
+            for file_obj in files_arg.elements:
+                if isinstance(file_obj, String):
+                    path = file_obj.value
+                    if os.path.exists(path):
+                        file_paths.append(path)
+                    else:
+                        return EvaluationError(f"File not found: {path}")
+                else:
+                    return EvaluationError("watch_and_reload() file paths must be strings")
+            
+            if not file_paths:
+                return EvaluationError("No valid files to watch")
+            
+            # Get initial modification times
+            file_mtimes = {}
+            for path in file_paths:
+                try:
+                    file_mtimes[path] = os.path.getmtime(path)
+                except OSError as e:
+                    return EvaluationError(f"Cannot stat {path}: {str(e)}")
+            
+            reload_count = [0]  # Use list for closure mutability
+            
+            def watch_worker():
+                """Background thread that watches for file changes"""
+                while True:
+                    time_module.sleep(check_interval)
+                    
+                    for path in file_paths:
+                        try:
+                            current_mtime = os.path.getmtime(path)
+                            if current_mtime > file_mtimes[path]:
+                                # File was modified!
+                                print(f"\n🔄 File changed: {path}")
+                                file_mtimes[path] = current_mtime
+                                reload_count[0] += 1
+                                
+                                # Execute reload callback if provided
+                                if reload_callback:
+                                    try:
+                                        result = self.apply_function(reload_callback, [String(path)])
+                                        if is_error(result):
+                                            print(f"⚠️  Reload callback error: {result.message}")
+                                    except Exception as e:
+                                        print(f"⚠️  Reload callback exception: {str(e)}")
+                                else:
+                                    print(f"   Reload #{reload_count[0]} - No auto-reload callback set")
+                                    print(f"   Tip: Restart the program to see changes")
+                        except OSError:
+                            # File might have been deleted/renamed
+                            pass
+            
+            # Start watch thread
+            watch_thread = threading.Thread(target=watch_worker, daemon=True)
+            watch_thread.start()
+            
+            print(f"👁️  Watching {len(file_paths)} file(s) for changes...")
+            for path in file_paths:
+                print(f"   - {path}")
+            print(f"   Check interval: {check_interval}s")
+            
+            # Return watch info
+            return Map({
+                "files": files_arg,
+                "interval": Float(check_interval),
+                "active": BooleanObj(True)
+            })
+        
         def _get_module_name(*a):
             """
             Get the current module name (__MODULE__).
@@ -1413,6 +1697,10 @@ class FunctionEvaluatorMixin:
             "on_start": Builtin(_on_start, "on_start"),
             "on_exit": Builtin(_on_exit, "on_exit"),
             "signal_handler": Builtin(_signal_handler, "signal_handler"),
+            "schedule": Builtin(_schedule, "schedule"),
+            "sleep": Builtin(_sleep, "sleep"),
+            "daemonize": Builtin(_daemonize, "daemonize"),
+            "watch_and_reload": Builtin(_watch_and_reload, "watch_and_reload"),
             "get_module_name": Builtin(_get_module_name, "get_module_name"),
             "get_module_path": Builtin(_get_module_path, "get_module_path"),
             "module_info": Builtin(_module_info, "module_info"),

@@ -1,0 +1,30 @@
+# test_run_with_args.zx - Test enhanced run() with callback arguments
+
+print("=== Testing Enhanced run() Function ===")
+print("")
+
+# Test 1: Simple callback with arguments
+let counter = 0
+let received_args = []
+
+action test_callback(arg1, arg2) {
+    counter = counter + 1
+    print("Callback executed #" + string(counter))
+    print("  arg1: " + string(arg1))
+    print("  arg2: " + string(arg2))
+    
+    # Stop after 3 iterations
+    if counter >= 3 {
+        exit_program(0)
+    }
+}
+
+print("Test 1: run() with callback and arguments")
+print("  Running test_callback with args [42, 'hello']")
+print("  Will run 3 times then exit")
+print("")
+
+if is_main() {
+    # This will call test_callback(42, "hello") every 0.5 seconds
+    run(test_callback, 0.5, [42, "hello"])
+}

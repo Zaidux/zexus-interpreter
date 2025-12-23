@@ -1,0 +1,56 @@
+# test_schedule.zx - Test multi-task scheduling
+
+print("=== Testing schedule() Function ===")
+print("")
+
+# Counter for each task
+let counter1 = 0
+let counter5 = 0
+let counter10 = 0
+
+# Task 1: Runs every 1 second
+action fast_task {
+    counter1 = counter1 + 1
+    print("⚡ Fast task (1s): " + string(counter1))
+}
+
+# Task 2: Runs every 2 seconds
+action medium_task {
+    counter5 = counter5 + 1
+    print("🔄 Medium task (2s): " + string(counter5))
+}
+
+# Task 3: Runs every 3 seconds
+action slow_task {
+    counter10 = counter10 + 1
+    print("🐌 Slow task (3s): " + string(counter10))
+}
+
+if is_main() {
+    print("📋 Scheduling multiple tasks...")
+    
+    # Schedule all tasks with different intervals
+    let task_ids = schedule([
+        {interval: 1, action: fast_task},
+        {interval: 2, action: medium_task},
+        {interval: 3, action: slow_task}
+    ])
+    
+    print("✅ Scheduled " + string(len(task_ids)) + " tasks")
+    print("   Task IDs: " + string(task_ids))
+    print("")
+    print("🔄 Running for 10 seconds...")
+    print("   (Press Ctrl+C to stop early)")
+    print("")
+    
+    # Keep running to let scheduled tasks execute
+    run(lambda: {}, 10)
+    
+    print("")
+    print("⏹️  Stopped")
+    print("")
+    print("📊 Final counts:")
+    print("   Fast task (1s): " + string(counter1) + " executions")
+    print("   Medium task (2s): " + string(counter5) + " executions")
+    print("   Slow task (3s): " + string(counter10) + " executions")
+}

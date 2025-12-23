@@ -107,26 +107,30 @@ class UltimateParser:
             print(message)
 
     def parse_program(self):
-        """The tolerant parsing pipeline - FIXED"""
+        """The tolerant parsing pipeline - OPTIMIZED"""
         if not self.use_advanced_parsing:
             return self._parse_traditional()
 
         try:
-            self._log("🎯 Starting Tolerant Parsing Pipeline...", "normal")
+            # OPTIMIZATION: Check if we already have tokens cached
+            if not hasattr(self, '_cached_tokens'):
+                self._cached_tokens = self._collect_all_tokens()
+            
+            all_tokens = self._cached_tokens
 
-            # Phase 1: Structural Analysis
-            all_tokens = self._collect_all_tokens()
-            self.block_map = self.structural_analyzer.analyze(all_tokens)
-
-            if config.enable_debug_logs:
-                self.structural_analyzer.print_structure()
+            # OPTIMIZATION: Only analyze structure if not done before
+            if not hasattr(self, '_structure_analyzed'):
+                self.block_map = self.structural_analyzer.analyze(all_tokens)
+                self._structure_analyzed = True
+                
+                if config.enable_debug_logs:
+                    self.structural_analyzer.print_structure()
 
             # Phase 2: Parse ALL blocks
             program = self._parse_all_blocks_tolerantly(all_tokens)
 
             # Fallback if advanced parsing fails
             if len(program.statements) == 0 and len(all_tokens) > 10:
-                self._log("🔄 Advanced parsing found no statements, falling back to traditional...", "normal")
                 return self._parse_traditional()
 
             self._log(f"✅ Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors", "minimal")
@@ -204,7 +208,7 @@ class UltimateParser:
         return MapLiteral(pairs=pairs)
 
     def _collect_all_tokens(self):
-        """Collect all tokens for structural analysis"""
+        """Collect all tokens for structural analysis - OPTIMIZED"""
         tokens = []
         original_position = self.lexer.position
         original_cur = self.cur_token
@@ -216,12 +220,21 @@ class UltimateParser:
         self.lexer.ch = ''
         self.lexer.read_char()
 
-        # Collect all tokens
-        while True:
+        # OPTIMIZATION: Pre-allocate list with reasonable capacity
+        tokens = []
+        
+        # OPTIMIZATION: Collect all tokens without logging overhead
+        max_tokens = 100000
+        iteration = 0
+        while iteration < max_tokens:
+            iteration += 1
             token = self.lexer.next_token()
             tokens.append(token)
             if token.type == EOF:
                 break
+        
+        if iteration >= max_tokens:
+            self._log(f"⚠️ WARNING: Hit token limit ({max_tokens}), possible lexer infinite loop", "normal")
 
         # Restore parser state
         self.lexer.position = original_position

@@ -1,0 +1,36 @@
+# test_hot_reload.zx - Test watch_and_reload() function
+
+print("=== Testing Hot Reload (watch_and_reload) ===")
+print("")
+
+# Counter for reload events
+let reload_count = 0
+
+action on_file_change(filepath) {
+    reload_count = reload_count + 1
+    print("🔄 Reload event #" + string(reload_count))
+    print("   Changed file: " + filepath)
+}
+
+if is_main() {
+    print("Test: watch_and_reload() with callback")
+    print("")
+    
+    # Watch this file for changes
+    let watch_info = watch_and_reload([__file__], 0.5, on_file_change)
+    
+    print("")
+    print("Watch info: " + string(watch_info))
+    print("")
+    print("To test: Modify this file and save it")
+    print("The reload callback will be triggered")
+    print("")
+    print("Running for 5 seconds...")
+    
+    # Keep running to allow file watching
+    sleep(5)
+    
+    print("")
+    print("Test complete")
+    print("Reload events detected: " + string(reload_count))
+}

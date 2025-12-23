@@ -183,6 +183,7 @@ PATTERN = "PATTERN"          # Pattern matching: pattern value { case x => ...; 
 ENUM = "ENUM"                # Type-safe enumerations: enum Color { Red, Green, Blue }
 STREAM = "STREAM"            # Event streaming: stream name as event => handler;
 WATCH = "WATCH"              # Reactive state management: watch variable => reaction;
+LOG = "LOG"                  # Output logging: log > filename.txt
 
 # Modifiers (single keyword to extend declarations)
 PUBLIC = "PUBLIC"
