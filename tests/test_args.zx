@@ -1,0 +1,18 @@
+# test_args.zx - Test command-line arguments
+
+print("=== Testing Command-Line Arguments ===")
+print("")
+
+print("Module: " + __MODULE__)
+print("File: " + __file__)
+print("Directory: " + __DIR__)
+print("Package: " + __PACKAGE__)
+print("")
+
+print("Command-line arguments:")
+print("Total arguments: " + string(len(__ARGS__)))
+print("Arguments:")
+print(__ARGS__)
+
+print("")
+print("✅ Argument test complete")

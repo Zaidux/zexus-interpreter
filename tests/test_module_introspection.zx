@@ -1,0 +1,51 @@
+# test_module_introspection.zx - Test module introspection functions
+
+print("=== Testing Module Introspection ===")
+print("")
+
+# Test module_info()
+print("1. module_info():")
+var info = module_info()
+print("")
+
+# Test individual info fields
+if "module" in info:
+    print("   Module: " + info["module"])
+if "file" in info:
+    print("   File: " + info["file"])
+if "dir" in info:
+    print("   Directory: " + info["dir"])
+if "package" in info:
+    print("   Package: " + info["package"])
+print("")
+
+# Test list_imports()
+print("2. list_imports():")
+var imports = list_imports()
+print("   Total imports: " + string(len(imports)))
+else:
+    print("   No imports found")
+print("")
+
+# Test get_exported_names()
+print("3. get_exported_names():")
+var exports = get_exported_names()
+print("   Total exports: " + string(len(exports)))
+if len(exports) > 0:
+    print("   First few exports:")
+    var count = 0
+    for name in exports:
+        if count < 5:  # Show first 5
+            print("   - " + name)
+            count = count + 1
+else:
+    print("   No exports found")
+print("")
+
+# Define some test exports
+export func test_function():
+    return "test"
+
+export var TEST_CONSTANT = 42
+
+print("✅ Module introspection test complete")

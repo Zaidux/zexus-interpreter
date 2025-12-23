@@ -1469,27 +1469,35 @@ class ContextStackParser:
                 # Parse IF statement directly here
                 j = i + 1
                 
-                # Collect condition tokens (between IF and {)
+                # Collect condition tokens (between IF and { or :)
                 cond_tokens = []
                 paren_depth = 0
+                skipped_outer_paren = False
                 
-                while j < len(tokens) and tokens[j].type != LBRACE:
+                while j < len(tokens) and tokens[j].type not in [LBRACE, COLON]:
                     # Handle outer parentheses for the condition
                     if tokens[j].type == LPAREN:
                         if len(cond_tokens) == 0 and paren_depth == 0:
-                            # Skip the very first opening paren if it wraps the whole condition
+                            # This might be wrapping the whole condition - skip it tentatively
                             j += 1
                             paren_depth += 1
+                            skipped_outer_paren = True
                             continue
                         else:
                             paren_depth += 1
                     
                     elif tokens[j].type == RPAREN:
                         paren_depth -= 1
-                        # If we hit a closing paren that matches the initial skipped one
-                        if paren_depth == 0 and len(cond_tokens) > 0:
+                        # Only break if we're closing the tentatively skipped outer paren
+                        # AND there are more tokens after it (not end of condition)
+                        if paren_depth == 0 and skipped_outer_paren and len(cond_tokens) > 0:
                             j += 1
-                            break
+                            # Check if next token is { or : (end of condition)
+                            if j < len(tokens) and tokens[j].type in [LBRACE, COLON]:
+                                break
+                            # Otherwise continue collecting - the paren wasn't wrapping the whole condition
+                            skipped_outer_paren = False
+                            continue
                     
                     cond_tokens.append(tokens[j])
                     j += 1
@@ -1499,8 +1507,9 @@ class ContextStackParser:
                 # Parse condition expression
                 condition = self._parse_expression(cond_tokens) if cond_tokens else Identifier("true")
                 
-                # Collect consequence block tokens (inside { })
+                # Collect consequence block tokens
                 if j < len(tokens) and tokens[j].type == LBRACE:
+                    # Brace-style block
                     j += 1  # Skip LBRACE
                     inner_tokens = []
                     depth = 1
@@ -1517,6 +1526,20 @@ class ContextStackParser:
                     consequence = BlockStatement()
                     consequence.statements = self._parse_block_statements(inner_tokens)
                     j += 1  # Skip closing RBRACE
+                elif j < len(tokens) and tokens[j].type == COLON:
+                    # Colon-style block - collect until next statement keyword or dedent
+                    j += 1  # Skip COLON
+                    inner_tokens = []
+                    # Collect tokens until we hit a keyword that starts a new statement at the same level
+                    while j < len(tokens):
+                        if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                            # Found a new statement, stop here
+                            break
+                        inner_tokens.append(tokens[j])
+                        j += 1
+                    
+                    consequence = BlockStatement()
+                    consequence.statements = self._parse_block_statements(inner_tokens)
                 else:
                     consequence = BlockStatement()
                 
@@ -1529,13 +1552,25 @@ class ContextStackParser:
                         j += 1
                         # Parse elif condition
                         elif_cond_tokens = []
-                        while j < len(tokens) and tokens[j].type != LBRACE:
-                            if tokens[j].type == LPAREN and len(elif_cond_tokens) == 0:
-                                j += 1
-                                continue
-                            elif tokens[j].type == RPAREN and len(elif_cond_tokens) > 0:
-                                j += 1
-                                break
+                        elif_paren_depth = 0
+                        elif_skipped_outer = False
+                        while j < len(tokens) and tokens[j].type not in [LBRACE, COLON]:
+                            if tokens[j].type == LPAREN:
+                                if len(elif_cond_tokens) == 0 and elif_paren_depth == 0:
+                                    j += 1
+                                    elif_paren_depth += 1
+                                    elif_skipped_outer = True
+                                    continue
+                                else:
+                                    elif_paren_depth += 1
+                            elif tokens[j].type == RPAREN:
+                                elif_paren_depth -= 1
+                                if elif_paren_depth == 0 and elif_skipped_outer and len(elif_cond_tokens) > 0:
+                                    j += 1
+                                    if j < len(tokens) and tokens[j].type in [LBRACE, COLON]:
+                                        break
+                                    elif_skipped_outer = False
+                                    continue
                             elif_cond_tokens.append(tokens[j])
                             j += 1
                         
@@ -1543,6 +1578,7 @@ class ContextStackParser:
                         
                         # Collect elif block
                         if j < len(tokens) and tokens[j].type == LBRACE:
+                            # Brace-style
                             j += 1
                             elif_inner = []
                             depth = 1
@@ -1558,6 +1594,17 @@ class ContextStackParser:
                             elif_block = BlockStatement()
                             elif_block.statements = self._parse_block_statements(elif_inner)
                             j += 1
+                        elif j < len(tokens) and tokens[j].type == COLON:
+                            # Colon-style
+                            j += 1
+                            elif_inner = []
+                            while j < len(tokens):
+                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                                    break
+                                elif_inner.append(tokens[j])
+                                j += 1
+                            elif_block = BlockStatement()
+                            elif_block.statements = self._parse_block_statements(elif_inner)
                         else:
                             elif_block = BlockStatement()
                         
@@ -1567,6 +1614,7 @@ class ContextStackParser:
                         j += 1
                         # Collect else block
                         if j < len(tokens) and tokens[j].type == LBRACE:
+                            # Brace-style
                             j += 1
                             else_inner = []
                             depth = 1
@@ -1582,6 +1630,17 @@ class ContextStackParser:
                             alternative = BlockStatement()
                             alternative.statements = self._parse_block_statements(else_inner)
                             j += 1
+                        elif j < len(tokens) and tokens[j].type == COLON:
+                            # Colon-style
+                            j += 1
+                            else_inner = []
+                            while j < len(tokens):
+                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                                    break
+                                else_inner.append(tokens[j])
+                                j += 1
+                            alternative = BlockStatement()
+                            alternative.statements = self._parse_block_statements(else_inner)
                         break
                 
                 stmt = IfStatement(

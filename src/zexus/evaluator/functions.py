@@ -538,7 +538,11 @@ class FunctionEvaluatorMixin:
                 return Integer(len(arg.value))
             if isinstance(arg, List): 
                 return Integer(len(arg.elements))
-            return EvaluationError(f"len() not supported for {arg.type()}")
+            # Handle Python list (shouldn't happen, but defensive)
+            if isinstance(arg, list):
+                return Integer(len(arg))
+            arg_type = arg.type() if hasattr(arg, 'type') else type(arg).__name__
+            return EvaluationError(f"len() not supported for {arg_type}")
         
         # List Utils (Builtin versions of methods)
         def _first(*a): 
@@ -1034,10 +1038,19 @@ class FunctionEvaluatorMixin:
         import signal
         import time as time_module
         
+        # Storage for lifecycle hooks and signal handlers
+        self._lifecycle_hooks = {'on_start': [], 'on_exit': []}
+        self._signal_handlers = {}
+        
         def _run(*a):
             """
             Keep the program running until interrupted (Ctrl+C).
             Useful for servers, event loops, or long-running programs.
+            
+            Enhanced version supports:
+            - callback with arguments
+            - interval timing
+            - lifecycle hooks (on_start, on_exit)
             
             Usage:
                 if __MODULE__ == "__main__":
@@ -1046,9 +1059,18 @@ class FunctionEvaluatorMixin:
             or with a callback:
                 if __MODULE__ == "__main__":
                     run(lambda: print("Still running..."))
+            
+            or with callback and interval:
+                if __MODULE__ == "__main__":
+                    run(callback, 0.5)  # Run every 500ms
+            
+            or with callback and arguments:
+                if __MODULE__ == "__main__":
+                    run(server.process_requests, 1.0, [port, host])
             """
             callback = None
             interval = 1.0  # Default interval in seconds
+            callback_args = []
             
             if len(a) >= 1:
                 # First argument is the callback function
@@ -1064,7 +1086,23 @@ class FunctionEvaluatorMixin:
                 else:
                     return EvaluationError("run() interval must be a number")
             
+            if len(a) >= 3:
+                # Third argument is callback arguments
+                if isinstance(a[2], List):
+                    callback_args = a[2].elements
+                else:
+                    callback_args = [a[2]]
+            
             print("🚀 Program running. Press Ctrl+C to exit.")
+            
+            # Execute on_start hooks
+            for hook in self._lifecycle_hooks.get('on_start', []):
+                try:
+                    result = self.apply_function(hook, [])
+                    if is_error(result):
+                        print(f"⚠️  on_start hook error: {result.message}")
+                except Exception as e:
+                    print(f"⚠️  on_start hook error: {str(e)}")
             
             # Setup signal handler for graceful shutdown
             shutdown_requested = [False]  # Use list for closure mutability
@@ -1072,6 +1110,15 @@ class FunctionEvaluatorMixin:
             def signal_handler(sig, frame):
                 shutdown_requested[0] = True
                 print("\n⏹️  Shutdown requested. Cleaning up...")
+                
+                # Execute custom signal handlers if registered
+                sig_name = signal.Signals(sig).name
+                if sig_name in self._signal_handlers:
+                    for handler in self._signal_handlers[sig_name]:
+                        try:
+                            self.apply_function(handler, [String(sig_name)])
+                        except Exception as e:
+                            print(f"⚠️  Signal handler error: {str(e)}")
             
             signal.signal(signal.SIGINT, signal_handler)
             signal.signal(signal.SIGTERM, signal_handler)
@@ -1080,8 +1127,8 @@ class FunctionEvaluatorMixin:
                 # Keep running until interrupted
                 while not shutdown_requested[0]:
                     if callback:
-                        # Execute callback function
-                        result = self.apply_function(callback, [])
+                        # Execute callback function with arguments
+                        result = self.apply_function(callback, callback_args)
                         if is_error(result):
                             print(f"⚠️  Callback error: {result.message}")
                     
@@ -1096,6 +1143,15 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"run() error: {str(e)}")
             
             finally:
+                # Execute on_exit hooks
+                for hook in self._lifecycle_hooks.get('on_exit', []):
+                    try:
+                        result = self.apply_function(hook, [])
+                        if is_error(result):
+                            print(f"⚠️  on_exit hook error: {result.message}")
+                    except Exception as e:
+                        print(f"⚠️  on_exit hook error: {str(e)}")
+                
                 print("✅ Program terminated gracefully.")
             
             return NULL
@@ -1141,8 +1197,151 @@ class FunctionEvaluatorMixin:
                 else:
                     return EvaluationError("exit_program() exit code must be an integer")
             
+            # Execute on_exit hooks before exiting
+            for hook in self._lifecycle_hooks.get('on_exit', []):
+                try:
+                    result = self.apply_function(hook, [])
+                    if is_error(result):
+                        print(f"⚠️  on_exit hook error: {result.message}")
+                except Exception as e:
+                    print(f"⚠️  on_exit hook error: {str(e)}")
+            
             print(f"👋 Exiting with code {exit_code}")
             sys.exit(exit_code)
+        
+        def _on_start(*a):
+            """
+            Register a callback to run when the program starts (before run loop).
+            
+            Usage:
+                on_start(lambda: print("Starting up..."))
+                on_start(initialize_database)
+            """
+            if len(a) != 1:
+                return EvaluationError("on_start() requires exactly one function argument")
+            
+            callback = a[0]
+            if not isinstance(callback, (Action, LambdaFunction)):
+                return EvaluationError("on_start() argument must be a function")
+            
+            self._lifecycle_hooks['on_start'].append(callback)
+            return NULL
+        
+        def _on_exit(*a):
+            """
+            Register a callback to run when the program exits (after run loop).
+            
+            Usage:
+                on_exit(lambda: print("Cleaning up..."))
+                on_exit(close_connections)
+            """
+            if len(a) != 1:
+                return EvaluationError("on_exit() requires exactly one function argument")
+            
+            callback = a[0]
+            if not isinstance(callback, (Action, LambdaFunction)):
+                return EvaluationError("on_exit() argument must be a function")
+            
+            self._lifecycle_hooks['on_exit'].append(callback)
+            return NULL
+        
+        def _signal_handler(*a):
+            """
+            Register a custom signal handler for specific signals.
+            
+            Usage:
+                signal_handler("SIGINT", lambda sig: print("Caught SIGINT"))
+                signal_handler("SIGTERM", cleanup_handler)
+            """
+            if len(a) != 2:
+                return EvaluationError("signal_handler() requires signal name and callback function")
+            
+            signal_name = _to_str(a[0])
+            callback = a[1]
+            
+            if not isinstance(callback, (Action, LambdaFunction)):
+                return EvaluationError("signal_handler() callback must be a function")
+            
+            if signal_name not in self._signal_handlers:
+                self._signal_handlers[signal_name] = []
+            
+            self._signal_handlers[signal_name].append(callback)
+            return NULL
+        
+        def _module_info(*a):
+            """
+            Get information about the current module.
+            Returns a map with module metadata.
+            
+            Usage:
+                info = module_info()
+                print(info["name"])     # Module name
+                print(info["file"])     # File path
+                print(info["dir"])      # Directory
+                print(info["package"])  # Package name
+            """
+            env = getattr(self, '_current_env', None)
+            if not env:
+                return Map({})
+            
+            result = {}
+            
+            # Get module variables
+            for var_name in ['__MODULE__', '__file__', '__FILE__', '__DIR__', '__PACKAGE__']:
+                val = env.get(var_name)
+                if val:
+                    key = var_name.strip('_').lower()
+                    result[String(key)] = val
+            
+            return Map(result)
+        
+        def _list_imports(*a):
+            """
+            List all imported modules in the current environment.
+            
+            Usage:
+                imports = list_imports()
+                print(imports)  # ["math", "json", "./utils"]
+            """
+            env = getattr(self, '_current_env', None)
+            if not env:
+                return List([])
+            
+            # Collect all imported module names (this is a simplified version)
+            # In a more complete implementation, we'd track imports explicitly
+            imports = []
+            
+            # Look for common module indicators in the environment
+            for name, value in env.store.items():
+                # Skip special variables and builtins
+                if name.startswith('__') or name in self.builtins:
+                    continue
+                # Check if it looks like an imported module
+                if isinstance(value, Map) and len(value.pairs) > 3:
+                    imports.append(String(name))
+            
+            return List(imports)
+        
+        def _get_exported_names(*a):
+            """
+            Get all exported variable names from the current module.
+            
+            Usage:
+                exports = get_exported_names()
+                print(exports)  # ["myFunction", "MY_CONSTANT", "MyClass"]
+            """
+            env = getattr(self, '_current_env', None)
+            if not env:
+                return List([])
+            
+            exports = []
+            
+            # Get all user-defined names (skip special variables and builtins)
+            for name in env.store.keys():
+                if not name.startswith('__') and name not in self.builtins:
+                    exports.append(String(name))
+            
+            return List(exports)
         
         # Register the builtins
         self.builtins.update({
@@ -1150,6 +1349,12 @@ class FunctionEvaluatorMixin:
             "execute": Builtin(_execute, "execute"),
             "is_main": Builtin(_is_main, "is_main"),
             "exit_program": Builtin(_exit_program, "exit_program"),
+            "on_start": Builtin(_on_start, "on_start"),
+            "on_exit": Builtin(_on_exit, "on_exit"),
+            "signal_handler": Builtin(_signal_handler, "signal_handler"),
+            "module_info": Builtin(_module_info, "module_info"),
+            "list_imports": Builtin(_list_imports, "list_imports"),
+            "get_exported_names": Builtin(_get_exported_names, "get_exported_names"),
         })
     
     def _register_renderer_builtins(self):

@@ -1,0 +1,98 @@
+# test_complete_server.zx - Complete server example with all features
+
+print("=== Complete Server Example ===")
+print("")
+
+# Configuration
+var config = {
+    "port": 8080,
+    "host": "localhost",
+    "max_connections": 100,
+    "timeout": 30
+}
+
+var active_connections = 0
+var request_count = 0
+var is_shutting_down = false
+
+# Startup initialization
+func initialize():
+    print("🚀 Server Initialization")
+    print("────────────────────────")
+    
+    # Show module info
+    var info = module_info()
+    print("Module: " + info["module"])
+    print("File: " + info["file"])
+    print("Directory: " + info["dir"])
+    print("")
+    
+    # Parse command-line arguments
+    if len(__ARGS__) >= 1:
+        config["port"] = int(__ARGS__[0])
+        print("Port set from args: " + string(config["port"]))
+    
+    if len(__ARGS__) >= 2:
+        config["host"] = __ARGS__[1]
+        print("Host set from args: " + config["host"])
+    
+    print("")
+    print("Configuration:")
+    print("  Host: " + config["host"])
+    print("  Port: " + string(config["port"]))
+    print("  Max Connections: " + string(config["max_connections"]))
+    print("  Timeout: " + string(config["timeout"]) + "s")
+    print("")
+    print("✅ Initialization complete")
+    print("")
+
+# Cleanup on shutdown
+func cleanup():
+    print("")
+    print("🛑 Server Shutdown")
+    print("──────────────────")
+    print("Closing " + string(active_connections) + " active connections...")
+    print("Total requests processed: " + string(request_count))
+    print("✅ Cleanup complete")
+
+# Handle interrupt signals
+func handle_interrupt(signal):
+    print("")
+    print("⚠️  Received " + signal)
+    if !is_shutting_down:
+        is_shutting_down = true
+        print("Initiating graceful shutdown...")
+    else:
+        print("Already shutting down, please wait...")
+
+# Main server loop
+func process_requests(port, host):
+    if is_shutting_down:
+        return
+    
+    request_count = request_count + 1
+    active_connections = (request_count % 10) + 1  # Simulate varying connections
+    
+    print("⚡ Server tick #" + string(request_count) + " | Connections: " + string(active_connections) + " | " + host + ":" + string(port))
+
+# Register lifecycle hooks
+on_start(initialize)
+on_exit(cleanup)
+
+# Register signal handlers
+signal_handler("SIGINT", handle_interrupt)
+signal_handler("SIGTERM", handle_interrupt)
+
+# Main entry point
+if is_main():
+    print("Starting server...")
+    print("Press Ctrl+C to shutdown gracefully")
+    print("════════════════════════════════════")
+    print("")
+    
+    # Run server with configuration
+    run(process_requests, 0.5, [config["port"], config["host"]])
+else:
+    print("Server module imported (not running)")
+    export var config = config
+    export func process_requests = process_requests

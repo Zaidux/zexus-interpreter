@@ -115,8 +115,9 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
 
 @cli.command()
 @click.argument('file', type=click.Path(exists=True))
+@click.argument('args', nargs=-1)  # Accept any number of additional arguments
 @click.pass_context
-def run(ctx, file):
+def run(ctx, file, args):
     """Run a Zexus program with hybrid execution"""
     try:
         with open(file, 'r') as f:
@@ -168,8 +169,32 @@ def run(ctx, file):
         
         # Use the evaluator package
         env = Environment()
-        env.set("__file__", file)  # Set the current file for module imports
-        env.set("__MODULE__", String("__main__"))  # Indicate this is the main entry point
+        
+        # Set module context variables
+        import os
+        abs_file = os.path.abspath(file)
+        env.set("__file__", String(abs_file))  # Absolute file path
+        env.set("__FILE__", String(abs_file))  # Alternative name
+        env.set("__MODULE__", String("__main__"))  # Main entry point
+        env.set("__DIR__", String(os.path.dirname(abs_file)))  # Directory path
+        
+        # Set command-line arguments
+        from ..object import List
+        args_list = List([String(arg) for arg in args])
+        env.set("__ARGS__", args_list)  # Command-line arguments
+        env.set("__ARGV__", args_list)  # Alternative name
+        
+        # Detect package (if file is in a package structure)
+        package_name = String("")
+        try:
+            rel_path = os.path.relpath(abs_file)
+            if '/' in rel_path or '\\' in rel_path:
+                parts = rel_path.replace('\\', '/').split('/')
+                if len(parts) > 1:
+                    package_name = String(parts[0])
+        except:
+            pass
+        env.set("__PACKAGE__", package_name)
         
         # UPDATED: Use the evaluate function from the evaluator package
         result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])

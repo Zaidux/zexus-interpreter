@@ -1,0 +1,34 @@
+# test_signal_handlers.zx - Test custom signal handling
+
+print("=== Testing Signal Handlers ===")
+print("")
+
+var interrupt_count = 0
+
+func handle_interrupt(signal):
+    print("⚠️  Caught signal: " + signal)
+    print("   Interrupt count: " + string(interrupt_count))
+    interrupt_count = interrupt_count + 1
+    
+    if interrupt_count >= 2:
+        print("   Multiple interrupts detected!")
+
+func handle_term(signal):
+    print("⚠️  Termination signal received: " + signal)
+    print("   Performing graceful shutdown...")
+
+# Register signal handlers
+signal_handler("SIGINT", handle_interrupt)
+signal_handler("SIGTERM", handle_term)
+
+func status_check():
+    print("✓ System running normally... (Press Ctrl+C to test signal handling)")
+
+if is_main():
+    print("Registered SIGINT and SIGTERM handlers")
+    print("Try pressing Ctrl+C to see the signal handler in action")
+    print("")
+    
+    run(status_check, 2.0)
+else:
+    print("Module imported, not running")

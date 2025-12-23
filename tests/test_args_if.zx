@@ -1,0 +1,13 @@
+# test_args_if.zx - Test __ARGS__ with simple if
+
+print("Testing __ARGS__...")
+print(__ARGS__)
+
+print("Testing len(__ARGS__)...")
+print(len(__ARGS__))
+
+if len(__ARGS__) > 0 {
+    print("ARGS has elements:", len(__ARGS__))
+}
+
+print("Done!")

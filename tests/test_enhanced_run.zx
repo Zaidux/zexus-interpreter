@@ -1,0 +1,36 @@
+# test_enhanced_run.zx - Test enhanced run() function with arguments
+
+print("=== Testing Enhanced run() Function ===")
+print("")
+
+var call_count = 0
+
+# Test 1: Callback with arguments
+func process_with_args(name, port):
+    call_count = call_count + 1
+    print("🔄 Processing: " + name + " on port " + string(port) + " (call #" + string(call_count) + ")")
+
+# Test 2: Simple callback without arguments
+func simple_callback():
+    print("✓ Simple callback executed")
+
+if is_main():
+    print("This test demonstrates run() with callback arguments")
+    print("")
+    
+    # Check if we have command-line args for the test mode
+    if len(__ARGS__) > 0 and __ARGS__[0] == "simple":
+        print("Running in SIMPLE mode (no callback args)")
+        run(simple_callback, 1.5)
+    else:
+        print("Running in ADVANCED mode (with callback args)")
+        print("Usage: zx run test_enhanced_run.zx [simple]")
+        print("")
+        print("Passing arguments to callback: ['TestServer', 8080]")
+        print("Press Ctrl+C to exit")
+        print("")
+        
+        # Pass arguments to the callback
+        run(process_with_args, 1.0, ["TestServer", 8080])
+else:
+    print("Module imported, not running")

@@ -1,0 +1,18 @@
+# test_args_brace.zx - Test __ARGS__ with brace syntax
+
+print("Testing __ARGS__...")
+print(__ARGS__)
+
+print("Testing len(__ARGS__)...")
+print(len(__ARGS__))
+
+print("Testing len(__ARGS__) > 0...")
+print(len(__ARGS__) > 0)
+
+if len(__ARGS__) > 0 {
+    print("ARGS has elements")
+} else {
+    print("ARGS is empty")
+}
+
+print("All tests complete!")

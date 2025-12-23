@@ -1,0 +1,3 @@
+print("__ARGS__:", __ARGS__)
+print("Length:", len(__ARGS__))
+print("__MODULE__:", __MODULE__)

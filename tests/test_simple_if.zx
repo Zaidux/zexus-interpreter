@@ -1,0 +1,9 @@
+# test_simple_if.zx - Simplest if test
+
+print("Before if")
+
+if true {
+    print("Inside if")
+}
+
+print("After if")

@@ -1,0 +1,44 @@
+# test_lifecycle_hooks.zx - Test on_start and on_exit hooks
+
+print("=== Testing Lifecycle Hooks ===")
+print("")
+
+var startup_count = 0
+var shutdown_count = 0
+
+func first_startup():
+    print("🚀 First startup hook called")
+    startup_count = startup_count + 1
+
+func second_startup():
+    print("🚀 Second startup hook called")
+    startup_count = startup_count + 1
+
+func first_shutdown():
+    print("🛑 First shutdown hook called")
+    shutdown_count = shutdown_count + 1
+
+func second_shutdown():
+    print("🛑 Second shutdown hook called")
+    shutdown_count = shutdown_count + 1
+
+# Register multiple startup hooks
+on_start(first_startup)
+on_start(second_startup)
+
+# Register multiple shutdown hooks
+on_exit(first_shutdown)
+on_exit(second_shutdown)
+
+func main_loop():
+    print("💫 Main loop iteration (Press Ctrl+C to exit)")
+
+if is_main():
+    print("Registering lifecycle hooks...")
+    print("Press Ctrl+C to trigger shutdown hooks")
+    print("")
+    
+    # Run for a short time with a callback
+    run(main_loop, 2.0)
+else:
+    print("Module imported, not running")

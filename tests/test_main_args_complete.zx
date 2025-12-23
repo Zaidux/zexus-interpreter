@@ -1,0 +1,48 @@
+# test_main_args_complete.zx - Complete test for __ARGS__ enhancement
+
+print("=== Main Entry Point Enhancements Test ===")
+print("")
+
+print("1. Testing __ARGS__ variable:")
+print("   __ARGS__ = " + string(__ARGS__))
+print("")
+
+print("2. Testing __ARGS__ length:")
+let argc = len(__ARGS__)
+print("   Argument count: " + string(argc))
+print("")
+
+print("3. Testing conditional logic with __ARGS__:")
+if argc == 0 {
+    print("   No arguments provided")
+} elif argc == 1 {
+    print("   One argument: " + string(__ARGS__))
+} elif argc == 2 {
+    print("   Two arguments: " + string(__ARGS__))
+} else {
+    print("   Multiple arguments (" + string(argc) + ")")
+    print("   Arguments: " + string(__ARGS__))
+}
+print("")
+
+print("4. Testing __MODULE__ variable:")
+print("   __MODULE__ = " + __MODULE__)
+print("")
+
+print("5. Testing __DIR__ variable:")
+print("   __DIR__ = " + __DIR__)
+print("")
+
+print("6. Testing __PACKAGE__ variable:")
+print("   __PACKAGE__ = " + __PACKAGE__)
+print("")
+
+print("7. Testing is_main() function:")
+if is_main() {
+    print("   ✓ Running as main module")
+} else {
+    print("   ✓ Running as imported module")
+}
+print("")
+
+print("=== Test Complete ===")
