@@ -544,6 +544,34 @@ class FunctionEvaluatorMixin:
             arg_type = arg.type() if hasattr(arg, 'type') else type(arg).__name__
             return EvaluationError(f"len() not supported for {arg_type}")
         
+        def _type(*a):
+            """Return the type name of the argument"""
+            if len(a) != 1:
+                return EvaluationError("type() takes exactly 1 argument")
+            arg = a[0]
+            if isinstance(arg, Integer):
+                return String("Integer")
+            elif isinstance(arg, Float):
+                return String("Float")
+            elif isinstance(arg, String):
+                return String("String")
+            elif isinstance(arg, BooleanObj):
+                return String("Boolean")
+            elif isinstance(arg, List):
+                return String("List")
+            elif isinstance(arg, Map):
+                return String("Map")
+            elif isinstance(arg, Action):
+                return String("Action")
+            elif isinstance(arg, LambdaFunction):
+                return String("Lambda")
+            elif isinstance(arg, Builtin):
+                return String("Builtin")
+            elif isinstance(arg, Null):
+                return String("Null")
+            else:
+                return String(type(arg).__name__)
+        
         # List Utils (Builtin versions of methods)
         def _first(*a): 
             if not isinstance(a[0], List): 
@@ -614,6 +642,7 @@ class FunctionEvaluatorMixin:
             "debug_trace": Builtin(_debug_trace, "debug_trace"),
             "string": Builtin(_string, "string"),
             "len": Builtin(_len, "len"),
+            "type": Builtin(_type, "type"),
             "first": Builtin(_first, "first"),
             "rest": Builtin(_rest, "rest"),
             "push": Builtin(_push, "push"),
@@ -1268,6 +1297,38 @@ class FunctionEvaluatorMixin:
             self._signal_handlers[signal_name].append(callback)
             return NULL
         
+        def _get_module_name(*a):
+            """
+            Get the current module name (__MODULE__).
+            
+            Usage:
+                name = get_module_name()
+                print("Module: " + name)
+            """
+            env = getattr(self, '_current_env', None)
+            if not env:
+                return String("")
+            
+            module = env.get('__MODULE__')
+            return module if module else String("")
+        
+        def _get_module_path(*a):
+            """
+            Get the current module file path (__file__).
+            
+            Usage:
+                path = get_module_path()
+                print("Path: " + path)
+            """
+            env = getattr(self, '_current_env', None)
+            if not env:
+                return String("")
+            
+            file_path = env.get('__file__')
+            if not file_path:
+                file_path = env.get('__FILE__')
+            return file_path if file_path else String("")
+        
         def _module_info(*a):
             """
             Get information about the current module.
@@ -1352,6 +1413,8 @@ class FunctionEvaluatorMixin:
             "on_start": Builtin(_on_start, "on_start"),
             "on_exit": Builtin(_on_exit, "on_exit"),
             "signal_handler": Builtin(_signal_handler, "signal_handler"),
+            "get_module_name": Builtin(_get_module_name, "get_module_name"),
+            "get_module_path": Builtin(_get_module_path, "get_module_path"),
             "module_info": Builtin(_module_info, "module_info"),
             "list_imports": Builtin(_list_imports, "list_imports"),
             "get_exported_names": Builtin(_get_exported_names, "get_exported_names"),

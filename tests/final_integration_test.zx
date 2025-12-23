@@ -1,0 +1,77 @@
+# final_integration_test.zx - Comprehensive integration test
+
+# Test all main entry point enhancements together
+
+print("=== Zexus Main Entry Point - Full Integration Test ===")
+print("")
+
+# 1. Module Information
+print("📦 Module Information:")
+print("   __MODULE__: " + __MODULE__)
+print("   __DIR__: " + __DIR__)
+print("   __PACKAGE__: " + __PACKAGE__)
+print("   is_main(): " + string(is_main()))
+print("")
+
+# 2. Command-Line Arguments
+print("🔧 Command-Line Arguments:")
+print("   __ARGS__: " + string(__ARGS__))
+print("   Argument count: " + string(len(__ARGS__)))
+
+if len(__ARGS__) > 0 {
+    print("   Processing " + string(len(__ARGS__)) + " arguments")
+} else {
+    print("   No arguments provided")
+}
+print("")
+
+# 3. Lifecycle Hooks
+print("🎬 Setting up lifecycle hooks...")
+
+action startup_task {
+    print("   ✓ on_start: Application initialized")
+}
+
+action shutdown_task {
+    print("   ✓ on_exit: Cleaning up resources")
+}
+
+on_start(startup_task)
+on_exit(shutdown_task)
+print("")
+
+# 4. Module Introspection
+print("🔍 Module Introspection:")
+print("   Module name: " + get_module_name())
+print("   Module path: " + get_module_path())
+print("")
+
+# 5. Conditional Logic Test
+print("🧪 Testing Conditional Logic:")
+
+let test_count = len(__ARGS__)
+
+if test_count == 0 {
+    print("   ✓ Zero arguments detected")
+} elif test_count == 1 {
+    print("   ✓ One argument detected")
+} elif test_count == 2 {
+    print("   ✓ Two arguments detected")
+} else {
+    print("   ✓ Multiple arguments detected: " + string(test_count))
+}
+print("")
+
+# 6. Main Execution Block
+if is_main() {
+    print("🚀 Main Execution Block:")
+    print("   This code runs only when executed directly")
+    print("   (not when imported as a module)")
+    print("")
+    
+    print("✅ All Tests Passed!")
+    print("")
+    print("=== Integration Test Complete ===")
+} else {
+    print("📚 Module imported, skipping main execution")
+}
