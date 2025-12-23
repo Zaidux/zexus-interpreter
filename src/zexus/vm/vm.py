@@ -79,6 +79,15 @@ except ImportError:
     PeepholeOptimizer = None
     OptimizationLevel = None
 
+# Async Optimizer (Phase 8)
+try:
+    from .async_optimizer import AsyncOptimizer, AsyncOptimizationLevel
+    _ASYNC_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _ASYNC_OPTIMIZER_AVAILABLE = False
+    AsyncOptimizer = None
+    AsyncOptimizationLevel = None
+
 # Renderer Backend
 try:
     from renderer import backend as _BACKEND
@@ -131,7 +140,9 @@ class VM:
         enable_memory_pool: bool = True,
         pool_max_size: int = 1000,
         enable_peephole_optimizer: bool = True,
-        optimization_level: str = "MODERATE"
+        optimization_level: str = "MODERATE",
+        enable_async_optimizer: bool = True,
+        async_optimization_level: str = "MODERATE"
     ):
         """
         Initialize the enhanced VM.
@@ -224,6 +235,20 @@ class VM:
                 if debug:
                     print(f"[VM] Failed to enable peephole optimizer: {e}")
                 self.enable_peephole_optimizer = False
+
+        # --- Async Optimizer (Phase 8) ---
+        self.enable_async_optimizer = enable_async_optimizer and _ASYNC_OPTIMIZER_AVAILABLE
+        self.async_optimizer = None
+        if self.enable_async_optimizer:
+            try:
+                level = getattr(AsyncOptimizationLevel, async_optimization_level, AsyncOptimizationLevel.MODERATE)
+                self.async_optimizer = AsyncOptimizer(level=level, pool_size=pool_max_size)
+                if debug:
+                    print(f"[VM] Async optimizer enabled: {async_optimization_level}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable async optimizer: {e}")
+                self.enable_async_optimizer = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -834,7 +859,14 @@ class VM:
                     args = [stack.pop() for _ in range(arg_count)][::-1]
                     fn = self.builtins.get(fn_name) or self.env.get(fn_name)
                     coro = self._to_coro(fn, args)
-                    task = asyncio.create_task(coro)
+                    
+                    # Use async optimizer if available
+                    if self.async_optimizer:
+                        coro = self.async_optimizer.spawn(coro)
+                        task = asyncio.create_task(coro)
+                    else:
+                        task = asyncio.create_task(coro)
+                    
                     self._task_counter += 1
                     tid = f"task_{self._task_counter}"
                     self._tasks[tid] = task
@@ -850,14 +882,22 @@ class VM:
                     top = stack.pop()
                     
                     if isinstance(top, str) and top in self._tasks:
-                        res = await self._tasks[top]
+                        # Use async optimizer if available
+                        if self.async_optimizer:
+                            res = await self.async_optimizer.await_optimized(self._tasks[top])
+                        else:
+                            res = await self._tasks[top]
                         # Push back any non-task values we skipped
                         for val in reversed(temp_stack):
                             stack.append(val)
                         stack.append(res)
                         result_found = True
                     elif asyncio.iscoroutine(top) or isinstance(top, asyncio.Future):
-                        res = await top
+                        # Use async optimizer if available
+                        if self.async_optimizer:
+                            res = await self.async_optimizer.await_optimized(top)
+                        else:
+                            res = await top
                         # Push back any non-task values we skipped
                         for val in reversed(temp_stack):
                             stack.append(val)
@@ -1215,6 +1255,20 @@ class VM:
         """Reset peephole optimizer statistics"""
         if self.peephole_optimizer:
             self.peephole_optimizer.reset_stats()
+    
+    # ==================== Async Optimizer Interface ====================
+    
+    def get_async_stats(self) -> Dict[str, Any]:
+        """Get async optimizer statistics"""
+        if not self.async_optimizer:
+            return {'error': 'Async optimizer not enabled'}
+        
+        return self.async_optimizer.get_stats()
+    
+    def reset_async_stats(self):
+        """Reset async optimizer statistics"""
+        if self.async_optimizer:
+            self.async_optimizer.reset_stats()
 
 # ==================== Factory Functions ====================
 
