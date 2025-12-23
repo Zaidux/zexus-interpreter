@@ -196,20 +196,30 @@ class RegisterAllocator:
         Find pairs of variables related by move instructions
         
         Args:
-            instructions: List of instructions
+            instructions: List of instructions (tuples or Instruction objects)
             
         Returns:
             List of (source, dest) variable pairs
         """
         move_pairs = []
         
+        # Normalize instructions
+        normalized = []
         for instr in instructions:
-            if len(instr) < 2:
+            if instr is None:
+                normalized.append(None)
+            elif hasattr(instr, 'opcode') and hasattr(instr, 'arg'):
+                normalized.append((instr.opcode, instr.arg))
+            else:
+                normalized.append(instr)
+        
+        for instr in normalized:
+            if not instr or len(instr) < 2:
                 continue
             
             opcode = instr[0]
             
-            # Detect move instructions (LOAD_FAST is a move)
+            # Detect move instructions (LOAD_FAST followed by STORE_FAST is a move)
             if opcode == 'LOAD_FAST' and len(instr) >= 3:
                 source = instr[1]
                 dest = instr[2] if len(instr) > 2 else None
@@ -370,16 +380,28 @@ def compute_live_ranges(instructions: List[Tuple]) -> Dict[str, LiveRange]:
     Compute live ranges for all variables in instructions
     
     Args:
-        instructions: List of instructions
+        instructions: List of instructions (tuples or Instruction objects)
         
     Returns:
         Dictionary mapping variable names to their live ranges
     """
     live_ranges = {}
     
+    # Normalize instructions
+    normalized = []
+    for instr in instructions:
+        if instr is None:
+            normalized.append(None)
+        elif hasattr(instr, 'opcode') and hasattr(instr, 'arg'):
+            # Instruction object from peephole optimizer
+            normalized.append((instr.opcode, instr.arg))
+        else:
+            # Already a tuple
+            normalized.append(instr)
+    
     # First pass: find all def and use positions
-    for i, instr in enumerate(instructions):
-        if len(instr) < 2:
+    for i, instr in enumerate(normalized):
+        if not instr or len(instr) < 2:
             continue
         
         opcode = instr[0]

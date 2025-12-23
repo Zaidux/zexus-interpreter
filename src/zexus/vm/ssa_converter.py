@@ -70,6 +70,17 @@ class SSAProgram:
     dominators: Dict[int, Set[int]] = field(default_factory=dict)
     dominator_tree: Dict[int, Set[int]] = field(default_factory=lambda: defaultdict(set))
     
+    @property
+    def num_phi_nodes(self) -> int:
+        """Get total number of phi nodes in all blocks"""
+        return sum(len(block.phi_nodes) for block in self.blocks.values())
+    
+    @property
+    def variables(self) -> Dict[str, List[str]]:
+        """Get mapping of original variables to SSA versions (for compatibility)"""
+        # Return variable_versions in a format compatible with old API
+        return dict(self.variable_versions)
+    
     def get_block_order(self) -> List[int]:
         """Get blocks in dominance order (reverse postorder)"""
         visited = set()
@@ -126,7 +137,7 @@ class SSAConverter:
         Convert instructions to SSA form
         
         Args:
-            instructions: List of bytecode instructions
+            instructions: List of bytecode instructions (tuples or Instruction objects)
             
         Returns:
             SSAProgram in SSA form
@@ -136,8 +147,20 @@ class SSAConverter:
         if not instructions:
             return SSAProgram(blocks={0: BasicBlock(id=0)}, entry_block=0)
         
+        # Normalize instructions (handle both tuples and Instruction objects)
+        normalized = []
+        for instr in instructions:
+            if instr is None:
+                normalized.append(None)
+            elif hasattr(instr, 'opcode') and hasattr(instr, 'arg'):
+                # Instruction object from peephole optimizer
+                normalized.append((instr.opcode, instr.arg))
+            else:
+                # Already a tuple
+                normalized.append(instr)
+        
         # 1. Build CFG with proper basic blocks
-        blocks = self._build_cfg(instructions)
+        blocks = self._build_cfg(normalized)
         self.stats['blocks_created'] = len(blocks)
         
         # 2. Compute dominators and dominator tree
@@ -179,6 +202,15 @@ class SSAConverter:
         if not instructions:
             return {0: BasicBlock(id=0)}
         
+        # Define all jump/branch opcodes
+        jump_opcodes = {
+            'JUMP', 'JUMP_IF_TRUE', 'JUMP_IF_FALSE',
+            'JUMP_ABSOLUTE', 'JUMP_FORWARD', 'JUMP_BACKWARD',
+            'POP_JUMP_IF_TRUE', 'POP_JUMP_IF_FALSE',
+            'FOR_ITER', 'SETUP_LOOP', 'SETUP_EXCEPT', 'SETUP_FINALLY'
+        }
+        control_flow_opcodes = jump_opcodes | {'RETURN', 'CALL', 'SPAWN', 'YIELD', 'RAISE'}
+        
         # Identify leaders
         leaders = {0}  # First instruction is always a leader
         
@@ -188,11 +220,11 @@ class SSAConverter:
             # Instruction after control flow is leader
             if i > 0:
                 prev_opcode = instructions[i-1][0] if instructions[i-1] else None
-                if prev_opcode in ('JUMP', 'JUMP_IF_TRUE', 'JUMP_IF_FALSE', 'RETURN', 'CALL', 'SPAWN'):
+                if prev_opcode in control_flow_opcodes:
                     leaders.add(i)
             
             # Jump targets are leaders
-            if opcode in ('JUMP', 'JUMP_IF_TRUE', 'JUMP_IF_FALSE'):
+            if opcode in jump_opcodes:
                 if len(instr) > 1 and isinstance(instr[1], int):
                     target = instr[1]
                     if 0 <= target < len(instructions):
@@ -223,6 +255,14 @@ class SSAConverter:
         """Build CFG edges based on control flow"""
         block_map = {leaders[i]: i for i in range(len(leaders))}
         
+        # Define unconditional and conditional jump opcodes
+        unconditional_jumps = {'JUMP', 'JUMP_ABSOLUTE', 'JUMP_FORWARD', 'JUMP_BACKWARD'}
+        conditional_jumps = {
+            'JUMP_IF_TRUE', 'JUMP_IF_FALSE',
+            'POP_JUMP_IF_TRUE', 'POP_JUMP_IF_FALSE',
+            'FOR_ITER'
+        }
+        
         for block_id, block in blocks.items():
             if not block.instructions:
                 continue
@@ -233,8 +273,8 @@ class SSAConverter:
             # Get instruction index of last instruction in block
             instr_idx = leaders[block_id] + len(block.instructions) - 1
             
-            if opcode == 'JUMP':
-                # Unconditional jump
+            if opcode in unconditional_jumps:
+                # Unconditional jump - only jump target is successor
                 if len(last_instr) > 1 and isinstance(last_instr[1], int):
                     target = last_instr[1]
                     if target in block_map:
@@ -242,7 +282,7 @@ class SSAConverter:
                         block.successors.add(target_block)
                         blocks[target_block].predecessors.add(block_id)
             
-            elif opcode in ('JUMP_IF_TRUE', 'JUMP_IF_FALSE'):
+            elif opcode in conditional_jumps:
                 # Conditional branch - two successors
                 if len(last_instr) > 1 and isinstance(last_instr[1], int):
                     target = last_instr[1]
