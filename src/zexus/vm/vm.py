@@ -70,6 +70,15 @@ except ImportError:
     StringPool = None
     ListPool = None
 
+# Peephole Optimizer (Phase 8)
+try:
+    from .peephole_optimizer import PeepholeOptimizer, OptimizationLevel
+    _PEEPHOLE_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _PEEPHOLE_OPTIMIZER_AVAILABLE = False
+    PeepholeOptimizer = None
+    OptimizationLevel = None
+
 # Renderer Backend
 try:
     from renderer import backend as _BACKEND
@@ -120,7 +129,9 @@ class VM:
         enable_profiling: bool = False,
         profiling_level: str = "DETAILED",
         enable_memory_pool: bool = True,
-        pool_max_size: int = 1000
+        pool_max_size: int = 1000,
+        enable_peephole_optimizer: bool = True,
+        optimization_level: str = "MODERATE"
     ):
         """
         Initialize the enhanced VM.
@@ -199,6 +210,20 @@ class VM:
                 if debug:
                     print(f"[VM] Failed to enable memory pools: {e}")
                 self.enable_memory_pool = False
+
+        # --- Peephole Optimizer (Phase 8) ---
+        self.enable_peephole_optimizer = enable_peephole_optimizer and _PEEPHOLE_OPTIMIZER_AVAILABLE
+        self.peephole_optimizer = None
+        if self.enable_peephole_optimizer:
+            try:
+                level = getattr(OptimizationLevel, optimization_level, OptimizationLevel.MODERATE)
+                self.peephole_optimizer = PeepholeOptimizer(level=level)
+                if debug:
+                    print(f"[VM] Peephole optimizer enabled: {optimization_level}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable peephole optimizer: {e}")
+                self.enable_peephole_optimizer = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -1161,6 +1186,35 @@ class VM:
             self.string_pool.clear()
         if self.list_pool:
             self.list_pool.clear()
+    
+    # ==================== Peephole Optimizer Interface ====================
+    
+    def optimize_bytecode(self, bytecode):
+        """
+        Optimize bytecode using peephole optimizer
+        
+        Args:
+            bytecode: Bytecode object or list of instructions
+            
+        Returns:
+            Optimized bytecode
+        """
+        if not self.peephole_optimizer:
+            return bytecode
+        
+        return self.peephole_optimizer.optimize(bytecode)
+    
+    def get_optimizer_stats(self) -> Dict[str, Any]:
+        """Get peephole optimizer statistics"""
+        if not self.peephole_optimizer:
+            return {'error': 'Peephole optimizer not enabled'}
+        
+        return self.peephole_optimizer.stats.to_dict()
+    
+    def reset_optimizer_stats(self):
+        """Reset peephole optimizer statistics"""
+        if self.peephole_optimizer:
+            self.peephole_optimizer.reset_stats()
 
 # ==================== Factory Functions ====================
 
@@ -1173,5 +1227,7 @@ def create_high_performance_vm() -> VM:
         use_jit=True,
         use_memory_manager=True,
         enable_memory_pool=True,
+        enable_peephole_optimizer=True,
+        optimization_level="AGGRESSIVE",
         worker_count=4
     )
