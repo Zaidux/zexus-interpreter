@@ -88,6 +88,16 @@ except ImportError:
     AsyncOptimizer = None
     AsyncOptimizationLevel = None
 
+# SSA Converter & Register Allocator (Phase 8.5)
+try:
+    from .ssa_converter import SSAConverter, SSAProgram, destruct_ssa
+    from .register_allocator import RegisterAllocator, compute_live_ranges, AllocationResult
+    _SSA_AVAILABLE = True
+except ImportError:
+    _SSA_AVAILABLE = False
+    SSAConverter = None
+    RegisterAllocator = None
+
 # Renderer Backend
 try:
     from renderer import backend as _BACKEND
@@ -142,7 +152,10 @@ class VM:
         enable_peephole_optimizer: bool = True,
         optimization_level: str = "MODERATE",
         enable_async_optimizer: bool = True,
-        async_optimization_level: str = "MODERATE"
+        async_optimization_level: str = "MODERATE",
+        enable_ssa: bool = False,
+        enable_register_allocation: bool = False,
+        num_allocator_registers: int = 16
     ):
         """
         Initialize the enhanced VM.
@@ -249,6 +262,35 @@ class VM:
                 if debug:
                     print(f"[VM] Failed to enable async optimizer: {e}")
                 self.enable_async_optimizer = False
+
+        # --- SSA Converter & Register Allocator (Phase 8.5) ---
+        self.enable_ssa = enable_ssa and _SSA_AVAILABLE
+        self.enable_register_allocation = enable_register_allocation and _SSA_AVAILABLE
+        self.ssa_converter = None
+        self.register_allocator = None
+        
+        if self.enable_ssa:
+            try:
+                self.ssa_converter = SSAConverter(optimize=True)
+                if debug:
+                    print("[VM] SSA converter enabled")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable SSA converter: {e}")
+                self.enable_ssa = False
+        
+        if self.enable_register_allocation:
+            try:
+                self.register_allocator = RegisterAllocator(
+                    num_registers=num_allocator_registers,
+                    num_temp_registers=8
+                )
+                if debug:
+                    print(f"[VM] Register allocator enabled: {num_allocator_registers} registers")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable register allocator: {e}")
+                self.enable_register_allocation = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -1269,6 +1311,69 @@ class VM:
         """Reset async optimizer statistics"""
         if self.async_optimizer:
             self.async_optimizer.reset_stats()
+    
+    # ==================== SSA & Register Allocator Interface ====================
+    
+    def convert_to_ssa(self, instructions: List[Tuple]) -> Optional['SSAProgram']:
+        """
+        Convert instructions to SSA form
+        
+        Args:
+            instructions: List of bytecode instructions
+            
+        Returns:
+            SSAProgram or None if SSA not enabled
+        """
+        if not self.ssa_converter:
+            return None
+        
+        return self.ssa_converter.convert_to_ssa(instructions)
+    
+    def allocate_registers(
+        self,
+        instructions: List[Tuple]
+    ) -> Optional['AllocationResult']:
+        """
+        Allocate registers for instructions
+        
+        Args:
+            instructions: List of bytecode instructions
+            
+        Returns:
+            AllocationResult or None if register allocator not enabled
+        """
+        if not self.register_allocator:
+            return None
+        
+        # Compute live ranges
+        live_ranges = compute_live_ranges(instructions)
+        
+        # Allocate registers
+        return self.register_allocator.allocate(instructions, live_ranges)
+    
+    def get_ssa_stats(self) -> Dict[str, Any]:
+        """Get SSA converter statistics"""
+        if not self.ssa_converter:
+            return {'error': 'SSA converter not enabled'}
+        
+        return self.ssa_converter.get_stats()
+    
+    def get_allocator_stats(self) -> Dict[str, Any]:
+        """Get register allocator statistics"""
+        if not self.register_allocator:
+            return {'error': 'Register allocator not enabled'}
+        
+        return self.register_allocator.get_stats()
+    
+    def reset_ssa_stats(self):
+        """Reset SSA converter statistics"""
+        if self.ssa_converter:
+            self.ssa_converter.reset_stats()
+    
+    def reset_allocator_stats(self):
+        """Reset register allocator statistics"""
+        if self.register_allocator:
+            self.register_allocator.reset_stats()
 
 # ==================== Factory Functions ====================
 
