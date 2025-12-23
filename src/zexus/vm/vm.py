@@ -60,6 +60,16 @@ except ImportError:
     InstructionProfiler = None
     ProfilingLevel = None
 
+# Memory Pool (Phase 8)
+try:
+    from .memory_pool import IntegerPool, StringPool, ListPool
+    _MEMORY_POOL_AVAILABLE = True
+except ImportError:
+    _MEMORY_POOL_AVAILABLE = False
+    IntegerPool = None
+    StringPool = None
+    ListPool = None
+
 # Renderer Backend
 try:
     from renderer import backend as _BACKEND
@@ -108,7 +118,9 @@ class VM:
         hybrid_mode: bool = True,
         debug: bool = False,
         enable_profiling: bool = False,
-        profiling_level: str = "DETAILED"
+        profiling_level: str = "DETAILED",
+        enable_memory_pool: bool = True,
+        pool_max_size: int = 1000
     ):
         """
         Initialize the enhanced VM.
@@ -170,6 +182,23 @@ class VM:
                 if debug:
                     print(f"[VM] Failed to enable profiler: {e}")
                 self.enable_profiling = False
+
+        # --- Memory Pool (Phase 8) ---
+        self.enable_memory_pool = enable_memory_pool and _MEMORY_POOL_AVAILABLE
+        self.integer_pool = None
+        self.string_pool = None
+        self.list_pool = None
+        if self.enable_memory_pool:
+            try:
+                self.integer_pool = IntegerPool(max_size=pool_max_size)
+                self.string_pool = StringPool(max_size=pool_max_size)
+                self.list_pool = ListPool(max_pool_size=pool_max_size)
+                if debug:
+                    print(f"[VM] Memory pools enabled: max_size={pool_max_size}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable memory pools: {e}")
+                self.enable_memory_pool = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -1073,6 +1102,65 @@ class VM:
         """Reset profiler statistics"""
         if self.profiler:
             self.profiler.reset()
+    
+    # ==================== Memory Pool Interface ====================
+    
+    def allocate_integer(self, value: int) -> int:
+        """Allocate an integer from the pool"""
+        if self.integer_pool:
+            return self.integer_pool.get(value)
+        return value
+    
+    def release_integer(self, value: int):
+        """Release an integer back to the pool (no-op for integers)"""
+        # IntegerPool doesn't need explicit release
+        pass
+    
+    def allocate_string(self, value: str) -> str:
+        """Allocate a string from the pool"""
+        if self.string_pool:
+            return self.string_pool.get(value)
+        return value
+    
+    def release_string(self, value: str):
+        """Release a string back to the pool (no-op for strings)"""
+        # StringPool doesn't need explicit release (uses interning)
+        pass
+    
+    def allocate_list(self, initial_capacity: int = 0) -> list:
+        """Allocate a list from the pool"""
+        if self.list_pool:
+            return self.list_pool.acquire(initial_capacity)
+        return [None] * initial_capacity if initial_capacity > 0 else []
+    
+    def release_list(self, value: list):
+        """Release a list back to the pool"""
+        if self.list_pool:
+            self.list_pool.release(value)
+    
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """Get memory pool statistics"""
+        if not self.enable_memory_pool:
+            return {'error': 'Memory pooling not enabled'}
+        
+        stats = {}
+        if self.integer_pool:
+            stats['integer_pool'] = self.integer_pool.stats.to_dict()
+        if self.string_pool:
+            stats['string_pool'] = self.string_pool.stats.to_dict()
+        if self.list_pool:
+            stats['list_pool'] = self.list_pool.get_stats()
+        
+        return stats
+    
+    def reset_pools(self):
+        """Reset all memory pools"""
+        if self.integer_pool:
+            self.integer_pool.clear()
+        if self.string_pool:
+            self.string_pool.clear()
+        if self.list_pool:
+            self.list_pool.clear()
 
 # ==================== Factory Functions ====================
 
@@ -1080,4 +1168,10 @@ def create_vm(mode: str = "auto", use_jit: bool = True, **kwargs) -> VM:
     return VM(mode=VMMode(mode.lower()), use_jit=use_jit, **kwargs)
 
 def create_high_performance_vm() -> VM:
-    return create_vm(mode="auto", use_jit=True, use_memory_manager=True, worker_count=4)
+    return create_vm(
+        mode="auto",
+        use_jit=True,
+        use_memory_manager=True,
+        enable_memory_pool=True,
+        worker_count=4
+    )
