@@ -1,0 +1,29 @@
+# Example: Using exit_program() to terminate with exit codes
+
+action validate_input(value) {
+    if value < 0 {
+        print("❌ Error: Value cannot be negative!")
+        exit_program(1)  # Exit with error code 1
+    }
+    
+    if value > 100 {
+        print("⚠️  Warning: Value too large!")
+        exit_program(2)  # Exit with error code 2
+    }
+    
+    return value
+}
+
+if __MODULE__ == "__main__" {
+    print("🔍 Validating input...")
+    
+    let test_value = 50
+    print("Testing with value: " + string(test_value))
+    
+    let result = validate_input(test_value)
+    
+    print("✅ Validation passed! Value: " + string(result))
+    
+    # Exit successfully
+    exit_program(0)  # or just: exit_program()
+}

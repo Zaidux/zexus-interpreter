@@ -1,0 +1,19 @@
+# Example: Importing the main_entry_point module
+# This demonstrates that when imported, the main block doesn't run
+
+print("📦 Importing main_entry_point module...")
+
+use "./main_entry_point.zx" as utils
+
+print("✅ Module imported successfully!")
+print("")
+
+# Use the imported functions
+print("Using imported functions:")
+print(utils.greet("Zexus"))
+print("10 + 20 = " + string(utils.add(10, 20)))
+print("7 * 8 = " + string(utils.multiply(7, 8)))
+
+print("")
+print("✅ Import test complete!")
+print("Notice: The 'main' block from main_entry_point.zx did NOT execute!")

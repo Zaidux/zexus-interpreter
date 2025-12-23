@@ -1,0 +1,25 @@
+# Example: Using run() to keep program running
+# This simulates a server or long-running program
+
+let request_count = 0
+
+action handle_request() {
+    request_count = request_count + 1
+    print("📨 Handled request #" + string(request_count))
+}
+
+action server_loop() {
+    # This function will be called repeatedly
+    handle_request()
+}
+
+# Only run the server if this is the main module
+if __MODULE__ == "__main__" {
+    print("🌐 Starting server...")
+    print("Press Ctrl+C to stop")
+    print("")
+    
+    # Keep the server running
+    # Call server_loop every 2 seconds
+    run(server_loop, 2)
+}

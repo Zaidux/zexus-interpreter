@@ -1,0 +1,25 @@
+# Example: Using is_main() helper function
+# Alternative to checking __MODULE__ == "__main__"
+
+action do_work() {
+    print("⚙️  Doing some work...")
+    let result = 42 * 2
+    print("Result: " + string(result))
+    return result
+}
+
+# Export for potential import
+export do_work
+
+# Use is_main() helper instead of __MODULE__ check
+if is_main() {
+    print("🎯 Running as main program!")
+    print("")
+    
+    do_work()
+    
+    print("")
+    print("✅ Done!")
+} else {
+    print("📦 Loaded as a module")
+}

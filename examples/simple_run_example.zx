@@ -1,0 +1,20 @@
+# Example: Simple run() usage
+# Demonstrates keeping a program running indefinitely
+
+print("🚀 Starting continuous program...")
+print("This program will keep running until you press Ctrl+C")
+print("")
+
+# Option 1: run() without callback - just keeps program alive
+# run()
+
+# Option 2: run() with callback - execute code periodically
+let counter = 0
+
+action tick() {
+    counter = counter + 1
+    print("⏰ Tick " + string(counter))
+}
+
+# Call tick() every 1 second
+run(tick, 1)

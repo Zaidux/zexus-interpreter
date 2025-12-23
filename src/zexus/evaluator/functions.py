@@ -37,6 +37,7 @@ class FunctionEvaluatorMixin:
         
         # Register all functions
         self._register_core_builtins()
+        self._register_main_entry_point_builtins()
         self._register_renderer_builtins()
     
     def eval_call_expression(self, node, env, stack_trace):
@@ -1028,6 +1029,129 @@ class FunctionEvaluatorMixin:
             "set_execution_mode": Builtin(_set_execution_mode, "set_execution_mode"),
         })
     
+    def _register_main_entry_point_builtins(self):
+        """Register builtins for main entry point pattern and continuous execution"""
+        import signal
+        import time as time_module
+        
+        def _run(*a):
+            """
+            Keep the program running until interrupted (Ctrl+C).
+            Useful for servers, event loops, or long-running programs.
+            
+            Usage:
+                if __MODULE__ == "__main__":
+                    run()
+            
+            or with a callback:
+                if __MODULE__ == "__main__":
+                    run(lambda: print("Still running..."))
+            """
+            callback = None
+            interval = 1.0  # Default interval in seconds
+            
+            if len(a) >= 1:
+                # First argument is the callback function
+                callback = a[0]
+                if not isinstance(callback, (Action, LambdaFunction)):
+                    return EvaluationError("run() callback must be a function")
+            
+            if len(a) >= 2:
+                # Second argument is the interval
+                interval_obj = a[1]
+                if isinstance(interval_obj, (Integer, Float)):
+                    interval = float(interval_obj.value)
+                else:
+                    return EvaluationError("run() interval must be a number")
+            
+            print("🚀 Program running. Press Ctrl+C to exit.")
+            
+            # Setup signal handler for graceful shutdown
+            shutdown_requested = [False]  # Use list for closure mutability
+            
+            def signal_handler(sig, frame):
+                shutdown_requested[0] = True
+                print("\n⏹️  Shutdown requested. Cleaning up...")
+            
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+            
+            try:
+                # Keep running until interrupted
+                while not shutdown_requested[0]:
+                    if callback:
+                        # Execute callback function
+                        result = self.apply_function(callback, [])
+                        if is_error(result):
+                            print(f"⚠️  Callback error: {result.message}")
+                    
+                    # Sleep for the interval
+                    time_module.sleep(interval)
+            
+            except KeyboardInterrupt:
+                print("\n⏹️  Interrupted. Exiting...")
+            
+            except Exception as e:
+                print(f"❌ Error in run loop: {str(e)}")
+                return EvaluationError(f"run() error: {str(e)}")
+            
+            finally:
+                print("✅ Program terminated gracefully.")
+            
+            return NULL
+        
+        def _execute(*a):
+            """
+            Alias for run() - keeps the program executing until interrupted.
+            
+            Usage:
+                if __MODULE__ == "__main__":
+                    execute()
+            """
+            return _run(*a)
+        
+        def _is_main(*a):
+            """
+            Check if the current module is being run as the main program.
+            Returns true if __MODULE__ == "__main__", false otherwise.
+            
+            Usage:
+                if is_main():
+                    print("Running as main program")
+            """
+            env = getattr(self, '_current_env', None)
+            if env:
+                module_name = env.get('__MODULE__')
+                if module_name and isinstance(module_name, String):
+                    return TRUE if module_name.value == "__main__" else FALSE
+            return FALSE
+        
+        def _exit_program(*a):
+            """
+            Exit the program with an optional exit code.
+            
+            Usage:
+                exit_program()      # Exit with code 0
+                exit_program(1)     # Exit with code 1
+            """
+            exit_code = 0
+            if len(a) >= 1:
+                if isinstance(a[0], Integer):
+                    exit_code = a[0].value
+                else:
+                    return EvaluationError("exit_program() exit code must be an integer")
+            
+            print(f"👋 Exiting with code {exit_code}")
+            sys.exit(exit_code)
+        
+        # Register the builtins
+        self.builtins.update({
+            "run": Builtin(_run, "run"),
+            "execute": Builtin(_execute, "execute"),
+            "is_main": Builtin(_is_main, "is_main"),
+            "exit_program": Builtin(_exit_program, "exit_program"),
+        })
+    
     def _register_renderer_builtins(self):
         """Logic extracted from the original RENDER_REGISTRY and helper functions."""
         
@@ -1488,3 +1612,6 @@ class FunctionEvaluatorMixin:
             "sanitize_input": Builtin(_sanitize_input, "sanitize_input"),
             "validate_length": Builtin(_validate_length, "validate_length"),
         })
+        
+        # Register main entry point and event loop builtins
+        self._register_main_entry_point_builtins()

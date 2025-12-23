@@ -490,6 +490,8 @@ class StatementEvaluatorMixin:
                     
                     # Set __file__ in module environment so it can do relative imports
                     module_env.set("__file__", String(os.path.abspath(candidate)))
+                    # Set __MODULE__ to the module path (not "__main__" since it's imported)
+                    module_env.set("__MODULE__", String(file_path))
                     
                     # Recursive evaluation
                     self.eval_node(program, module_env)
@@ -616,6 +618,8 @@ class StatementEvaluatorMixin:
                     
                     # Set __file__ in module environment so it can do relative imports
                     module_env.set("__file__", String(os.path.abspath(candidate)))
+                    # Set __MODULE__ to the module path (not "__main__" since it's imported)
+                    module_env.set("__MODULE__", String(file_path))
                     
                     self.eval_node(program, module_env)
                     cache_module(normalized_path, module_env)

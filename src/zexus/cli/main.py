@@ -13,8 +13,8 @@ from ..lexer import Lexer
 from ..parser import Parser
 # UPDATED: Import evaluate from evaluator package
 from ..evaluator import evaluate
-# UPDATED: Import Environment from object module
-from ..object import Environment
+# UPDATED: Import Environment and String from object module
+from ..object import Environment, String
 from ..syntax_validator import SyntaxValidator
 from ..hybrid_orchestrator import orchestrator
 from ..config import config
@@ -169,6 +169,7 @@ def run(ctx, file):
         # Use the evaluator package
         env = Environment()
         env.set("__file__", file)  # Set the current file for module imports
+        env.set("__MODULE__", String("__main__"))  # Indicate this is the main entry point
         
         # UPDATED: Use the evaluate function from the evaluator package
         result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
