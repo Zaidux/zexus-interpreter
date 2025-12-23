@@ -655,6 +655,10 @@ class FunctionEvaluatorMixin:
             import subprocess
             path = a[0].value
             
+            import os
+            import subprocess
+            path = a[0].value
+            
             # Normalize path
             if not os.path.isabs(path):
                 path = os.path.join(os.getcwd(), path)
@@ -702,6 +706,15 @@ class FunctionEvaluatorMixin:
                         result = self.eval_node(stmt, new_env, [])
                         if is_error(result):
                             return result
+                    
+                    # Export all defined functions/actions to global builtins
+                    # This allows cross-file code reuse
+                    for key in new_env.store.keys():
+                        if key not in ['__file__', '__FILE__', '__MODULE__', '__DIR__', '__ARGS__', '__ARGV__', '__PACKAGE__']:
+                            val = new_env.get(key)
+                            if val and not is_error(val):
+                                # Add to builtins so it's available globally
+                                self.builtins[key] = val
                     
                     return result if result else NULL
                 except Exception as e:
