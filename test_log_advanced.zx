@@ -1,0 +1,81 @@
+// Test LOG >> for cross-block/file data sharing
+
+print("=== Test 1: Generate Python code ===");
+
+action generatePython {
+    log >> "generated.py";
+    print("# Auto-generated Python code");
+    print("def calculate(x, y):");
+    print("    return x + y");
+    print("");
+    print("result = calculate(10, 20)");
+    print("print(f'Python result: {result}')");
+}
+
+generatePython();
+print("Python code generated to generated.py");
+
+print("\n=== Test 2: Generate Zexus code ===");
+
+action generateZexus {
+    log >> "generated.zx";
+    print("// Auto-generated Zexus code");
+    print("action multiply(a, b) {");
+    print("    return a * b;");
+    print("}");
+    print("");
+    print("let result = multiply(5, 6);");
+    print("print(\"Zexus result: \" + result);");
+}
+
+generateZexus();
+print("Zexus code generated to generated.zx");
+
+print("\n=== Test 3: Read generated file ===");
+let python_code = read_file("generated.py");
+print("Read Python code:");
+print(python_code);
+
+print("\n=== Test 4: Multiple blocks writing to same file ===");
+
+action block1 {
+    log >> "shared.txt";
+    print("Line from block 1");
+}
+
+action block2 {
+    log >> "shared.txt";
+    print("Line from block 2");
+}
+
+action block3 {
+    log >> "shared.txt";
+    print("Line from block 3");
+}
+
+block1();
+block2();
+block3();
+
+let shared_content = read_file("shared.txt");
+print("\nShared file contents:");
+print(shared_content);
+
+print("\n=== Test 5: Generate C++ code ===");
+
+action generateCpp {
+    log >> "generated.cpp";
+    print("#include <iostream>");
+    print("");
+    print("int main() {");
+    print("    std::cout << \"C++ result: \" << (10 * 5) << std::endl;");
+    print("    return 0;");
+    print("}");
+}
+
+generateCpp();
+let cpp_code = read_file("generated.cpp");
+print("Generated C++ code:");
+print(cpp_code);
+
+print("\n=== All tests complete ===");

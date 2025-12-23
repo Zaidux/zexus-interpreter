@@ -132,6 +132,13 @@ class Lexer:
                 tok = Token(GTE, literal)
                 tok.line = current_line
                 tok.column = current_column
+            elif self.peek_char() == '>':
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(APPEND, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(GT, self.ch)
                 tok.line = current_line

@@ -1516,29 +1516,40 @@ class ContextStackParser:
                 i = j
                 continue
             
-            # LOG statement heuristic: log > filename
+            # LOG statement heuristic: log > filename OR log >> filename
             elif token.type == LOG:
                 j = i + 1
-                # Expect > symbol
-                if j < len(tokens) and tokens[j].type == GT:
+                # Expect > or >> symbol
+                append_mode = True  # Default to append
+                if j < len(tokens) and tokens[j].type == APPEND:
+                    # Explicit append: log >> file
+                    append_mode = True
                     j += 1
-                    # Get filepath (can be STRING or IDENT)
-                    if j < len(tokens) and tokens[j].type in [STRING, IDENT]:
-                        filepath_token = tokens[j]
-                        parser_debug(f"    📝 Found log statement: log > {filepath_token.literal}")
-                        
-                        # Create a simple string literal or identifier expression
-                        if filepath_token.type == STRING:
-                            filepath_expr = StringLiteral(filepath_token.literal)
-                        else:
-                            filepath_expr = Identifier(filepath_token.literal)
-                        
-                        statements.append(LogStatement(filepath_expr))
-                        j += 1
-                    else:
-                        parser_debug(f"    ⚠️ Expected filepath after 'log >'")
+                elif j < len(tokens) and tokens[j].type == GT:
+                    # Write mode: log > file (still appends within scope, but clearer intent)
+                    append_mode = True  # Keep append for scope safety
+                    j += 1
                 else:
-                    parser_debug(f"    ⚠️ Expected '>' after 'log'")
+                    parser_debug(f"    ⚠️ Expected '>' or '>>' after 'log'")
+                    i = j
+                    continue
+                
+                # Get filepath (can be STRING or IDENT)
+                if j < len(tokens) and tokens[j].type in [STRING, IDENT]:
+                    filepath_token = tokens[j]
+                    mode_str = ">>" if tokens[i+1].type == APPEND else ">"
+                    parser_debug(f"    📝 Found log statement: log {mode_str} {filepath_token.literal}")
+                    
+                    # Create a simple string literal or identifier expression
+                    if filepath_token.type == STRING:
+                        filepath_expr = StringLiteral(filepath_token.literal)
+                    else:
+                        filepath_expr = Identifier(filepath_token.literal)
+                    
+                    statements.append(LogStatement(filepath_expr, append_mode))
+                    j += 1
+                else:
+                    parser_debug(f"    ⚠️ Expected filepath after 'log {mode_str}'")
                 
                 i = j
                 continue

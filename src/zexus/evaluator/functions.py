@@ -621,6 +621,137 @@ class FunctionEvaluatorMixin:
             except Exception as e:
                 return EvaluationError(f"file() error: {str(e)}")
         
+        def _read_file(*a):
+            """Read entire file contents as string"""
+            if len(a) != 1:
+                return EvaluationError("read_file() takes exactly 1 argument: path")
+            if not isinstance(a[0], String):
+                return EvaluationError("read_file() path must be a string")
+            
+            import os
+            path = a[0].value
+            
+            # Normalize path
+            if not os.path.isabs(path):
+                path = os.path.join(os.getcwd(), path)
+            
+            try:
+                with open(path, 'r') as f:
+                    content = f.read()
+                return String(content)
+            except FileNotFoundError:
+                return EvaluationError(f"File not found: {path}")
+            except Exception as e:
+                return EvaluationError(f"read_file() error: {str(e)}")
+        
+        def _eval_file(*a):
+            """Execute code from a file based on its extension"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("eval_file() takes 1-2 arguments: eval_file(path) or eval_file(path, language)")
+            if not isinstance(a[0], String):
+                return EvaluationError("eval_file() path must be a string")
+            
+            import os
+            import subprocess
+            path = a[0].value
+            
+            # Normalize path
+            if not os.path.isabs(path):
+                path = os.path.join(os.getcwd(), path)
+            
+            # Determine language from extension or argument
+            if len(a) == 2 and isinstance(a[1], String):
+                language = a[1].value.lower()
+            else:
+                _, ext = os.path.splitext(path)
+                language = ext[1:].lower() if ext else "unknown"
+            
+            # Read file content
+            try:
+                with open(path, 'r') as f:
+                    content = f.read()
+            except FileNotFoundError:
+                return EvaluationError(f"File not found: {path}")
+            except Exception as e:
+                return EvaluationError(f"eval_file() read error: {str(e)}")
+            
+            # Execute based on language
+            if language == "zx" or language == "zexus":
+                # Execute Zexus code
+                from ..parser.parser import UltimateParser
+                from ..lexer import Lexer
+                
+                try:
+                    lexer = Lexer(content)
+                    parser = UltimateParser(lexer)
+                    program = parser.parse_program()
+                    
+                    if parser.errors:
+                        return EvaluationError(f"Parse errors: {parser.errors[0]}")
+                    
+                    # Use the current evaluator instance to execute in a new environment
+                    from ..object import Environment
+                    new_env = Environment()
+                    
+                    # Copy builtins to new environment
+                    for name, builtin in self.builtins.items():
+                        new_env.set(name, builtin)
+                    
+                    result = NULL
+                    for stmt in program.statements:
+                        result = self.eval_node(stmt, new_env, [])
+                        if is_error(result):
+                            return result
+                    
+                    return result if result else NULL
+                except Exception as e:
+                    return EvaluationError(f"eval_file() zexus execution error: {str(e)}")
+            
+            elif language == "py" or language == "python":
+                # Execute Python code
+                try:
+                    exec_globals = {}
+                    exec(content, exec_globals)
+                    # Return the result if there's a 'result' variable
+                    if 'result' in exec_globals:
+                        result_val = exec_globals['result']
+                        # Convert Python types to Zexus types
+                        if isinstance(result_val, str):
+                            return String(result_val)
+                        elif isinstance(result_val, int):
+                            return Integer(result_val)
+                        elif isinstance(result_val, float):
+                            return Float(result_val)
+                        elif isinstance(result_val, bool):
+                            return Boolean(result_val)
+                        elif isinstance(result_val, list):
+                            return List([Integer(x) if isinstance(x, int) else String(str(x)) for x in result_val])
+                    return NULL
+                except Exception as e:
+                    return EvaluationError(f"eval_file() python execution error: {str(e)}")
+            
+            elif language in ["cpp", "c++", "c", "rs", "rust", "go"]:
+                # For compiled languages, try to compile and run
+                return EvaluationError(f"eval_file() for {language} requires compilation - not yet implemented")
+            
+            elif language == "js" or language == "javascript":
+                # Execute JavaScript (if Node.js is available)
+                try:
+                    result = subprocess.run(['node', '-e', content], 
+                                          capture_output=True, 
+                                          text=True, 
+                                          timeout=5)
+                    if result.returncode != 0:
+                        return EvaluationError(f"JavaScript error: {result.stderr}")
+                    return String(result.stdout.strip())
+                except FileNotFoundError:
+                    return EvaluationError("Node.js not found - cannot execute JavaScript")
+                except Exception as e:
+                    return EvaluationError(f"eval_file() js execution error: {str(e)}")
+            
+            else:
+                return EvaluationError(f"Unsupported language: {language}")
+        
         # Register mappings
         self.builtins.update({
             "now": Builtin(_now, "now"),
@@ -637,6 +768,8 @@ class FunctionEvaluatorMixin:
             "file_write_json": Builtin(_write_json, "file_write_json"),
             "file_append": Builtin(_append, "file_append"),
             "file_list_dir": Builtin(_list_dir, "file_list_dir"),
+            "read_file": Builtin(_read_file, "read_file"),
+            "eval_file": Builtin(_eval_file, "eval_file"),
             "debug": Builtin(_debug, "debug"),
             "debug_log": Builtin(_debug_log, "debug_log"),
             "debug_trace": Builtin(_debug_trace, "debug_trace"),

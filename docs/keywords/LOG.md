@@ -1,13 +1,16 @@
-# LOG Keyword - Output Redirection
+# LOG Keyword - Output Redirection & Code Generation
 
 ## Overview
 
 The `LOG` keyword redirects subsequent print output to a file. Output redirection is **scope-aware**, meaning it automatically restores to the previous output destination when the current block exits.
 
+**New in v2:** Support for `>>` append operator and any file extension, enabling cross-block code generation and data sharing.
+
 ## Syntax
 
 ```zexus
-log > filepath;
+log > filepath;   // Write mode (scope-aware append)
+log >> filepath;  // Explicit append mode (recommended for cross-block use)
 ```
 
 ## Parameters
@@ -15,6 +18,7 @@ log > filepath;
 - **filepath**: String literal or expression evaluating to a file path
   - Can be a relative path (saved relative to current working directory)
   - Can be an absolute path
+  - **Supports any file extension**: .txt, .py, .zx, .cpp, .rs, .js, .json, etc.
   - File is opened in append mode (won't overwrite existing content)
 
 ## Basic Usage
@@ -100,6 +104,116 @@ print("Back to console");
 - inner.log: "Inner - logged"
 
 ## Advanced Usage
+
+### Cross-Block Code Generation
+
+Generate code in one block, use in another:
+
+```zexus
+// Block A: Generate Python code
+action generatePython {
+    log >> "script.py";
+    print("def calculate(x, y):");
+    print("    return x + y");
+    print("");
+    print("result = calculate(10, 20)");
+}
+
+generatePython();
+
+// Block B: Read and execute
+let code = read_file("script.py");
+eval_file("script.py", "python");
+```
+
+### Hidden Code Layers
+
+Generate code in any language for later execution:
+
+```zexus
+// Generate C++ code
+action generateCppModule {
+    log >> "math.cpp";
+    print("#include <iostream>");
+    print("int multiply(int a, int b) {");
+    print("    return a * b;");
+    print("}");
+}
+
+// Generate Rust code
+action generateRustModule {
+    log >> "utils.rs";
+    print("pub fn add(a: i32, b: i32) -> i32 {");
+    print("    a + b");
+    print("}");
+}
+
+// Generate Zexus code
+action generateZexusModule {
+    log >> "helpers.zx";
+    print("action divide(a, b) {");
+    print("    return a / b;");
+    print("}");
+}
+
+generateCppModule();
+generateRustModule();
+generateZexusModule();
+
+// Later: Execute the generated Zexus code
+eval_file("helpers.zx");
+```
+
+### Multi-Block Data Sharing
+
+Multiple blocks appending to the same file:
+
+```zexus
+action collectData1 {
+    log >> "data.txt";
+    print("Data from block 1: [1, 2, 3]");
+}
+
+action collectData2 {
+    log >> "data.txt";
+    print("Data from block 2: [4, 5, 6]");
+}
+
+action collectData3 {
+    log >> "data.txt";
+    print("Data from block 3: [7, 8, 9]");
+}
+
+collectData1();
+collectData2();
+collectData3();
+
+// Read all collected data
+let all_data = read_file("data.txt");
+print(all_data);
+```
+
+### JSON Data Generation
+
+```zexus
+action generateConfig {
+    log >> "config.json";
+    print("{");
+    print("  \"server\": {");
+    print("    \"host\": \"localhost\",");
+    print("    \"port\": 8080");
+    print("  },");
+    print("  \"debug\": true");
+    print("}");
+}
+
+generateConfig();
+
+// Read and parse JSON
+let config = read_file("config.json");
+print("Config generated:");
+print(config);
+```
 
 ### Conditional Logging
 
@@ -377,8 +491,209 @@ recordAudit("admin", "login", "Successful authentication");
 recordAudit("user123", "file_access", "Read file: data.txt");
 ```
 
+## Built-in Functions for File Operations
+
+### read_file(path)
+
+Read the entire contents of a file as a string.
+
+**Syntax:**
+```zexus
+let content = read_file("filename.txt");
+```
+
+**Parameters:**
+- `path` (string): Relative or absolute file path
+
+**Returns:** String containing file contents
+
+**Errors:**
+- File not found
+- Permission denied
+- Read error
+
+**Example:**
+```zexus
+action generateData {
+    log >> "data.txt";
+    print("Line 1");
+    print("Line 2");
+}
+
+generateData();
+
+let data = read_file("data.txt");
+print("Read from file:");
+print(data);
+```
+
+### eval_file(path, [language])
+
+Execute code from a file, optionally specifying the language.
+
+**Syntax:**
+```zexus
+eval_file("script.zx");              // Auto-detect from extension
+eval_file("script.py", "python");    // Explicit language
+```
+
+**Parameters:**
+- `path` (string): Relative or absolute file path
+- `language` (optional string): Language override ("zx", "python", "js", etc.)
+
+**Supported Languages:**
+- **zx/zexus**: Execute Zexus code (`.zx` files)
+- **py/python**: Execute Python code (`.py` files)
+- **js/javascript**: Execute JavaScript via Node.js (`.js` files)
+- **cpp/c++/c**: Planned - compilation support
+- **rs/rust**: Planned - compilation support
+
+**Returns:** Result of execution (language-dependent)
+
+**Example:**
+```zexus
+// Generate and execute Zexus code
+action generateHelper {
+    log >> "helper.zx";
+    print("action add(a, b) {");
+    print("    return a + b;");
+    print("}");
+}
+
+generateHelper();
+eval_file("helper.zx");
+
+// Now we can use the generated function
+let result = add(5, 10);
+print("Result: " + result);  // 15
+```
+
+**Python Interop Example:**
+```zexus
+action generatePython {
+    log >> "calculate.py";
+    print("x = 10");
+    print("y = 20");
+    print("result = x * y");
+    print("print(f'Python: {result}')");
+}
+
+generatePython();
+eval_file("calculate.py", "python");
+// Output: Python: 200
+```
+
+**Error Handling:**
+```zexus
+try {
+    eval_file("missing.zx");
+} catch (err) {
+    print("Error: " + err);
+}
+```
+
+## Use Cases
+
+### 1. Dynamic Module Generation
+
+```zexus
+action generateMathModule {
+    log >> "math_extended.zx";
+    print("action square(x) { return x * x; }");
+    print("action cube(x) { return x * x * x; }");
+    print("action pow4(x) { return x * x * x * x; }");
+}
+
+generateMathModule();
+eval_file("math_extended.zx");
+
+// Use generated functions
+print(square(5));   // 25
+print(cube(3));     // 27
+print(pow4(2));     // 16
+```
+
+### 2. Configuration File Generation
+
+```zexus
+action generateConfig {
+    log >> "app.config.zx";
+    print("let config = {");
+    print("    api_url: \"https://api.example.com\",");
+    print("    timeout: 5000,");
+    print("    debug: true");
+    print("};");
+}
+
+generateConfig();
+eval_file("app.config.zx");
+print(config.api_url);
+```
+
+### 3. Template Engine
+
+```zexus
+action generateTemplate(name, age) {
+    log >> "user_" + name + ".html";
+    print("<!DOCTYPE html>");
+    print("<html>");
+    print("<body>");
+    print("  <h1>Welcome, " + name + "</h1>");
+    print("  <p>Age: " + age + "</p>");
+    print("</body>");
+    print("</html>");
+}
+
+generateTemplate("Alice", 30);
+generateTemplate("Bob", 25);
+
+let alice_html = read_file("user_Alice.html");
+print(alice_html);
+```
+
+### 4. Build System Integration
+
+```zexus
+action generateMakefile {
+    log >> "Makefile";
+    print("CC = gcc");
+    print("CFLAGS = -Wall -O2");
+    print("");
+    print("all: program");
+    print("");
+    print("program: main.o utils.o");
+    print("\t$(CC) $(CFLAGS) -o program main.o utils.o");
+}
+
+generateMakefile();
+```
+
+### 5. Test Data Generation
+
+```zexus
+action generateTestData {
+    log >> "test_data.json";
+    print("[");
+    
+    let i = 0;
+    while (i < 100) {
+        log >> "test_data.json";
+        print("  {\"id\": " + i + ", \"value\": " + (i * 10) + "},");
+        i = i + 1;
+    }
+    
+    log >> "test_data.json";
+    print("  {\"id\": 100, \"value\": 1000}");
+    print("]");
+}
+
+generateTestData();
+```
+
 ## See Also
 
+- **read_file()**: Read file contents
+- **eval_file()**: Execute code from files
 - [PRINT](PRINT.md) - Output to console
 - [DEBUG](DEBUG.md) - Debug output
 - [ACTION](ACTION_FUNCTION_LAMBDA_RETURN.md) - Function scopes

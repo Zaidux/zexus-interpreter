@@ -896,16 +896,19 @@ class WatchStatement(Statement):
 class LogStatement(Statement):
     """Log statement - Redirect output to file
     
-    log > output.txt
-    log > /path/to/file.txt
+    log > output.txt     # Write mode (overwrites on first write in scope)
+    log >> output.txt    # Append mode (always appends)
     
+    Supports any file extension: .txt, .py, .zx, .cpp, .rs, etc.
     Redirects subsequent print output to the specified file.
     """
-    def __init__(self, filepath):
+    def __init__(self, filepath, append_mode=True):
         self.filepath = filepath  # Expression: path to log file
+        self.append_mode = append_mode  # True for >>, False for >
     
     def __repr__(self):
-        return f"LogStatement(filepath={self.filepath})"
+        mode = ">>" if self.append_mode else ">"
+        return f"LogStatement({mode} {self.filepath})"
 
 
 # NEW: Capability-based security statements

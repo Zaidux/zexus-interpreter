@@ -25,6 +25,7 @@ MOD = "%"
 DOT = "."
 LTE = "<="
 GTE = ">="
+APPEND = ">>"           # Append operator for LOG: log >> file
 AND = "&&"
 OR = "||"
 QUESTION = "?"          # Ternary operator: condition ? true_val : false_val

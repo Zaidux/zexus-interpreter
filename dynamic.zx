@@ -1,0 +1,15 @@
+action secret_multiply(x, y) {
+    let result = x * y;
+    print(\
+    return result;
+}
+action secret_multiply(x, y) {
+    let result = x * y;
+    print(\
+    return result;
+}
+action secret_multiply(x, y) {
+    let result = x * y;
+    print(\
+    return result;
+}
