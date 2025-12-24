@@ -1,8 +1,9 @@
 # lexer.py (ENHANCED WITH PHASE 1 KEYWORDS)
 from .zexus_token import *
+from .error_reporter import get_error_reporter, SyntaxError as ZexusSyntaxError
 
 class Lexer:
-    def __init__(self, source_code):
+    def __init__(self, source_code, filename="<stdin>"):
         self.input = source_code
         self.position = 0
         self.read_position = 0
@@ -10,10 +11,16 @@ class Lexer:
         self.in_embedded_block = False
         self.line = 1
         self.column = 1
+        self.filename = filename
         # Hint for parser: when '(' starts a lambda parameter list that is
         # immediately followed by '=>', this flag will be set for the token
         # produced for that '('. Parser can check and consume accordingly.
         self._next_paren_has_lambda = False
+        
+        # Register source with error reporter
+        self.error_reporter = get_error_reporter()
+        self.error_reporter.register_source(filename, source_code)
+        
         self.read_char()
 
     def read_char(self):
@@ -97,9 +104,16 @@ class Lexer:
                 tok.line = current_line
                 tok.column = current_column
             else:
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                # Single '&' is not supported - suggest using '&&'
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    f"Unexpected character '{self.ch}'",
+                    line=current_line,
+                    column=current_column,
+                    filename=self.filename,
+                    suggestion="Did you mean '&&' for logical AND?"
+                )
+                raise error
         elif self.ch == '|':
             if self.peek_char() == '|':
                 ch = self.ch
@@ -109,9 +123,16 @@ class Lexer:
                 tok.line = current_line
                 tok.column = current_column
             else:
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                # Single '|' is not supported - suggest using '||'
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    f"Unexpected character '{self.ch}'",
+                    line=current_line,
+                    column=current_column,
+                    filename=self.filename,
+                    suggestion="Did you mean '||' for logical OR?"
+                )
+                raise error
         elif self.ch == '<':
             if self.peek_char() == '=':
                 ch = self.ch
@@ -308,9 +329,17 @@ class Lexer:
                     tok.line = current_line
                     tok.column = current_column
                     return tok
-                tok = Token(ILLEGAL, self.ch)
-                tok.line = current_line
-                tok.column = current_column
+                # Unknown character - report helpful error
+                char_desc = f"'{self.ch}'" if self.ch.isprintable() else f"'\\x{ord(self.ch):02x}'"
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    f"Unexpected character {char_desc}",
+                    line=current_line,
+                    column=current_column,
+                    filename=self.filename,
+                    suggestion="Remove or replace this character with valid Zexus syntax."
+                )
+                raise error
 
         self.read_char()
         return tok
@@ -340,17 +369,35 @@ class Lexer:
 
     def read_string(self):
         start_position = self.position + 1
+        start_line = self.line
+        start_column = self.column
         result = []
         while True:
             self.read_char()
             if self.ch == "":
                 # End of input - unclosed string
-                break
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Unterminated string literal",
+                    line=start_line,
+                    column=start_column,
+                    filename=self.filename,
+                    suggestion="Add a closing quote \" to terminate the string."
+                )
+                raise error
             elif self.ch == '\\':
                 # Escape sequence - read next character
                 self.read_char()
                 if self.ch == '':
-                    break
+                    error = self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        "Incomplete escape sequence at end of file",
+                        line=self.line,
+                        column=self.column,
+                        filename=self.filename,
+                        suggestion="Remove the backslash or complete the escape sequence."
+                    )
+                    raise error
                 # Map escape sequences to their actual characters
                 escape_map = {
                     'n': '\n',

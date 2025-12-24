@@ -18,6 +18,8 @@ from ..object import Environment, String
 from ..syntax_validator import SyntaxValidator
 from ..hybrid_orchestrator import orchestrator
 from ..config import config
+# Import error handling
+from ..error_reporter import get_error_reporter, ZexusError, print_error
 
 console = Console()
 
@@ -119,9 +121,15 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
 @click.pass_context
 def run(ctx, file, args):
     """Run a Zexus program with hybrid execution"""
+    # Register source for error reporting
+    error_reporter = get_error_reporter()
+    
     try:
         with open(file, 'r') as f:
             source_code = f.read()
+        
+        # Register source with error reporter
+        error_reporter.register_source(file, source_code)
         
         syntax_style = ctx.obj['SYNTAX_STYLE']
         advanced_parsing = ctx.obj['ADVANCED_PARSING']
@@ -159,7 +167,7 @@ def run(ctx, file, args):
                     console.print("[bold red]❌ Could not auto-fix errors, attempting to run anyway...[/bold red]")
         
         # Parse the program
-        lexer = Lexer(source_code)
+        lexer = Lexer(source_code, filename=file)
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
         
@@ -208,10 +216,15 @@ def run(ctx, file, args):
         elif hasattr(result, 'value') and result.value is not None:
             console.print(f"\n📊 [bold blue]Result:[/bold blue] {result.value}")
 
+    except ZexusError as e:
+        # Handle our custom Zexus errors with nice formatting
+        print_error(e)
+        sys.exit(1)
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {str(e)}")
-        import traceback
-        traceback.print_exc()
+        console.print(f"[bold red]Unexpected Error:[/bold red] {str(e)}")
+        if ctx.obj.get('DEBUG'):
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 @cli.command()
