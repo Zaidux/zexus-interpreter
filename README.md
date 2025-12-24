@@ -9,9 +9,41 @@
 
 **A modern, security-first programming language with built-in blockchain support, VM-accelerated execution, advanced memory management, and policy-as-code**
 
-[Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Examples](#-examples)
+[What's New](#-whats-new-in-v013) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
 
 </div>
+
+---
+
+## 📋 Table of Contents
+
+- [What is Zexus?](#-what-is-zexus)
+- [What's New](#-whats-new-in-v013)
+- [Key Features](#-key-features)
+  - [VM-Accelerated Performance](#-vm-accelerated-performance-new)
+  - [Security & Policy-as-Code](#-security--policy-as-code--verify-enhanced)
+  - [Blockchain Support](#️-native-blockchain-support)
+  - [Persistent Memory](#-persistent-memory-management)
+  - [Dependency Injection](#-dependency-injection--testing)
+  - [Reactive State](#-reactive-state-management)
+  - [Advanced Features](#-advanced-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Examples](#-examples)
+- [Complete Feature Reference](#-complete-feature-reference)
+- [Complete Keyword Reference](#-complete-keyword-reference)
+- [Built-in Functions](#built-in-functions-100)
+- [CLI Commands](#-cli-commands)
+- [Architecture](#️-architecture)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
+- [Testing](#-testing)
+- [Getting Help & Troubleshooting](#-getting-help--troubleshooting)
+- [License](#-license)
+- [Roadmap](#️-roadmap)
+- [Project Stats](#-project-stats)
+
+
 
 ---
 
@@ -188,6 +220,58 @@ count = 5  # Automatically triggers watch callback
 - **Syntax flexibility**: Multiple syntax styles (`:` and `=` for assignments)
 - **130+ keywords**: Comprehensive language features
 - **Main entry point**: Run/execute patterns like Python's `if __name__ == "__main__"`
+
+---
+
+## 🔍 Why Choose Zexus?
+
+### Language Comparison
+
+| Feature | Zexus | Python | Solidity | Rust | TypeScript |
+|---------|-------|--------|----------|------|------------|
+| **Blockchain Native** | ✅ Built-in | ❌ Libraries | ✅ Native | ❌ Libraries | ❌ Libraries |
+| **Policy-as-Code** | ✅ Native | ⚠️ Manual | ⚠️ Modifiers | ❌ None | ❌ None |
+| **VM Execution** | ✅ Hybrid | ✅ Bytecode | ✅ EVM | ✅ Native | ⚠️ V8/Node |
+| **Type Safety** | ✅ Strong+Inference | ⚠️ Optional | ✅ Strong | ✅ Strong | ✅ Strong |
+| **Async/Await** | ✅ Native | ✅ Native | ❌ None | ✅ Native | ✅ Native |
+| **Dependency Injection** | ✅ Built-in | ⚠️ Libraries | ❌ None | ⚠️ Manual | ⚠️ Libraries |
+| **Reactive State** | ✅ WATCH | ⚠️ Libraries | ❌ None | ⚠️ Libraries | ⚠️ Libraries |
+| **Memory Tracking** | ✅ Automatic | ⚠️ Manual | ⚠️ Gas-based | ✅ Ownership | ⚠️ Manual |
+| **Security Features** | ✅✅✅ Extensive | ⚠️ Libraries | ⚠️ Limited | ✅ Safe | ⚠️ Libraries |
+| **Syntax Flexibility** | ✅ Multiple styles | ✅ PEP-8 | ✅ Solidity | ✅ Strict | ✅ Strict |
+| **Learning Curve** | 🟢 Easy | 🟢 Easy | 🟡 Medium | 🔴 Hard | 🟡 Medium |
+
+### Use Zexus When You Need
+
+✅ **Smart contracts without EVM complexity** - Cleaner syntax than Solidity  
+✅ **Security-first development** - Built-in policy enforcement  
+✅ **Rapid prototyping with production-ready features** - Faster than Rust  
+✅ **Cross-platform blockchain apps** - No separate contracts needed  
+✅ **Enterprise features out-of-the-box** - DI, middleware, auth, caching  
+✅ **Reactive applications** - Built-in WATCH for state management  
+✅ **Memory-safe applications** - Automatic leak detection  
+
+### Zexus = Python's Ease + Solidity's Blockchain + Rust's Safety
+
+```zexus
+# Python-like simplicity
+let users = []
+for each user in get_users() {
+    print(user.name)
+}
+
+# Solidity-like contracts
+contract Token {
+    persistent storage balances: Map<Address, integer>
+    action payable transfer(to, amount) { ... }
+}
+
+# Rust-like safety
+verify balance >= amount {
+    log_error("Insufficient balance")
+    revert("Not enough funds")
+}
+```
 
 ---
 
@@ -1407,6 +1491,163 @@ python test_vm_integration.py
 
 ---
 
+## 💡 Best Practices
+
+### Code Organization
+
+```zexus
+# Use modules for organization
+module UserManagement {
+    export action createUser(name, email) { ... }
+    export action deleteUser(id) { ... }
+    
+    private action hashPassword(password) { ... }
+}
+
+# Import only what you need
+use {createUser, deleteUser} from "UserManagement"
+```
+
+### Security First
+
+```zexus
+# Always validate inputs
+action processPayment(amount, recipient) {
+    # Validate amount
+    verify amount > 0, "Amount must be positive"
+    restrict(amount, {
+        type: "integer",
+        range: [1, 1000000]
+    })
+    
+    # Validate recipient
+    verify is_email(recipient), "Invalid email"
+    
+    # Sanitize inputs
+    let clean_recipient = sanitize(recipient, "email")
+    
+    # Apply security policies
+    protect(processPayment, {
+        auth_required: true,
+        rate_limit: 10,
+        log_access: true
+    }, "strict")
+}
+```
+
+### Error Handling
+
+```zexus
+# Use try-catch for error recovery
+try {
+    let data = file_read_json("config.json")
+    process_config(data)
+} catch (error) {
+    # Fallback to defaults
+    let data = get_default_config()
+    debug_log("Using default config", {error: error})
+}
+
+# Use defer for cleanup
+action process_file(path) {
+    let handle = open_file(path)
+    defer {
+        close_file(handle)  # Always executes
+    }
+    
+    # Process file...
+    return result
+}
+```
+
+### Performance Optimization
+
+```zexus
+# Use native for CPU-intensive tasks
+native action calculate_hash(data: string) -> string {
+    source: "crypto.cpp"
+    function: "sha256_hash"
+}
+
+# Mark read-only functions as pure
+action pure calculate_total(items) {
+    return reduce(items, lambda(sum, item) { sum + item.price }, 0)
+}
+
+# Use inline for small frequently-called functions
+inline action square(x) {
+    return x * x
+}
+```
+
+### Async Patterns
+
+```zexus
+# Use async/await for I/O operations
+async action fetch_user_data(user_id) {
+    let profile = await http_get("/users/" + user_id)
+    let posts = await http_get("/users/" + user_id + "/posts")
+    
+    return {profile: profile, posts: posts}
+}
+
+# Use channels for producer-consumer patterns
+channel<Task> work_queue
+
+action producer() {
+    for each task in pending_tasks {
+        send(work_queue, task)
+    }
+    close_channel(work_queue)
+}
+```
+
+### Testing with Dependency Injection
+
+```zexus
+# Production code
+register_dependency("database", ProductionDB())
+
+action saveUser(user) {
+    inject database
+    database.insert("users", user)
+}
+
+# Test code
+test_mode(true)
+mock_dependency("database", MockDB())
+# Now saveUser() uses mocks
+```
+
+### Smart Contract Best Practices
+
+```zexus
+# Use modifiers for reusable guards
+contract Vault {
+    state owner
+    
+    modifier onlyOwner {
+        require(TX.caller == owner, "Not authorized")
+    }
+    
+    action payable withdraw(amount) modifier onlyOwner {
+        require(balance >= amount, "Insufficient balance")
+        transfer(TX.caller, amount)
+        emit Withdrawal(TX.caller, amount)
+    }
+}
+```
+
+### Code Style Guidelines
+
+1. **Naming**: `snake_case` for variables/functions, `PascalCase` for types
+2. **Indentation**: 4 spaces (not tabs)
+3. **Comments**: Use `#` for single-line comments
+4. **Functions**: Keep under 50 lines when possible
+5. **Error Messages**: Be descriptive and actionable
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -1564,6 +1805,42 @@ print(memory_stats())         # Check for leaks
 - **Discussions**: [Ask questions and share ideas](https://github.com/Zaidux/zexus-interpreter/discussions)
 - **Documentation**: [Browse complete docs](docs/)
 - **Examples**: [See working code samples](examples/)
+
+### Community & Ecosystem
+
+#### Official Resources
+- **GitHub Repository**: [Zaidux/zexus-interpreter](https://github.com/Zaidux/zexus-interpreter)
+- **Documentation Site**: [docs/](docs/)
+- **VS Code Extension**: [.vscode/extensions/zexus-language/](.vscode/extensions/zexus-language/)
+- **Syntax Highlighting**: [syntaxes/](syntaxes/)
+
+#### Standard Library Packages
+- **zexus-blockchain**: Blockchain utilities and helpers
+- **zexus-network**: HTTP, WebSocket, and networking
+- **zexus-math**: Advanced mathematical operations
+- **zexus-stdlib**: Standard library modules
+
+Install packages with ZPM:
+```bash
+zpm install zexus-blockchain
+zpm install zexus-network
+zpm install zexus-math
+```
+
+#### Learning Resources
+- **Quick Start**: [docs/QUICK_START.md](docs/QUICK_START.md)
+- **Examples Directory**: [examples/](examples/)
+- **Test Suite**: [tests/](tests/) - 1175+ working examples
+- **Keyword Testing**: [docs/KEYWORD_TESTING_MASTER_LIST.md](docs/KEYWORD_TESTING_MASTER_LIST.md)
+- **Feature Guides**: [docs/features/](docs/features/)
+
+#### Development Tools
+- **CLI**: `zx` for running programs
+- **Package Manager**: `zpm` for dependencies
+- **REPL**: Interactive shell with `zx repl`
+- **AST Inspector**: `zx ast program.zx`
+- **Token Viewer**: `zx tokens program.zx`
+- **Validator**: `zx validate program.zx`
 
 ---
 
