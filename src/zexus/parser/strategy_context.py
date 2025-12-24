@@ -1529,7 +1529,24 @@ class ContextStackParser:
                         break
                     
                     # Stop when we hit another statement starter (at nesting 0)
+                    # EXCEPT: Allow IF when followed by THEN (if-then-else expression)
                     if nesting == 0 and t.type in statement_starters and j > i + 1:
+                        # Check if this is IF followed by THEN (expression form)
+                        if t.type == IF:
+                            # Look ahead for THEN to determine if this is an expression
+                            is_if_expression = False
+                            for k in range(j + 1, len(tokens)):
+                                if tokens[k].type == THEN:
+                                    is_if_expression = True
+                                    break
+                                elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
+                                    # Statement indicators before THEN
+                                    break
+                            if is_if_expression:
+                                # This is if-then-else expression, continue collecting
+                                j += 1
+                                continue
+                        # Not an if-expression, so break
                         break
                     
                     j += 1
@@ -2819,6 +2836,51 @@ class ContextStackParser:
         """Parse a full expression with operator precedence handling"""
         if not tokens or len(tokens) == 0:
             return StringLiteral("")
+        
+        # Handle if-then-else expression (high precedence, check early)
+        # Pattern: if <condition> then <value1> else <value2>
+        if tokens[0].type == IF:
+            # Look for THEN and ELSE tokens at nesting level 0
+            then_index = -1
+            else_index = -1
+            nesting = 0
+            for idx, t in enumerate(tokens):
+                if t.type in {LPAREN, LBRACE, LBRACKET}:
+                    nesting += 1
+                elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                    nesting -= 1
+                elif nesting == 0:
+                    if t.type == THEN and then_index == -1:
+                        then_index = idx
+                    elif t.type == ELSE and else_index == -1 and then_index != -1:
+                        else_index = idx
+                        break
+            
+            if then_index > 0 and else_index > then_index:
+                # Valid if-then-else expression
+                condition_tokens = tokens[1:then_index]
+                consequence_tokens = tokens[then_index+1:else_index]
+                alternative_tokens = tokens[else_index+1:]
+                
+                condition = self._parse_expression(condition_tokens)
+                consequence_exp = self._parse_expression(consequence_tokens)
+                alternative_exp = self._parse_expression(alternative_tokens)
+                
+                if condition and consequence_exp and alternative_exp:
+                    # Wrap expressions in ExpressionStatements within BlockStatements
+                    consequence_stmt = ExpressionStatement(expression=consequence_exp)
+                    consequence_block = BlockStatement()
+                    consequence_block.statements = [consequence_stmt]
+                    
+                    alternative_stmt = ExpressionStatement(expression=alternative_exp)
+                    alternative_block = BlockStatement()
+                    alternative_block.statements = [alternative_stmt]
+                    
+                    return IfExpression(
+                        condition=condition,
+                        consequence=consequence_block,
+                        alternative=alternative_block
+                    )
         
         # Handle ASSIGN (lowest precedence)
         assign_index = -1

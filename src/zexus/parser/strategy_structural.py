@@ -462,9 +462,20 @@ class StructuralAnalyzer:
                         if not (prev and prev.type == DOT):
                             # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE as RHS (expressions)
                             # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
+                            # Also allow IF when followed by THEN (if-then-else expression)
                             allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
                             allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
-                            if not (in_assignment and (allow_in_assignment or allow_debug_call)):
+                            allow_if_then_else = False
+                            if tj.type == IF:
+                                # Look ahead for THEN to detect if-then-else expression
+                                for k in range(j + 1, min(j + 20, n)):  # Look ahead up to 20 tokens
+                                    if tokens[k].type == THEN:
+                                        allow_if_then_else = True
+                                        break
+                                    elif tokens[k].type in {LBRACE, COLON}:
+                                        # Found statement form indicators
+                                        break
+                            if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
                                 break
                     
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
