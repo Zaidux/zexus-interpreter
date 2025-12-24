@@ -1,0 +1,192 @@
+# index.zx - Comprehensive Zexus Language Test
+# Testing core features, syntax variations, and advanced functionality
+
+print("=== ZEXUS LANGUAGE TEST ===\n")
+
+# 1. Test basic syntax variations
+print("1. Testing variable declarations:")
+let standard = "Hello"
+let colonSyntax : "World"
+let typedVar : string = "Zexus"
+print("Standard: " + standard)
+print("Colon: " + colonSyntax)
+print("Typed: " + typedVar + "\n")
+
+# 2. Test constants
+print("2. Testing constants:")
+const PI = 3.14159
+print("PI constant: " + string(PI) + "\n")
+
+# 3. Test functions/actions
+print("3. Testing actions:")
+action greet(name: string) -> string {
+    return "Hello, " + name + "!"
+}
+
+let greeting = greet("Developer")
+print("Action result: " + greeting + "\n")
+
+# 4. Test control flow
+print("4. Testing control flow:")
+let number = 7
+if number > 5 {
+    print("Number is greater than 5")
+} elif number == 5 {
+    print("Number is 5")
+} else {
+    print("Number is less than 5")
+}
+
+# 5. Test loops
+print("\n5. Testing loops:")
+print("While loop:")
+let counter = 0
+while counter < 3 {
+    print("Counter: " + string(counter))
+    counter = counter + 1
+}
+
+print("\nFor loop:")
+let items = ["apple", "banana", "cherry"]
+for each item in items {
+    print("Item: " + item)
+}
+
+# 6. Test collections
+print("\n6. Testing collections:")
+let fruits = ["apple", "banana", "orange"]
+let scores = {"alice": 95, "bob": 87}
+print("Fruits list: " + string(fruits))
+print("Scores map: " + string(scores))
+
+# 7. Test pattern matching (if available)
+print("\n7. Testing pattern matching:")
+let value = 42
+match value {
+    case 0: print("Zero")
+    case 42: print("The answer!")
+    default: print("Other number")
+}
+
+# 8. Test error handling
+print("\n8. Testing error handling:")
+try {
+    let result = 10 / 2
+    print("Division successful: " + string(result))
+} catch (error) {
+    print("Error: " + string(error))
+}
+
+# 9. Test debug functionality
+print("\n9. Testing debug:")
+debug standard;
+let debugResult = debug(42);
+print("Debug function returned: " + string(debugResult))
+
+# 10. Test reactive state (WATCH)
+print("\n10. Testing WATCH:")
+let watched = 0
+watch watched {
+    print("WATCH triggered: " + string(watched))
+}
+watched = 1
+watched = 2
+
+# 11. Test persistence
+print("\n11. Testing persistence:")
+persist_set("test_key", "test_value")
+let persisted = persist_get("test_key")
+print("Persisted value: " + string(persisted))
+
+# 12. Test security features
+print("\n12. Testing security features:")
+verify true, "This should pass"
+print("VERIFY passed")
+
+# 13. Test async/await if available
+print("\n13. Testing async features:")
+async action async_task() -> string {
+    return "Async completed"
+}
+
+# Note: Uncomment if async/await is fully implemented
+# let async_result = await async_task()
+# print("Async result: " + async_result)
+
+# 14. Test main entry point pattern
+print("\n14. Testing main entry point:")
+action main() {
+    print("Inside main() function")
+    return "Main executed"
+}
+
+if is_main() {
+    print("This is the main module")
+    let result = main()
+    print("Main function returned: " + result)
+}
+
+# 15. Test module system
+print("\n15. Testing module features:")
+print("Module name: " + get_module_name())
+print("Module path: " + get_module_path())
+
+# 16. Test built-in functions
+print("\n16. Testing built-in functions:")
+print("String length: " + string(len("Hello")))
+print("Uppercase: " + uppercase("zexus"))
+print("Random number: " + string(random(100)))
+
+# 17. Test blockchain features
+print("\n17. Testing blockchain features:")
+contract SimpleToken {
+    persistent storage owner: string
+    
+    action constructor() {
+        owner = "creator"
+    }
+}
+
+print("Contract test placeholder")
+
+# 18. Test entity system
+print("\n18. Testing entities:")
+entity Person {
+    name: string,
+    age: integer
+}
+
+let person = Person("Alice", 30)
+print("Entity created: " + string(person))
+
+# 19. Test defer
+print("\n19. Testing DEFER:")
+action test_defer() {
+    print("Starting test_defer")
+    defer {
+        print("DEFER: Cleanup executed")
+    }
+    print("Inside test_defer")
+    return "Done"
+}
+
+let defer_result = test_defer()
+print("After test_defer: " + defer_result)
+
+# 20. Test math operations
+print("\n20. Testing math:")
+let sum = 10 + 5
+let product = 3 * 4
+print("10 + 5 = " + string(sum))
+print("3 * 4 = " + string(product))
+
+# 21. Test type conversions
+print("\n21. Testing type conversions:")
+let num_str = string(123)
+let str_num = int("456")
+print("Number to string: " + num_str)
+print("String to number: " + string(str_num))
+
+print("\n=== TEST COMPLETE ===")
+print("Total features tested: 21")
+print("Language version check: " + (if exists("__version__") then __version__ else "Unknown"))
