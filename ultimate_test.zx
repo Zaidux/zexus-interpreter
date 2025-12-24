@@ -1,0 +1,624 @@
+# ultimate_test.zx - Pushing Zexus to Its Limits
+# This tests performance, edge cases, and advanced features
+
+print("🚀 ZEXUS ULTIMATE STRESS TEST 🚀\n")
+print("Starting at: " + timestamp() + "\n")
+
+# ============================================
+# PART 1: PERFORMANCE & SCALABILITY
+# ============================================
+
+print("=== PART 1: PERFORMANCE TESTS ===\n")
+
+# 1.1: Large loop optimization
+print("1.1: Large loop (100,000 iterations)...")
+let start_time = now()
+let loop_sum = 0
+let i = 0
+while i < 100000 {
+    loop_sum = loop_sum + i
+    i = i + 1
+}
+let loop_time = now() - start_time
+print("Loop completed in " + string(loop_time) + "ms")
+print("Sum: " + string(loop_sum))
+print("Expected: 4999950000")
+print("")
+
+# 1.2: Recursion depth test
+print("1.2: Recursion depth test...")
+action factorial(n: integer) -> integer {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+try {
+    let fact_result = factorial(10)
+    print("10! = " + string(fact_result))
+    print("Expected: 3628800")
+    
+    # Test deeper recursion
+    let deep_result = factorial(15)
+    print("15! = " + string(deep_result))
+} catch (error) {
+    print("Recursion error: " + string(error))
+}
+print("")
+
+# 1.3: Memory-intensive operations
+print("1.3: Memory stress test...")
+let large_list = []
+let j = 0
+while j < 10000 {
+    large_list = large_list + [{
+        id: j,
+        name: "Item " + string(j),
+        data: "x" * 100,  # Large string
+        nested: {a: 1, b: 2, c: [1, 2, 3]}
+    }]
+    j = j + 1
+}
+print("Created list with " + string(len(large_list)) + " complex items")
+print("Memory used: " + string(memory_stats().current) + " bytes")
+print("")
+
+# ============================================
+# PART 2: COMPLEX TYPE SYSTEM
+# ============================================
+
+print("=== PART 2: COMPLEX TYPE SYSTEM ===\n")
+
+# 2.1: Nested entities with inheritance
+print("2.1: Nested entity system...")
+entity BaseEntity {
+    id: integer,
+    created_at: string
+}
+
+entity User extends BaseEntity {
+    username: string,
+    email: string,
+    profile: Profile
+}
+
+entity Profile {
+    bio: string,
+    settings: Map<string, any>
+}
+
+let user = User(1, timestamp(), "zaidux", "zaidux@example.com", 
+                Profile("Zexus Developer", {"theme": "dark", "notifications": true}))
+print("User created: " + string(user))
+print("User email: " + user.email)
+print("Profile theme: " + user.profile.settings["theme"])
+print("")
+
+# 2.2: Generic data types (if implemented)
+print("2.2: Generic data types test...")
+try {
+    data Container<T> {
+        value: T,
+        action get_value() -> T {
+            return this.value
+        },
+        action set_value(new_val: T) {
+            this.value = new_val
+        }
+    }
+    
+    let str_container = Container<string>("Hello Generics!")
+    let num_container = Container<integer>(42)
+    
+    print("String container: " + str_container.get_value())
+    print("Number container: " + string(num_container.get_value()))
+    
+    str_container.set_value("Updated value")
+    print("Updated: " + str_container.get_value())
+} catch (error) {
+    print("Generics not fully implemented: " + string(error))
+}
+print("")
+
+# ============================================
+# PART 3: ADVANCED CONCURRENCY
+# ============================================
+
+print("=== PART 3: CONCURRENCY TESTS ===\n")
+
+# 3.1: Channel-based communication
+print("3.1: Channel communication...")
+channel<integer> number_channel
+channel<string> message_channel
+
+action producer() {
+    for each i in range(1, 6) {
+        send(number_channel, i * 10)
+        sleep(0.01)  # Small delay
+    }
+    close_channel(number_channel)
+    send(message_channel, "Producer done")
+    close_channel(message_channel)
+}
+
+action consumer() {
+    let total = 0
+    while true {
+        let num = receive(number_channel)
+        if num == null {
+            break
+        }
+        total = total + num
+        print("Consumer received: " + string(num))
+    }
+    print("Consumer total: " + string(total))
+    let msg = receive(message_channel)
+    print("Final message: " + string(msg))
+}
+
+# Run concurrently
+try {
+    async producer()
+    async consumer()
+    sleep(0.5)  # Wait for completion
+} catch (error) {
+    print("Concurrency error: " + string(error))
+}
+print("")
+
+# 3.2: Atomic operations
+print("3.2: Atomic operations test...")
+let shared_counter = 0
+action incrementer() {
+    for each i in range(0, 1000) {
+        atomic {
+            shared_counter = shared_counter + 1
+        }
+    }
+}
+
+# Start multiple incrementers
+let start_counter = shared_counter
+async incrementer()
+async incrementer()
+async incrementer()
+sleep(0.2)
+
+print("Shared counter (should be 3000): " + string(shared_counter))
+print("Actual increase: " + string(shared_counter - start_counter))
+print("")
+
+# ============================================
+# PART 4: SECURITY & POLICY SYSTEM
+# ============================================
+
+print("=== PART 4: SECURITY TESTS ===\n")
+
+# 4.1: Complex policy definitions
+print("4.1: Policy-as-code...")
+action transfer_funds(amount: integer, recipient: string) -> string {
+    return "Transferred " + string(amount) + " to " + recipient
+}
+
+# Apply comprehensive policy
+protect(transfer_funds, {
+    rate_limit: 10,           # Max 10 calls per minute
+    auth_required: true,      # Authentication required
+    require_https: true,      # HTTPS only
+    allowed_roles: ["admin", "user"],
+    max_amount: 10000,        # Transaction limit
+    log_access: true,         # Audit logging
+    timeout: 5000,           # 5 second timeout
+    retry_count: 3           # Auto-retry on failure
+}, "strict")
+
+print("Policy applied to transfer_funds")
+print("")
+
+# 4.2: Multi-condition verification
+print("4.2: Complex verification...")
+action process_transaction(user: User, amount: integer) {
+    verify user.id > 0, "Invalid user ID"
+    verify amount > 0 and amount <= 10000, "Amount out of range"
+    verify user.email matches "/^[^@]+@[^@]+\.[^@]+$/", "Invalid email"
+    verify user.profile.settings["2fa"] == true, "2FA required"
+    
+    # Nested verification
+    verify {
+        user.username != "",
+        len(user.username) >= 3,
+        user.username matches "/^[a-zA-Z0-9_]+$/"
+    }, "Username validation failed"
+    
+    print("Transaction verification passed")
+}
+
+try {
+    let test_user = User(42, timestamp(), "test", "test@example.com", 
+                        Profile("", {"2fa": true}))
+    process_transaction(test_user, 500)
+} catch (error) {
+    print("Verification failed: " + string(error))
+}
+print("")
+
+# ============================================
+# PART 5: BLOCKCHAIN & SMART CONTRACTS
+# ============================================
+
+print("=== PART 5: BLOCKCHAIN TESTS ===\n")
+
+# 5.1: Complex smart contract
+print("5.1: Smart contract with events...")
+contract AdvancedToken {
+    persistent storage owner: Address
+    persistent storage balances: Map<Address, integer>
+    persistent storage allowances: Map<Address, Map<Address, integer>>
+    
+    event Transfer(from: Address, to: Address, amount: integer)
+    event Approval(owner: Address, spender: Address, amount: integer)
+    
+    action constructor() {
+        owner = TX.caller
+        balances[owner] = 1000000
+        print("Token deployed with 1,000,000 supply")
+    }
+    
+    action pure total_supply() -> integer {
+        return 1000000
+    }
+    
+    action view balance_of(account: Address) -> integer {
+        return balances.get(account, 0)
+    }
+    
+    action payable transfer(to: Address, amount: integer) -> boolean {
+        require(balances[TX.caller] >= amount, "Insufficient balance")
+        require(amount > 0, "Amount must be positive")
+        
+        balances[TX.caller] = balances[TX.caller] - amount
+        balances[to] = balances.get(to, 0) + amount
+        
+        emit Transfer(TX.caller, to, amount)
+        return true
+    }
+    
+    action approve(spender: Address, amount: integer) -> boolean {
+        allowances[TX.caller][spender] = amount
+        emit Approval(TX.caller, spender, amount)
+        return true
+    }
+}
+
+print("Contract defined (will create storage if executed)")
+print("")
+
+# ============================================
+# PART 6: DEPENDENCY INJECTION & TESTING
+# ============================================
+
+print("=== PART 6: DEPENDENCY INJECTION ===\n")
+
+# 6.1: Complex DI setup
+print("6.1: Dependency injection system...")
+
+# Define interfaces
+protocol Logger {
+    action log(message: string, level: string)
+}
+
+protocol Database {
+    action query(sql: string) -> any
+    action insert(table: string, data: Map<string, any>) -> integer
+}
+
+# Implementations
+entity FileLogger implements Logger {
+    file_path: string
+    
+    action log(message: string, level: string) {
+        let entry = "[" + level + "] " + timestamp() + ": " + message
+        file_append(this.file_path, entry + "\n")
+        print("Logged: " + entry)
+    }
+}
+
+entity MockDatabase implements Database {
+    storage: Map<string, list>
+    
+    action query(sql: string) -> any {
+        return {"rows": [], "count": 0}
+    }
+    
+    action insert(table: string, data: Map<string, any>) -> integer {
+        if !this.storage.has_key(table) {
+            this.storage[table] = []
+        }
+        this.storage[table] = this.storage[table] + [data]
+        return len(this.storage[table])
+    }
+}
+
+# Register dependencies
+register_dependency("logger", FileLogger("/tmp/zexus_test.log"))
+register_dependency("database", MockDatabase())
+
+# Service using DI
+entity UserService {
+    inject logger: Logger
+    inject database: Database
+    
+    action create_user(username: string, email: string) -> integer {
+        this.logger.log("Creating user: " + username, "INFO")
+        
+        let user_data = {
+            "username": username,
+            "email": email,
+            "created_at": timestamp()
+        }
+        
+        let user_id = this.database.insert("users", user_data)
+        this.logger.log("User created with ID: " + string(user_id), "SUCCESS")
+        
+        return user_id
+    }
+}
+
+try {
+    let service = UserService()
+    let user_id = service.create_user("testuser", "test@example.com")
+    print("Created user with ID: " + string(user_id))
+} catch (error) {
+    print("DI test error: " + string(error))
+}
+print("")
+
+# ============================================
+# PART 7: REACTIVE SYSTEM STRESS
+# ============================================
+
+print("=== PART 7: REACTIVE SYSTEM ===\n")
+
+# 7.1: Multiple watch expressions
+print("7.1: Multiple reactive watchers...")
+let reactive_count = 0
+let reactive_name = "Initial"
+let reactive_list = [1, 2, 3]
+
+watch reactive_count => {
+    print("Count changed: " + string(reactive_count))
+    if reactive_count > 5 {
+        print("Count exceeded limit!")
+    }
+}
+
+watch reactive_name => {
+    print("Name changed to: " + reactive_name)
+}
+
+watch reactive_list => {
+    print("List changed, length: " + string(len(reactive_list)))
+}
+
+# Trigger changes
+reactive_count = 1
+reactive_count = 2
+reactive_count = 3
+reactive_name = "Updated"
+reactive_list = reactive_list + [4, 5]
+reactive_count = 10
+print("")
+
+# 7.2: Computed reactive values
+print("7.2: Computed reactive properties...")
+let price = 100
+let quantity = 2
+let total = 0
+
+watch price => {
+    total = price * quantity
+    print("Price changed, total updated: " + string(total))
+}
+
+watch quantity => {
+    total = price * quantity
+    print("Quantity changed, total updated: " + string(total))
+}
+
+price = 150
+quantity = 3
+print("Final total: " + string(total))
+print("")
+
+# ============================================
+# PART 8: ERROR RESILIENCE & RECOVERY
+# ============================================
+
+print("=== PART 8: ERROR RESILIENCE ===\n")
+
+# 8.1: Complex error recovery patterns
+print("8.1: Error recovery with circuit breaker...")
+let failure_count = 0
+let circuit_open = false
+
+action resilient_operation(data: any) -> any {
+    try {
+        if circuit_open {
+            throw "Circuit breaker open - service unavailable"
+        }
+        
+        # Simulate operation
+        if random(10) < 3 {  # 30% chance of failure
+            throw "Simulated operation failure"
+        }
+        
+        # Success
+        failure_count = 0
+        return {"status": "success", "data": data}
+        
+    } catch (error) {
+        failure_count = failure_count + 1
+        print("Operation failed (" + string(failure_count) + "/3): " + string(error))
+        
+        if failure_count >= 3 {
+            circuit_open = true
+            print("⚠️ Circuit breaker TRIPPED")
+            # Schedule reset after 5 seconds
+            defer {
+                sleep(5)
+                circuit_open = false
+                failure_count = 0
+                print("✅ Circuit breaker RESET")
+            }
+        }
+        
+        return {"status": "error", "message": string(error)}
+    }
+}
+
+# Test circuit breaker
+for each i in range(0, 10) {
+    let result = resilient_operation({"test": i})
+    print("Attempt " + string(i + 1) + ": " + result["status"])
+    sleep(0.1)
+}
+print("")
+
+# ============================================
+# PART 9: METAPROGRAMMING & DYNAMIC CODE
+# ============================================
+
+print("=== PART 9: METAPROGRAMMING ===\n")
+
+# 9.1: Dynamic code generation and execution
+print("9.1: Dynamic code generation...")
+
+action generate_math_module() {
+    log >> "dynamic_math.zx"
+    print("module DynamicMath {")
+    print("  export action add(a, b) { return a + b }")
+    print("  export action multiply(a, b) { return a * b }")
+    print("  export action power(a, b) {")
+    print("    let result = 1")
+    print("    let i = 0")
+    print("    while i < b {")
+    print("      result = result * a")
+    print("      i = i + 1")
+    print("    }")
+    print("    return result")
+    print("  }")
+    print("}")
+    print("# Generated at " + timestamp())
+}
+
+try {
+    generate_math_module()
+    print("Dynamic module generated")
+    
+    # Try to use it
+    eval_file("dynamic_math.zx")
+    use {add, multiply} from "dynamic_math"
+    
+    print("Dynamic add: " + string(add(5, 3)))
+    print("Dynamic multiply: " + string(multiply(5, 3)))
+} catch (error) {
+    print("Metaprogramming error: " + string(error))
+}
+print("")
+
+# ============================================
+# PART 10: FINAL STRESS TEST
+# ============================================
+
+print("=== PART 10: FINAL INTEGRATION TEST ===\n")
+
+# 10.1: Everything together
+print("10.1: Integrated system test...")
+
+entity Order {
+    id: integer,
+    items: list,
+    total: float,
+    status: string
+}
+
+action process_order(order: Order) -> string {
+    # Security policies
+    protect(this, {
+        rate_limit: 100,
+        auth_required: true
+    }, "strict")
+    
+    # Verification
+    verify order.total > 0, "Invalid order total"
+    verify len(order.items) > 0, "Empty order"
+    verify order.status in ["pending", "processing", "completed"], "Invalid status"
+    
+    # Reactive tracking
+    watch order.status => {
+        print("Order " + string(order.id) + " status changed to: " + order.status)
+    }
+    
+    # Business logic
+    order.status = "processing"
+    print("Processing order " + string(order.id) + " with total: $" + string(order.total))
+    
+    # Simulate async processing
+    sleep(0.1)
+    order.status = "completed"
+    
+    # Persist result
+    persist_set("order_" + string(order.id), order)
+    
+    return "Order " + string(order.id) + " completed successfully"
+}
+
+try {
+    let order = Order(999, [{"item": "Laptop", "price": 999.99}], 999.99, "pending")
+    let result = process_order(order)
+    print(result)
+    
+    # Retrieve persisted
+    let persisted_order = persist_get("order_999")
+    print("Persisted order status: " + persisted_order["status"])
+} catch (error) {
+    print("Integration test error: " + string(error))
+}
+
+# ============================================
+# FINAL SUMMARY
+# ============================================
+
+print("\n" + "="*50)
+print("🎉 STRESS TEST COMPLETE 🎉")
+print("="*50)
+
+let end_time = now()
+let total_time = end_time - start_time
+
+print("\n📊 PERFORMANCE SUMMARY:")
+print("Total execution time: " + string(total_time) + "ms")
+print("Memory usage: " + string(memory_stats().current) + " bytes")
+print("Peak memory: " + string(memory_stats().peak) + " bytes")
+print("Garbage collections: " + string(memory_stats().gc_count))
+
+print("\n✅ FEATURES TESTED:")
+print("1. Performance & Scalability")
+print("2. Complex Type System")
+print("3. Advanced Concurrency")
+print("4. Security & Policies")
+print("5. Blockchain Contracts")
+print("6. Dependency Injection")
+print("7. Reactive System")
+print("8. Error Resilience")
+print("9. Metaprogramming")
+print("10. Integration")
+
+print("\n🚀 Zexus appears to handle: " + 
+      (if total_time < 10000 then "Excellent" else "Acceptable") + 
+      " performance")
+
+print("\n" + "="*50)
+print("Test completed at: " + timestamp())
+print("="*50)
