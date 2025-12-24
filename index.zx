@@ -191,5 +191,6 @@ print("String to number: " + string(str_num))
 
 print("\n=== TEST COMPLETE ===")
 print("Total features tested: 21")
-let lang_version = "Zexus 0.1.0"
-print("Language version: " + lang_version)
+// Test: Version check using if-then-else expression (simplified)
+let lang_version = if true then "Zexus 0.1.0" else "Unknown";
+print("Language version: " + lang_version);

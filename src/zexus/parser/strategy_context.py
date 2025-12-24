@@ -323,14 +323,39 @@ class ContextStackParser:
                 # Stop at explicit terminators
                 if t.type == SEMICOLON:
                     break
-                # Allow method chains but stop at other statement starters
-                if t.type in {LET, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                # Check for statement starters that should break
+                # Context-sensitive: IF followed by THEN is an expression, not a statement
+                if t.type in {LET, PRINT, FOR, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
                     # Allow if part of method chain OR if DEBUG followed by ( (function call)
                     allow_method_chain = prev and prev.type == DOT
                     allow_debug_call = t.type == DEBUG and j + 1 < len(tokens) and tokens[j + 1].type == LPAREN
                     if not (allow_method_chain or allow_debug_call):
                         break
+                # IF is only a statement starter if NOT followed by THEN
+                elif t.type == IF:
+                    prev = tokens[j-1] if j > 0 else None
+                    # Allow if part of method chain
+                    if prev and prev.type == DOT:
+                        pass  # Method chain, continue
+                    else:
+                        # Check if this is if-then-else expression
+                        is_if_expression = False
+                        for k in range(j + 1, len(tokens)):
+                            if tokens[k].type == THEN:
+                                is_if_expression = True
+                                break
+                            # LPAREN right after IF indicates statement form: if (...) { }
+                            # But LPAREN after IDENT is a function call: if exists(...) then ...
+                            elif tokens[k].type == LPAREN and k == j + 1:
+                                # LPAREN immediately after IF = statement form
+                                break
+                            elif tokens[k].type in {LBRACE, COLON}:
+                                # Other statement form indicators
+                                break
+                        if not is_if_expression:
+                            # Statement form IF, break here
+                            break
 
             value_tokens.append(t)
             j += 1
@@ -920,7 +945,25 @@ class ContextStackParser:
         j = 2
         while j < len(tokens):
             t = tokens[j]
-            if t.type in stop_types or t.type in statement_starters:
+            if t.type in stop_types:
+                break
+            # Context-sensitive IF handling: IF followed by THEN is an expression, not a statement
+            if t.type == IF:
+                # Look ahead to check if this is if-then-else expression
+                is_if_expression = False
+                for k in range(j + 1, len(tokens)):
+                    if tokens[k].type == THEN:
+                        is_if_expression = True
+                        break
+                    elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
+                        # These indicate statement form, not expression
+                        break
+                if not is_if_expression:
+                    # This is a statement-form IF, stop here
+                    break
+                # Otherwise, it's an if-then-else expression, include it
+            elif t.type in statement_starters:
+                # Other statement starters always break
                 break
             value_tokens.append(t)
             j += 1
@@ -1542,6 +1585,7 @@ class ContextStackParser:
                                 elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
                                     # Statement indicators before THEN
                                     break
+                            print(f"[LET_IF_DEBUG] Found IF at j={j}, is_if_expression={is_if_expression}")
                             if is_if_expression:
                                 # This is if-then-else expression, continue collecting
                                 j += 1
