@@ -6,6 +6,12 @@ from .strategy_structural import StructuralAnalyzer
 from .strategy_context import ContextStackParser
 from ..strategy_recovery import ErrorRecoveryEngine
 from ..config import config  # Import the config
+from ..error_reporter import (
+    get_error_reporter,
+    SyntaxError as ZexusSyntaxError,
+    TypeError as ZexusTypeError,
+    NameError as ZexusNameError,
+)
 
 # Precedence constants
 LOWEST, TERNARY, ASSIGN_PREC, NULLISH_PREC, LOGICAL, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
@@ -36,6 +42,10 @@ class UltimateParser:
         self.errors = []
         self.cur_token = None
         self.peek_token = None
+        
+        # Error reporter for better error messages
+        self.error_reporter = get_error_reporter()
+        self.filename = getattr(lexer, 'filename', '<stdin>')
 
         # Multi-strategy architecture
         if self.enable_advanced_strategies:
@@ -105,6 +115,33 @@ class UltimateParser:
             print(message)
         elif level in ["normal", "minimal"]:
             print(message)
+    
+    def _create_parse_error(self, message, suggestion=None, token=None):
+        """
+        Create a properly formatted parse error with context.
+        
+        Args:
+            message: Error message
+            suggestion: Optional helpful suggestion
+            token: Token where error occurred (defaults to current token)
+        
+        Returns:
+            ZexusSyntaxError ready to be raised or appended
+        """
+        if token is None:
+            token = self.cur_token
+        
+        line = getattr(token, 'line', None)
+        column = getattr(token, 'column', None)
+        
+        return self.error_reporter.report_error(
+            ZexusSyntaxError,
+            message,
+            line=line,
+            column=column,
+            filename=self.filename,
+            suggestion=suggestion
+        )
 
     def parse_program(self):
         """The tolerant parsing pipeline - OPTIMIZED"""
@@ -199,8 +236,11 @@ class UltimateParser:
 
         # Expect closing brace
         if not self.cur_token_is(RBRACE):
-            self.errors.append(f"Line {getattr(self.cur_token, 'line', 'unknown')}: Expected '}}' to close map literal")
-            return None
+            error = self._create_parse_error(
+                "Expected '}' to close map literal",
+                suggestion="Make sure all opening braces { have matching closing braces }"
+            )
+            raise error
 
         # consume '}'
         self.next_token()
@@ -621,8 +661,11 @@ class UltimateParser:
             condition = self.parse_expression(LOWEST)
 
         if not condition:
-            self.errors.append("Expected condition after 'if'")
-            return None
+            error = self._create_parse_error(
+                "Expected condition after 'if'",
+                suggestion="Add a condition expression: if (condition) { ... }"
+            )
+            raise error
 
         print(f"[PARSE_IF] Parsed condition, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
         # Parse consequence (flexible block style)
@@ -647,8 +690,11 @@ class UltimateParser:
                 elif_condition = self.parse_expression(LOWEST)
             
             if not elif_condition:
-                self.errors.append("Expected condition after 'elif'")
-                return None
+                error = self._create_parse_error(
+                    "Expected condition after 'elif'",
+                    suggestion="Add a condition expression: elif (condition) { ... }"
+                )
+                raise error
             
             # Parse elif consequence block
             elif_consequence = self.parse_block("elif")
@@ -726,8 +772,11 @@ class UltimateParser:
         stmt = LetStatement(name=None, value=None)
 
         if not self.expect_peek(IDENT):
-            self.errors.append("Expected variable name after 'let'")
-            return None
+            error = self._create_parse_error(
+                "Expected variable name after 'let'",
+                suggestion="Use 'let' to declare a variable: let myVariable = value"
+            )
+            raise error
 
         stmt.name = Identifier(value=self.cur_token.literal)
 
