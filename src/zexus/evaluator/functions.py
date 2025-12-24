@@ -47,6 +47,23 @@ class FunctionEvaluatorMixin:
         if is_error(fn): 
             return fn
         
+        # Check if this is a generic type instantiation: Box<number>(42)
+        type_args = getattr(node, 'type_args', [])
+        if type_args and hasattr(fn, 'is_generic') and fn.is_generic:
+            debug_log("  Generic type instantiation", f"Type args: {type_args}")
+            
+            # Create specialized constructor for this type combination
+            template = fn.generic_template
+            specialized_constructor = self._create_specialized_generic_constructor(
+                template, type_args, env, stack_trace
+            )
+            
+            if is_error(specialized_constructor):
+                return specialized_constructor
+            
+            # Now call the specialized constructor with the actual arguments
+            fn = specialized_constructor
+        
         args = self.eval_expressions(node.arguments, env)
         if is_error(args): 
             return args
@@ -60,6 +77,91 @@ class FunctionEvaluatorMixin:
             return fn.instantiate(args)
         
         return self.apply_function(fn, args, env)
+    
+    def _create_specialized_generic_constructor(self, template, type_args, env, stack_trace):
+        """Create a specialized constructor for a generic type with concrete type arguments
+        
+        Example: Box<number> creates a specialized Box constructor with T = number
+        """
+        from ..object import EvaluationError, String, Map
+        from .. import zexus_ast
+        
+        debug_log("_create_specialized_generic_constructor", f"Specializing with types: {type_args}")
+        
+        type_params = template['type_params']
+        
+        if len(type_args) != len(type_params):
+            return EvaluationError(
+                f"Generic type requires {len(type_params)} type argument(s), got {len(type_args)}"
+            )
+        
+        # Create specialized type name
+        specialized_type_name = f"{template['type_name']}<{', '.join(type_args)}>"
+        
+        # Check if we've already created this specialization (cache it)
+        existing = template['env'].get(specialized_type_name)
+        if existing and not is_error(existing):
+            debug_log("  Using cached specialization", specialized_type_name)
+            return existing
+        
+        # Create type substitution map: T -> number, U -> string, etc.
+        type_subst = dict(zip(type_params, type_args))
+        debug_log("  Type substitution map", str(type_subst))
+        
+        # Create a specialized version of the fields with type substitution
+        specialized_fields = []
+        for field in template['fields']:
+            # Create a copy of the field with substituted type
+            field_type = field.field_type
+            
+            # If field type is a type parameter, substitute it
+            if field_type in type_subst:
+                field_type = type_subst[field_type]
+                debug_log(f"  Substituted field type", f"{field.name}: {field_type}")
+            
+            # Create new field with substituted type
+            specialized_field = zexus_ast.DataField(
+                name=field.name,
+                field_type=field_type,
+                default_value=field.default_value,
+                constraint=field.constraint,
+                computed=field.computed,
+                method_body=field.method_body,
+                method_params=field.method_params,
+                operator=field.operator,
+                decorators=field.decorators
+            )
+            specialized_fields.append(specialized_field)
+        
+        # Create a specialized DataStatement node
+        specialized_node = zexus_ast.DataStatement(
+            name=zexus_ast.Identifier(specialized_type_name),
+            fields=specialized_fields,
+            modifiers=template['modifiers'],
+            parent=template['parent_type'],
+            decorators=template['decorators'],
+            type_params=[]  # No longer generic after specialization
+        )
+        
+        # Evaluate the specialized data statement to create the constructor
+        # This will register it in the environment
+        evaluator = template['evaluator']
+        result = evaluator.eval_data_statement(
+            specialized_node,
+            template['env'],
+            template['stack_trace']
+        )
+        
+        if is_error(result):
+            return result
+        
+        # Get the constructor from the environment (it was registered by eval_data_statement)
+        constructor = template['env'].get(specialized_type_name)
+        
+        if constructor is None:
+            return EvaluationError(f"Failed to create specialized constructor for {specialized_type_name}")
+        
+        return constructor
     
     def apply_function(self, fn, args, env=None):
         debug_log("apply_function", f"Calling {fn}")

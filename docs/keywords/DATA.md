@@ -1081,17 +1081,132 @@ verify(tx) {
 let block = Block(1, timestamp(), [tx], "0x0000...");
 ```
 
+## Generic Types
+
+> **Status:** ✅ Implemented
+
+Generic types allow you to create reusable dataclasses that work with different types. Type parameters are specified in angle brackets and substituted when the type is instantiated.
+
+### Basic Generic Type
+
+```zexus
+data Box<T> {
+    value: T
+}
+
+let numBox = Box<number>(42);
+print(numBox.value);  // 42
+
+let strBox = Box<string>("hello");
+print(strBox.value);  // hello
+```
+
+### Multiple Type Parameters
+
+```zexus
+data Pair<K, V> {
+    key: K,
+    value: V
+}
+
+let pair = Pair<string, number>("age", 25);
+print(pair.key);    // age
+print(pair.value);  // 25
+
+data Triple<A, B, C> {
+    first: A,
+    second: B,
+    third: C
+}
+
+let triple = Triple<string, number, bool>("test", 42, true);
+```
+
+### Generic with Methods
+
+```zexus
+data Container<T> {
+    item: T,
+    
+    method get() {
+        return this.item;
+    },
+    
+    method set(newItem) {
+        this.item = newItem;
+    }
+}
+
+let container = Container<number>(100);
+print(container.get());  // 100
+```
+
+### Generic with Computed Properties
+
+```zexus
+data Circle<T> {
+    radius: T,
+    
+    computed area => this.radius * this.radius * 3.14159
+}
+
+let circle = Circle<number>(5);
+print(circle.area);  // ~78.54
+```
+
+### Generic with Operator Overloading
+
+```zexus
+data Point<T> {
+    x: T,
+    y: T,
+    
+    operator +(other) {
+        return Point<number>(this.x + other.x, this.y + other.y);
+    }
+}
+
+let p1 = Point<number>(3, 4);
+let p2 = Point<number>(1, 2);
+let p3 = p1 + p2;
+print(p3.x);  // 4
+print(p3.y);  // 6
+```
+
+### Generic with Validation
+
+```zexus
+data Validated<T> {
+    value: T require value != null
+}
+
+let validated = Validated<number>(100);
+```
+
+### Features:
+- **Type Parameters**: Single or multiple (`T`, `K, V`, `A, B, C`)
+- **Type Substitution**: Automatic replacement of type parameters
+- **Full Feature Support**: Works with methods, computed properties, operators, validation
+- **Type Safety**: Validates field types match the specified type argument
+- **Caching**: Specialized types are cached for performance
+
+### Limitations:
+- Type arguments must be provided explicitly (no type inference yet)
+- Type parameters cannot have constraints (e.g., `T extends Number`)
+- Nested generic instantiation not yet supported (e.g., `Box<Pair<A, B>>`)
+
 ## Future Enhancements
 
 Planned features for upcoming versions:
 
-1. **Generic Types**: `data Box<T> { value: T }`
-2. **Pattern Matching**: `match value { Point(x, y) => ... }`
-3. **Auto-Documentation**: Generate docs from data definitions
-4. **Private/Public Modifiers**: `private field: string`
-5. **Readonly Fields**: Prevent mutation after construction
+1. **Type Inference**: Automatic type parameter deduction from arguments
+2. **Type Constraints**: `data Box<T extends Comparable> { ... }`
+3. **Nested Generics**: `Box<Pair<string, number>>`
+4. **Pattern Matching**: `match value { Point(x, y) => ... }`
+5. **Private/Public Modifiers**: `private field: string`
+6. **Readonly Fields**: Prevent mutation after construction
 
-> **Current Implementation**: Production-grade dataclass with type validation, constraints, auto-generated methods (toString, toJSON, clone, equals, hash, verify), immutability, verification support, static default() method, computed properties, custom method definitions, operator overloading, inheritance with extends, and decorators (@logged, @cached, @validated).
+> **Current Implementation**: Production-grade dataclass with type validation, constraints, auto-generated methods (toString, toJSON, clone, equals, hash, verify), immutability, verification support, static default() method, computed properties, custom method definitions, operator overloading, inheritance with extends, decorators (@logged, @cached, @validated), and generic types with full type substitution.
 
 ## See Also
 
@@ -1170,6 +1285,16 @@ Planned features for upcoming versions:
 - [x] Class decorators
 - [x] Zero overhead when not used
 
+### ✅ Generic Types
+- [x] Type parameter syntax (`data Box<T>`)
+- [x] Multiple type parameters (`data Pair<K, V>`)
+- [x] Type substitution in field definitions
+- [x] Generic methods and computed properties
+- [x] Generic operator overloading
+- [x] Generic validation constraints
+- [x] Specialized type caching for performance
+- [x] Works with all data modifiers
+
 ### ✅ Integration
 - [x] Works with keyword-after-dot feature
 - [x] Map-based implementation with String keys
@@ -1179,8 +1304,10 @@ Planned features for upcoming versions:
 ## Future Features (Not Yet Implemented)
 
 ### ⏳ Planned for Phase 2
-- [ ] Generic types (`data Box<T> { value: T }`)
 - [ ] Pattern matching syntax (`match value { Pattern(...) => ... }`)
+- [ ] Type inference for generics (`Box(42)` infers `Box<number>`)
+- [ ] Type constraints for generics (`data Box<T extends Comparable>`)
+- [ ] Nested generic types (`Box<Pair<string, number>>`)
 - [ ] Auto-documentation generation
 - [ ] Private/public field modifiers (enhanced)
 - [ ] Readonly fields (prevent mutation after construction)
