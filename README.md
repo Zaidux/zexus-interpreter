@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v0.1.3-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.5.0-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
@@ -19,8 +19,10 @@
 
 Zexus is a next-generation, general-purpose programming language designed for security-conscious developers who need:
 
+- **🎨 World-Class Error Messages** - Beginner-friendly errors with helpful suggestions (NEW in v1.5!)
 - **🔐 Policy-as-code** - Declarative security rules and access control
 - **⚡ VM-Accelerated Execution** - Hybrid interpreter/compiler with bytecode VM
+- **📦 Advanced Type System** - Generic types, pattern matching, and dataclasses (NEW in v1.5!)
 - **⛓️ Built-in Blockchain** - Native smart contracts and DApp primitives  
 - **💾 Persistent Memory** - Cross-session data with automatic leak detection
 - **🔌 Dependency Injection** - Powerful DI system with mocking for testing
@@ -32,7 +34,102 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ## ✨ Key Features
 
-### ⚡ VM-Accelerated Performance (NEW!)
+### 🎨 **NEW!** World-Class Error Reporting (v1.5.0)
+
+Zexus now features **production-grade error messages** that rival Rust and surpass Python:
+
+```
+ERROR: SyntaxError[SYNTAX]
+  → myfile.zx:10:16
+
+  10 | let message = "Hello world
+                       ^
+
+  Unterminated string literal
+
+  💡 Suggestion: Add a closing quote " to terminate the string.
+```
+
+**Error Reporting Features:**
+- ✅ **Color-coded output** - Errors in red, warnings in yellow, info in blue
+- ✅ **Source code context** - See exactly where the error occurred
+- ✅ **Helpful suggestions** - Actionable hints for fixing errors
+- ✅ **Beginner-friendly** - Clear messages, no cryptic codes
+- ✅ **Category distinction** - Know if it's your code or an interpreter bug
+- ✅ **Smart detection** - Single `&` suggests `&&`, unclosed strings, etc.
+
+**Better than Python**: No confusing indentation errors!  
+**On par with Rust**: Same quality formatting and helpful suggestions!  
+**Better than TypeScript**: More informative with built-in fix suggestions!
+
+[Learn more about error reporting →](docs/ERROR_REPORTING.md)
+
+### 📦 **NEW!** Advanced DATA Features (v1.5.0)
+
+Complete dataclass system with **8/8 features** including generics and pattern matching:
+
+#### Generic Types
+```zexus
+data Box<T> {
+    value: T
+    
+    unwrap() { this.value }
+}
+
+data Pair<K, V> {
+    key: K
+    value: V
+    
+    operator + (other) {
+        Pair(this.key, this.value + other.value)
+    }
+}
+
+let numberBox = Box<number>(42)
+let stringBox = Box<string>("hello")
+let pair = Pair<string, number>("age", 30)
+```
+
+#### Pattern Matching
+```zexus
+data Shape {
+    // Base shape
+}
+
+data Circle extends Shape {
+    radius: number
+}
+
+data Rectangle extends Shape {
+    width: number
+    height: number
+}
+
+action calculateArea(shape) {
+    match shape {
+        Circle(r) => 3.14 * r * r,
+        Rectangle(w, h) => w * h,
+        _ => 0
+    }
+}
+
+let circle = Circle(5)
+let area = calculateArea(circle)  // 78.5
+```
+
+**Complete Feature Set:**
+1. ✅ Static `default()` method
+2. ✅ Computed properties with `get`
+3. ✅ Method definitions
+4. ✅ Operator overloading
+5. ✅ Inheritance with `extends`
+6. ✅ Decorators
+7. ✅ **Generic types** (NEW!)
+8. ✅ **Pattern matching** (NEW!)
+
+[Learn more about DATA features →](docs/keywords/DATA.md)
+
+### ⚡ VM-Accelerated Performance
 
 Zexus now includes a sophisticated Virtual Machine for optimized execution:
 
