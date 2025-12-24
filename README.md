@@ -27,6 +27,38 @@ Zexus is a next-generation, general-purpose programming language designed for se
 - **👀 Reactive State** - WATCH for automatic state change reactions
 - **🎭 Flexible Syntax** - Support for both universal (`{}`) and tolerant (`:`) styles
 - **📦 Package Manager** - ZPM for dependency management
+- **🚀 Main Entry Point** - Python-style `if __name__ == "__main__"` pattern support
+- **🎨 UI Rendering** - Built-in screen, component, and theme system
+- **🔒 Enterprise Features** - Middleware, authentication, throttling, and caching
+
+---
+
+## 🎉 What's New in v0.1.3
+
+### Recent Enhancements
+
+✅ **130+ Keywords Fully Operational** - All core language features tested and verified  
+✅ **Dual-Mode DEBUG** - Function mode (`debug(x)`) and statement mode (`debug x;`)  
+✅ **Multiple Syntax Styles** - `let x = 5`, `let x : 5`, `let x : int = 5` all supported  
+✅ **Enterprise Keywords** - MIDDLEWARE, AUTH, THROTTLE, CACHE, INJECT fully functional  
+✅ **Async/Await Runtime** - Complete Promise-based async system with context propagation  
+✅ **Main Entry Point** - 15+ builtins for program lifecycle management  
+✅ **UI Renderer** - SCREEN, COMPONENT, THEME keywords with 120+ tests  
+✅ **Enhanced VERIFY** - Email, URL, phone validation, pattern matching, database checks  
+✅ **Blockchain Keywords** - implements, pure, view, payable, modifier, this, emit  
+✅ **100+ Built-in Functions** - Comprehensive standard library
+
+### Bug Fixes & Improvements
+
+✅ Fixed array literal parsing (no more duplicate elements)  
+✅ Fixed ENUM value accessibility  
+✅ Fixed WHILE condition parsing without parentheses  
+✅ Fixed loop execution and variable reassignment  
+✅ Fixed DEFER cleanup execution  
+✅ Fixed SANDBOX return values  
+✅ Fixed dependency injection container creation  
+✅ Added tolerance blocks for REQUIRE  
+✅ Improved error messages and debugging output
 
 ---
 
@@ -150,9 +182,12 @@ count = 5  # Automatically triggers watch callback
 - **Pattern matching**: Powerful match expressions
 - **Async/await**: Built-in concurrency primitives
 - **Module system**: Import/export with access control
-- **Rich built-ins**: 70+ built-in functions
+- **Rich built-ins**: 100+ built-in functions
 - **Plugin system**: Extensible architecture
 - **Advanced types**: Entities, Contracts, Enums, Protocols
+- **Syntax flexibility**: Multiple syntax styles (`:` and `=` for assignments)
+- **130+ keywords**: Comprehensive language features
+- **Main entry point**: Run/execute patterns like Python's `if __name__ == "__main__"`
 
 ---
 
@@ -328,6 +363,84 @@ let result = fibonacci(100)
 print(result)
 ```
 
+### Example 5: Main Entry Point Pattern
+
+```zexus
+# Similar to Python's if __name__ == "__main__"
+action main() {
+    print("Running main program")
+    let result = process_data()
+    print("Result: " + string(result))
+}
+
+# Only runs if this is the main module
+if is_main() {
+    run(main)
+}
+```
+
+### Example 6: Middleware & Enterprise Features
+
+```zexus
+# Define authentication middleware
+middleware("auth", action(req, res) {
+    if !req.has_token {
+        return {status: 401, message: "Unauthorized"}
+    }
+    return true
+})
+
+# Configure authentication
+auth {
+    provider: "oauth2",
+    scopes: ["read", "write"],
+    token_expiry: 3600
+}
+
+# Apply rate limiting
+throttle(api_endpoint, {
+    requests_per_minute: 100,
+    burst: 20
+})
+
+# Enable caching
+cache(expensive_query, {
+    ttl: 300,
+    strategy: "lru"
+})
+```
+
+### Example 7: Concurrency with Channels
+
+```zexus
+# Create typed channel
+channel<integer> numbers
+
+# Producer
+action producer() {
+    for each i in range(0, 10) {
+        send(numbers, i)
+        sleep(0.1)
+    }
+    close_channel(numbers)
+}
+
+# Consumer
+action consumer() {
+    while true {
+        let value = receive(numbers)
+        if value == null {
+            break
+        }
+        print("Received: " + string(value))
+    }
+}
+
+# Run concurrently
+async producer()
+async consumer()
+```
+
 ---
 
 ## 📚 Complete Feature Reference
@@ -336,9 +449,14 @@ print(result)
 
 #### Variables & Constants
 ```zexus
-let mutable_var = 42                    # Mutable
-const IMMUTABLE = 3.14159               # Immutable
+# Multiple syntax options supported
+let mutable_var = 42            # Standard assignment
+let mutable_var : 42            # Colon syntax (tolerant style)
+let typed_var : int = 42        # With type annotation
+const IMMUTABLE = 3.14159       # Immutable constant
 ```
+
+**Variable Scoping**: Zexus uses function-level scoping (not block-level). Variables can only be shadowed within function boundaries.
 
 #### Data Types
 - **Primitives**: Integer, Float, String, Boolean, Null
@@ -354,6 +472,25 @@ action greet(name: string) -> string {
 
 # Lambda functions
 let double = lambda(x) { x * 2 }
+
+# Deferred cleanup (executes on scope exit)
+defer {
+    cleanup_resources()
+}
+```
+
+#### Debugging
+```zexus
+# DUAL-MODE DEBUG:
+# Function mode - returns value, usable in expressions
+let x = debug(42)           # Outputs: [DEBUG] 42, x = 42
+
+# Statement mode - logs with metadata
+debug myVariable;           # Outputs: 🔍 DEBUG: <value> with context
+
+# Other debug tools
+debug_log("message", context)
+debug_trace()               # Stack trace
 ```
 
 #### Control Flow
@@ -649,13 +786,15 @@ type_alias UserId = integer
 type_alias UserMap = Map<UserId, User>
 ```
 
-### Built-in Functions (70+)
+### Built-in Functions (100+)
 
 #### I/O Functions
 ```zexus
 print(value)                    # Print without newline
 println(value)                  # Print with newline
 input(prompt)                   # Get user input
+read_text(path)                 # Read text file
+write_text(path, content)       # Write text file
 ```
 
 #### Type Conversion
@@ -759,9 +898,14 @@ mock_dependency(name, mock)     # Mock for testing
 test_mode(enabled)              # Enable/disable test mode
 ```
 
-#### Blockchain
+#### Concurrency & Channels
 ```zexus
-transaction(params)             # Create transaction
+channel<type> name              # Create typed channel
+send(channel, value)            # Send to channel
+receive(channel)                # Receive from channel
+close_channel(channel)          # Close channel
+atomic { }                      # Atomic operation block
+```
 emit(event, ...args)            # Emit event
 require(condition, message)     # Assert with revert
 assert(condition)               # Assert
@@ -784,11 +928,221 @@ draw_line(canvas, x1, y1, x2, y2) # Draw line
 draw_text(canvas, text, x, y)   # Draw text
 ```
 
-#### Debug
+#### Debug & Development
 ```zexus
+debug(value)                    # Debug function (returns value)
+debug value;                    # Debug statement (logs with metadata)
 debug_log(message, context)     # Debug logging
 debug_trace()                   # Stack trace
+is_main()                       # Check if module is main entry point
+exit_program(code)              # Exit with status code
+module_info()                   # Get module metadata
 ```
+
+#### Main Entry Point Features
+```zexus
+run(task_fn)                    # Execute task function
+execute(fn)                     # Execute function immediately
+is_main()                       # True if current module is main
+exit_program(code)              # Exit with status code
+on_start(fn)                    # Register startup handler
+on_exit(fn)                     # Register cleanup handler
+signal_handler(signal, fn)      # Handle OS signals
+schedule(fn, delay)             # Schedule delayed execution
+sleep(seconds)                  # Sleep for duration
+daemonize(fn)                   # Run as background daemon
+watch_and_reload(path)          # Auto-reload on file changes
+get_module_name()               # Get current module name
+get_module_path()               # Get current module path
+list_imports()                  # List imported modules
+get_exported_names()            # List exported names
+```
+
+#### Validation & Verification
+```zexus
+is_email(string)                # Validate email format
+is_url(string)                  # Validate URL format
+is_phone(string)                # Validate phone format
+is_numeric(string)              # Check if numeric
+is_alpha(string)                # Check if alphabetic
+is_alphanumeric(string)         # Check if alphanumeric
+matches_pattern(str, pattern)   # Regex pattern matching
+password_strength(password)     # Check password strength
+sanitize_input(text, type)      # Sanitize user input
+validate_length(str, min, max)  # Validate string length
+env_get(name)                   # Get environment variable
+env_set(name, value)            # Set environment variable
+env_exists(name)                # Check if env var exists
+```
+
+---
+
+## 📖 Complete Keyword Reference
+
+Zexus supports **130+ keywords** organized into functional categories:
+
+### Core Language Keywords
+
+#### Variable Declaration & Constants
+- **`let`** - Mutable variable declaration (supports `=` and `:` syntax)
+- **`const`** - Immutable constant declaration
+- **`immutable`** - Mark variable as permanently immutable
+
+#### Control Flow
+- **`if`** / **`elif`** / **`else`** - Conditional execution
+- **`while`** - While loop
+- **`for`** / **`each`** / **`in`** - For-each iteration
+- **`match`** / **`case`** / **`default`** - Pattern matching
+- **`break`** / **`continue`** - Loop control
+- **`return`** - Return from function
+
+#### Functions & Actions
+- **`action`** - Define action (Zexus function)
+- **`function`** - Define function
+- **`lambda`** - Anonymous function
+- **`defer`** - Deferred cleanup execution
+
+#### Types & Structures
+- **`entity`** - Define data structure
+- **`enum`** - Define enumeration
+- **`protocol`** / **`interface`** - Define interface
+- **`type_alias`** - Create type alias
+- **`implements`** - Implement protocol
+
+### Module System Keywords
+
+- **`use`** - Import modules/symbols
+- **`import`** - Alternative import syntax
+- **`export`** - Export symbols
+- **`module`** - Define module
+- **`package`** - Define package/namespace
+- **`from`** - Import from specific module
+- **`external`** - Declare external function
+
+### Security & Policy Keywords
+
+#### Policy Enforcement
+- **`protect`** - Apply security policy to function
+- **`verify`** - Runtime verification with custom logic
+- **`restrict`** - Input validation and constraints
+- **`require`** - Assert condition (with tolerance blocks)
+- **`assert`** - Always-check assertion
+
+#### Access Control & Isolation
+- **`seal`** - Make object immutable
+- **`sandbox`** - Isolated execution environment
+- **`audit`** - Compliance logging
+- **`trail`** - Event tracking and audit trails
+- **`capability`** - Define capability
+- **`grant`** / **`revoke`** - Capability management
+
+#### Data Validation
+- **`validate`** - Schema validation
+- **`sanitize`** - Input sanitization
+
+### Blockchain Keywords
+
+#### Smart Contracts
+- **`contract`** - Define smart contract
+- **`state`** - Mutable contract state
+- **`ledger`** - Immutable ledger
+- **`persistent`** / **`storage`** - Persistent storage
+- **`tx`** - Transaction context
+- **`gas`** - Gas tracking
+- **`limit`** - Gas/resource limits
+
+#### Cryptography
+- **`hash`** - Cryptographic hashing
+- **`signature`** - Digital signatures
+- **`verify_sig`** - Signature verification
+
+#### Contract Features
+- **`emit`** - Emit event
+- **`event`** - Event type
+- **`revert`** - Revert transaction
+- **`this`** - Current contract reference
+
+### Modifiers
+
+#### Visibility
+- **`public`** - Public visibility (auto-export)
+- **`private`** - Private/module-only visibility
+
+#### Contract Modifiers
+- **`pure`** / **`view`** - Read-only functions
+- **`payable`** - Can receive value
+- **`modifier`** - Define function modifier
+- **`sealed`** - Prevent override
+- **`secure`** - Security flag
+
+### Concurrency & Async Keywords
+
+- **`async`** - Async function
+- **`await`** - Await promise/coroutine
+- **`channel`** - Create channel
+- **`send`** / **`receive`** - Channel operations
+- **`atomic`** - Atomic operation block
+- **`stream`** - Event streaming
+- **`watch`** - Reactive state monitoring
+
+### Error Handling Keywords
+
+- **`try`** / **`catch`** - Exception handling
+- **`throw`** - Throw exception
+- **`finally`** - Cleanup block
+
+### Performance Optimization Keywords
+
+- **`native`** - Native C/C++ FFI
+- **`inline`** - Function inlining hint
+- **`gc`** - Garbage collection control
+- **`buffer`** - Memory buffer operations
+- **`simd`** - SIMD vector operations
+
+### Advanced Language Features
+
+- **`pattern`** - Pattern matching blocks
+- **`exactly`** - Exact matching block
+- **`embedded`** - Embed foreign language code
+- **`using`** - Resource management
+
+### Renderer/UI Keywords
+
+- **`screen`** - Define UI screen
+- **`component`** - Define UI component
+- **`theme`** - Theme declaration
+- **`canvas`** - Canvas for drawing
+- **`graphics`** - Graphics context
+- **`animation`** - Animation definition
+- **`clock`** - Timing/clock
+- **`color`** - Color definition
+
+### Enterprise Features
+
+- **`middleware`** - Request/response middleware
+- **`auth`** - Authentication configuration
+- **`throttle`** - Rate limiting
+- **`cache`** - Caching directive
+- **`inject`** - Dependency injection
+
+### Special Keywords
+
+- **`true`** / **`false`** - Boolean literals
+- **`null`** - Null value
+- **`map`** - Map/object literal
+
+### Reserved Transaction Context
+
+- **`TX`** - Global transaction context object with properties:
+  - `TX.caller` - Transaction sender
+  - `TX.value` - Sent value
+  - `TX.timestamp` - Block timestamp
+  - `TX.block_hash` - Current block hash
+  - `TX.gas_used` - Gas consumed
+  - `TX.gas_remaining` - Gas remaining
+  - `TX.gas_limit` - Gas limit
+
+[Complete keyword testing documentation →](docs/KEYWORD_TESTING_MASTER_LIST.md)
 
 ---
 
@@ -937,6 +1291,63 @@ Source Code (.zx)
 - **[Architecture](docs/ARCHITECTURE.md)** - System design
 - **[Philosophy](docs/PHILOSOPHY.md)** - Design principles
 
+### Keyword & Syntax Documentation
+
+- **[Keyword Testing Master List](docs/KEYWORD_TESTING_MASTER_LIST.md)** - Complete keyword reference with 130+ keywords
+- **[Blockchain Keywords](docs/BLOCKCHAIN_KEYWORDS.md)** - Smart contract keywords (implements, pure, view, payable, modifier, this, emit)
+- **[Advanced Keywords](docs/keywords/ADVANCED_KEYWORDS.md)** - Advanced language features
+- **[Modifiers](docs/MODIFIERS.md)** - Function and access modifiers
+
+### Language Features by Category
+
+#### Core Language
+- **[LET](docs/keywords/LET.md)** - Variable declaration (multiple syntax styles)
+- **[CONST](docs/keywords/CONST.md)** - Constant declaration
+- **[ACTION/FUNCTION/LAMBDA/RETURN](docs/keywords/ACTION_FUNCTION_LAMBDA_RETURN.md)** - Function definitions
+- **[IF/ELIF/ELSE](docs/keywords/IF_ELIF_ELSE.md)** - Conditional execution
+- **[WHILE/FOR/EACH/IN](docs/keywords/WHILE_FOR_EACH_IN.md)** - Loops and iteration
+- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging
+
+#### Module System
+- **[MODULE_SYSTEM](docs/keywords/MODULE_SYSTEM.md)** - USE, IMPORT, EXPORT, MODULE, PACKAGE
+- **[Main Entry Point](docs/MAIN_ENTRY_POINT.md)** - run, execute, is_main patterns
+
+#### Async & Concurrency
+- **[ASYNC/AWAIT](docs/keywords/ASYNC_AWAIT.md)** - Asynchronous programming
+- **[ASYNC_CONCURRENCY](docs/keywords/ASYNC_CONCURRENCY.md)** - Channels, send, receive, atomic
+
+#### Events & Reactive
+- **[EVENTS_REACTIVE](docs/keywords/EVENTS_REACTIVE.md)** - Event system
+- **[WATCH](docs/COMMAND_watch.md)** - Reactive state management
+
+#### Security Features
+- **[SECURITY](docs/keywords/SECURITY.md)** - Security features overview
+- **[RESTRICT](docs/COMMAND_restrict.md)** - Input validation
+- **[SANDBOX](docs/COMMAND_sandbox.md)** - Isolated execution
+- **[AUDIT](docs/COMMAND_audit.md)** - Compliance logging
+- **[TRAIL](docs/COMMAND_trail.md)** - Event tracking
+
+#### Performance
+- **[PERFORMANCE](docs/keywords/PERFORMANCE.md)** - Performance features
+- **[NATIVE](docs/COMMAND_native.md)** - C/C++ FFI
+- **[INLINE](docs/COMMAND_inline.md)** - Function inlining
+- **[GC](docs/COMMAND_gc.md)** - Garbage collection control
+- **[BUFFER](docs/COMMAND_buffer.md)** - Memory buffers
+- **[SIMD](docs/COMMAND_simd.md)** - SIMD operations
+
+#### Advanced Features
+- **[DEFER](docs/COMMAND_defer.md)** - Deferred cleanup
+- **[PATTERN](docs/COMMAND_pattern.md)** - Pattern matching
+- **[ENUM](docs/COMMAND_enum.md)** - Enumerations
+- **[STREAM](docs/COMMAND_stream.md)** - Event streaming
+
+#### Blockchain & State
+- **[BLOCKCHAIN_STATE](docs/keywords/BLOCKCHAIN_STATE.md)** - State management
+- **[Error Handling](docs/keywords/ERROR_HANDLING.md)** - TRY/CATCH/REQUIRE/REVERT
+
+#### Renderer/UI
+- **[RENDERER_UI](docs/keywords/RENDERER_UI.md)** - UI and rendering system
+
 ### Specific Features
 
 - **[VM Integration](VM_INTEGRATION_SUMMARY.md)** - Virtual Machine details
@@ -1022,18 +1433,30 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Completed ✅
 - [x] Core interpreter with hybrid execution
-- [x] VM-accelerated bytecode execution
+- [x] VM-accelerated bytecode execution with JIT compilation
+- [x] 130+ language keywords fully implemented and tested
 - [x] Policy-as-code (PROTECT/VERIFY/RESTRICT)
-- [x] Persistent memory management
-- [x] Dependency injection system
-- [x] Reactive state (WATCH)
+- [x] Enhanced VERIFY with validation builtins (email, URL, phone, patterns)
+- [x] Persistent memory management with leak detection
+- [x] Dependency injection system with auto-container creation
+- [x] Reactive state (WATCH) for automatic change reactions
 - [x] Blockchain primitives and smart contracts
-- [x] Module system with access control
-- [x] Package manager (ZPM)
-- [x] 70+ built-in functions
-- [x] Advanced types (entities, contracts, protocols)
-- [x] Security features (sandbox, seal, trail)
-- [x] Concurrency primitives (async/await, channels)
+- [x] Blockchain modifiers (pure, view, payable, modifier, this, implements, emit)
+- [x] Module system (USE, EXPORT, MODULE, PACKAGE) with access control
+- [x] Package manager (ZPM) for dependency management
+- [x] 100+ built-in functions across all categories
+- [x] Advanced types (entities, contracts, protocols, enums, type_alias)
+- [x] Security features (sandbox, seal, trail, audit, capability, grant/revoke)
+- [x] Concurrency primitives (async/await with Promises, channels, send/receive, atomic)
+- [x] Main entry point system (run, execute, is_main, exit_program, on_start/on_exit)
+- [x] Enterprise features (middleware, auth, throttle, cache, inject)
+- [x] UI rendering system (screen, component, theme, canvas)
+- [x] Performance optimization (native, inline, gc, buffer, simd)
+- [x] Advanced features (defer, pattern, stream, exactly, embedded)
+- [x] Dual-mode DEBUG (function and statement modes)
+- [x] Multiple syntax styles (`:` and `=` for assignments)
+- [x] Tolerance blocks for enhanced REQUIRE
+- [x] Comprehensive test suite (1175+ tests)
 
 ### In Progress 🚧
 - [ ] VS Code extension with full IntelliSense
@@ -1062,12 +1485,85 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📊 Project Stats
 
 - **Language**: Python 3.8+
-- **Version**: 0.1.0 (Alpha)
+- **Version**: 0.1.3 (Alpha)
 - **Lines of Code**: ~50,000+
-- **Built-in Functions**: 70+
-- **Documentation Pages**: 80+
-- **Test Cases**: 500+
-- **Features**: 100+
+- **Keywords**: 130+ language keywords
+- **Built-in Functions**: 100+ built-in functions
+- **Documentation Pages**: 100+
+- **Test Cases**: 1175+ comprehensive tests
+- **Features**: 100+ language features
+- **Supported Platforms**: Linux, macOS, Windows
+
+---
+
+## ❓ Getting Help & Troubleshooting
+
+### Common Issues
+
+#### "Identifier not found" errors
+- Check variable spelling and case sensitivity
+- Ensure variable is declared in current or parent scope
+- Remember: Zexus uses function-level scoping (not block-level)
+- Variables declared in blocks persist in function scope
+
+#### Import/Module errors
+- Use `use {symbol} from "module"` syntax for imports
+- Check that module file exists and has `.zx` extension
+- Ensure exported symbols are marked with `export` keyword
+- Use `zpm install` to install package dependencies
+
+#### Syntax errors
+- Zexus supports multiple syntax styles: `let x = 5` or `let x : 5`
+- Ensure proper braces `{}` for blocks
+- Use `;` for statement termination (optional in some contexts)
+- Check for unmatched parentheses, brackets, or braces
+
+#### Performance issues
+- Enable VM execution for compute-heavy code (default: auto)
+- Use `--use-vm` flag for explicit VM mode
+- Consider using `native` keyword for C/C++ FFI
+- Profile with `memory_stats()` to check for leaks
+
+#### Blockchain/Contract issues
+- Remember `TX` is a global context object (uppercase)
+- Use `persistent storage` for contract state
+- Mark value-receiving functions as `payable`
+- Use `pure` or `view` for read-only functions
+
+### Documentation Quick Links
+
+- **Beginner**: Start with [Quick Start Guide](docs/QUICK_START.md)
+- **Keywords**: See [Keyword Master List](docs/KEYWORD_TESTING_MASTER_LIST.md)
+- **Examples**: Check [examples/](examples/) directory
+- **API Reference**: Browse [docs/](docs/) for detailed docs
+- **Advanced**: Read [Advanced Features Guide](docs/ADVANCED_FEATURES_IMPLEMENTATION.md)
+
+### Debug Tools
+
+```zexus
+# Enable detailed debugging
+debug myVariable;              # Logs with context
+
+# Check execution context
+print(is_main())              # Am I the main module?
+print(get_module_name())      # Current module name
+print(module_info())          # Module metadata
+
+# Memory debugging
+track_memory()                # Enable tracking
+print(memory_stats())         # Check for leaks
+
+# AST/Token inspection
+# Run: zx ast program.zx
+# Run: zx tokens program.zx
+```
+
+### Getting Support
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/Zaidux/zexus-interpreter/issues)
+- **Discussions**: [Ask questions and share ideas](https://github.com/Zaidux/zexus-interpreter/discussions)
+- **Documentation**: [Browse complete docs](docs/)
+- **Examples**: [See working code samples](examples/)
 
 ---
 
