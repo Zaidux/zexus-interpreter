@@ -437,6 +437,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)
             
+            elif node_type == zexus_ast.MatchExpression:
+                debug_log("🎯 MatchExpression node", "Pattern matching")
+                return self.eval_match_expression(node, env, stack_trace)
+            
             elif node_type == zexus_ast.MethodCallExpression:
                 debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
                 return self.eval_method_call_expression(node, env, stack_trace)
