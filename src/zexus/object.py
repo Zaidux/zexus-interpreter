@@ -893,11 +893,13 @@ class File(Object):
 
 # EvaluationError class for error handling
 class EvaluationError(Object):
-    def __init__(self, message, line=None, column=None, stack_trace=None):
+    def __init__(self, message, line=None, column=None, stack_trace=None, filename=None, suggestion=None):
         self.message = message
         self.line = line
         self.column = column
         self.stack_trace = stack_trace or []
+        self.filename = filename
+        self.suggestion = suggestion
 
     def inspect(self):
         return f"❌ Error: {self.message}"
@@ -906,10 +908,38 @@ class EvaluationError(Object):
         return "ERROR"
 
     def __str__(self):
-        location = f"Line {self.line}:{self.column}" if self.line and self.column else "Unknown location"
-        trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
-        trace_section = f"\n   Stack:\n{trace}" if trace else ""
-        return f"❌ Runtime Error at {location}\n   {self.message}{trace_section}"
+        """Format as a nice error message"""
+        # Try to use error reporter if available
+        try:
+            from .error_reporter import get_error_reporter, ZexusError, ErrorCategory
+            
+            error_reporter = get_error_reporter()
+            
+            # Create a formatted error
+            # We use a temporary ZexusError for formatting
+            temp_error = ZexusError(
+                message=self.message,
+                category=ErrorCategory.USER_CODE,
+                filename=self.filename or "<runtime>",
+                line=self.line,
+                column=self.column,
+                source_line=error_reporter.get_source_line(self.filename, self.line) if self.line else None,
+                suggestion=self.suggestion
+            )
+            
+            # Add stack trace if available
+            if self.stack_trace:
+                trace = "\n".join(self.stack_trace[-5:])
+                temp_error.message += f"\n\nStack trace:\n{trace}"
+            
+            return temp_error.format_error()
+        except Exception:
+            # Fallback to simple format if error reporter not available
+            location = f"Line {self.line}:{self.column}" if self.line and self.column else "Unknown location"
+            trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+            trace_section = f"\n   Stack:\n{trace}" if trace else ""
+            suggestion_section = f"\n   💡 Suggestion: {self.suggestion}" if self.suggestion else ""
+            return f"❌ Runtime Error at {location}\n   {self.message}{suggestion_section}{trace_section}"
 
     def __len__(self):
         """Support len() on errors to prevent secondary failures"""

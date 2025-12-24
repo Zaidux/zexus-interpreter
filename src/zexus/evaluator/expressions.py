@@ -10,6 +10,7 @@ from ..object import (
     Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
+from ..error_reporter import get_error_reporter, NameError as ZexusNameError, TypeError as ZexusTypeError
 
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
@@ -71,7 +72,39 @@ class ExpressionEvaluatorMixin:
             print(f"[DEBUG] Identifier not found: {node.value}; env_keys={env_keys}\nStack snippet:\n{stack_snip}")
         except Exception:
             print(f"[DEBUG] Identifier not found: {node.value}")
-        return EvaluationError(f"Identifier '{node.value}' not found")
+        
+        # Try to find similar names for helpful suggestion
+        suggestion = None
+        if hasattr(env, 'store'):
+            env_keys = list(env.store.keys())
+            
+            # Find similar variable names (simple approach)
+            def similarity(a, b):
+                a, b = a.lower(), b.lower()
+                if a == b:
+                    return 1.0
+                if a in b or b in a:
+                    return 0.8
+                if len(a) > 2 and len(b) > 2:
+                    if a[:3] == b[:3] or a[-3:] == b[-3:]:
+                        return 0.6
+                return 0.0
+            
+            similar = [(key, similarity(node.value, key)) for key in env_keys]
+            similar = [(k, s) for k, s in similar if s > 0.5]
+            similar.sort(key=lambda x: x[1], reverse=True)
+            
+            if similar:
+                suggestion = f"Did you mean '{similar[0][0]}'?"
+            elif env_keys:
+                suggestion = f"Declare the variable first with 'let' or 'const'. Available: {', '.join(env_keys[:5])}"
+            else:
+                suggestion = "No variables declared yet. Use 'let variableName = value' to create one."
+        
+        return EvaluationError(
+            f"Identifier '{node.value}' not found",
+            suggestion=suggestion
+        )
     
     def eval_integer_infix(self, operator, left, right):
         left_val = left.value
@@ -85,11 +118,17 @@ class ExpressionEvaluatorMixin:
             return Integer(left_val * right_val)
         elif operator == "/":
             if right_val == 0: 
-                return EvaluationError("Division by zero")
+                return EvaluationError(
+                    "Division by zero",
+                    suggestion="Check your divisor value. Consider adding a condition: if (divisor != 0) { ... }"
+                )
             return Integer(left_val // right_val)
         elif operator == "%":
             if right_val == 0: 
-                return EvaluationError("Modulo by zero")
+                return EvaluationError(
+                    "Modulo by zero",
+                    suggestion="Check your divisor value. Modulo operation requires a non-zero divisor."
+                )
             return Integer(left_val % right_val)
         elif operator == "<": 
             return TRUE if left_val < right_val else FALSE
