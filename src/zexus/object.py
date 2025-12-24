@@ -35,6 +35,14 @@ class String(Object):
     def inspect(self): return self.value
     def type(self): return "STRING"
     def __str__(self): return self.value
+    def __eq__(self, other):
+        """Enable String objects to be used as dict keys"""
+        if isinstance(other, String):
+            return self.value == other.value
+        return False
+    def __hash__(self):
+        """Enable String objects to be used as dict keys"""
+        return hash(self.value)
 
 class List(Object):
     def __init__(self, elements): self.elements = elements

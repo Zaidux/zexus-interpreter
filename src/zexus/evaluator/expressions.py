@@ -7,7 +7,7 @@ from ..zexus_ast import (
 )
 from ..object import (
     Integer, Float, String, List, Map, Boolean as BooleanObj,
-    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError
+    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
 
@@ -17,7 +17,33 @@ class ExpressionEvaluatorMixin:
     def eval_identifier(self, node, env):
         debug_log("eval_identifier", f"Looking up: {node.value}")
         
-        # Special handling for TX - make it globally accessible
+        # Special case: 'this' keyword should be treated like ThisExpression
+        if node.value == "this":
+            # Look for contract instance first
+            contract_instance = env.get("__contract_instance__")
+            if contract_instance is not None:
+                return contract_instance
+            
+            # Then look for data method instance
+            data_instance = env.get("this")
+            if data_instance is not None:
+                return data_instance
+        
+        # First, check environment for user-defined variables (including DATA dataclasses)
+        val = env.get(node.value)
+        if val:
+            debug_log("  Found in environment", f"{node.value} = {val}")
+            return val
+        
+        # Check builtins (self.builtins should be defined in FunctionEvaluatorMixin)
+        if hasattr(self, 'builtins'):
+            builtin = self.builtins.get(node.value)
+            if builtin:
+                debug_log("  Found builtin", f"{node.value} = {builtin}")
+                return builtin
+        
+        # Special handling for TX - ONLY if not already defined by user
+        # This provides blockchain transaction context when TX is not a user dataclass
         if node.value == "TX":
             from ..blockchain.transaction import get_current_tx, create_tx_context
             tx = get_current_tx()
@@ -34,18 +60,6 @@ class ExpressionEvaluatorMixin:
                 "gas_remaining": Integer(tx.gas_remaining),
                 "gas_limit": Integer(tx.gas_limit)
             })
-        
-        val = env.get(node.value)
-        if val:
-            debug_log("  Found in environment", f"{node.value} = {val}")
-            return val
-        
-        # Check builtins (self.builtins should be defined in FunctionEvaluatorMixin)
-        if hasattr(self, 'builtins'):
-            builtin = self.builtins.get(node.value)
-            if builtin:
-                debug_log("  Found builtin", f"{node.value} = {builtin}")
-                return builtin
         
         try:
             env_keys = []
@@ -144,6 +158,17 @@ class ExpressionEvaluatorMixin:
         # (removed debug instrumentation)
         
         operator = node.operator
+        
+        # Check for operator overloading in left operand (for dataclasses)
+        if isinstance(left, Map) and hasattr(left, 'pairs'):
+            operator_key = String(f"__operator_{operator}__")
+            if operator_key in left.pairs:
+                operator_method = left.pairs[operator_key]
+                if isinstance(operator_method, Builtin):
+                    # Call the operator method with right operand
+                    result = operator_method.fn(right)
+                    debug_log("  Operator overload called", f"{operator} on {left}")
+                    return result
         
         # Logical Operators (short-circuiting)
         if operator == "&&":
@@ -433,3 +458,48 @@ class ExpressionEvaluatorMixin:
         
         # No type method - return as-is
         return awaitable
+
+    def eval_file_import_expression(self, node, env, stack_trace):
+        """Evaluate file import expression: let code << "filename.ext"
+        
+        Reads the file contents and returns as a String object.
+        Supports any file extension - returns raw file content.
+        """
+        import os
+        
+        # 1. Evaluate the filepath expression
+        filepath_obj = self.eval_node(node.filepath, env, stack_trace)
+        if is_error(filepath_obj):
+            return filepath_obj
+        
+        # 2. Convert to string
+        if hasattr(filepath_obj, 'value'):
+            filepath = str(filepath_obj.value)
+        else:
+            filepath = str(filepath_obj)
+        
+        # 3. Normalize path (handle relative paths relative to CWD)
+        if not os.path.isabs(filepath):
+            filepath = os.path.join(os.getcwd(), filepath)
+        
+        # 4. Check if file exists
+        if not os.path.exists(filepath):
+            return new_error(f"Cannot import file '{filepath}': File not found", stack_trace)
+        
+        # 5. Read file contents
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            return String(content)
+        except UnicodeDecodeError:
+            # Try binary mode for non-text files
+            try:
+                with open(filepath, 'rb') as f:
+                    content = f.read()
+                # Return as string representation of bytes
+                return String(str(content))
+            except Exception as e:
+                return new_error(f"Error reading file '{filepath}': {e}", stack_trace)
+        except Exception as e:
+            return new_error(f"Error importing file '{filepath}': {e}", stack_trace)

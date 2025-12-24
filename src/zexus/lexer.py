@@ -120,6 +120,13 @@ class Lexer:
                 tok = Token(LTE, literal)
                 tok.line = current_line
                 tok.column = current_column
+            elif self.peek_char() == '<':
+                ch = self.ch
+                self.read_char()
+                literal = ch + self.ch
+                tok = Token(IMPORT_OP, literal)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(LT, self.ch)
                 tok.line = current_line
@@ -167,6 +174,10 @@ class Lexer:
             tok.column = current_column
         elif self.ch == ']':
             tok = Token(RBRACKET, self.ch)
+            tok.line = current_line
+            tok.column = current_column
+        elif self.ch == '@':
+            tok = Token(AT, self.ch)
             tok.line = current_line
             tok.column = current_column
         elif self.ch == '(':
@@ -329,11 +340,33 @@ class Lexer:
 
     def read_string(self):
         start_position = self.position + 1
+        result = []
         while True:
             self.read_char()
-            if self.ch == '"' or self.ch == "":
+            if self.ch == "":
+                # End of input - unclosed string
                 break
-        return self.input[start_position:self.position]
+            elif self.ch == '\\':
+                # Escape sequence - read next character
+                self.read_char()
+                if self.ch == '':
+                    break
+                # Map escape sequences to their actual characters
+                escape_map = {
+                    'n': '\n',
+                    't': '\t',
+                    'r': '\r',
+                    '\\': '\\',
+                    '"': '"',
+                    "'": "'"
+                }
+                result.append(escape_map.get(self.ch, self.ch))
+            elif self.ch == '"':
+                # End of string
+                break
+            else:
+                result.append(self.ch)
+        return ''.join(result)
 
     def read_identifier(self):
         start_position = self.position
@@ -365,6 +398,7 @@ class Lexer:
         keywords = {
             "let": LET,
             "const": CONST,             # NEW: Const keyword for immutable variables
+            "data": DATA,               # NEW: Data keyword for dataclass definitions
             "print": PRINT,
             "if": IF,
             "elif": ELIF,               # NEW: Elif keyword for else-if conditionals
@@ -445,7 +479,8 @@ class Lexer:
             "ledger": LEDGER,           # Immutable state ledger
             "state": STATE,             # State management
             "revert": REVERT,           # Revert transaction
-            "tx": TX,                   # Transaction block
+            # NOTE: "tx" removed as keyword - users can use it as variable name
+            # Only uppercase "TX" is reserved for transaction context
             "limit": LIMIT,             # Gas/resource limit
             # NOTE: hash, signature, verify_sig, gas are BUILTINS, not keywords
             # NEW: Persistent storage keywords

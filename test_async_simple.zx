@@ -1,6 +1,0 @@
-async action test() {
-    return 42;
-}
-
-let c = test();
-print("Coroutine:", c);

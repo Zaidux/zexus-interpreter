@@ -91,6 +91,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.ConstStatement:
                 return self.eval_const_statement(node, env, stack_trace)
             
+            elif node_type == zexus_ast.DataStatement:
+                return self.eval_data_statement(node, env, stack_trace)
+            
             elif node_type == zexus_ast.AssignmentExpression:
                 debug_log("  AssignmentExpression node")
                 return self.eval_assignment_expression(node, env, stack_trace)
@@ -247,6 +250,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.LogStatement:
                 debug_log("  LogStatement node")
                 return self.eval_log_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ImportLogStatement:
+                debug_log("  ImportLogStatement node", "log <<")
+                return self.eval_import_log_statement(node, env, stack_trace)
             
             # === NEW SECURITY STATEMENTS ===
             elif node_type == zexus_ast.CapabilityStatement:
@@ -422,6 +429,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  AwaitExpression node")
                 return self.eval_await_expression(node, env, stack_trace)
             
+            elif node_type == zexus_ast.FileImportExpression:
+                debug_log("  FileImportExpression node", "<< file import")
+                return self.eval_file_import_expression(node, env, stack_trace)
+            
             elif node_type == zexus_ast.CallExpression:
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)
@@ -505,6 +516,13 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 except Exception:
                     restriction = None
 
+                # Handle Builtin objects (for static methods like TypeName.default())
+                from ..object import Builtin
+                if isinstance(obj, Builtin):
+                    if hasattr(obj, 'static_methods') and property_name in obj.static_methods:
+                        return obj.static_methods[property_name]
+                    return NULL
+
                 # Handle Module objects
                 from ..complexity_system import Module
                 if isinstance(obj, Module):
@@ -524,7 +542,35 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
 
                 # Handle Map objects
                 if isinstance(obj, Map):
+                    from ..object import String
+                    
+                    # Try string key first
                     val = obj.pairs.get(property_name, NULL)
+                    if val == NULL:
+                        # Try with String object key (for dataclasses and other String-keyed maps)
+                        str_key = String(property_name)
+                        val = obj.pairs.get(str_key, NULL)
+                    
+                    # Check if this is a computed property
+                    computed_props = obj.pairs.get(String("__computed__"))
+                    if computed_props and isinstance(computed_props, dict) and property_name in computed_props:
+                        # Evaluate computed property
+                        computed_expr = computed_props[property_name]
+                        
+                        # Create environment with all field values in scope
+                        from ..environment import Environment
+                        compute_env = Environment(outer=env)
+                        compute_env.set('this', obj)
+                        
+                        # Add all regular fields to environment
+                        for key, value in obj.pairs.items():
+                            if isinstance(key, String) and not key.value.startswith('__'):
+                                compute_env.set(key.value, value)
+                        
+                        # Evaluate the computed expression
+                        result = self.eval_node(computed_expr, compute_env, stack_trace)
+                        return result if not is_error(result) else NULL
+                    
                     # apply restriction if present
                     if restriction:
                         rule = restriction.get('restriction')

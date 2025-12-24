@@ -22,7 +22,7 @@ from ..zexus_ast import (
     TXExpression, HashExpression, SignatureExpression, VerifySignatureExpression, GasExpression
 )
 from ..object import (
-    Environment, Integer, String, Boolean as BooleanObj, ReturnValue,
+    Environment, Integer, String, Boolean as Boolean, ReturnValue,
     Action, List, Map, EvaluationError, EntityDefinition, EmbeddedCode, Builtin,
     start_collecting_dependencies, stop_collecting_dependencies
 )
@@ -187,6 +187,428 @@ class StatementEvaluatorMixin:
         env.set_const(node.name.value, value)
         return NULL
     
+    def eval_data_statement(self, node, env, stack_trace):
+        """Evaluate data statement - creates a production-grade dataclass constructor
+        
+        data User {
+            name: string,
+            email: string = "default",
+            age: number require age >= 0
+        }
+        
+        Creates a User() constructor function with:
+        - Type validation
+        - Constraint validation
+        - Auto-generated methods: toString(), toJSON(), clone(), hash(), verify()
+        - Static methods: fromJSON()
+        - Immutability support
+        - Verification support
+        """
+        from ..object import Map, String, Integer, Boolean, List, NULL, EvaluationError, Builtin
+        from ..environment import Environment
+        import json
+        import hashlib
+        
+        debug_log("eval_data_statement", f"data {node.name.value}")
+        
+        type_name = node.name.value
+        fields = node.fields
+        modifiers = node.modifiers or []
+        parent_type = node.parent
+        decorators = node.decorators or []
+        
+        # Check modifiers
+        is_immutable = "immutable" in modifiers
+        is_verified = "verified" in modifiers
+        is_validated = "validated" in decorators
+        
+        debug_log(f"  Fields: {len(fields)}, Immutable: {is_immutable}, Verified: {is_verified}, Validated: {is_validated}")
+        
+        # If there's a parent, get parent fields
+        parent_fields = []
+        parent_constructor = None
+        if parent_type:
+            debug_log(f"  Inheritance: {type_name} extends {parent_type}")
+            parent_constructor = env.get(parent_type)
+            if parent_constructor is None:
+                return EvaluationError(f"Parent type '{parent_type}' not found")
+            
+            # Extract parent fields from the parent's constructor metadata
+            if hasattr(parent_constructor, 'dataclass_fields'):
+                parent_fields = parent_constructor.dataclass_fields
+                debug_log(f"  Parent has {len(parent_fields)} fields")
+        
+        # Combine parent fields + child fields
+        all_fields = parent_fields + fields
+        
+        # Store reference to self and env for closures
+        evaluator_self = self
+        parent_env = env
+        
+        # Create constructor function
+        def dataclass_constructor(*args):
+            """Production-grade dataclass constructor with full validation"""
+            
+            # Create instance as a Map with String keys
+            instance = Map({})
+            instance.pairs = {}
+            
+            # Set type metadata
+            instance.pairs[String("__type__")] = String(type_name)
+            instance.pairs[String("__immutable__")] = Boolean(is_immutable)
+            instance.pairs[String("__verified__")] = Boolean(is_verified)
+            
+            # Process each field with validation (parent fields first, then child fields)
+            arg_index = 0
+            for field in all_fields:
+                field_name = field.name
+                
+                # Skip computed properties and methods - they'll be added later
+                if field.computed or field.method_body is not None:
+                    continue
+                
+                field_value = NULL
+                
+                # Get value from arguments or default
+                if arg_index < len(args):
+                    field_value = args[arg_index]
+                    arg_index += 1
+                elif field.default_value is not None:
+                    # Evaluate default value in parent environment
+                    field_value = evaluator_self.eval_node(field.default_value, parent_env, stack_trace)
+                    if is_error(field_value):
+                        return field_value
+                
+                # Type validation
+                if field.field_type and field_value != NULL:
+                    expected_type = field.field_type
+                    
+                    type_map = {
+                        "string": String,
+                        "number": Integer,
+                        "bool": Boolean,
+                        "array": List,
+                        "map": Map
+                    }
+                    
+                    if expected_type in type_map:
+                        expected_class = type_map[expected_type]
+                        if not isinstance(field_value, expected_class):
+                            actual_type = type(field_value).__name__
+                            return EvaluationError(
+                                f"Type mismatch for field '{field_name}': expected {expected_type}, got {actual_type}"
+                            )
+                
+                # Constraint validation (require clause)
+                if field.constraint and field_value != NULL:
+                    # Evaluate constraint with field value in scope
+                    temp_env = Environment(outer=parent_env)
+                    temp_env.set(field_name, field_value)
+                    
+                    constraint_result = evaluator_self.eval_node(field.constraint, temp_env, stack_trace)
+                    if is_error(constraint_result):
+                        return constraint_result
+                    
+                    # Check if constraint is truthy
+                    is_valid = False
+                    if hasattr(constraint_result, 'value'):
+                        is_valid = bool(constraint_result.value)
+                    elif isinstance(constraint_result, Boolean):
+                        is_valid = constraint_result.value
+                    else:
+                        is_valid = bool(constraint_result)
+                    
+                    if not is_valid:
+                        return EvaluationError(
+                            f"Validation failed for field '{field_name}': constraint not satisfied"
+                        )
+                
+                # Set field value
+                instance.pairs[String(field_name)] = field_value
+            
+            # Auto-generated methods
+            
+            # toString() method
+            def to_string_method(*args):
+                parts = []
+                for field in fields:
+                    fname = field.name
+                    fkey = String(fname)
+                    if fkey in instance.pairs:
+                        fval = instance.pairs[fkey]
+                        if hasattr(fval, 'inspect'):
+                            val_str = fval.inspect()
+                        elif hasattr(fval, 'value'):
+                            val_str = repr(fval.value)
+                        else:
+                            val_str = str(fval)
+                        parts.append(f'{fname}={val_str}')
+                return String(f"{type_name}({', '.join(parts)})")
+            
+            instance.pairs[String("toString")] = Builtin(to_string_method)
+            
+            # toJSON() method
+            def to_json_method(*args):
+                obj = {}
+                for field in fields:
+                    fname = field.name
+                    fkey = String(fname)
+                    if fkey in instance.pairs:
+                        fval = instance.pairs[fkey]
+                        if hasattr(fval, 'value'):
+                            obj[fname] = fval.value
+                        elif fval == NULL:
+                            obj[fname] = None
+                        else:
+                            obj[fname] = str(fval)
+                return String(json.dumps(obj))
+            
+            instance.pairs[String("toJSON")] = Builtin(to_json_method)
+            
+            # clone() method
+            def clone_method(*args):
+                clone_args = []
+                for field in fields:
+                    fname = field.name
+                    fkey = String(fname)
+                    if fkey in instance.pairs:
+                        clone_args.append(instance.pairs[fkey])
+                    else:
+                        clone_args.append(NULL)
+                return dataclass_constructor(*clone_args)
+            
+            instance.pairs[String("clone")] = Builtin(clone_method)
+            
+            # equals() method
+            def equals_method(*args):
+                if len(args) == 0:
+                    return Boolean(False)
+                other = args[0]
+                if not isinstance(other, Map):
+                    return Boolean(False)
+                
+                # Check type match
+                other_type = other.pairs.get(String("__type__"))
+                if not other_type or other_type.value != type_name:
+                    return Boolean(False)
+                
+                # Compare all fields
+                for field in fields:
+                    fname = field.name
+                    fkey = String(fname)
+                    if fkey not in instance.pairs or fkey not in other.pairs:
+                        return Boolean(False)
+                    
+                    val1 = instance.pairs[fkey]
+                    val2 = other.pairs[fkey]
+                    
+                    # Compare values
+                    if hasattr(val1, 'value') and hasattr(val2, 'value'):
+                        if val1.value != val2.value:
+                            return Boolean(False)
+                    elif val1 != val2:
+                        return Boolean(False)
+                
+                return Boolean(True)
+            
+            instance.pairs[String("equals")] = Builtin(equals_method)
+            
+            # Verified type methods
+            if is_verified:
+                # hash() method - cryptographic hash of all fields
+                def hash_method(*args):
+                    json_str = to_json_method()
+                    hash_val = hashlib.sha256(json_str.value.encode()).hexdigest()
+                    return String(hash_val)
+                
+                instance.pairs[String("hash")] = Builtin(hash_method)
+                
+                # verify() method - re-validate all constraints
+                def verify_method(*args):
+                    for field in fields:
+                        if field.constraint:
+                            fname = field.name
+                            fkey = String(fname)
+                            if fkey in instance.pairs:
+                                fval = instance.pairs[fkey]
+                                temp_env = Environment(outer=parent_env)
+                                temp_env.set(fname, fval)
+                                result = evaluator_self.eval_node(field.constraint, temp_env, stack_trace)
+                                if is_error(result):
+                                    return Boolean(False)
+                                if hasattr(result, 'value') and not result.value:
+                                    return Boolean(False)
+                    return Boolean(True)
+                
+                instance.pairs[String("verify")] = Builtin(verify_method)
+            
+            # Add custom methods defined in the dataclass (parent + child)
+            for field in all_fields:
+                if field.method_body is not None:
+                    # Create a closure for the method that has access to instance fields
+                    def make_method(method_body, method_params, method_name, decorators):
+                        def custom_method(*args):
+                            # Create method environment with instance fields
+                            from ..environment import Environment
+                            method_env = Environment(outer=parent_env)
+                            
+                            # Bind 'this' to the instance
+                            method_env.set('this', instance)
+                            
+                            # Bind parameters to arguments
+                            for i, param in enumerate(method_params):
+                                if i < len(args):
+                                    method_env.set(param, args[i])
+                                else:
+                                    method_env.set(param, NULL)
+                            
+                            # Apply @logged decorator
+                            if "logged" in decorators:
+                                arg_str = ", ".join([str(arg.value if hasattr(arg, 'value') else arg) for arg in args])
+                                print(f"📝 Calling {method_name}({arg_str})")
+                            
+                            # Execute method body
+                            from ..object import ReturnValue
+                            result = NULL
+                            for stmt in method_body:
+                                result = evaluator_self.eval_node(stmt, method_env, stack_trace)
+                                if is_error(result):
+                                    return result
+                                # Handle return statements
+                                if isinstance(result, ReturnValue):
+                                    return result.value
+                            
+                            # Apply @logged decorator (return value)
+                            if "logged" in decorators:
+                                result_str = str(result.value if hasattr(result, 'value') else result)
+                                print(f"📝 {method_name} returned: {result_str}")
+                            
+                            return result
+                        
+                        return custom_method
+                    
+                    # Add the method to the instance (child methods override parent methods)
+                    method_func = make_method(field.method_body, field.method_params, field.name, field.decorators)
+                    
+                    # Apply @cached decorator if present
+                    if "cached" in field.decorators:
+                        cache = {}
+                        original_func = method_func
+                        
+                        def cached_method(*args):
+                            # Create cache key from arguments
+                            cache_key = tuple(arg.value if hasattr(arg, 'value') else str(arg) for arg in args)
+                            if cache_key in cache:
+                                return cache[cache_key]
+                            result = original_func(*args)
+                            cache[cache_key] = result
+                            return result
+                        
+                        method_func = cached_method
+                    
+                    instance.pairs[String(field.name)] = Builtin(
+                        method_func,
+                        name=field.name
+                    )
+            
+            # Store computed property definitions for auto-calling on access
+            computed_props = {}
+            for field in all_fields:
+                if field.computed:
+                    computed_props[field.name] = field.computed
+            
+            # Store computed property metadata
+            if computed_props:
+                instance.pairs[String("__computed__")] = computed_props
+            
+            return instance
+        
+        # Create static fromJSON method
+        def from_json_static(*args):
+            """Static method to deserialize from JSON"""
+            if len(args) == 0:
+                return EvaluationError("fromJSON requires a JSON string argument")
+            
+            json_str = args[0]
+            if not isinstance(json_str, String):
+                return EvaluationError("fromJSON expects a string argument")
+            
+            try:
+                data = json.loads(json_str.value)
+                constructor_args = []
+                
+                for field in fields:
+                    fname = field.name
+                    if fname in data:
+                        val = data[fname]
+                        # Convert JSON values to Zexus objects
+                        if isinstance(val, str):
+                            constructor_args.append(String(val))
+                        elif isinstance(val, bool):
+                            constructor_args.append(Boolean(val))
+                        elif isinstance(val, (int, float)):
+                            constructor_args.append(Integer(int(val)))
+                        elif isinstance(val, list):
+                            # Convert to List
+                            zx_list = List()
+                            zx_list.elements = [String(str(item)) for item in val]
+                            constructor_args.append(zx_list)
+                        elif isinstance(val, dict):
+                            # Convert to Map
+                            zx_map = Map()
+                            zx_map.pairs = {String(k): String(str(v)) for k, v in val.items()}
+                            constructor_args.append(zx_map)
+                        elif val is None:
+                            constructor_args.append(NULL)
+                        else:
+                            constructor_args.append(String(str(val)))
+                    else:
+                        constructor_args.append(NULL)
+                
+                return dataclass_constructor(*constructor_args)
+            
+            except json.JSONDecodeError as e:
+                return EvaluationError(f"Invalid JSON: {str(e)}")
+            except Exception as e:
+                return EvaluationError(f"Error deserializing JSON: {str(e)}")
+        
+        # Create static default() method
+        def default_static(*args):
+            """Static method to create instance with all default values"""
+            default_args = []
+            
+            for field in fields:
+                if field.default_value is not None:
+                    # Evaluate default value in parent environment
+                    default_val = evaluator_self.eval_node(field.default_value, parent_env, stack_trace)
+                    if is_error(default_val):
+                        return default_val
+                    default_args.append(default_val)
+                else:
+                    # No default - use NULL
+                    default_args.append(NULL)
+            
+            return dataclass_constructor(*default_args)
+        
+        # Register constructor as a Builtin with static methods
+        constructor = Builtin(dataclass_constructor)
+        
+        # Store fields for inheritance (child classes need access to parent fields)
+        constructor.dataclass_fields = all_fields
+        
+        # Add static methods as properties on the constructor
+        # (We'll store them in a special way that the evaluator can access)
+        constructor.static_methods = {
+            "fromJSON": Builtin(from_json_static),
+            "default": Builtin(default_static)
+        }
+        
+        # Register constructor in environment as const
+        env.set_const(type_name, constructor)
+        
+        debug_log(f"  ✅ Registered production-grade dataclass: {type_name}")
+        return NULL
+    
     def eval_return_statement(self, node, env, stack_trace):
         val = self.eval_node(node.return_value, env, stack_trace)
         if is_error(val): 
@@ -194,9 +616,14 @@ class StatementEvaluatorMixin:
         return ReturnValue(val)
     
     def eval_assignment_expression(self, node, env, stack_trace):
-        debug_log("eval_assignment_expression", f"Assigning to {node.name.value}")
         # Support assigning to identifiers or property access targets
         from ..object import EvaluationError, NULL
+        
+        # Debug logging
+        if isinstance(node.name, PropertyAccessExpression):
+            debug_log("eval_assignment_expression", f"Assigning to property access")
+        else:
+            debug_log("eval_assignment_expression", f"Assigning to {node.name.value if hasattr(node.name, 'value') else node.name}")
 
         # If target is a property access expression
         if isinstance(node.name, PropertyAccessExpression):
@@ -1562,7 +1989,7 @@ class StatementEvaluatorMixin:
                 elif ks == "burst_size" and isinstance(v, Integer): 
                     burst = v.value
                 elif ks == "per_user": 
-                    per_user = True if (isinstance(v, BooleanObj) and v.value) else False
+                    per_user = True if (isinstance(v, Boolean) and v.value) else False
         
         limiter = RateLimiter(rpm, burst, per_user)
         ctx = get_security_context()
@@ -3227,20 +3654,27 @@ class StatementEvaluatorMixin:
         return NULL
 
     def eval_this_expression(self, node, env, stack_trace):
-        """Evaluate THIS expression - reference to current contract instance.
+        """Evaluate THIS expression - reference to current contract instance or data method instance.
         
         this.balances[account]
         this.owner = TX.caller
+        this.width  # in data method
         """
         from ..object import EvaluationError
         
         # Look for current contract instance in environment
         contract_instance = env.get("__contract_instance__")
         
-        if contract_instance is None:
-            return EvaluationError("'this' can only be used inside a contract")
+        if contract_instance is not None:
+            return contract_instance
         
-        return contract_instance
+        # For data methods, look for 'this' binding
+        data_instance = env.get("this")
+        
+        if data_instance is not None:
+            return data_instance
+        
+        return EvaluationError("'this' can only be used inside a contract or data method")
 
     def eval_emit_statement(self, node, env, stack_trace):
         """Evaluate EMIT statement - emit an event.

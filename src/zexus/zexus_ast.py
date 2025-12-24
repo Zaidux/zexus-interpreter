@@ -41,6 +41,75 @@ class ConstStatement(Statement):
     def __repr__(self):
         return f"ConstStatement(name={self.name}, value={self.value})"
 
+class DataStatement(Statement):
+    """Data statement - dataclass definition
+    
+    data User {
+        name: string,
+        email: string,
+        age: number
+    }
+    
+    data Admin extends User {
+        permissions: array
+    }
+    
+    @validated
+    data Email {
+        address: string
+    }
+    
+    Creates a structured type with automatic methods:
+    - Constructor
+    - toString(), toJSON(), fromJSON()
+    - equals(), clone(), hash()
+    """
+    def __init__(self, name, fields, modifiers=None, parent=None, decorators=None):
+        self.name = name           # Identifier: class name
+        self.fields = fields       # List of DataField objects
+        self.modifiers = modifiers or []  # List of modifiers: ["immutable", "verified", etc.]
+        self.parent = parent       # String: parent dataclass name (for inheritance)
+        self.decorators = decorators or []  # List of decorator names: ["validated", "logged", etc.]
+
+    def __repr__(self):
+        mods = f", modifiers={self.modifiers}" if self.modifiers else ""
+        parent = f", extends={self.parent}" if self.parent else ""
+        decs = f", decorators={self.decorators}" if self.decorators else ""
+        return f"DataStatement(name={self.name}, fields={self.fields}{mods}{parent}{decs})"
+
+class DataField:
+    """Field definition in a dataclass
+    
+    name: string = "default" require len(name) > 0
+    method area() { return this.width * this.height; }
+    operator +(other) { return Point(this.x + other.x, this.y + other.y); }
+    
+    @logged
+    method calculate() { ... }
+    """
+    def __init__(self, name, field_type=None, default_value=None, constraint=None, computed=None, method_body=None, method_params=None, operator=None, decorators=None):
+        self.name = name                    # Identifier: field name
+        self.field_type = field_type        # String: type annotation (optional)
+        self.default_value = default_value  # Expression: default value (optional)
+        self.constraint = constraint        # Expression: validation constraint (optional)
+        self.computed = computed            # Expression: computed property (optional)
+        self.method_body = method_body      # BlockStatement: method body (optional)
+        self.method_params = method_params or []  # List of parameters for method
+        self.operator = operator            # String: operator symbol (+, -, *, /, ==, etc.)
+        self.decorators = decorators or []  # List of decorator names for methods
+
+    def __repr__(self):
+        parts = [f"name={self.name}"]
+        if self.field_type:
+            parts.append(f"type={self.field_type}")
+        if self.default_value:
+            parts.append(f"default={self.default_value}")
+        if self.constraint:
+            parts.append(f"require={self.constraint}")
+        if self.computed:
+            parts.append(f"computed={self.computed}")
+        return f"DataField({', '.join(parts)})"
+
 class ReturnStatement(Statement):
     def __init__(self, return_value):
         self.return_value = return_value
@@ -434,6 +503,20 @@ class AwaitExpression(Expression):
 
     def __repr__(self):
         return f"AwaitExpression(expression={self.expression})"
+
+class FileImportExpression(Expression):
+    """File import expression for << operator
+    
+    let code << "filename.ext"
+    
+    Reads the file contents and returns as a string.
+    Supports any file extension.
+    """
+    def __init__(self, filepath):
+        self.filepath = filepath  # Expression: path to file
+    
+    def __repr__(self):
+        return f"FileImportExpression(<< {self.filepath})"
 
 class EmbeddedLiteral(Expression):
     def __init__(self, language, code):
@@ -909,6 +992,32 @@ class LogStatement(Statement):
     def __repr__(self):
         mode = ">>" if self.append_mode else ">"
         return f"LogStatement({mode} {self.filepath})"
+
+
+class ImportLogStatement(Statement):
+    """Import/Execute code from file (Hidden Layer)
+    
+    log << "helpers.zx"    # Import and execute Zexus code from file
+    
+    Creates a hidden layer where generated code is automatically loaded
+    and executed in the current scope. Combines code generation with
+    immediate execution without explicit eval_file() calls.
+    
+    Example:
+        action generateHelpers {
+            log >> "helpers.zx";
+            print("action add(a, b) { return a + b; }");
+        }
+        generateHelpers();
+        
+        log << "helpers.zx";  // Auto-imports and executes
+        let result = add(5, 10);  // Can use imported functions
+    """
+    def __init__(self, filepath):
+        self.filepath = filepath  # Expression: path to file to import
+    
+    def __repr__(self):
+        return f"ImportLogStatement(<< {self.filepath})"
 
 
 # NEW: Capability-based security statements

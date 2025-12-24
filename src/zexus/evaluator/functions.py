@@ -211,6 +211,17 @@ class FunctionEvaluatorMixin:
         
         method_name = node.method.value
         
+        # === Builtin Static Methods ===
+        # Handle static methods on dataclass constructors (e.g., User.default(), User.fromJSON())
+        if isinstance(obj, Builtin):
+            if hasattr(obj, 'static_methods') and method_name in obj.static_methods:
+                static_method = obj.static_methods[method_name]
+                args = self.eval_expressions(node.arguments, env)
+                if is_error(args):
+                    return args
+                return self.apply_function(static_method, args, env)
+            # If no static method found, fall through to error
+        
         # === List Methods ===
         if isinstance(obj, List):
             # For map/filter/reduce, we need to evaluate arguments first
@@ -261,6 +272,18 @@ class FunctionEvaluatorMixin:
         
         # === Map Methods ===
         if isinstance(obj, Map):
+            # First check if the method is a callable stored in the Map (for DATA dataclasses)
+            method_key = String(method_name)
+            if method_key in obj.pairs:
+                method_value = obj.pairs[method_key]
+                if isinstance(method_value, Builtin):
+                    # This is a dataclass method - evaluate args and call it
+                    args = self.eval_expressions(node.arguments, env)
+                    if is_error(args):
+                        return args
+                    return self.apply_function(method_value, args, env)
+            
+            # Otherwise handle built-in Map methods
             args = self.eval_expressions(node.arguments, env)
             if is_error(args): 
                 return args
