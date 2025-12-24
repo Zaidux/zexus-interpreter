@@ -413,6 +413,85 @@ for each num in numbers {
 print doubled;    // Output: [2, 4, 6, 8, 10]
 ```
 
+## File Reading with << Operator
+
+**New in v3.0**: The `<<` operator enables reading file contents directly into variables!
+
+### Syntax
+
+```zexus
+let variable << "filepath";       // Read file contents as string
+let code << "script.zx";          // Works with any file extension
+let data << "data.json";          // JSON, text, code, etc.
+```
+
+### Basic Usage
+
+```zexus
+// Read a text file
+let content << "README.txt";
+print(content);
+
+// Read JSON data
+let jsonData << "config.json";
+print(jsonData);
+
+// Read code from another file
+let helperCode << "helpers.zx";
+print(helperCode);
+```
+
+### Features
+
+- **Any File Type**: Works with .txt, .json, .zx, .py, .cpp, .js, etc.
+- **Automatic Reading**: File is read and stored as a string
+- **Mutable Storage**: Since it uses `let`, the variable can be reassigned
+- **Path Support**: Relative and absolute paths supported
+
+### Comparison with LOG <<
+
+| Feature | `let code << file` | `log << file` |
+|---------|-------------------|---------------|
+| **Purpose** | Read file as string | Execute code from file |
+| **File Types** | Any extension | .zx files only |
+| **Result** | String variable | Code execution |
+| **Use Case** | Data loading | Hidden code layers |
+
+### Example: Template Loading
+
+```zexus
+// Load email template
+let template << "email_template.txt";
+
+// Replace placeholders
+let email = template;
+email = email.replace("{{NAME}}", "Alice");
+email = email.replace("{{DATE}}", "2025-12-24");
+
+print(email);
+```
+
+### Example: Configuration Loading
+
+```zexus
+// Load configuration
+let configJson << "config.json";
+let config = JSON.parse(configJson);
+
+print("Theme: " + config.theme);
+print("Version: " + config.version);
+```
+
+### Error Handling
+
+If the file doesn't exist or can't be read, an error is raised:
+
+```zexus
+let data << "missing.txt";  // ❌ Error: File not found
+```
+
+**Best Practice**: Always ensure the file exists before reading, or use try-catch blocks.
+
 ## Summary
 
 The `let` keyword is fundamental to Zexus programming. It creates mutable variables that can be reassigned, making it perfect for:
@@ -425,13 +504,14 @@ Remember: Use `let` for mutable data and `const` for immutable data. This makes 
 
 ---
 
-**Related Keywords**: CONST, ASSIGN, IDENT, TYPE_ALIAS  
+**Related Keywords**: CONST, ASSIGN, IDENT, TYPE_ALIAS, LOG  
 **Category**: Variable Declaration  
 **Status**: ✅ Fully Implemented  
-**Last Updated**: December 18, 2025
+**Last Updated**: December 24, 2025
 
-### Recent Updates (Dec 18, 2025)
-- ✅ Added colon syntax support: `let x : 42;`
-- ✅ Documented function-level scoping behavior
-- ✅ Clarified shadowing limitations (functions only)
-- ✅ Updated all syntax variations with type annotations
+### Recent Updates
+- ✅ **Dec 24, 2025**: Added `let << file` operator for file reading
+- ✅ **Dec 18, 2025**: Added colon syntax support: `let x : 42;`
+- ✅ **Dec 18, 2025**: Documented function-level scoping behavior
+- ✅ **Dec 18, 2025**: Clarified shadowing limitations (functions only)
+- ✅ **Dec 18, 2025**: Updated all syntax variations with type annotations

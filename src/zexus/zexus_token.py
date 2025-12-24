@@ -26,6 +26,7 @@ DOT = "."
 LTE = "<="
 GTE = ">="
 APPEND = ">>"           # Append operator for LOG: log >> file
+IMPORT_OP = "<<"        # Import operator: << file or let x << file
 AND = "&&"
 OR = "||"
 QUESTION = "?"          # Ternary operator: condition ? true_val : false_val
@@ -41,6 +42,7 @@ LBRACE = "{"
 RBRACE = "}"
 LBRACKET = "["
 RBRACKET = "]"
+AT = "@"                # Decorator symbol: @logged, @cached, etc.
 
 # Backwards-compatible alias: some parts of the codebase expect the name
 # ASTERISK for the multiplication token. Provide a stable alias to avoid
@@ -50,6 +52,7 @@ ASTERISK = STAR
 # Keywords
 LET = "LET"
 CONST = "CONST"                # NEW: Const immutable variables
+DATA = "DATA"                  # NEW: Dataclass definitions
 PRINT = "PRINT"
 IF = "IF"
 ELIF = "ELIF"                  # NEW: Elif else-if conditionals

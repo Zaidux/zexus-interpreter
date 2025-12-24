@@ -37,7 +37,7 @@ class StructuralAnalyzer:
         # Statement starters (keywords that begin a new statement)
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL,
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
@@ -603,7 +603,7 @@ class StructuralAnalyzer:
         stop_types = {SEMICOLON, RBRACE}
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,

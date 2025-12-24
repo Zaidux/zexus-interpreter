@@ -533,6 +533,125 @@ const finalData = formatForDisplay(sortedData);
 - Warnings for unused constants
 - Deep immutability for arrays and objects
 
+## File Reading with << Operator
+
+**New in v3.0**: The `<<` operator enables reading file contents directly into **immutable** constants!
+
+### Syntax
+
+```zexus
+const variable << "filepath";       // Read file as immutable string
+const config << "config.json";      // Configuration files
+const template << "template.txt";   // Templates and data
+```
+
+### Basic Usage
+
+```zexus
+// Read a configuration file (immutable)
+const appConfig << "config.json";
+print(appConfig);
+
+// appConfig = "something else";  // ❌ Error: Cannot reassign const
+
+// Read a template (immutable)
+const emailTemplate << "email.txt";
+print(emailTemplate);
+```
+
+### Why Use const << Instead of let <<?
+
+**Use `const <<`** when the file content should never change:
+- ✅ Configuration files that shouldn't be modified
+- ✅ Templates that remain constant
+- ✅ Reference data that's read-only
+- ✅ Secrets and API keys (immutable)
+
+**Use `let <<`** when you might modify the content:
+- Data that gets transformed
+- Templates with placeholder replacement
+- Content that's processed and updated
+
+### Features
+
+- **Immutable**: Cannot reassign after reading
+- **Any File Type**: Works with .txt, .json, .zx, .py, .cpp, .js, etc.
+- **Path Support**: Relative and absolute paths
+- **Type Safety**: Content is always a string
+
+### Comparison Table
+
+| Feature | `const code << file` | `let code << file` | `log << file` |
+|---------|---------------------|-------------------|---------------|
+| **Mutability** | ❌ Immutable | ✅ Mutable | N/A (execution) |
+| **Purpose** | Read as constant | Read as variable | Execute code |
+| **File Types** | Any extension | Any extension | .zx only |
+| **Reassignment** | Not allowed | Allowed | N/A |
+| **Use Case** | Config, templates | Data processing | Hidden layers |
+
+### Example: Immutable Configuration
+
+```zexus
+// Load configuration as immutable
+const dbConfig << "database.json";
+const apiKeys << "secrets.json";
+
+// Parse and use
+const db = JSON.parse(dbConfig);
+const keys = JSON.parse(apiKeys);
+
+// These cannot be reassigned
+// dbConfig = "new value";  // ❌ Error: Cannot reassign const
+
+print("Database: " + db.host);
+print("API Key loaded: " + (keys.api_key ? "yes" : "no"));
+```
+
+### Example: Template Constants
+
+```zexus
+// Load email templates as constants
+const welcomeEmail << "templates/welcome.txt";
+const resetEmail << "templates/password_reset.txt";
+
+// Use templates (no modification to const itself)
+action sendWelcome(name) {
+    let email = welcomeEmail;  // Copy to mutable variable
+    email = email.replace("{{NAME}}", name);
+    sendEmail(email);
+}
+
+sendWelcome("Alice");
+```
+
+### Error Handling
+
+File not found errors:
+
+```zexus
+const data << "missing.txt";  // ❌ Error: File not found
+```
+
+Reassignment errors:
+
+```zexus
+const content << "file.txt";
+content = "new content";  // ❌ Error: Cannot reassign const variable 'content'
+```
+
+### Security Benefits
+
+Using `const <<` for sensitive data provides extra safety:
+
+```zexus
+// API keys loaded as constants (cannot be accidentally changed)
+const apiKeys << "secrets.json";
+const credentials << "auth.json";
+
+// These are now protected from reassignment
+// apiKeys = "{}";  // ❌ Blocked by const!
+```
+
 ## Summary
 
 The `const` keyword is essential for writing safe, maintainable Zexus code. It declares variables that cannot be reassigned, making your intentions clear and preventing accidental modifications.
@@ -548,14 +667,15 @@ The `const` keyword is essential for writing safe, maintainable Zexus code. It d
 
 ---
 
-**Related Keywords**: LET, IMMUTABLE, ASSIGN, IDENT  
+**Related Keywords**: LET, IMMUTABLE, ASSIGN, IDENT, LOG  
 **Category**: Variable Declaration  
 **Status**: ✅ Fully Implemented  
-**Last Updated**: December 18, 2025
+**Last Updated**: December 24, 2025
 
-### Recent Updates (Dec 18, 2025)
-- ✅ Added colon syntax support: `const x : 42;`
-- ✅ Documented function-level scoping behavior
-- ✅ Clarified why block-level shadowing doesn't work
-- ✅ Added workarounds and best practices
-- ✅ Updated all syntax variations with type annotations
+### Recent Updates
+- ✅ **Dec 24, 2025**: Added `const << file` operator for immutable file reading
+- ✅ **Dec 18, 2025**: Added colon syntax support: `const x : 42;`
+- ✅ **Dec 18, 2025**: Documented function-level scoping behavior
+- ✅ **Dec 18, 2025**: Clarified why block-level shadowing doesn't work
+- ✅ **Dec 18, 2025**: Added workarounds and best practices
+- ✅ **Dec 18, 2025**: Updated all syntax variations with type annotations

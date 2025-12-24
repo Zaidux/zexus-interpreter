@@ -1,5 +1,0 @@
-let txCaller = TX.caller;
-print "Direct TX.caller:", txCaller;
-
-let txObj = TX;
-print "TX object:", txObj;

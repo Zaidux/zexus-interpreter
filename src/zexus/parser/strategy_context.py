@@ -245,6 +245,30 @@ class ContextStackParser:
         variable_name = tokens[1].literal
         parser_debug(f"  📝 Variable: {variable_name}")
 
+        # Check for << operator (file import): let code << "file.ext"
+        if len(tokens) >= 4 and tokens[2].type == IMPORT_OP:
+            parser_debug(f"  📝 File import syntax detected: << operator")
+            # Get the filepath (next token after <<)
+            if tokens[3].type in [STRING, IDENT]:
+                filepath_token = tokens[3]
+                if filepath_token.type == STRING:
+                    filepath_expr = StringLiteral(filepath_token.literal)
+                else:
+                    filepath_expr = Identifier(filepath_token.literal)
+                
+                parser_debug(f"  ✅ Let with file import: {variable_name} << {filepath_token.literal}")
+                # Create a special FileImportExpression
+                from ..zexus_ast import FileImportExpression
+                value_expression = FileImportExpression(filepath_expr)
+                return LetStatement(
+                    name=Identifier(variable_name),
+                    value=value_expression,
+                    type_annotation=None
+                )
+            else:
+                parser_debug(f"  ❌ Expected filename after << operator")
+                return None
+
         # Check for type annotation (name: Type = value) or colon syntax (name : value)
         type_annotation = None
         colon_as_assign = False
@@ -353,6 +377,37 @@ class ContextStackParser:
         variable_name = tokens[1].literal
         parser_debug(f"  📝 Variable: {variable_name}")
 
+        # Check for << operator (file import)
+        if len(tokens) > 2 and tokens[2].type == IMPORT_OP:
+            parser_debug(f"  📂 Detected const << file import")
+            if len(tokens) < 4:
+                parser_debug("  ❌ Invalid const << statement: missing filename")
+                return None
+            
+            # Parse the filename expression (everything after <<)
+            filename_tokens = []
+            j = 3
+            while j < len(tokens):
+                if tokens[j].type == SEMICOLON:
+                    break
+                filename_tokens.append(tokens[j])
+                j += 1
+            
+            if not filename_tokens:
+                parser_debug("  ❌ Invalid const << statement: empty filename")
+                return None
+            
+            filename_expr = self._parse_expression(filename_tokens)
+            if filename_expr is None:
+                parser_debug("  ❌ Could not parse filename expression")
+                return None
+            
+            parser_debug(f"  ✅ Const file import: {variable_name} << file")
+            return ConstStatement(
+                name=Identifier(variable_name),
+                value=FileImportExpression(filepath=filename_expr)
+            )
+
         equals_index = -1
         for i, token in enumerate(tokens):
             if token.type == ASSIGN:
@@ -414,6 +469,356 @@ class ContextStackParser:
             name=Identifier(variable_name),
             value=value_expression
         )
+
+    def _parse_data_statement(self, tokens):
+        """Parse data statement (dataclass definition)
+        
+        @validated
+        data User {
+            name: string,
+            email: string = "default",
+            age: number require age >= 0
+        }
+        
+        data immutable Point { x: number, y: number }
+        data verified Transaction { from: address, to: address, amount: number }
+        """
+        parser_debug("🔧 [Context] Parsing data statement")
+        parser_debug(f"  📝 Got {len(tokens)} tokens: {[t.literal for t in tokens]}")
+        
+        if len(tokens) < 4:  # data TypeName { }
+            parser_debug("  ❌ Invalid data statement: too few tokens")
+            return None
+        
+        # Parse decorators before 'data' keyword: @validated, @logged, etc.
+        decorators = []
+        idx = 0
+        
+        # Skip any @ decorators at the beginning
+        while idx < len(tokens) and tokens[idx].type == AT:
+            idx += 1  # Skip @
+            if idx < len(tokens) and tokens[idx].type == IDENT:
+                decorators.append(tokens[idx].literal)
+                parser_debug(f"  🎨 Found decorator: @{tokens[idx].literal}")
+                idx += 1
+            else:
+                parser_debug("  ❌ Invalid decorator: expected name after @")
+        
+        # Now we should be at 'data' keyword
+        if idx >= len(tokens) or tokens[idx].type != DATA:
+            parser_debug(f"  ❌ Expected 'data' keyword at index {idx}, got {tokens[idx].type if idx < len(tokens) else 'EOF'}")
+            return None
+        idx += 1  # Skip 'data'
+        
+        # Check for modifiers (immutable, verified, etc.)
+        modifiers = []
+        
+        # Parse modifiers before type name
+        while idx < len(tokens) and tokens[idx].type == IDENT and tokens[idx].literal in ["immutable", "verified"]:
+            modifiers.append(tokens[idx].literal)
+            parser_debug(f"  🏷️ Found modifier: {tokens[idx].literal}")
+            idx += 1
+        
+        # Type name
+        if idx >= len(tokens) or tokens[idx].type != IDENT:
+            parser_debug("  ❌ Invalid data statement: expected type name")
+            return None
+        
+        type_name = tokens[idx].literal
+        parser_debug(f"  📝 Type name: {type_name}")
+        idx += 1
+        
+        # Check for inheritance: extends ParentType
+        parent_type = None
+        if idx < len(tokens) and tokens[idx].type == IDENT and tokens[idx].literal == "extends":
+            idx += 1
+            if idx < len(tokens) and tokens[idx].type == IDENT:
+                parent_type = tokens[idx].literal
+                parser_debug(f"  🔗 Extends: {parent_type}")
+                idx += 1
+            else:
+                parser_debug("  ❌ Invalid extends: expected parent type name")
+        
+        # Find opening brace
+        if idx >= len(tokens) or tokens[idx].type != LBRACE:
+            parser_debug("  ❌ Invalid data statement: expected {")
+            return None
+        idx += 1
+        
+        # Find closing brace
+        brace_count = 1
+        body_start = idx
+        body_end = idx
+        
+        while idx < len(tokens):
+            if tokens[idx].type == LBRACE:
+                brace_count += 1
+            elif tokens[idx].type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    body_end = idx
+                    break
+            idx += 1
+        
+        if brace_count != 0:
+            parser_debug("  ❌ Invalid data statement: unmatched braces")
+            return None
+        
+        # Parse field definitions
+        body_tokens = tokens[body_start:body_end]
+        fields = self._parse_data_fields(body_tokens)
+        
+        parser_debug(f"  ✅ Data statement: {type_name} with {len(fields)} fields")
+        return DataStatement(
+            name=Identifier(type_name),
+            fields=fields,
+            modifiers=modifiers,
+            parent=parent_type,
+            decorators=decorators
+        )
+    
+    def _parse_data_fields(self, tokens):
+        """Parse field definitions in a dataclass body
+        
+        name: string,
+        email: string = "default",
+        age: number require age >= 0,
+        computed area => width * height
+        """
+        from ..zexus_ast import DataField
+        
+        parser_debug(f"  🔍 Parsing data fields from tokens: {[t.literal for t in tokens]}")
+        fields = []
+        i = 0
+        
+        while i < len(tokens):
+            # Skip whitespace and commas
+            if tokens[i].type in {COMMA, SEMICOLON}:
+                i += 1
+                continue
+            
+            # Check for decorators: @logged, @cached, etc.
+            decorators = []
+            while i < len(tokens) and tokens[i].type == AT:
+                i += 1  # Skip @
+                if i < len(tokens) and tokens[i].type == IDENT:
+                    decorators.append(tokens[i].literal)
+                    parser_debug(f"    🎨 Found decorator: @{tokens[i].literal}")
+                    i += 1
+            
+            # Field must start with identifier (or 'method'/'operator' keyword for custom definitions)
+            if i >= len(tokens) or tokens[i].type != IDENT:
+                i += 1
+                continue
+            
+            # Check for operator overloading: operator + (other) { ... }
+            if tokens[i].literal == "operator":
+                parser_debug(f"    🔧 Operator overloading detected")
+                i += 1
+                
+                # Get the operator symbol
+                operator_symbol = None
+                if i < len(tokens):
+                    # Could be +, -, *, /, ==, etc.
+                    if tokens[i].type in {PLUS, MINUS, STAR, SLASH, MOD, EQ, NOT_EQ, LT, GT, LTE, GTE}:
+                        operator_symbol = tokens[i].literal
+                        parser_debug(f"      Operator: {operator_symbol}")
+                        i += 1
+                    else:
+                        parser_debug(f"      ❌ Invalid operator symbol: {tokens[i].literal}")
+                        i += 1
+                        continue
+                
+                # Parse parameters: (other)
+                method_params = []
+                if i < len(tokens) and tokens[i].type == LPAREN:
+                    i += 1
+                    while i < len(tokens) and tokens[i].type != RPAREN:
+                        if tokens[i].type == IDENT:
+                            method_params.append(tokens[i].literal)
+                            i += 1
+                        elif tokens[i].type == COMMA:
+                            i += 1
+                        else:
+                            i += 1
+                    if i < len(tokens) and tokens[i].type == RPAREN:
+                        i += 1
+                
+                parser_debug(f"        Parameters: {method_params}")
+                
+                # Parse operator body: { ... }
+                method_body = None
+                if i < len(tokens) and tokens[i].type == LBRACE:
+                    # Find matching closing brace
+                    brace_count = 1
+                    body_start = i + 1
+                    i += 1
+                    
+                    while i < len(tokens) and brace_count > 0:
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                    
+                    body_tokens = tokens[body_start:i-1]
+                    if body_tokens:
+                        # Parse the body as a block of statements
+                        method_body = self._parse_block_statements(body_tokens)
+                        parser_debug(f"        Body: {len(method_body)} statements")
+                
+                # Create a DataField for the operator
+                fields.append(DataField(
+                    name=f"__operator_{operator_symbol}__",
+                    field_type=None,
+                    default_value=None,
+                    constraint=None,
+                    computed=None,
+                    method_body=method_body,
+                    method_params=method_params,
+                    operator=operator_symbol,
+                    decorators=decorators
+                ))
+                continue
+            
+            # Check for method definition: method name(params) { ... }
+            if tokens[i].literal == "method":
+                parser_debug(f"    🔧 Method definition detected")
+                i += 1
+                
+                if i >= len(tokens) or tokens[i].type != IDENT:
+                    parser_debug(f"      ❌ Expected method name")
+                    i += 1
+                    continue
+                
+                method_name = tokens[i].literal
+                parser_debug(f"      Method: {method_name}")
+                i += 1
+                
+                # Parse parameters: (param1, param2, ...)
+                method_params = []
+                if i < len(tokens) and tokens[i].type == LPAREN:
+                    i += 1
+                    while i < len(tokens) and tokens[i].type != RPAREN:
+                        if tokens[i].type == IDENT:
+                            method_params.append(tokens[i].literal)
+                            i += 1
+                        elif tokens[i].type == COMMA:
+                            i += 1
+                        else:
+                            i += 1
+                    if i < len(tokens) and tokens[i].type == RPAREN:
+                        i += 1
+                
+                parser_debug(f"        Parameters: {method_params}")
+                
+                # Parse method body: { ... }
+                method_body = None
+                if i < len(tokens) and tokens[i].type == LBRACE:
+                    # Find matching closing brace
+                    brace_count = 1
+                    body_start = i + 1
+                    i += 1
+                    
+                    while i < len(tokens) and brace_count > 0:
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                    
+                    body_tokens = tokens[body_start:i-1]
+                    if body_tokens:
+                        # Parse the body as a block of statements
+                        method_body = self._parse_block_statements(body_tokens)
+                        parser_debug(f"        Body: {len(method_body)} statements")
+                
+                # Create a DataField for the method
+                fields.append(DataField(
+                    name=method_name,
+                    field_type=None,
+                    default_value=None,
+                    constraint=None,
+                    computed=None,
+                    method_body=method_body,
+                    method_params=method_params,
+                    decorators=decorators
+                ))
+                continue
+            
+            field_name = tokens[i].literal
+            parser_debug(f"    📌 Field: {field_name}")
+            i += 1
+            
+            field_type = None
+            default_value = None
+            constraint = None
+            computed = None
+            
+            # Check for type annotation: name: type
+            if i < len(tokens) and tokens[i].type == COLON:
+                i += 1
+                if i < len(tokens) and tokens[i].type == IDENT:
+                    field_type = tokens[i].literal
+                    parser_debug(f"      Type: {field_type}")
+                    i += 1
+            
+            # Check for default value: = value
+            if i < len(tokens) and tokens[i].type == ASSIGN:
+                i += 1
+                # Collect value tokens until comma, require, or computed
+                value_tokens = []
+                while i < len(tokens) and tokens[i].type not in {COMMA, SEMICOLON}:
+                    if tokens[i].type in {REQUIRE} or (tokens[i].type == IDENT and tokens[i].literal in ["computed"]):
+                        break
+                    value_tokens.append(tokens[i])
+                    i += 1
+                
+                if value_tokens:
+                    default_value = self._parse_expression(value_tokens)
+                    parser_debug(f"      Default: {default_value}")
+            
+            # Check for require constraint: require expression
+            if i < len(tokens) and tokens[i].type == REQUIRE:
+                i += 1
+                # Collect constraint tokens until comma
+                constraint_tokens = []
+                while i < len(tokens) and tokens[i].type not in {COMMA, SEMICOLON}:
+                    if tokens[i].type == IDENT and tokens[i].literal == "computed":
+                        break
+                    constraint_tokens.append(tokens[i])
+                    i += 1
+                
+                if constraint_tokens:
+                    constraint = self._parse_expression(constraint_tokens)
+                    parser_debug(f"      Constraint: {constraint}")
+            
+            # Check for computed property: computed => expression
+            if i < len(tokens) and tokens[i].type == IDENT and tokens[i].literal == "computed":
+                i += 1
+                # Expect => (LAMBDA token)
+                if i < len(tokens) and tokens[i].type == LAMBDA:
+                    i += 1
+                    # Collect expression tokens
+                    expr_tokens = []
+                    while i < len(tokens) and tokens[i].type not in {COMMA, SEMICOLON}:
+                        expr_tokens.append(tokens[i])
+                        i += 1
+                    
+                    if expr_tokens:
+                        computed = self._parse_expression(expr_tokens)
+                        parser_debug(f"      Computed: {computed}")
+            
+            fields.append(DataField(
+                name=field_name,
+                field_type=field_type,
+                default_value=default_value,
+                constraint=constraint,
+                computed=computed
+            ))
+        
+        parser_debug(f"  ✅ Parsed {len(fields)} fields")
+        return fields
 
     def _parse_print_statement_block(self, block_info, all_tokens):
         """Parse print statement block - RETURNS PrintStatement"""
@@ -1009,7 +1414,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
+        statement_starters = {LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
         
         # Safety: track loop iterations to prevent infinite loops
         max_iterations = len(tokens) * 10  # Very generous limit
@@ -1121,6 +1526,31 @@ class ContextStackParser:
                     statements.append(LetStatement(Identifier(var_name), value_expr))
 
                 i = j
+
+            # DATA statement heuristic (dataclass definition)
+            elif token.type == DATA:
+                j = i + 1
+                brace_nesting = 0
+                # Find the complete data block
+                while j < len(tokens):
+                    if tokens[j].type == LBRACE:
+                        brace_nesting += 1
+                    elif tokens[j].type == RBRACE:
+                        brace_nesting -= 1
+                        if brace_nesting == 0:
+                            j += 1  # Include the closing brace
+                            break
+                    j += 1
+                
+                data_tokens = tokens[i:j]
+                parser_debug(f"    📝 Found data statement: {[t.literal for t in data_tokens]}")
+                
+                stmt = self._parse_data_statement(data_tokens)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
 
             # USE statement heuristic (fallback for non-structural detection)
             elif token.type == USE:
@@ -1516,10 +1946,34 @@ class ContextStackParser:
                 i = j
                 continue
             
-            # LOG statement heuristic: log > filename OR log >> filename
+            # LOG statement heuristic: log > filename OR log >> filename OR log << filename
             elif token.type == LOG:
                 j = i + 1
-                # Expect > or >> symbol
+                # Check for <<, >>, or > operator
+                if j < len(tokens) and tokens[j].type == IMPORT_OP:
+                    # Import mode: log << file (import and execute code from file)
+                    j += 1
+                    
+                    # Get filepath (can be STRING or IDENT)
+                    if j < len(tokens) and tokens[j].type in [STRING, IDENT]:
+                        filepath_token = tokens[j]
+                        parser_debug(f"    📝 Found import log statement: log << {filepath_token.literal}")
+                        
+                        # Create a simple string literal or identifier expression
+                        if filepath_token.type == STRING:
+                            filepath_expr = StringLiteral(filepath_token.literal)
+                        else:
+                            filepath_expr = Identifier(filepath_token.literal)
+                        
+                        statements.append(ImportLogStatement(filepath_expr))
+                        j += 1
+                    else:
+                        parser_debug(f"    ⚠️ Expected filepath after 'log <<'")
+                    
+                    i = j
+                    continue
+                    
+                # Expect > or >> symbol for output redirection
                 append_mode = True  # Default to append
                 if j < len(tokens) and tokens[j].type == APPEND:
                     # Explicit append: log >> file
@@ -1530,7 +1984,7 @@ class ContextStackParser:
                     append_mode = True  # Keep append for scope safety
                     j += 1
                 else:
-                    parser_debug(f"    ⚠️ Expected '>' or '>>' after 'log'")
+                    parser_debug(f"    ⚠️ Expected '>', '>>', or '<<' after 'log'")
                     i = j
                     continue
                 
@@ -2537,7 +2991,9 @@ class ContextStackParser:
                     break
 
                 name_token = tokens[i]
-                if name_token.type != IDENT:
+                # Allow keywords as property/method names (e.g., t.verify, obj.data)
+                # Check if token has a literal (IDENT or any keyword)
+                if not name_token.literal:
                     break
 
                 i += 1  # Skip name
@@ -2668,7 +3124,14 @@ class ContextStackParser:
             except Exception:
                 return FloatLiteral(0.0)
         elif token.type == IDENT:
+            # Special case: 'this' should be ThisExpression
+            if token.literal == 'this':
+                from ..zexus_ast import ThisExpression
+                return ThisExpression()
             return Identifier(token.literal)
+        elif token.type == THIS:
+            from ..zexus_ast import ThisExpression
+            return ThisExpression()
         elif token.type == TRUE:
             # Derive value from literal text for safety
             lit = getattr(token, 'literal', 'true')
@@ -3328,6 +3791,30 @@ class ContextStackParser:
         if tokens[0].type == CONST:
             parser_debug(f"  🎯 [Generic] Detected const statement")
             return self._parse_const_statement_block(block_info, all_tokens)
+        
+        # Check if this is a DATA statement (dataclass definition)
+        # Can be: data User { ... } or @validated data User { ... }
+        has_decorator = tokens[0].type == AT
+        data_index = 0
+        
+        # Skip decorators to find 'data' keyword
+        while data_index < len(tokens) and tokens[data_index].type == AT:
+            data_index += 1  # Skip @
+            if data_index < len(tokens) and tokens[data_index].type == IDENT:
+                data_index += 1  # Skip decorator name
+        
+        if data_index < len(tokens) and tokens[data_index].type == DATA:
+            parser_debug(f"  🎯 [Generic] Detected data statement (decorators: {has_decorator})")
+            return self._parse_data_statement(tokens)
+        
+        # Check if this is a LOG statement (log >, log >>, or log <<)
+        if tokens[0].type == LOG:
+            parser_debug(f"  🎯 [Generic] Detected log statement")
+            # Parse using _parse_block_statements which handles LOG
+            statements = self._parse_block_statements(tokens)
+            if statements and len(statements) > 0:
+                return statements[0]  # Return the first (and likely only) statement
+            return None
         
         # Check if this is an assignment statement (identifier = value)
         if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == ASSIGN:

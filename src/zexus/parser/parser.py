@@ -1014,11 +1014,17 @@ class UltimateParser:
         if not self.cur_token_is(DOT):
             return None
 
-        if not self.expect_peek(IDENT):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected method name after '.'")
+        # After a dot, allow keywords to be used as property/method names
+        # This enables t.verify(), obj.data, etc. even though verify/data are keywords
+        self.next_token()
+        
+        # Accept any token with a literal as a property name (IDENT or keywords)
+        # This allows using reserved keywords like 'verify', 'data', 'hash', etc. as property names
+        if self.cur_token.literal:
+            method = Identifier(self.cur_token.literal)
+        else:
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected property/method name after '.'")
             return None
-
-        method = Identifier(self.cur_token.literal)
 
         if self.peek_token_is(LPAREN):
             self.next_token()
