@@ -528,6 +528,39 @@ class ContextStackParser:
         parser_debug(f"  📝 Type name: {type_name}")
         idx += 1
         
+        # Parse generic type parameters: <T, U, V>
+        type_params = []
+        if idx < len(tokens) and tokens[idx].type == LT:
+            idx += 1  # Skip <
+            parser_debug("  🔤 Parsing generic type parameters")
+            
+            # Parse comma-separated type parameter names
+            while idx < len(tokens):
+                if tokens[idx].type == GT:
+                    idx += 1  # Skip >
+                    break
+                
+                if tokens[idx].type == IDENT:
+                    type_params.append(tokens[idx].literal)
+                    parser_debug(f"    ✅ Type parameter: {tokens[idx].literal}")
+                    idx += 1
+                    
+                    # Check for comma or closing >
+                    if idx < len(tokens):
+                        if tokens[idx].type == COMMA:
+                            idx += 1  # Skip comma
+                        elif tokens[idx].type == GT:
+                            continue  # Will break on next iteration
+                        else:
+                            parser_debug(f"  ❌ Invalid type parameters: expected ',' or '>', got {tokens[idx].type}")
+                            return None
+                else:
+                    parser_debug(f"  ❌ Invalid type parameter: expected identifier, got {tokens[idx].type}")
+                    return None
+            
+            if type_params:
+                parser_debug(f"  🔤 Generic type parameters: {type_params}")
+        
         # Check for inheritance: extends ParentType
         parent_type = None
         if idx < len(tokens) and tokens[idx].type == IDENT and tokens[idx].literal == "extends":
@@ -574,7 +607,8 @@ class ContextStackParser:
             fields=fields,
             modifiers=modifiers,
             parent=parent_type,
-            decorators=decorators
+            decorators=decorators,
+            type_params=type_params
         )
     
     def _parse_data_fields(self, tokens):
@@ -2938,6 +2972,53 @@ class ContextStackParser:
             elif t.type == IDENT or t.type in {SEND, RECEIVE, DEBUG}:  # Identifier or function call (including concurrency/debug keywords)
                 name = t.literal if t.type == IDENT else ("send" if t.type == SEND else ("receive" if t.type == RECEIVE else "debug"))
                 i += 1
+                
+                # Check for generic type arguments: Box<number>
+                type_args = []
+                if i < n and tokens[i].type == LT:
+                    # Need to disambiguate < for generics vs less-than operator
+                    # Heuristic: if followed by type name and > or comma, it's a generic
+                    lookahead = i + 1
+                    is_generic = False
+                    
+                    if lookahead < n and tokens[lookahead].type == IDENT:
+                        # Look for closing > or comma
+                        temp_idx = lookahead + 1
+                        while temp_idx < n:
+                            if tokens[temp_idx].type == GT:
+                                is_generic = True
+                                break
+                            elif tokens[temp_idx].type == COMMA:
+                                is_generic = True
+                                break
+                            elif tokens[temp_idx].type == IDENT:
+                                temp_idx += 1
+                            else:
+                                break
+                    
+                    if is_generic:
+                        i += 1  # Skip <
+                        # Parse comma-separated type arguments
+                        while i < n:
+                            if tokens[i].type == GT:
+                                i += 1  # Skip >
+                                break
+                            
+                            if tokens[i].type == IDENT:
+                                type_args.append(tokens[i].literal)
+                                i += 1
+                                
+                                # Check for comma or closing >
+                                if i < n:
+                                    if tokens[i].type == COMMA:
+                                        i += 1  # Skip comma
+                                    elif tokens[i].type == GT:
+                                        continue  # Will break on next iteration
+                                    else:
+                                        break  # Invalid syntax, stop parsing type args
+                            else:
+                                break
+                
                 # Check for immediate function call
                 if i < n and tokens[i].type == LPAREN:
                     i += 1  # Skip LPAREN
@@ -2966,7 +3047,7 @@ class ContextStackParser:
                             i += 1  # Skip comma
                     if i < n and tokens[i].type == RPAREN:
                         i += 1  # Skip RPAREN
-                    return CallExpression(Identifier(name), args)
+                    return CallExpression(Identifier(name), args, type_args=type_args)
                 else:
                     return Identifier(name)
 

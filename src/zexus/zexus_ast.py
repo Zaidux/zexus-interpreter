@@ -59,23 +59,29 @@ class DataStatement(Statement):
         address: string
     }
     
+    data Box<T> {
+        value: T
+    }
+    
     Creates a structured type with automatic methods:
     - Constructor
     - toString(), toJSON(), fromJSON()
     - equals(), clone(), hash()
     """
-    def __init__(self, name, fields, modifiers=None, parent=None, decorators=None):
+    def __init__(self, name, fields, modifiers=None, parent=None, decorators=None, type_params=None):
         self.name = name           # Identifier: class name
         self.fields = fields       # List of DataField objects
         self.modifiers = modifiers or []  # List of modifiers: ["immutable", "verified", etc.]
         self.parent = parent       # String: parent dataclass name (for inheritance)
         self.decorators = decorators or []  # List of decorator names: ["validated", "logged", etc.]
+        self.type_params = type_params or []  # List of type parameter names: ["T", "U", "V"]
 
     def __repr__(self):
         mods = f", modifiers={self.modifiers}" if self.modifiers else ""
         parent = f", extends={self.parent}" if self.parent else ""
         decs = f", decorators={self.decorators}" if self.decorators else ""
-        return f"DataStatement(name={self.name}, fields={self.fields}{mods}{parent}{decs})"
+        tparams = f", type_params={self.type_params}" if self.type_params else ""
+        return f"DataStatement(name={self.name}, fields={self.fields}{mods}{parent}{decs}{tparams})"
 
 class DataField:
     """Field definition in a dataclass
@@ -459,12 +465,14 @@ class LambdaExpression(Expression):
         return f"LambdaExpression(parameters={len(self.parameters)})"
 
 class CallExpression(Expression):
-    def __init__(self, function, arguments):
+    def __init__(self, function, arguments, type_args=None):
         self.function = function
         self.arguments = arguments
+        self.type_args = type_args or []  # List of type arguments for generic instantiation: Box<number>
 
     def __repr__(self):
-        return f"CallExpression(function={self.function}, arguments={len(self.arguments)})"
+        targs = f", type_args={self.type_args}" if self.type_args else ""
+        return f"CallExpression(function={self.function}, arguments={len(self.arguments)}{targs})"
 
 class MethodCallExpression(Expression):
     def __init__(self, object, method, arguments):

@@ -196,9 +196,14 @@ class StatementEvaluatorMixin:
             age: number require age >= 0
         }
         
-        Creates a User() constructor function with:
+        data Box<T> {
+            value: T
+        }
+        
+        Creates a User() or Box<T>() constructor function with:
         - Type validation
         - Constraint validation
+        - Generic type substitution
         - Auto-generated methods: toString(), toJSON(), clone(), hash(), verify()
         - Static methods: fromJSON()
         - Immutability support
@@ -216,6 +221,43 @@ class StatementEvaluatorMixin:
         modifiers = node.modifiers or []
         parent_type = node.parent
         decorators = node.decorators or []
+        type_params = node.type_params or []
+        
+        # Check modifiers
+        is_immutable = "immutable" in modifiers
+        is_verified = "verified" in modifiers
+        is_validated = "validated" in decorators
+        
+        debug_log(f"  Fields: {len(fields)}, Immutable: {is_immutable}, Verified: {is_verified}, Validated: {is_validated}")
+        
+        if type_params:
+            debug_log(f"  Generic type parameters: {type_params}")
+        
+        # If this is a generic type, we need to create a factory that produces specialized constructors
+        if type_params:
+            # Store the generic template
+            generic_template = {
+                'type_name': type_name,
+                'fields': fields,
+                'modifiers': modifiers,
+                'parent_type': parent_type,
+                'decorators': decorators,
+                'type_params': type_params,
+                'env': env,
+                'stack_trace': stack_trace,
+                'evaluator': self
+            }
+            
+            # Create a Builtin that stores the template
+            template_constructor = Builtin(lambda *args: EvaluationError(
+                f"Generic type '{type_name}' requires type arguments. Use {type_name}<Type>(...)"
+            ))
+            template_constructor.is_generic = True
+            template_constructor.generic_template = generic_template
+            
+            # Register the generic template
+            env.set(type_name, template_constructor)
+            return NULL
         
         # Check modifiers
         is_immutable = "immutable" in modifiers
@@ -604,7 +646,17 @@ class StatementEvaluatorMixin:
         }
         
         # Register constructor in environment as const
-        env.set_const(type_name, constructor)
+        # For specialized generics (e.g., Box<number>), don't fail if already registered
+        try:
+            env.set_const(type_name, constructor)
+        except ValueError as e:
+            # If it's a specialized generic that's already registered, just return the existing one
+            if '<' in type_name and '>' in type_name:
+                debug_log(f"  ℹ️  Specialized generic already registered: {type_name}")
+                return NULL
+            else:
+                # Re-raise for non-generic types
+                raise e
         
         debug_log(f"  ✅ Registered production-grade dataclass: {type_name}")
         return NULL
