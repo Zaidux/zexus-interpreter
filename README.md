@@ -78,7 +78,11 @@ Zexus is a next-generation, general-purpose programming language designed for se
 ✅ **UI Renderer** - SCREEN, COMPONENT, THEME keywords with 120+ tests  
 ✅ **Enhanced VERIFY** - Email, URL, phone validation, pattern matching, database checks  
 ✅ **Blockchain Keywords** - implements, pure, view, payable, modifier, this, emit  
-✅ **100+ Built-in Functions** - Comprehensive standard library
+✅ **100+ Built-in Functions** - Comprehensive standard library  
+✅ **LOG Keyword Enhancements** - `read_file()` and `eval_file()` for dynamic code generation  
+✅ **REQUIRE Tolerance Blocks** - Conditional bypasses for VIP/admin/emergency scenarios  
+✅ **Function-Level Scoping** - LET/CONST documented with scope behavior and shadowing rules  
+✅ **Advanced Error Patterns** - Retry, circuit breaker, error aggregation patterns
 
 ### Bug Fixes & Improvements
 
@@ -569,6 +573,65 @@ action generateReports() {
 }
 ```
 
+### Example 9: Advanced Error Handling with Tolerance Blocks
+
+```zexus
+# REQUIRE with tolerance blocks - VIP bypass
+action processPremiumAccess(user, balance, isVIP) {
+    # Standard users need 1.0 ETH, VIP bypass
+    require balance >= 1.0 {
+        if (isVIP) return true;
+    }
+    
+    print("Premium access granted to: " + user)
+    return true
+}
+
+# Advanced error patterns - Circuit breaker
+let failureCount = 0
+let circuitOpen = false
+
+action protectedOperation(data) {
+    try {
+        if (circuitOpen) {
+            revert("Circuit breaker activated - too many failures")
+        }
+        
+        # Process operation
+        let result = processData(data)
+        failureCount = 0  # Reset on success
+        return result
+    } catch (error) {
+        failureCount = failureCount + 1
+        if (failureCount >= 3) {
+            circuitOpen = true
+        }
+        return null
+    }
+}
+
+# Retry pattern with error aggregation
+action retryableOperation(maxAttempts) {
+    let attempts = 0
+    let errors = []
+    
+    while (attempts < maxAttempts) {
+        try {
+            return performOperation()
+        } catch (e) {
+            attempts = attempts + 1
+            errors = errors + [e]
+            if (attempts < maxAttempts) {
+                sleep(1)  # Wait before retry
+            }
+        }
+    }
+    
+    print("Failed after " + attempts + " attempts")
+    return null
+}
+```
+
 ---
 
 ## 📚 Complete Feature Reference
@@ -993,6 +1056,22 @@ file_read_json(path)            # Read JSON file
 file_write_json(path, data)     # Write JSON file
 file_append(path, content)      # Append to file
 file_list_dir(path)             # List directory
+read_file(path)                 # Read file contents (alias for file_read_text)
+eval_file(path, [language])     # Execute code from file (Zexus, Python, JS)
+```
+
+**New in v0.1.3**: `read_file()` and `eval_file()` enable dynamic code generation and multi-language execution:
+```zexus
+# Generate and execute Zexus code
+log >> "helper.zx"
+print("action add(a, b) { return a + b; }")
+eval_file("helper.zx")
+let result = add(5, 10)  # Uses generated function
+
+# Execute Python code
+log >> "script.py"
+print("print('Hello from Python!')")
+eval_file("script.py", "python")
 ```
 
 #### Persistence
@@ -1225,6 +1304,21 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`try`** / **`catch`** - Exception handling
 - **`throw`** - Throw exception
 - **`finally`** - Cleanup block
+- **`require`** - Assert condition (with tolerance blocks for conditional bypasses)
+- **`revert`** - Revert transaction
+
+**New in v0.1.3**: REQUIRE supports tolerance blocks for conditional requirement bypasses:
+```zexus
+# VIP users bypass balance requirement
+require balance >= 0.1 {
+    if (isVIP) return true;
+}
+
+# Emergency admin access overrides maintenance mode
+require !maintenanceMode {
+    if (isAdmin && emergency) return true;
+}
+```
 
 ### Performance Optimization Keywords
 
