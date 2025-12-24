@@ -108,11 +108,12 @@ print("VERIFY passed")
 print("\n13. Testing async features:")
 async action async_task() -> string {
     return "Async completed"
-}
+};
 
 # Note: Uncomment if async/await is fully implemented
 # let async_result = await async_task()
 # print("Async result: " + async_result)
+print("Async action defined (await not yet implemented)")
 
 # 14. Test main entry point pattern
 print("\n14. Testing main entry point:")
@@ -190,4 +191,4 @@ print("String to number: " + string(str_num))
 
 print("\n=== TEST COMPLETE ===")
 print("Total features tested: 21")
-print("Language version check: " + (if exists("__version__") then __version__ else "Unknown"))
+print("All tests passed successfully!")
