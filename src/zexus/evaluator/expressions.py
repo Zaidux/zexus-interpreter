@@ -503,3 +503,180 @@ class ExpressionEvaluatorMixin:
                 return new_error(f"Error reading file '{filepath}': {e}", stack_trace)
         except Exception as e:
             return new_error(f"Error importing file '{filepath}': {e}", stack_trace)
+    def eval_match_expression(self, node, env, stack_trace):
+        """Evaluate match expression with pattern matching
+        
+        match value {
+            Point(x, y) => x + y,
+            User(name, _) => name,
+            42 => "the answer",
+            _ => "default"
+        }
+        """
+        from .. import zexus_ast
+        from ..object import Map, String, Integer, Boolean as BooleanObj, Environment
+        
+        debug_log("eval_match_expression", "Evaluating match expression")
+        
+        # Evaluate the value to match against
+        match_value = self.eval_node(node.value, env, stack_trace)
+        if is_error(match_value):
+            return match_value
+        
+        debug_log("  Match value", str(match_value))
+        
+        # Try each case in order
+        for case in node.cases:
+            pattern = case.pattern
+            result_expr = case.result
+            
+            # Try to match the pattern
+            match_result = self._match_pattern(pattern, match_value, env)
+            
+            if match_result is not None:
+                # Pattern matched! Create new environment with bindings
+                new_env = Environment(outer=env)
+                
+                # Add all bindings to the new environment
+                for var_name, var_value in match_result.items():
+                    new_env.set(var_name, var_value)
+                
+                # Evaluate and return the result expression
+                result = self.eval_node(result_expr, new_env, stack_trace)
+                debug_log("  ✅ Pattern matched", f"Result: {result}")
+                return result
+        
+        # No pattern matched
+        return EvaluationError("Match expression: no pattern matched")
+    
+    def _match_pattern(self, pattern, value, env):
+        """Try to match a pattern against a value
+        
+        Returns:
+            dict: Bindings if matched (variable name -> value)
+            None: If pattern doesn't match
+        """
+        from .. import zexus_ast
+        from ..object import Map, String, Integer, Float, Boolean as BooleanObj
+        
+        # Wildcard pattern: always matches, no bindings
+        if isinstance(pattern, zexus_ast.WildcardPattern):
+            debug_log("  🎯 Wildcard pattern matched", "_")
+            return {}
+        
+        # Variable pattern: always matches, bind variable
+        if isinstance(pattern, zexus_ast.VariablePattern):
+            debug_log("  🎯 Variable pattern matched", f"{pattern.name} = {value}")
+            return {pattern.name: value}
+        
+        # Literal pattern: check equality
+        if isinstance(pattern, zexus_ast.LiteralPattern):
+            pattern_value = self.eval_node(pattern.value, env, [])
+            
+            # Compare values
+            matches = False
+            if isinstance(value, Integer) and isinstance(pattern_value, Integer):
+                matches = value.value == pattern_value.value
+            elif isinstance(value, Float) and isinstance(pattern_value, Float):
+                matches = value.value == pattern_value.value
+            elif isinstance(value, String) and isinstance(pattern_value, String):
+                matches = value.value == pattern_value.value
+            elif isinstance(value, BooleanObj) and isinstance(pattern_value, BooleanObj):
+                matches = value.value == pattern_value.value
+            
+            if matches:
+                debug_log("  🎯 Literal pattern matched", str(pattern_value))
+                return {}
+            else:
+                debug_log("  ❌ Literal pattern didn't match", f"{pattern_value} != {value}")
+                return None
+        
+        # Constructor pattern: match dataclass instances
+        if isinstance(pattern, zexus_ast.ConstructorPattern):
+            # Check if value is a Map (dataclass instance)
+            if not isinstance(value, Map):
+                debug_log("  ❌ Constructor pattern: value is not a dataclass", type(value).__name__)
+                return None
+            
+            # Check if value has __type__ field matching constructor name
+            type_key = String("__type__")
+            if type_key not in value.pairs:
+                debug_log("  ❌ Constructor pattern: no __type__ field", "")
+                return None
+            
+            type_value = value.pairs[type_key]
+            if not isinstance(type_value, String):
+                debug_log("  ❌ Constructor pattern: __type__ is not a string", type(type_value).__name__)
+                return None
+            
+            # Extract actual type name (handle specialized generics like "Point<number>")
+            actual_type = type_value.value
+            if '<' in actual_type:
+                # Strip generic parameters for matching
+                actual_type = actual_type.split('<')[0]
+            
+            if actual_type != pattern.constructor_name:
+                debug_log("  ❌ Constructor pattern: type mismatch", f"{actual_type} != {pattern.constructor_name}")
+                return None
+            
+            debug_log("  ✅ Constructor type matched", pattern.constructor_name)
+            
+            # Extract field values and match against bindings
+            bindings = {}
+            
+            # Get all non-internal, non-method fields from the dataclass
+            # Maintain original field order from the dataclass definition
+            fields = []
+            field_dict = {}
+            
+            for key, val in value.pairs.items():
+                if isinstance(key, String):
+                    field_name = key.value
+                    # Skip internal fields (__type__, __immutable__, etc.)
+                    if field_name.startswith("__"):
+                        continue
+                    # Skip auto-generated methods (toString, toJSON, clone, equals, hash, verify, fromJSON)
+                    if field_name in {"toString", "toJSON", "clone", "equals", "hash", "verify", "fromJSON"}:
+                        continue
+                    field_dict[field_name] = val
+            
+            # Try to get field order from __field_order__ metadata if available
+            # Otherwise, use the order they appear in the Map (which should be insertion order in Python 3.7+)
+            field_order_key = String("__field_order__")
+            if field_order_key in value.pairs:
+                # Use explicit field order if available
+                field_order = value.pairs[field_order_key]
+                if isinstance(field_order, List):
+                    for field_name_obj in field_order.elements:
+                        if isinstance(field_name_obj, String):
+                            field_name = field_name_obj.value
+                            if field_name in field_dict:
+                                fields.append((field_name, field_dict[field_name]))
+            else:
+                # Use insertion order (dict maintains order in Python 3.7+)
+                fields = [(k, v) for k, v in field_dict.items()]
+            
+            # Match each binding pattern against corresponding field value
+            if len(pattern.bindings) != len(fields):
+                debug_log("  ❌ Constructor pattern: binding count mismatch", f"{len(pattern.bindings)} != {len(fields)}")
+                return None
+            
+            for i, (field_name, field_value) in enumerate(fields):
+                binding_pattern = pattern.bindings[i]
+                
+                # Recursively match the binding pattern
+                binding_result = self._match_pattern(binding_pattern, field_value, env)
+                
+                if binding_result is None:
+                    debug_log("  ❌ Constructor pattern: binding didn't match", f"field {field_name}")
+                    return None
+                
+                # Merge bindings
+                bindings.update(binding_result)
+            
+            debug_log("  🎯 Constructor pattern fully matched", f"{pattern.constructor_name} with {len(bindings)} bindings")
+            return bindings
+        
+        # Unknown pattern type
+        debug_log("  ❌ Unknown pattern type", type(pattern).__name__)
+        return None

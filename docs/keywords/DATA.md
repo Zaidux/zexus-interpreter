@@ -1195,6 +1195,135 @@ let validated = Validated<number>(100);
 - Type parameters cannot have constraints (e.g., `T extends Number`)
 - Nested generic instantiation not yet supported (e.g., `Box<Pair<A, B>>`)
 
+## Pattern Matching
+
+> **Status:** ✅ Implemented
+
+Pattern matching allows you to destructure and match against dataclass instances using powerful pattern syntax.
+
+### Basic Pattern Matching
+
+```zexus
+data Point { x: number, y: number }
+
+let p = Point(10, 20);
+
+let result = match p {
+    Point(0, 0) => "origin",
+    Point(x, 0) => "on x-axis at " + x,
+    Point(0, y) => "on y-axis at " + y,
+    Point(x, y) => "at (" + x + ", " + y + ")"
+};
+
+print(result);  // "at (10, 20)"
+```
+
+### Wildcard Pattern
+
+```zexus
+data Shape {
+    type: string,
+    size: number
+}
+
+let shape = Shape("circle", 50);
+
+let description = match shape {
+    Shape("circle", _) => "It's a circle!",
+    Shape("square", _) => "It's a square!",
+    Shape(_, size) => "Unknown shape of size " + size
+};
+
+print(description);  // "It's a circle!"
+```
+
+### Variable Binding
+
+```zexus
+data User {
+    name: string,
+    age: number
+}
+
+let user = User("Alice", 30);
+
+let greeting = match user {
+    User("Bob", _) => "Hello Bob!",
+    User(name, age) => "Hello " + name + ", you are " + age
+};
+
+print(greeting);  // "Hello Alice, you are 30"
+```
+
+### Literal Pattern Matching
+
+```zexus
+data Config {
+    mode: string,
+    port: number
+}
+
+let config = Config("production", 8080);
+
+let status = match config {
+    Config("production", 8080) => "Production mode on default port",
+    Config("production", port) => "Production on port " + port,
+    Config("development", _) => "Development mode",
+    Config(mode, _) => mode + " mode"
+};
+```
+
+### Complex Patterns with Computation
+
+```zexus
+data Rectangle {
+    width: number,
+    height: number,
+    
+    computed area => this.width * this.height
+}
+
+let rect = Rectangle(10, 20);
+
+let info = match rect {
+    Rectangle(w, h) => "Area: " + (w * h)
+};
+
+print(info);  // "Area: 200"
+```
+
+### Pattern Matching with Generic Types
+
+```zexus
+data Box<T> {
+    value: T
+}
+
+let numBox = Box<number>(42);
+
+let result = match numBox {
+    Box(0) => "empty",
+    Box(value) => "contains " + value
+};
+
+print(result);  // "contains 42"
+```
+
+### Features:
+- **Constructor Patterns**: Match dataclass constructors `Point(x, y)`
+- **Wildcard Patterns**: Use `_` to ignore values
+- **Variable Binding**: Bind matched values to variables
+- **Literal Matching**: Match exact values `Point(0, 0)`
+- **Field Extraction**: Automatically extract field values in order
+- **Generic Support**: Works with generic dataclasses
+- **Computed Properties**: Access computed fields in patterns
+
+### Pattern Syntax:
+- **Type(field1, field2, ...)**: Constructor pattern with field bindings
+- **Type(literal, ...)**: Match literal field values
+- **Type(var, ...)**: Bind fields to variables
+- **_**: Wildcard (matches anything, doesn't bind)
+
 ## Future Enhancements
 
 Planned features for upcoming versions:
@@ -1202,11 +1331,13 @@ Planned features for upcoming versions:
 1. **Type Inference**: Automatic type parameter deduction from arguments
 2. **Type Constraints**: `data Box<T extends Comparable> { ... }`
 3. **Nested Generics**: `Box<Pair<string, number>>`
-4. **Pattern Matching**: `match value { Point(x, y) => ... }`
-5. **Private/Public Modifiers**: `private field: string`
-6. **Readonly Fields**: Prevent mutation after construction
+4. **Nested Patterns**: `Box(Point(x, y))` for nested destructuring
+5. **Guard Clauses**: `Point(x, y) if x > 0 => ...`
+6. **Array Patterns**: `[first, ...rest]` destructuring
+7. **Private/Public Modifiers**: `private field: string`
+8. **Readonly Fields**: Prevent mutation after construction
 
-> **Current Implementation**: Production-grade dataclass with type validation, constraints, auto-generated methods (toString, toJSON, clone, equals, hash, verify), immutability, verification support, static default() method, computed properties, custom method definitions, operator overloading, inheritance with extends, decorators (@logged, @cached, @validated), and generic types with full type substitution.
+> **Current Implementation**: Production-grade dataclass with type validation, constraints, auto-generated methods (toString, toJSON, clone, equals, hash, verify), immutability, verification support, static default() method, computed properties, custom method definitions, operator overloading, inheritance with extends, decorators (@logged, @cached, @validated), generic types with full type substitution, and pattern matching with constructor patterns and wildcard support.
 
 ## See Also
 
@@ -1295,6 +1426,16 @@ Planned features for upcoming versions:
 - [x] Specialized type caching for performance
 - [x] Works with all data modifiers
 
+### ✅ Pattern Matching
+- [x] Match expressions with `match value { ... }`
+- [x] Constructor patterns (`Point(x, y)`)
+- [x] Wildcard patterns (`_` to ignore values)
+- [x] Variable binding in patterns
+- [x] Literal value matching
+- [x] Field extraction in declaration order
+- [x] Works with generic types
+- [x] Works with computed properties
+
 ### ✅ Integration
 - [x] Works with keyword-after-dot feature
 - [x] Map-based implementation with String keys
@@ -1303,8 +1444,10 @@ Planned features for upcoming versions:
 
 ## Future Features (Not Yet Implemented)
 
-### ⏳ Planned for Phase 2
-- [ ] Pattern matching syntax (`match value { Pattern(...) => ... }`)
+### ⏳ Planned for Phase 3
+- [ ] Nested pattern matching (`Box(Point(x, y))`)
+- [ ] Pattern guard clauses (`Point(x, y) if x > 0`)
+- [ ] Array/List pattern matching (`[first, ...rest]`)
 - [ ] Type inference for generics (`Box(42)` infers `Box<number>`)
 - [ ] Type constraints for generics (`data Box<T extends Comparable>`)
 - [ ] Nested generic types (`Box<Pair<string, number>>`)

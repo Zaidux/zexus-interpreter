@@ -495,6 +495,7 @@ class Lexer:
             "simd": SIMD,               # Performance: vector operations
             "defer": DEFER,             # Convenience: cleanup code execution
             "pattern": PATTERN,         # Convenience: pattern matching
+            "match": MATCH,             # Match expression for pattern matching
             "enum": ENUM,               # Advanced: type-safe enumerations
             "stream": STREAM,           # Advanced: event streaming
             "watch": WATCH,             # Advanced: reactive state management

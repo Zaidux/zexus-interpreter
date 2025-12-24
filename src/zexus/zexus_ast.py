@@ -483,6 +483,63 @@ class MethodCallExpression(Expression):
     def __repr__(self):
         return f"MethodCallExpression(object={self.object}, method={self.method})"
 
+class MatchExpression(Expression):
+    """Match expression for pattern matching
+    
+    match value {
+        Point(x, y) => x + y,
+        User(name, _) => name,
+        42 => "the answer",
+        _ => "default"
+    }
+    """
+    def __init__(self, value, cases):
+        self.value = value  # Expression: value to match against
+        self.cases = cases  # List[MatchCase]: pattern cases
+
+    def __repr__(self):
+        return f"MatchExpression(value={self.value}, cases={len(self.cases)})"
+
+class MatchCase:
+    """A single match case with pattern and result expression"""
+    def __init__(self, pattern, result):
+        self.pattern = pattern  # Pattern: pattern to match
+        self.result = result  # Expression: result if matched
+
+    def __repr__(self):
+        return f"MatchCase(pattern={self.pattern}, result={self.result})"
+
+# Pattern nodes for destructuring
+class ConstructorPattern:
+    """Constructor pattern: Point(x, y)"""
+    def __init__(self, constructor_name, bindings):
+        self.constructor_name = constructor_name  # String: type name
+        self.bindings = bindings  # List[Pattern]: nested patterns or variable names
+
+    def __repr__(self):
+        return f"ConstructorPattern({self.constructor_name}, bindings={self.bindings})"
+
+class VariablePattern:
+    """Variable binding pattern: x, name, value"""
+    def __init__(self, name):
+        self.name = name  # String: variable name to bind
+
+    def __repr__(self):
+        return f"VariablePattern({self.name})"
+
+class WildcardPattern:
+    """Wildcard pattern: _ (matches anything, no binding)"""
+    def __repr__(self):
+        return "WildcardPattern(_)"
+
+class LiteralPattern:
+    """Literal pattern: 42, "hello", true"""
+    def __init__(self, value):
+        self.value = value  # Literal value (IntegerLiteral, StringLiteral, etc.)
+
+    def __repr__(self):
+        return f"LiteralPattern({self.value})"
+
 class PropertyAccessExpression(Expression):
     def __init__(self, object, property):
         self.object = object

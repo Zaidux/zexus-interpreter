@@ -2932,6 +2932,8 @@ class ContextStackParser:
             return self._parse_list_literal(tokens)
         if tokens[0].type == LAMBDA:
             return self._parse_lambda(tokens)
+        if tokens[0].type == MATCH:
+            return self._parse_match_expression(tokens)
         if tokens[0].type == FUNCTION or tokens[0].type == ACTION:
             return self._parse_function_literal(tokens)
         if tokens[0].type == SANDBOX:
@@ -3173,22 +3175,79 @@ class ContextStackParser:
                 continue
 
             # Binary operators (comparisons and arithmetic - but NOT AND/OR which are handled above)
-            if t.type in {PLUS, MINUS, ASTERISK, SLASH, 
+            if t.type in {PLUS, MINUS, ASTERISK, SLASH, MOD,
                          LT, GT, EQ, NOT_EQ, LTE, GTE}:
+                # Get operator precedence
+                op_precedence = self._get_operator_precedence(t.type)
                 i += 1  # Skip operator
-                right = self._parse_comparison_and_above(tokens[i:])
+                
+                # Parse right side with proper precedence climbing
+                # We need to find where the right operand ends based on precedence
+                right_start = i
+                right_end = i
+                
+                # Find the extent of the right operand based on precedence
+                # Lower precedence operators should end our right operand
+                depth = 0
+                while right_end < n:
+                    tt = tokens[right_end]
+                    
+                    # Track nesting depth
+                    if tt.type in {LPAREN, LBRACKET, LBRACE}:
+                        depth += 1
+                    elif tt.type in {RPAREN, RBRACKET, RBRACE}:
+                        depth -= 1
+                        if depth < 0:  # We've hit a closing bracket from outer context
+                            break
+                    
+                    # If we're not nested and we hit an operator with same or lower precedence, stop
+                    if depth == 0 and tt.type in {PLUS, MINUS, ASTERISK, SLASH, MOD, LT, GT, EQ, NOT_EQ, LTE, GTE}:
+                        next_precedence = self._get_operator_precedence(tt.type)
+                        # For left-associative operators, stop if next has same or lower precedence
+                        if next_precedence <= op_precedence:
+                            break
+                    
+                    right_end += 1
+                
+                # Parse the right operand
+                right = self._parse_comparison_and_above(tokens[right_start:right_end]) if right_start < right_end else None
+                
                 if right:
                     current_expr = InfixExpression(
                         left=current_expr,
                         operator=t.literal,
                         right=right
                     )
-                break  # Stop after handling one binary operator
+                    i = right_end  # Continue from where right operand ended
+                    continue
+                else:
+                    break
 
             # No more chaining possible
             break
 
         return current_expr
+    
+    def _get_operator_precedence(self, token_type):
+        """Get operator precedence for proper parsing
+        Higher numbers = higher precedence (evaluated first)
+        """
+        # Precedence levels (matching parser.py conventions)
+        PRODUCT = 9   # *, /, %
+        SUM = 8       # +, -
+        COMPARISON = 7  # <, >, <=, >=
+        EQUALITY = 6    # ==, !=
+        
+        if token_type in {ASTERISK, SLASH, MOD}:
+            return PRODUCT
+        elif token_type in {PLUS, MINUS}:
+            return SUM
+        elif token_type in {LT, GT, LTE, GTE}:
+            return COMPARISON
+        elif token_type in {EQ, NOT_EQ}:
+            return EQUALITY
+        else:
+            return 1  # Lowest precedence
 
     def _parse_single_token_expression(self, token):
         """Parse a single token into an expression"""
@@ -3356,6 +3415,212 @@ class ContextStackParser:
         body_tokens = tokens[i:]
         body = self._parse_expression(body_tokens) if body_tokens else StringLiteral("")
         return LambdaExpression(parameters=params, body=body)
+
+    def _parse_match_expression(self, tokens):
+        """Parse a match expression for pattern matching
+        
+        match value {
+            Point(x, y) => x + y,
+            User(name, _) => name,
+            42 => "the answer",
+            _ => "default"
+        }
+        """
+        from ..zexus_ast import (MatchExpression, MatchCase, ConstructorPattern, 
+                                 VariablePattern, WildcardPattern, LiteralPattern)
+        
+        parser_debug("🔧 [Match] Parsing match expression")
+        
+        if not tokens or tokens[0].type != MATCH:
+            return None
+        
+        idx = 1
+        
+        # Parse the value expression (until {)
+        value_end = idx
+        while value_end < len(tokens) and tokens[value_end].type != LBRACE:
+            value_end += 1
+        
+        if value_end >= len(tokens):
+            parser_debug("  ❌ Match expression: expected {")
+            return None
+        
+        value_tokens = tokens[idx:value_end]
+        value_expr = self._parse_expression(value_tokens)
+        
+        if not value_expr:
+            parser_debug("  ❌ Match expression: failed to parse value")
+            return None
+        
+        # Find matching closing brace
+        idx = value_end + 1  # Skip {
+        brace_count = 1
+        body_start = idx
+        
+        while idx < len(tokens):
+            if tokens[idx].type == LBRACE:
+                brace_count += 1
+            elif tokens[idx].type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    break
+            idx += 1
+        
+        if brace_count != 0:
+            parser_debug("  ❌ Match expression: unmatched braces")
+            return None
+        
+        body_end = idx
+        body_tokens = tokens[body_start:body_end]
+        
+        # Parse match cases
+        cases = []
+        i = 0
+        
+        while i < len(body_tokens):
+            # Skip commas and semicolons
+            if body_tokens[i].type in {COMMA, SEMICOLON}:
+                i += 1
+                continue
+            
+            # Find the => separator
+            arrow_idx = -1
+            depth = 0
+            for j in range(i, len(body_tokens)):
+                if body_tokens[j].type in {LPAREN, LBRACE, LBRACKET}:
+                    depth += 1
+                elif body_tokens[j].type in {RPAREN, RBRACE, RBRACKET}:
+                    depth -= 1
+                elif body_tokens[j].type == LAMBDA and depth == 0:  # => is tokenized as LAMBDA
+                    arrow_idx = j
+                    break
+            
+            if arrow_idx == -1:
+                # No more cases
+                break
+            
+            # Parse pattern (from i to arrow_idx)
+            pattern_tokens = body_tokens[i:arrow_idx]
+            pattern = self._parse_pattern(pattern_tokens)
+            
+            if not pattern:
+                parser_debug(f"  ❌ Failed to parse pattern: {[t.literal for t in pattern_tokens]}")
+                i = arrow_idx + 1
+                continue
+            
+            # Find result expression end (comma, semicolon, or end of body)
+            result_start = arrow_idx + 1
+            result_end = result_start
+            depth = 0
+            
+            while result_end < len(body_tokens):
+                if body_tokens[result_end].type in {LPAREN, LBRACE, LBRACKET}:
+                    depth += 1
+                elif body_tokens[result_end].type in {RPAREN, RBRACE, RBRACKET}:
+                    depth -= 1
+                elif body_tokens[result_end].type in {COMMA, SEMICOLON} and depth == 0:
+                    break
+                result_end += 1
+            
+            # Parse result expression
+            result_tokens = body_tokens[result_start:result_end]
+            result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
+            
+            cases.append(MatchCase(pattern=pattern, result=result_expr))
+            parser_debug(f"  ✅ Parsed match case: {pattern} => {result_expr}")
+            
+            i = result_end
+        
+        parser_debug(f"  ✅ Match expression with {len(cases)} cases")
+        return MatchExpression(value=value_expr, cases=cases)
+    
+    def _parse_pattern(self, tokens):
+        """Parse a pattern for pattern matching
+        
+        Patterns:
+          Point(x, y)    - Constructor pattern with bindings
+          _              - Wildcard pattern
+          x, name        - Variable pattern
+          42, "hello"    - Literal pattern
+        """
+        from ..zexus_ast import (ConstructorPattern, VariablePattern, 
+                                 WildcardPattern, LiteralPattern, IntegerLiteral, StringLiteral)
+        
+        if not tokens:
+            return None
+        
+        # Wildcard pattern: _
+        if len(tokens) == 1 and tokens[0].type == IDENT and tokens[0].literal == "_":
+            return WildcardPattern()
+        
+        # Literal patterns: 42, "hello", true, false
+        if len(tokens) == 1:
+            t = tokens[0]
+            if t.type == INT:
+                return LiteralPattern(IntegerLiteral(int(t.literal)))
+            elif t.type == STRING:
+                return LiteralPattern(StringLiteral(t.literal))
+            elif t.type == TRUE:
+                return LiteralPattern(Boolean(True))
+            elif t.type == FALSE:
+                return LiteralPattern(Boolean(False))
+        
+        # Constructor pattern: Point(x, y)
+        if tokens[0].type == IDENT and len(tokens) > 1 and tokens[1].type == LPAREN:
+            constructor_name = tokens[0].literal
+            
+            # Find matching closing paren
+            paren_count = 0
+            start = 1
+            end = 1
+            
+            for i in range(1, len(tokens)):
+                if tokens[i].type == LPAREN:
+                    paren_count += 1
+                elif tokens[i].type == RPAREN:
+                    paren_count -= 1
+                    if paren_count == 0:
+                        end = i
+                        break
+            
+            # Parse bindings (comma-separated patterns inside parentheses)
+            binding_tokens = tokens[start+1:end]
+            bindings = []
+            
+            if binding_tokens:
+                # Split by commas at depth 0
+                current_binding = []
+                depth = 0
+                
+                for t in binding_tokens:
+                    if t.type in {LPAREN, LBRACE, LBRACKET}:
+                        depth += 1
+                        current_binding.append(t)
+                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                        depth -= 1
+                        current_binding.append(t)
+                    elif t.type == COMMA and depth == 0:
+                        if current_binding:
+                            binding_pattern = self._parse_pattern(current_binding)
+                            if binding_pattern:
+                                bindings.append(binding_pattern)
+                        current_binding = []
+                    else:
+                        current_binding.append(t)
+                
+                # Don't forget the last binding
+                if current_binding:
+                    binding_pattern = self._parse_pattern(current_binding)
+                    if binding_pattern:
+                        bindings.append(binding_pattern)
+            
+            return ConstructorPattern(constructor_name=constructor_name, bindings=bindings)
+        
+        # Variable pattern: single identifier (not a wildcard)
+        if len(tokens) == 1 and tokens[0].type == IDENT:
+            return VariablePattern(name=tokens[0].literal)
+        
+        return None
 
     def _parse_function_literal(self, tokens):
         """Parse a function or action literal expression (anonymous function)
