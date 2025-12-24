@@ -62,11 +62,12 @@ print("Scores map: " + string(scores))
 # 7. Test pattern matching (if available)
 print("\n7. Testing pattern matching:")
 let value = 42
-match value {
-    case 0: print("Zero")
-    case 42: print("The answer!")
-    default: print("Other number")
+let match_result = match value {
+    0 => "Zero",
+    42 => "The answer!",
+    _ => "Other number"
 }
+print("Matched: " + match_result)
 
 # 8. Test error handling
 print("\n8. Testing error handling:")
@@ -85,12 +86,12 @@ print("Debug function returned: " + string(debugResult))
 
 # 10. Test reactive state (WATCH)
 print("\n10. Testing WATCH:")
-let watched = 0
-watch watched {
+let watched = 0;
+watch watched => {
     print("WATCH triggered: " + string(watched))
-}
-watched = 1
-watched = 2
+};
+watched = 1;
+watched = 2;
 
 # 11. Test persistence
 print("\n11. Testing persistence:")

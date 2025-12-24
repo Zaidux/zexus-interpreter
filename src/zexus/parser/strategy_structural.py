@@ -466,6 +466,15 @@ class StructuralAnalyzer:
                             allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
                             if not (in_assignment and (allow_in_assignment or allow_debug_call)):
                                 break
+                    
+                    # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
+                    # and not in an assignment context
+                    if nesting == 0 and not in_assignment and not found_colon_block and not found_brace_block:
+                        if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
+                            # This looks like a function call starting a new expression statement
+                            # Only break if we've already collected some tokens (not the first token)
+                            if len(stmt_tokens) > 1:
+                                break
 
                     # Always collect tokens
                     stmt_tokens.append(tj)
@@ -519,10 +528,15 @@ class StructuralAnalyzer:
 
             # Fallback: collect a run of tokens until a clear statement boundary
             # Respect nesting so that constructs inside parentheses/braces aren't split
+            # FIX: Handle expression statements (function calls not assigned to variables)
             start_idx = i
             run_tokens = [t]
             j = i + 1
             nesting = 0
+            
+            # Check if this is a simple function call expression statement: ident(...) 
+            is_function_call_start = (t.type == IDENT and j < n and tokens[j].type == LPAREN)
+            
             while j < n:
                 tj = tokens[j]
                 # Update nesting for parentheses/brackets/braces
@@ -535,6 +549,28 @@ class StructuralAnalyzer:
                 # Only consider these as boundaries when at top-level (nesting == 0)
                 if nesting == 0 and (tj.type in stop_types or tj.type in statement_starters or tj.type == LBRACE or tj.type == TRY):
                     break
+                
+                # FIX: If this is a function call and nesting just became 0 (closed all parens),
+                # check if next token looks like start of new statement
+                if is_function_call_start and nesting == 0 and j > start_idx + 1:
+                    # We've closed the function call parens
+                    # Check if next token starts a new statement (IDENT followed by LPAREN, or a statement keyword)
+                    next_idx = j + 1
+                    # Skip semicolons
+                    while next_idx < n and tokens[next_idx].type == SEMICOLON:
+                        next_idx += 1
+                    if next_idx < n:
+                        next_tok = tokens[next_idx]
+                        # If next token is a statement starter OR an identifier followed by (, it's a new statement
+                        if next_tok.type in statement_starters:
+                            run_tokens.append(tj)
+                            j += 1
+                            break
+                        elif next_tok.type == IDENT and next_idx + 1 < n and tokens[next_idx + 1].type == LPAREN:
+                            # Next statement is also a function call
+                            run_tokens.append(tj)
+                            j += 1
+                            break
 
                 run_tokens.append(tj)
                 j += 1

@@ -250,24 +250,28 @@ class ThemeStatement(Statement):
         return f"ThemeStatement(name={self.name}, properties={self.properties})"
 
 class ActionStatement(Statement):
-    def __init__(self, name, parameters, body, is_async=False):
+    def __init__(self, name, parameters, body, is_async=False, return_type=None):
         self.name = name
         self.parameters = parameters
         self.body = body
         self.is_async = is_async
+        self.return_type = return_type
 
     def __repr__(self):
         async_str = "async " if self.is_async else ""
-        return f"ActionStatement({async_str}name={self.name}, parameters={len(self.parameters)})"
+        return_type_str = f" -> {self.return_type}" if self.return_type else ""
+        return f"ActionStatement({async_str}name={self.name}, parameters={len(self.parameters)}{return_type_str})"
 
 class FunctionStatement(Statement):
-    def __init__(self, name, parameters, body):
+    def __init__(self, name, parameters, body, return_type=None):
         self.name = name
         self.parameters = parameters
         self.body = body
+        self.return_type = return_type
 
     def __repr__(self):
-        return f"FunctionStatement(name={self.name}, parameters={len(self.parameters)})"
+        return_type_str = f" -> {self.return_type}" if self.return_type else ""
+        return f"FunctionStatement(name={self.name}, parameters={len(self.parameters)}{return_type_str})"
 
 class ExactlyStatement(Statement):
     def __init__(self, name, body):

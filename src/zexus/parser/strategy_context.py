@@ -3875,7 +3875,7 @@ class ContextStackParser:
         )
 
     def _parse_action_statement_context(self, block_info, all_tokens):
-        """Parse action statement: [async] action name(params) { body }"""
+        """Parse action statement: [async] action name(params) [-> return_type] { body }"""
         tokens = block_info.get('tokens', [])
         if not tokens:
             return None
@@ -3895,6 +3895,7 @@ class ContextStackParser:
         # Extract action name (next IDENT after ACTION)
         name = None
         params = []
+        return_type = None
         body_tokens = []
         
         while i < len(tokens):
@@ -3914,6 +3915,15 @@ class ContextStackParser:
                         params.append(Identifier(tokens[i].literal))
                     i += 1
                 i += 1  # Skip RPAREN
+        
+        # Check for return type annotation: -> type
+        if i < len(tokens) and tokens[i].type == MINUS:
+            if i + 1 < len(tokens) and tokens[i + 1].type == GT:
+                # Found -> return type annotation
+                i += 2  # Skip - and >
+                if i < len(tokens) and tokens[i].type == IDENT:
+                    return_type = tokens[i].literal
+                    i += 1
         
         # Extract body tokens (everything from { to })
         if i < len(tokens):
@@ -3940,11 +3950,12 @@ class ContextStackParser:
             name=name or Identifier('anonymous'),
             parameters=params,
             body=body,
-            is_async=is_async
+            is_async=is_async,
+            return_type=return_type
         )
 
     def _parse_function_statement_context(self, block_info, all_tokens):
-        """Parse function statement: function name(params) { body }"""
+        """Parse function statement: function name(params) [-> return_type] { body }"""
         tokens = block_info.get('tokens', [])
         if not tokens or tokens[0].type != FUNCTION:
             return None
@@ -3952,6 +3963,7 @@ class ContextStackParser:
         # Extract function name (next IDENT after FUNCTION)
         name = None
         params = []
+        return_type = None
         body_tokens = []
         
         i = 1
@@ -3972,6 +3984,15 @@ class ContextStackParser:
                         params.append(Identifier(tokens[i].literal))
                     i += 1
                 i += 1  # Skip RPAREN
+        
+        # Check for return type annotation: -> type
+        if i < len(tokens) and tokens[i].type == MINUS:
+            if i + 1 < len(tokens) and tokens[i + 1].type == GT:
+                # Found -> return type annotation
+                i += 2  # Skip - and >
+                if i < len(tokens) and tokens[i].type == IDENT:
+                    return_type = tokens[i].literal
+                    i += 1
         
         # Extract body tokens (everything from { to })
         if i < len(tokens):
@@ -3997,7 +4018,8 @@ class ContextStackParser:
         return FunctionStatement(
             name=name or Identifier('anonymous'),
             parameters=params,
-            body=body
+            body=body,
+            return_type=return_type
         )
 
     def _parse_conditional_context(self, block_info, all_tokens):
@@ -5372,16 +5394,11 @@ class ContextStackParser:
             return WatchStatement(reaction=body, watched_expr=None)
             
         # Check for form 2: watch expr => ...
-        # Find '=>' (ASSIGN in this context usually, or maybe we need to check for it)
-        # The lexer might not produce a specific ARROW token, usually it's ASSIGN or similar.
-        # But wait, the parser uses ASSIGN for => in parse_watch_statement.
+        # Find '=>' (tokenized as LAMBDA)
         
         arrow_idx = -1
         for i, t in enumerate(tokens):
-            if t.literal == '=>': # Look for => specifically
-                arrow_idx = i
-                break
-            elif t.type == ASSIGN: # Fallback to ASSIGN token
+            if t.type == LAMBDA or t.literal == '=>':
                 arrow_idx = i
                 break
                 

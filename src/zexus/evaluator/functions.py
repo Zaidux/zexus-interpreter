@@ -7,7 +7,7 @@ from ..zexus_ast import CallExpression, MethodCallExpression
 from ..object import (
     Environment, Integer, Float, String, List, Map, Boolean as BooleanObj,
     Null, Builtin, Action, LambdaFunction, ReturnValue, DateTime, Math, File, Debug,
-    EvaluationError
+    EvaluationError, EntityDefinition
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, _resolve_awaitable, _zexus_to_python, _python_to_zexus, _to_str
 
@@ -301,6 +301,25 @@ class FunctionEvaluatorMixin:
                 return _resolve_awaitable(res)
             except Exception as e:
                 return EvaluationError(f"Builtin error: {str(e)}")
+        
+        elif isinstance(fn, EntityDefinition):
+            debug_log("  Creating entity instance")
+            # Entity constructor: Person("Alice", 30)
+            # Create instance with positional arguments mapped to properties
+            from ..object import EntityInstance, String, Integer
+            
+            values = {}
+            # Map positional arguments to property names
+            if isinstance(fn.properties, dict):
+                prop_names = list(fn.properties.keys())
+            else:
+                prop_names = [prop['name'] for prop in fn.properties]
+            
+            for i, arg in enumerate(args):
+                if i < len(prop_names):
+                    values[prop_names[i]] = arg
+            
+            return EntityInstance(fn, values)
         
         return EvaluationError(f"Not a function: {fn}")
     
@@ -640,6 +659,7 @@ class FunctionEvaluatorMixin:
         
         # String & Utility
         def _string(*a):
+            from ..object import EntityInstance
             if len(a) != 1: 
                 return EvaluationError(f"string() takes 1 arg ({len(a)} given)")
             arg = a[0]
@@ -651,9 +671,173 @@ class FunctionEvaluatorMixin:
                 return String("true" if arg.value else "false")
             if isinstance(arg, (List, Map)): 
                 return String(arg.inspect())
+            if isinstance(arg, EntityInstance):
+                return String(arg.inspect())
             if arg == NULL: 
                 return String("null")
+            # For any object with an inspect method
+            if hasattr(arg, 'inspect') and callable(arg.inspect):
+                return String(arg.inspect())
             return String(str(arg))
+        
+        def _int(*a):
+            """Convert value to integer"""
+            if len(a) != 1:
+                return EvaluationError(f"int() takes 1 arg ({len(a)} given)")
+            arg = a[0]
+            if isinstance(arg, Integer):
+                return arg
+            if isinstance(arg, Float):
+                return Integer(int(arg.value))
+            if isinstance(arg, String):
+                try:
+                    return Integer(int(arg.value))
+                except ValueError:
+                    return EvaluationError(f"Cannot convert '{arg.value}' to integer")
+            if isinstance(arg, BooleanObj):
+                return Integer(1 if arg.value else 0)
+            return EvaluationError(f"Cannot convert {type(arg).__name__} to integer")
+        
+        def _float(*a):
+            """Convert value to float"""
+            if len(a) != 1:
+                return EvaluationError(f"float() takes 1 arg ({len(a)} given)")
+            arg = a[0]
+            if isinstance(arg, Float):
+                return arg
+            if isinstance(arg, Integer):
+                return Float(float(arg.value))
+            if isinstance(arg, String):
+                try:
+                    return Float(float(arg.value))
+                except ValueError:
+                    return EvaluationError(f"Cannot convert '{arg.value}' to float")
+            if isinstance(arg, BooleanObj):
+                return Float(1.0 if arg.value else 0.0)
+            return EvaluationError(f"Cannot convert {type(arg).__name__} to float")
+        
+        def _uppercase(*a):
+            """Convert string to uppercase"""
+            if len(a) != 1:
+                return EvaluationError(f"uppercase() takes 1 arg ({len(a)} given)")
+            arg = a[0]
+            if isinstance(arg, String):
+                return String(arg.value.upper())
+            return EvaluationError(f"uppercase() requires a string argument")
+        
+        def _lowercase(*a):
+            """Convert string to lowercase"""
+            if len(a) != 1:
+                return EvaluationError(f"lowercase() takes 1 arg ({len(a)} given)")
+            arg = a[0]
+            if isinstance(arg, String):
+                return String(arg.value.lower())
+            return EvaluationError(f"lowercase() requires a string argument")
+        
+        def _random(*a):
+            """Generate random number. random() -> 0-1, random(max) -> 0 to max-1"""
+            import random
+            if len(a) == 0:
+                return Float(random.random())
+            elif len(a) == 1:
+                if isinstance(a[0], Integer):
+                    return Integer(random.randint(0, a[0].value - 1))
+                elif isinstance(a[0], Float):
+                    return Float(random.random() * a[0].value)
+                return EvaluationError("random() argument must be a number")
+            else:
+                return EvaluationError(f"random() takes 0 or 1 arg ({len(a)} given)")
+        
+        def _persist_set(*a):
+            """Store a value in persistent storage: persist_set(key, value)"""
+            if len(a) != 2:
+                return EvaluationError(f"persist_set() takes 2 args (key, value), got {len(a)}")
+            if not isinstance(a[0], String):
+                return EvaluationError("persist_set() key must be a string")
+            
+            import json
+            import os
+            
+            key = a[0].value
+            value = a[1]
+            
+            # Create persistence directory if it doesn't exist
+            persist_dir = os.path.join(os.getcwd(), '.zexus_persist')
+            os.makedirs(persist_dir, exist_ok=True)
+            
+            # Convert value to JSON-serializable format
+            json_value = _to_python_value(value)
+            
+            # Save to file
+            persist_file = os.path.join(persist_dir, f'{key}.json')
+            try:
+                with open(persist_file, 'w') as f:
+                    json.dump(json_value, f)
+                return TRUE
+            except Exception as e:
+                return EvaluationError(f"persist_set() error: {str(e)}")
+        
+        def _persist_get(*a):
+            """Retrieve a value from persistent storage: persist_get(key)"""
+            if len(a) != 1:
+                return EvaluationError(f"persist_get() takes 1 arg (key), got {len(a)}")
+            if not isinstance(a[0], String):
+                return EvaluationError("persist_get() key must be a string")
+            
+            import json
+            import os
+            
+            key = a[0].value
+            persist_dir = os.path.join(os.getcwd(), '.zexus_persist')
+            persist_file = os.path.join(persist_dir, f'{key}.json')
+            
+            if not os.path.exists(persist_file):
+                return NULL
+            
+            try:
+                with open(persist_file, 'r') as f:
+                    json_value = json.load(f)
+                
+                # Convert back to Zexus object
+                return _from_python_value(json_value)
+            except Exception as e:
+                return EvaluationError(f"persist_get() error: {str(e)}")
+        
+        def _to_python_value(obj):
+            """Helper to convert Zexus object to Python value"""
+            if isinstance(obj, String):
+                return obj.value
+            elif isinstance(obj, (Integer, Float)):
+                return obj.value
+            elif isinstance(obj, BooleanObj):
+                return obj.value
+            elif isinstance(obj, List):
+                return [_to_python_value(v) for v in obj.elements]
+            elif isinstance(obj, Map):
+                return {str(k): _to_python_value(v) for k, v in obj.pairs.items()}
+            elif obj == NULL:
+                return None
+            else:
+                return str(obj)
+        
+        def _from_python_value(val):
+            """Helper to convert Python value to Zexus object"""
+            if isinstance(val, bool):
+                return BooleanObj(val)
+            elif isinstance(val, int):
+                return Integer(val)
+            elif isinstance(val, float):
+                return Float(val)
+            elif isinstance(val, str):
+                return String(val)
+            elif isinstance(val, list):
+                return List([_from_python_value(v) for v in val])
+            elif isinstance(val, dict):
+                return Map({String(k): _from_python_value(v) for k, v in val.items()})
+            elif val is None:
+                return NULL
+            else:
+                return String(str(val))
         
         def _len(*a):
             if len(a) != 1: 
@@ -912,6 +1096,13 @@ class FunctionEvaluatorMixin:
             "debug_log": Builtin(_debug_log, "debug_log"),
             "debug_trace": Builtin(_debug_trace, "debug_trace"),
             "string": Builtin(_string, "string"),
+            "int": Builtin(_int, "int"),
+            "float": Builtin(_float, "float"),
+            "uppercase": Builtin(_uppercase, "uppercase"),
+            "lowercase": Builtin(_lowercase, "lowercase"),
+            "random": Builtin(_random, "random"),
+            "persist_set": Builtin(_persist_set, "persist_set"),
+            "persist_get": Builtin(_persist_get, "persist_get"),
             "len": Builtin(_len, "len"),
             "type": Builtin(_type, "type"),
             "first": Builtin(_first, "first"),

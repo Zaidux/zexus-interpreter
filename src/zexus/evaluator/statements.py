@@ -22,7 +22,7 @@ from ..zexus_ast import (
     TXExpression, HashExpression, SignatureExpression, VerifySignatureExpression, GasExpression
 )
 from ..object import (
-    Environment, Integer, String, Boolean as Boolean, ReturnValue,
+    Environment, Integer, Float, String, Boolean as Boolean, ReturnValue,
     Action, List, Map, EvaluationError, EntityDefinition, EmbeddedCode, Builtin,
     start_collecting_dependencies, stop_collecting_dependencies
 )
@@ -117,7 +117,18 @@ class StatementEvaluatorMixin:
             self._restore_stdout(env)
     
     def eval_expression_statement(self, node, env, stack_trace):
-        return self.eval_node(node.expression, env, stack_trace)
+        # Debug: Check if expression is being evaluated
+        expr_type = type(node.expression).__name__
+        if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
+            func_name = node.expression.function.value
+            if func_name in ['persist_set', 'persist_get']:
+                print(f"[EVAL_EXPR_STMT] Evaluating {func_name} call", flush=True)
+        result = self.eval_node(node.expression, env, stack_trace)
+        if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
+            func_name = node.expression.function.value
+            if func_name in ['persist_set', 'persist_get']:
+                print(f"[EVAL_EXPR_STMT] Result from {func_name}: {result}", flush=True)
+        return result
     
     # === VARIABLE & CONTROL FLOW ===
     
@@ -865,7 +876,12 @@ class StatementEvaluatorMixin:
             executing[0] = True
             try:
                 # Re-evaluate the reaction block WITHOUT collecting dependencies
-                self.eval_node(node.reaction, env, [])
+                result = self.eval_node(node.reaction, env, [])
+                # Check for errors but don't propagate them (watchers shouldn't crash the program)
+                if is_error(result):
+                    pass  # Silently ignore watcher errors to prevent cascading failures
+            except Exception as e:
+                pass  # Silently ignore exceptions in watchers
             finally:
                 executing[0] = False
             
@@ -2483,24 +2499,55 @@ class StatementEvaluatorMixin:
     
     def eval_pattern_statement(self, node, env, stack_trace):
         """Evaluate pattern statement - pattern matching."""
+        debug_log("eval_pattern_statement", f"Matching against {len(node.cases)} cases")
+        
         # Evaluate the expression to match
         value = self.eval_node(node.expression, env, stack_trace)
         if is_error(value):
             return value
         
-        # Convert to comparable form
-        match_value = _zexus_to_python(value)
+        debug_log("  Match value", f"{value.inspect() if hasattr(value, 'inspect') else value}")
         
         # Try each pattern case
-        for case in node.cases:
-            case_pattern = _zexus_to_python(case.pattern)
+        for i, case in enumerate(node.cases):
+            debug_log(f"  Trying case {i}", f"pattern={case.pattern}")
             
-            # Match logic
-            if case_pattern == "default" or case_pattern == match_value:
-                # Execute action
+            # Check if this is the default case
+            if isinstance(case.pattern, str) and case.pattern == "default":
+                debug_log("  ✅ Default case matched", "")
                 action_result = self.eval_node(case.action, env, stack_trace)
                 return action_result
+            
+            # Evaluate the pattern expression
+            pattern_value = self.eval_node(case.pattern, env, stack_trace)
+            if is_error(pattern_value):
+                debug_log(f"  ❌ Pattern evaluation error", str(pattern_value))
+                continue  # Skip invalid patterns
+            
+            debug_log("  Pattern value", f"{pattern_value.inspect() if hasattr(pattern_value, 'inspect') else pattern_value}")
+            
+            # Compare values
+            matched = False
+            if isinstance(value, Integer) and isinstance(pattern_value, Integer):
+                matched = value.value == pattern_value.value
+                debug_log("  Integer comparison", f"{value.value} == {pattern_value.value} = {matched}")
+            elif isinstance(value, Float) and isinstance(pattern_value, Float):
+                matched = value.value == pattern_value.value
+            elif isinstance(value, String) and isinstance(pattern_value, String):
+                matched = value.value == pattern_value.value
+            elif isinstance(value, Boolean) and isinstance(pattern_value, Boolean):
+                matched = value.value == pattern_value.value
+            elif value == pattern_value:
+                matched = True
+            
+            if matched:
+                debug_log("  ✅ Pattern matched!", f"Executing action")
+                # Execute action
+                action_result = self.eval_node(case.action, env, stack_trace)
+                debug_log("  Action result", f"{action_result}")
+                return action_result
         
+        debug_log("  ❌ No pattern matched", "")
         # No match found
         return NULL
     

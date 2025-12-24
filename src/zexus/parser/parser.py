@@ -732,12 +732,23 @@ class UltimateParser:
             self.next_token()
             parameters = [Identifier(self.cur_token.literal)]
 
+        # Parse optional return type: -> type
+        return_type = None
+        if self.peek_token_is(MINUS):
+            # Check if this is -> (return type annotation)
+            self.next_token()  # Move to MINUS
+            if self.peek_token_is(GT):
+                self.next_token()  # Move to GT
+                self.next_token()  # Move to type identifier
+                if self.cur_token_is(IDENT):
+                    return_type = self.cur_token.literal
+
         # Parse body (flexible style)
         body = self.parse_block("action")
         if not body:
             return None
 
-        return ActionStatement(name=name, parameters=parameters, body=body)
+        return ActionStatement(name=name, parameters=parameters, body=body, return_type=return_type)
 
     def parse_function_statement(self):
         """Tolerant function parser supporting both syntax styles"""
@@ -760,12 +771,23 @@ class UltimateParser:
             self.next_token()
             parameters = [Identifier(self.cur_token.literal)]
 
+        # Parse optional return type: -> type
+        return_type = None
+        if self.peek_token_is(MINUS):
+            # Check if this is -> (return type annotation)
+            self.next_token()  # Move to MINUS
+            if self.peek_token_is(GT):
+                self.next_token()  # Move to GT
+                self.next_token()  # Move to type identifier
+                if self.cur_token_is(IDENT):
+                    return_type = self.cur_token.literal
+
         # Parse body (flexible style)
         body = self.parse_block("function")
         if not body:
             return None
 
-        return FunctionStatement(name=name, parameters=parameters, body=body)
+        return FunctionStatement(name=name, parameters=parameters, body=body, return_type=return_type)
 
     def parse_let_statement(self):
         """Tolerant let statement parser"""
@@ -1816,7 +1838,7 @@ class UltimateParser:
               update_ui();
             }
             
-            watch count => print "Count: " + count;
+            watch count => print("Count: " + count);
         """
         token = self.cur_token
 
@@ -1828,8 +1850,8 @@ class UltimateParser:
             self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'watch'")
             return None
 
-        # Expect '=>'
-        if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
+        # Expect '=>' (LAMBDA token)
+        if not self.expect_peek(LAMBDA):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in watch statement")
             return None
 
@@ -1845,7 +1867,6 @@ class UltimateParser:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
             return None
 
-        # FIXED: WatchStatement takes (reaction, watched_expr) not (watched_expr, reaction)
         return WatchStatement(reaction=reaction, watched_expr=watched_expr)
 
     def parse_embedded_literal(self):

@@ -116,9 +116,11 @@ def _python_to_zexus(value):
 
 def _to_str(obj):
     """Helper to convert Zexus object to string"""
-    from ..object import String, Integer, Float
+    from ..object import String, Integer, Float, EntityInstance
     if isinstance(obj, String):
         return obj.value
     if isinstance(obj, (Integer, Float)):
         return str(obj.value)
+    if isinstance(obj, EntityInstance):
+        return obj.inspect()
     return getattr(obj, 'inspect', lambda: str(obj))()
