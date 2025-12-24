@@ -202,6 +202,23 @@ action calculateArea(shape) {
 
 [Learn more about DATA keyword →](docs/keywords/DATA.md)
 
+
+let circle = Circle(5)
+let area = calculateArea(circle)  // 78.5
+```
+
+**Complete Feature Set:**
+1. ✅ Static `default()` method
+2. ✅ Computed properties with `get`
+3. ✅ Method definitions
+4. ✅ Operator overloading
+5. ✅ Inheritance with `extends`
+6. ✅ Decorators
+7. ✅ **Generic types** (NEW!)
+8. ✅ **Pattern matching** (NEW!)
+
+[Learn more about DATA features →](docs/keywords/DATA.md)
+
 ### ⚡ VM-Accelerated Performance
 
 Zexus now includes a sophisticated Virtual Machine for optimized execution:
