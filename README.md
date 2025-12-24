@@ -2,14 +2,14 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v0.1.3-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.5.0-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
 
 **A modern, security-first programming language with built-in blockchain support, VM-accelerated execution, advanced memory management, and policy-as-code**
 
-[What's New](#-whats-new-in-v013) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
+[What's New](#-whats-new-in-v150) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
 
 </div>
 
@@ -18,7 +18,7 @@
 ## 📋 Table of Contents
 
 - [What is Zexus?](#-what-is-zexus)
-- [What's New](#-whats-new-in-v013)
+- [What's New](#-whats-new-in-v150)
 - [Key Features](#-key-features)
   - [VM-Accelerated Performance](#-vm-accelerated-performance-new)
   - [Security & Policy-as-Code](#-security--policy-as-code--verify-enhanced)
@@ -51,8 +51,10 @@
 
 Zexus is a next-generation, general-purpose programming language designed for security-conscious developers who need:
 
+- **🎨 World-Class Error Messages** - Beginner-friendly errors with helpful suggestions (NEW in v1.5!)
 - **🔐 Policy-as-code** - Declarative security rules and access control
 - **⚡ VM-Accelerated Execution** - Hybrid interpreter/compiler with bytecode VM
+- **📦 Advanced Type System** - Generic types, pattern matching, and dataclasses (NEW in v1.5!)
 - **⛓️ Built-in Blockchain** - Native smart contracts and DApp primitives  
 - **💾 Persistent Memory** - Cross-session data with automatic leak detection
 - **🔌 Dependency Injection** - Powerful DI system with mocking for testing
@@ -65,9 +67,17 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ---
 
-## 🎉 What's New in v0.1.3
+## 🎉 What's New in v1.5.0
 
-### Recent Enhancements
+### Latest Features (v1.5.0)
+
+✅ **World-Class Error Reporting** - Production-grade error messages rivaling Rust  
+✅ **Advanced DATA System** - Generic types, pattern matching, operator overloading  
+✅ **Stack Trace Formatter** - Beautiful, readable stack traces with source context  
+✅ **Smart Error Suggestions** - Actionable hints for fixing common errors  
+✅ **Pattern Matching** - Complete pattern matching with exhaustiveness checking  
+
+### Recent Enhancements (v0.1.3)
 
 ✅ **130+ Keywords Fully Operational** - All core language features tested and verified  
 ✅ **Dual-Mode DEBUG** - Function mode (`debug(x)`) and statement mode (`debug x;`)  
@@ -100,7 +110,99 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ## ✨ Key Features
 
-### ⚡ VM-Accelerated Performance (NEW!)
+### 🎨 **NEW!** World-Class Error Reporting (v1.5.0)
+
+Zexus now features **production-grade error messages** that rival Rust and surpass Python:
+
+```
+ERROR: SyntaxError[SYNTAX]
+  → myfile.zx:10:16
+
+  10 | let message = "Hello world
+                       ^
+
+  Unterminated string literal
+
+  💡 Suggestion: Add a closing quote " to terminate the string.
+```
+
+**Error Reporting Features:**
+- ✅ **Color-coded output** - Errors in red, warnings in yellow, info in blue
+- ✅ **Source code context** - See exactly where the error occurred
+- ✅ **Helpful suggestions** - Actionable hints for fixing errors
+- ✅ **Beginner-friendly** - Clear messages, no cryptic codes
+- ✅ **Category distinction** - Know if it's your code or an interpreter bug
+- ✅ **Smart detection** - Single `&` suggests `&&`, unclosed strings, etc.
+
+**Better than Python**: No confusing indentation errors!  
+**On par with Rust**: Same quality formatting and helpful suggestions!  
+**Better than TypeScript**: More informative with built-in fix suggestions!
+
+[Learn more about error reporting →](docs/ERROR_REPORTING.md)
+
+### 📦 **NEW!** Advanced DATA Features (v1.5.0)
+
+Complete dataclass system with **8/8 features** including generics and pattern matching:
+
+#### Generic Types
+```zexus
+data Box<T> {
+    value: T
+    
+    unwrap() { this.value }
+}
+
+data Pair<K, V> {
+    key: K
+    value: V
+    
+    operator + (other) {
+        Pair(this.key, this.value + other.value)
+    }
+}
+
+let numberBox = Box<number>(42)
+let stringBox = Box<string>("hello")
+let pair = Pair<string, number>("age", 30)
+```
+
+#### Pattern Matching
+```zexus
+data Shape {
+    // Base shape
+}
+
+data Circle extends Shape {
+    radius: number
+}
+
+data Rectangle extends Shape {
+    width: number
+    height: number
+}
+
+action calculateArea(shape) {
+    match shape {
+        Circle(r) => 3.14 * r * r,
+        Rectangle(w, h) => w * h,
+        _ => 0
+    }
+}
+```
+
+**DATA Features:**
+- ✅ Generic type parameters (`<T>`, `<K, V>`)
+- ✅ Pattern matching with destructuring
+- ✅ Operator overloading
+- ✅ Inheritance and extends
+- ✅ Instance methods
+- ✅ Static methods
+- ✅ Property validation
+- ✅ Immutability options
+
+[Learn more about DATA keyword →](docs/keywords/DATA.md)
+
+### ⚡ VM-Accelerated Performance
 
 Zexus now includes a sophisticated Virtual Machine for optimized execution:
 
@@ -1216,6 +1318,7 @@ Zexus supports **130+ keywords** organized into functional categories:
 
 #### Types & Structures
 - **`entity`** - Define data structure
+- **`data`** - Define dataclass with generics and pattern matching (v1.5.0)
 - **`enum`** - Define enumeration
 - **`protocol`** / **`interface`** - Define interface
 - **`type_alias`** - Create type alias
@@ -1844,6 +1947,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Multiple syntax styles (`:` and `=` for assignments)
 - [x] Tolerance blocks for enhanced REQUIRE
 - [x] Comprehensive test suite (1175+ tests)
+- [x] **World-class error reporting system (v1.5.0)**
+- [x] **Generic types and advanced DATA features (v1.5.0)**
+- [x] **Pattern matching with exhaustiveness checking (v1.5.0)**
+- [x] **Stack trace formatter with source context (v1.5.0)**
 
 ### In Progress 🚧
 - [ ] VS Code extension with full IntelliSense
@@ -1872,7 +1979,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📊 Project Stats
 
 - **Language**: Python 3.8+
-- **Version**: 0.1.3 (Alpha)
+- **Version**: 1.5.0 (Stable)
 - **Lines of Code**: ~50,000+
 - **Keywords**: 130+ language keywords
 - **Built-in Functions**: 100+ built-in functions
