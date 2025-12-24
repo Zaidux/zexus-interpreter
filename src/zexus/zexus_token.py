@@ -55,6 +55,7 @@ CONST = "CONST"                # NEW: Const immutable variables
 DATA = "DATA"                  # NEW: Dataclass definitions
 PRINT = "PRINT"
 IF = "IF"
+THEN = "THEN"                  # NEW: Then for if-then-else expressions
 ELIF = "ELIF"                  # NEW: Elif else-if conditionals
 ELSE = "ELSE"
 RETURN = "RETURN"

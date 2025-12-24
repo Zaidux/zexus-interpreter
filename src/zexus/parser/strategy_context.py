@@ -2043,6 +2043,24 @@ class ContextStackParser:
                 continue
             
             elif token.type == IF:
+                # Check if this is an if-then-else expression or an if statement
+                # Look ahead for THEN token to determine
+                is_expression_form = False
+                for k in range(i + 1, len(tokens)):
+                    if tokens[k].type == THEN:
+                        is_expression_form = True
+                        break
+                    elif tokens[k].type in [LBRACE, COLON, LPAREN]:
+                        # Found statement indicators before THEN
+                        break
+                
+                if is_expression_form:
+                    # This is if-then-else expression - skip parsing it as statement
+                    # It will be parsed as part of the containing expression
+                    parser_debug(f"    ℹ️ Skipping IF at {i} - detected as if-then-else expression")
+                    i += 1
+                    continue
+                
                 # Parse IF statement directly here
                 j = i + 1
                 

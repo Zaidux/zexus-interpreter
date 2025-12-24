@@ -448,6 +448,7 @@ class Lexer:
             "data": DATA,               # NEW: Data keyword for dataclass definitions
             "print": PRINT,
             "if": IF,
+            "then": THEN,              # NEW: Then keyword for if-then-else expressions
             "elif": ELIF,               # NEW: Elif keyword for else-if conditionals
             "else": ELSE,
             "true": TRUE,

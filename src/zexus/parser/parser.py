@@ -2348,29 +2348,84 @@ class UltimateParser:
         return None
 
     def parse_if_expression(self):
+        """Parse if expression - handles both statement form and expression form
+        
+        Statement form: if (condition) { ... } else { ... }
+        Expression form: if condition then value else value
+        """
         expression = IfExpression(condition=None, consequence=None, alternative=None)
+        
+        # Check if next token is LPAREN (statement form) or not (expression form)
+        if self.peek_token_is(LPAREN):
+            # Statement form: if (condition) { ... }
+            if not self.expect_peek(LPAREN):
+                return None
 
-        if not self.expect_peek(LPAREN):
-            return None
-
-        self.next_token()
-        expression.condition = self.parse_expression(LOWEST)
-
-        if not self.expect_peek(RPAREN):
-            return None
-
-        if not self.expect_peek(LBRACE):
-            return None
-
-        expression.consequence = self.parse_block_statement()
-
-        if self.peek_token_is(ELSE):
             self.next_token()
+            expression.condition = self.parse_expression(LOWEST)
+
+            if not self.expect_peek(RPAREN):
+                return None
+
             if not self.expect_peek(LBRACE):
                 return None
-            expression.alternative = self.parse_block_statement()
 
-        return expression
+            expression.consequence = self.parse_block_statement()
+
+            if self.peek_token_is(ELSE):
+                self.next_token()
+                if not self.expect_peek(LBRACE):
+                    return None
+                expression.alternative = self.parse_block_statement()
+
+            return expression
+        else:
+            # Expression form: if condition then value else value
+            self.next_token()  # Move to condition
+            expression.condition = self.parse_expression(LOWEST)
+            
+            if expression.condition is None:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected condition after 'if'")
+                return None
+            
+            # Expect THEN
+            if not self.expect_peek(THEN):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'then' after if condition")
+                return None
+            
+            # Parse consequence expression
+            self.next_token()
+            consequence_exp = self.parse_expression(LOWEST)
+            if consequence_exp is None:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected expression after 'then'")
+                return None
+            
+            # Wrap the consequence expression in an ExpressionStatement for compatibility
+            from ..zexus_ast import ExpressionStatement, BlockStatement
+            consequence_stmt = ExpressionStatement(expression=consequence_exp)
+            consequence_block = BlockStatement()
+            consequence_block.statements = [consequence_stmt]
+            expression.consequence = consequence_block
+            
+            # Expect ELSE
+            if not self.expect_peek(ELSE):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected 'else' in if-then-else expression")
+                return None
+            
+            # Parse alternative expression
+            self.next_token()
+            alternative_exp = self.parse_expression(LOWEST)
+            if alternative_exp is None:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected expression after 'else'")
+                return None
+            
+            # Wrap the alternative expression in an ExpressionStatement
+            alternative_stmt = ExpressionStatement(expression=alternative_exp)
+            alternative_block = BlockStatement()
+            alternative_block.statements = [alternative_stmt]
+            expression.alternative = alternative_block
+            
+            return expression
 
     def parse_block_statement(self):
         return self.parse_brace_block()
