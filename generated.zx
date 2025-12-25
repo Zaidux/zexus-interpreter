@@ -1,7 +1,0 @@
-// Auto-generated Zexus code
-action multiply(a, b) {
-    return a * b;
-}
-
-let result = multiply(5, 6);
-print(\

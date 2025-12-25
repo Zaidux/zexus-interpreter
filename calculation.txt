@@ -1,2 +1,0 @@
-Result: 30
-Addition of 10 and 20

@@ -53,3 +53,42 @@ zpm_modules/
 /tmp/
 *.tmp
 *.bak
+
+# ===================================
+# RUNTIME STATE (NEVER COMMIT THESE)
+# ===================================
+
+# Blockchain/Contract State
+chain_data/
+*.sqlite
+*.db
+
+# Audit Logs
+audit_logs/
+*.audit
+
+# Generated Files
+generated.py
+generated.cpp
+generated.zx
+*.generated.*
+
+# Test Artifacts
+test_*.txt
+*_output.txt
+calculation.txt
+shared.txt
+
+# Temporary Scripts
+script.py
+analytics.py
+demo_*.py
+
+# Keys and Secrets
+*.key
+*.pem
+SSH_PUBLIC_KEY.txt
+
+# Cache and Runtime Data
+.mypy_cache/
+*.cache

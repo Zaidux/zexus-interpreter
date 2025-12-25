@@ -1,3 +1,0 @@
-Line from block 1
-Line from block 2
-Line from block 3
