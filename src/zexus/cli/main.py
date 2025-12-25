@@ -202,8 +202,8 @@ def run(ctx, file, args):
                 parts = rel_path.replace('\\', '/').split('/')
                 if len(parts) > 1:
                     package_name = String(parts[0])
-        except:
-            pass
+        except (OSError, ValueError):
+            pass  # Unable to determine package name
         env.set("__PACKAGE__", package_name)
         
         # UPDATED: Use the evaluate function from the evaluator package

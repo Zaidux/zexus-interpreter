@@ -224,14 +224,14 @@ class BytecodeCache:
             for const in bytecode.constants:
                 try:
                     constants_size += len(pickle.dumps(const))
-                except:
+                except (TypeError, pickle.PicklingError):
                     constants_size += 100  # Fallback estimate
             
             # Add metadata overhead
             metadata_size = 200  # Small overhead for name, line_map, etc.
             
             return instruction_size + constants_size + metadata_size
-        except:
+        except (AttributeError, TypeError):
             # Fallback to conservative estimate
             return len(bytecode.instructions) * 150
     

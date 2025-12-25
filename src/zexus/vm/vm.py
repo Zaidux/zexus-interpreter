@@ -879,7 +879,7 @@ class VM:
             elif op == "INDEX":
                 idx = stack.pop(); obj = stack.pop()
                 try: stack.append(obj[idx] if obj is not None else None)
-                except: stack.append(None)
+                except (IndexError, KeyError, TypeError): stack.append(None)
             elif op == "GET_LENGTH":
                 obj = stack.pop()
                 try:
@@ -889,7 +889,7 @@ class VM:
                         stack.append(len(obj))
                     else:
                         stack.append(0)
-                except:
+                except (TypeError, AttributeError):
                     stack.append(0)
 
             # --- Async & Events ---

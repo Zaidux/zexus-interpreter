@@ -29,7 +29,7 @@ class Environment:
         return None
 
     def set(self, name, value):
-        """Set a value in the environment"""
+        """Set a value in the environment (creates new variable)"""
         if "." in name:
             module_name, var_name = name.split(".", 1)
             module = self.modules.get(module_name)
@@ -42,6 +42,29 @@ class Environment:
                 self.modules[module_name] = module
         else:
             self.store[name] = value
+    
+    def assign(self, name, value):
+        """Assign to an existing variable or create if doesn't exist.
+        
+        This is used for reassignment (like in loops). It will:
+        1. Update the variable in the scope where it was first defined
+        2. Create a new variable in current scope if it doesn't exist anywhere
+        """
+        # Check if variable exists in current scope
+        if name in self.store:
+            self.store[name] = value
+            return
+        
+        # Check if exists in outer scopes
+        if self.outer:
+            existing = self.outer.get(name)
+            if existing is not None:
+                # Try to assign in outer scope
+                self.outer.assign(name, value)
+                return
+        
+        # Variable doesn't exist anywhere, create it in current scope
+        self.store[name] = value
 
     def export(self, name, value):
         """Export a value"""
