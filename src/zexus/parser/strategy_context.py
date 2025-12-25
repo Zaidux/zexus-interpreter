@@ -60,6 +60,7 @@ class ContextStackParser:
             FOR: self._parse_statement_block_context,
             WHILE: self._parse_statement_block_context,
             RETURN: self._parse_statement_block_context,
+            CONTINUE: self._parse_statement_block_context,
             DEFER: self._parse_statement_block_context,
             ENUM: self._parse_statement_block_context,
             SANDBOX: self._parse_statement_block_context,
@@ -325,7 +326,7 @@ class ContextStackParser:
                     break
                 # Check for statement starters that should break
                 # Context-sensitive: IF followed by THEN is an expression, not a statement
-                if t.type in {LET, PRINT, FOR, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                if t.type in {LET, PRINT, FOR, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
                     # Allow if part of method chain OR if DEBUG followed by ( (function call)
                     allow_method_chain = prev and prev.type == DOT
@@ -941,7 +942,7 @@ class ContextStackParser:
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
         value_tokens = []
         stop_types = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         j = 2
         while j < len(tokens):
             t = tokens[j]
@@ -1491,7 +1492,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
+        statement_starters = {LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
         
         # Safety: track loop iterations to prevent infinite loops
         max_iterations = len(tokens) * 10  # Very generous limit
@@ -2188,7 +2189,7 @@ class ContextStackParser:
                     inner_tokens = []
                     # Collect tokens until we hit a keyword that starts a new statement at the same level
                     while j < len(tokens):
-                        if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                        if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, CONTINUE, USE, EXPORT]:
                             # Found a new statement, stop here
                             break
                         inner_tokens.append(tokens[j])
@@ -2255,7 +2256,7 @@ class ContextStackParser:
                             j += 1
                             elif_inner = []
                             while j < len(tokens):
-                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, CONTINUE, USE, EXPORT]:
                                     break
                                 elif_inner.append(tokens[j])
                                 j += 1
@@ -2291,7 +2292,7 @@ class ContextStackParser:
                             j += 1
                             else_inner = []
                             while j < len(tokens):
-                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, USE, EXPORT]:
+                                if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, CONTINUE, USE, EXPORT]:
                                     break
                                 else_inner.append(tokens[j])
                                 j += 1
@@ -2830,7 +2831,7 @@ class ContextStackParser:
         # Collect tokens up to a statement boundary
         inner_tokens = []
         statement_terminators = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         nesting_level = 0
 
         for token in tokens[1:]:  # Skip the PRINT token

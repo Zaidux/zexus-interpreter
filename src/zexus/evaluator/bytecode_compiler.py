@@ -161,6 +161,12 @@ class EvaluatorBytecodeCompiler:
             self.builder.emit_constant(None)
         self.builder.emit("RETURN")
     
+    def _compile_ContinueStatement(self, node: zexus_ast.ContinueStatement):
+        """Compile continue statement - enables error recovery mode"""
+        # Emit a special instruction or constant to signal continue mode
+        # For now, emit a CONTINUE instruction that the VM can handle
+        self.builder.emit("CONTINUE")
+    
     def _compile_IfStatement(self, node: zexus_ast.IfStatement):
         """Compile if statement with elif and else branches"""
         else_label = f"else_{id(node)}"
@@ -609,7 +615,7 @@ class EvaluatorBytecodeCompiler:
         # List of supported node types
         supported = {
             'Program', 'ExpressionStatement', 'LetStatement', 'ConstStatement',
-            'ReturnStatement', 'IfStatement', 'WhileStatement', 'ForEachStatement',
+            'ReturnStatement', 'ContinueStatement', 'IfStatement', 'WhileStatement', 'ForEachStatement',
             'BlockStatement', 'ActionStatement', 'FunctionStatement', 'PrintStatement',
             'Identifier', 'IntegerLiteral', 'FloatLiteral',
             'StringLiteral', 'Boolean', 'ListLiteral', 'MapLiteral',
