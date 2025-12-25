@@ -1351,6 +1351,80 @@ env_set(name, value)            # Set environment variable
 env_exists(name)                # Check if env var exists
 ```
 
+#### Standard Library Modules
+
+Zexus provides **100+ functions** across **6 standard library modules**:
+
+##### File System (fs)
+```zexus
+use {read_file, write_file, exists, mkdir} from "fs"
+
+write_file("data.txt", "Hello!")
+let content = read_file("data.txt")
+if exists("data.txt") {
+    print("File exists!")
+}
+```
+
+**30+ functions**: `read_file`, `write_file`, `append_file`, `exists`, `mkdir`, `rmdir`, `list_dir`, `walk`, `glob`, `copy_file`, `rename`, `remove`, and more.
+
+##### HTTP Client (http)
+```zexus
+use {get, post} from "http"
+
+let response = get("https://api.example.com/data")
+print(response.status)
+print(response.body)
+```
+
+**5 functions**: `get`, `post`, `put`, `delete`, `request`
+
+##### JSON (json)
+```zexus
+use {parse, stringify} from "json"
+
+let data = {name: "Alice", age: 30}
+let json_str = stringify(data)
+let parsed = parse(json_str)
+```
+
+**7 functions**: `parse`, `stringify`, `load`, `save`, `validate`, `merge`, `pretty_print`
+
+##### Date & Time (datetime)
+```zexus
+use {now, timestamp, add_days} from "datetime"
+
+let current = now()
+let ts = timestamp()
+let tomorrow = add_days(current, 1)
+```
+
+**25+ functions**: `now`, `utc_now`, `timestamp`, `format`, `parse`, `add_days`, `add_hours`, `diff_seconds`, `is_before`, `is_after`, and more.
+
+##### Cryptography (crypto)
+```zexus
+use {hash_sha256, keccak256, random_bytes} from "crypto"
+
+let hash = hash_sha256("Hello World")
+let keccak = keccak256("Hello World")
+let random = random_bytes(32)
+```
+
+**15+ functions**: `hash_sha256`, `hash_sha512`, `keccak256`, `sha3_256`, `hmac_sha256`, `random_bytes`, `random_int`, `pbkdf2`, `generate_salt`, `compare_digest`, and more.
+
+##### Blockchain (blockchain)
+```zexus
+use {create_address, validate_address, calculate_merkle_root} from "blockchain"
+
+let address = create_address("public_key")
+let is_valid = validate_address(address)
+let merkle = calculate_merkle_root(["hash1", "hash2"])
+```
+
+**12+ functions**: `create_address`, `validate_address`, `calculate_merkle_root`, `create_block`, `hash_block`, `validate_block`, `create_genesis_block`, `proof_of_work`, `validate_proof_of_work`, `create_transaction`, `hash_transaction`, `validate_chain`
+
+[View complete stdlib documentation →](docs/stdlib/README.md)
+
 ---
 
 ## 📖 Complete Keyword Reference
@@ -2034,11 +2108,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] **Stack trace formatter with source context (v1.5.0)**
 
 ### In Progress 🚧
-- [ ] VS Code extension with full IntelliSense
-- [ ] Language Server Protocol (LSP)
-- [ ] Standard library expansion (fs, http, json, datetime)
-- [ ] Debugger integration
-- [ ] Performance profiling tools
+- [x] VS Code extension with full IntelliSense ✅
+- [x] Language Server Protocol (LSP) ✅
+- [x] Standard library expansion (fs, http, json, datetime, crypto, blockchain) ✅
+- [x] Performance profiling tools ✅
+- [ ] Debugger integration (Debug Adapter Protocol in progress)
 
 ### Planned 🎯
 - [ ] WASM compilation target

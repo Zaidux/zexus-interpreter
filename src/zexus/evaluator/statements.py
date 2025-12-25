@@ -520,8 +520,11 @@ class StatementEvaluatorMixin:
             # Add custom methods defined in the dataclass (parent + child)
             for field in all_fields:
                 if field.method_body is not None:
+                    # Check if this is an operator overload
+                    is_operator = hasattr(field, 'operator') and field.operator is not None
+                    
                     # Create a closure for the method that has access to instance fields
-                    def make_method(method_body, method_params, method_name, decorators):
+                    def make_method(method_body, method_params, method_name, decorators, is_op=False):
                         def custom_method(*args):
                             # Create method environment with instance fields
                             from ..environment import Environment
@@ -537,8 +540,8 @@ class StatementEvaluatorMixin:
                                 else:
                                     method_env.set(param, NULL)
                             
-                            # Apply @logged decorator
-                            if "logged" in decorators:
+                            # Apply @logged decorator (operators don't get logged)
+                            if "logged" in decorators and not is_op:
                                 arg_str = ", ".join([str(arg.value if hasattr(arg, 'value') else arg) for arg in args])
                                 print(f"📝 Calling {method_name}({arg_str})")
                             
@@ -554,7 +557,7 @@ class StatementEvaluatorMixin:
                                     return result.value
                             
                             # Apply @logged decorator (return value)
-                            if "logged" in decorators:
+                            if "logged" in decorators and not is_op:
                                 result_str = str(result.value if hasattr(result, 'value') else result)
                                 print(f"📝 {method_name} returned: {result_str}")
                             
@@ -562,8 +565,8 @@ class StatementEvaluatorMixin:
                         
                         return custom_method
                     
-                    # Add the method to the instance (child methods override parent methods)
-                    method_func = make_method(field.method_body, field.method_params, field.name, field.decorators)
+                    # Create the method function
+                    method_func = make_method(field.method_body, field.method_params, field.name, field.decorators, is_operator)
                     
                     # Apply @cached decorator if present
                     if "cached" in field.decorators:
@@ -581,10 +584,20 @@ class StatementEvaluatorMixin:
                         
                         method_func = cached_method
                     
-                    instance.pairs[String(field.name)] = Builtin(
-                        method_func,
-                        name=field.name
-                    )
+                    # Store the method/operator with appropriate key
+                    if is_operator:
+                        # Store with __operator_{symbol}__ key for operator overloading
+                        operator_key = f"__operator_{field.operator}__"
+                        instance.pairs[String(operator_key)] = Builtin(
+                            method_func,
+                            name=operator_key
+                        )
+                    else:
+                        # Regular method
+                        instance.pairs[String(field.name)] = Builtin(
+                            method_func,
+                            name=field.name
+                        )
             
             # Store computed property definitions for auto-calling on access
             computed_props = {}
@@ -1011,6 +1024,7 @@ class StatementEvaluatorMixin:
     def eval_use_statement(self, node, env, stack_trace):
         from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
         from ..builtin_modules import is_builtin_module, get_builtin_module
+        from ..stdlib_integration import is_stdlib_module, get_stdlib_module
         
         # 1. Determine File Path
         file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
@@ -1020,7 +1034,40 @@ class StatementEvaluatorMixin:
         
         debug_log("  UseStatement loading", file_path)
         
-        # 1a. Check if this is a builtin module (crypto, datetime, math)
+        # 1a. Check if this is a stdlib module (fs, http, json, datetime, crypto, blockchain)
+        if is_stdlib_module(file_path):
+            debug_log(f"  Loading stdlib module: {file_path}")
+            try:
+                module_env = get_stdlib_module(file_path, self)
+                if module_env:
+                    # Handle named imports: use {read_file, write_file} from "stdlib/fs"
+                    is_named_import = getattr(node, 'is_named_import', False)
+                    names = getattr(node, 'names', [])
+                    alias = getattr(node, 'alias', None)
+                    
+                    if is_named_import and names:
+                        # Import specific functions
+                        for name_node in names:
+                            name = name_node.value if hasattr(name_node, 'value') else str(name_node)
+                            value = module_env.get(name)
+                            if value is None:
+                                return EvaluationError(f"'{name}' is not exported from {file_path}")
+                            env.set(name, value)
+                            debug_log(f"  Imported '{name}' from {file_path}", value)
+                    elif alias:
+                        # Import as alias: use "stdlib/fs" as fs
+                        env.set(alias, module_env)
+                    else:
+                        # Import all functions into current scope
+                        for key in module_env.store.keys():
+                            env.set(key, module_env.get(key))
+                    return NULL
+                else:
+                    return EvaluationError(f"Stdlib module '{file_path}' not available")
+            except Exception as e:
+                return EvaluationError(f"Error loading stdlib module '{file_path}': {str(e)}")
+        
+        # 1b. Check if this is a builtin module (crypto, datetime, math)
         if is_builtin_module(file_path):
             debug_log(f"  Loading builtin module: {file_path}")
             module_env = get_builtin_module(file_path, self)

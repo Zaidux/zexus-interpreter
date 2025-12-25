@@ -1,0 +1,132 @@
+// Test DATA keyword - Easy level tests
+// Testing dataclass functionality
+
+// Test 1: Basic dataclass
+data User {
+    name: string,
+    email: string,
+    age: number
+}
+
+let user = User("Alice", "alice@example.com", 30);
+print("✓ Test 1: Basic dataclass");
+print("  Name: " + user.name);
+print("  Age: " + string(user.age));
+
+// Test 2: Default values
+data Config {
+    host: string = "localhost",
+    port: number = 8080,
+    debug: bool = false
+}
+
+let config1 = Config();
+let config2 = Config("0.0.0.0", 3000, true);
+print("✓ Test 2: Default values");
+print("  Config1 host: " + config1.host);
+print("  Config2 port: " + string(config2.port));
+
+// Test 3: Computed properties
+data Rectangle {
+    width: number,
+    height: number,
+    computed area => width * height,
+    computed perimeter => 2 * (width + height)
+}
+
+let rect = Rectangle(10, 20);
+print("✓ Test 3: Computed properties");
+print("  Area: " + string(rect.area));
+print("  Perimeter: " + string(rect.perimeter));
+
+// Test 4: Methods with this keyword
+data Counter {
+    value: number,
+    
+    method getValue() {
+        return this.value;
+    }
+}
+
+let counter = Counter(5);
+print("✓ Test 4: Methods");
+print("  getValue: " + string(counter.getValue()));
+
+// Test 5: Inheritance
+data Animal {
+    name: string,
+    
+    method speak() {
+        return this.name + " makes a sound";
+    }
+}
+
+data Dog extends Animal {
+    breed: string,
+    
+    method speak() {
+        return this.name + " barks!";
+    }
+}
+
+let dog = Dog("Buddy", "Golden Retriever");
+print("✓ Test 5: Inheritance");
+print("  " + dog.speak());
+
+// Test 6: Operator overloading (single operator)
+data Point {
+    x: number,
+    y: number,
+    
+    operator +(other) {
+        return Point(this.x + other.x, this.y + other.y);
+    }
+}
+
+let p1 = Point(10, 20);
+let p2 = Point(5, 15);
+let sum = p1 + p2;
+print("✓ Test 6: Operator overloading");
+print("  Sum: (" + string(sum.x) + ", " + string(sum.y) + ")");
+
+// Test 7: Auto-generated methods
+data Product {
+    id: number,
+    name: string,
+    price: number
+}
+
+let product = Product(1, "Widget", 19);
+print("✓ Test 7: Auto-generated methods");
+print("  toString: " + product.toString());
+let json = product.toJSON();
+print("  toJSON works: " + string(len(json) > 0));
+
+// Test 8: Immutable dataclass
+data immutable ImmutablePoint {
+    x: number,
+    y: number
+}
+
+let ip = ImmutablePoint(10, 20);
+print("✓ Test 8: Immutable dataclass");
+print("  Point: (" + string(ip.x) + ", " + string(ip.y) + ")");
+
+// Test 9: Methods with parameters
+data Calculator {
+    value: number,
+    
+    method add(x) {
+        return this.value + x;
+    }
+}
+
+let calc = Calculator(10);
+print("✓ Test 9: Method with parameters");
+print("  add(5): " + string(calc.add(5)));
+
+
+print("");
+print("=================================");
+print("All DATA keyword tests passed! ✓");
+print("=================================");

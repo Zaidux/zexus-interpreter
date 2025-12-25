@@ -1,0 +1,224 @@
+{
+  "name": "zexus-vscode",
+  "displayName": "Zexus Language Support",
+  "description": "Full-featured VS Code extension for Zexus with IntelliSense, debugging, and more",
+  "version": "1.5.0",
+  "publisher": "Zaidux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zaidux/zexus-interpreter"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "zexus",
+    "blockchain",
+    "smart-contracts",
+    "security",
+    "intellisense",
+    "lsp"
+  ],
+  "activationEvents": [
+    "onLanguage:zexus"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "zexus",
+        "aliases": [
+          "Zexus",
+          "zexus"
+        ],
+        "extensions": [
+          ".zx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zexus",
+        "scopeName": "source.zexus",
+        "path": "./syntaxes/zexus.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "zexus",
+        "path": "./snippets/zexus.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "zexus.run",
+        "title": "Run Zexus File",
+        "category": "Zexus"
+      },
+      {
+        "command": "zexus.check",
+        "title": "Check Syntax",
+        "category": "Zexus"
+      },
+      {
+        "command": "zexus.profile",
+        "title": "Profile Performance",
+        "category": "Zexus"
+      },
+      {
+        "command": "zexus.restartLanguageServer",
+        "title": "Restart Language Server",
+        "category": "Zexus"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "zexus.run",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorLangId == zexus"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "zexus"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "zexus",
+        "label": "Zexus Debug",
+        "program": "./dist/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the Zexus file to debug",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Enable logging of the Debug Adapter Protocol",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "zexus",
+            "request": "launch",
+            "name": "Debug Zexus File",
+            "program": "${file}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Zexus: Launch",
+            "description": "A new configuration for debugging a Zexus file",
+            "body": {
+              "type": "zexus",
+              "request": "launch",
+              "name": "Debug Zexus File",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Zexus",
+      "properties": {
+        "zexus.syntaxStyle": {
+          "type": "string",
+          "enum": [
+            "universal",
+            "tolerable",
+            "auto"
+          ],
+          "default": "auto",
+          "description": "Syntax style to use (universal=strict, tolerable=flexible, auto=detect)"
+        },
+        "zexus.executionMode": {
+          "type": "string",
+          "enum": [
+            "interpreter",
+            "compiler",
+            "auto"
+          ],
+          "default": "auto",
+          "description": "Execution engine to use"
+        },
+        "zexus.advancedParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable advanced multi-strategy parsing"
+        },
+        "zexus.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Zexus language server"
+        },
+        "zexus.languageServer.trace": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server"
+        },
+        "zexus.profiling.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable performance profiling"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./dist/test/runTest.js",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0",
+    "vscode-debugadapter": "^1.51.0",
+    "vscode-debugprotocol": "^1.51.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0",
+    "@vscode/test-electron": "^2.3.0",
+    "vsce": "^2.15.0"
+  }
+}

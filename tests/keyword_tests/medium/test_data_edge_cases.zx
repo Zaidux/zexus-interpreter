@@ -1,0 +1,236 @@
+// Comprehensive DATA Keyword Edge Case Tests
+// Testing all features and edge cases
+
+print("=== DATA Keyword Edge Case Test Suite ===\n");
+
+// Test 1: Complex type with everything mixed
+print("Test 1: Complex mixed type");
+data ComplexType {
+    x: number,
+    y: number = 10,
+    
+    computed sum => x + y,
+    computed product => x * y,
+    
+    method getValue() {
+        return this.x;
+    },
+    
+    method getSum() {
+        return this.sum;
+    },
+    
+    method setX(newX) {
+        this.x = newX;
+        return this.x;
+    },
+    
+    operator +(other) {
+        return ComplexType(this.x + other.x, this.y + other.y);
+    },
+    
+    operator -(other) {
+        return ComplexType(this.x - other.x, this.y - other.y);
+    },
+    
+    operator *(other) {
+        return ComplexType(this.x * other.x, this.y * other.y);
+    }
+}
+
+let c1 = ComplexType(5);
+let c2 = ComplexType(3, 7);
+print("  c1.getValue(): " + string(c1.getValue()));
+print("  c1.sum (computed): " + string(c1.sum));
+print("  c1.product (computed): " + string(c1.product));
+let c3 = c1 + c2;
+print("  (c1 + c2).x: " + string(c3.x));
+let c4 = c1 - c2;
+print("  (c1 - c2).y: " + string(c4.y));
+let c5 = c1 * c2;
+print("  (c1 * c2).x: " + string(c5.x));
+print("  ✓ Passed\n");
+
+// Test 2: Deep inheritance with multiple methods
+print("Test 2: Deep inheritance");
+data Animal {
+    name: string,
+    
+    method speak() {
+        return this.name + " makes a sound";
+    },
+    
+    method eat() {
+        return this.name + " is eating";
+    },
+    
+    method sleep() {
+        return this.name + " is sleeping";
+    }
+}
+
+data Dog extends Animal {
+    breed: string,
+    
+    method speak() {
+        return this.name + " barks";
+    },
+    
+    method wagTail() {
+        return this.name + " wags tail";
+    },
+    
+    method fetch() {
+        return this.name + " fetches ball";
+    }
+}
+
+let dog = Dog("Buddy", "Labrador");
+print("  " + dog.speak());
+print("  " + dog.eat());
+print("  " + dog.wagTail());
+print("  " + dog.fetch());
+print("  ✓ Passed\n");
+
+// Test 3: Many computed properties
+print("Test 3: Multiple computed properties");
+data GeometricShape {
+    width: number,
+    height: number,
+    
+    computed area => width * height,
+    computed perimeter => 2 * (width + height),
+    computed diagonal => width + height,
+    computed aspectRatio => width
+}
+
+let shape = GeometricShape(4, 3);
+print("  area: " + string(shape.area));
+print("  perimeter: " + string(shape.perimeter));
+print("  diagonal: " + string(shape.diagonal));
+print("  aspectRatio: " + string(shape.aspectRatio));
+print("  ✓ Passed\n");
+
+// Test 4: Empty dataclass
+print("Test 4: Empty dataclass");
+data Empty {
+}
+
+let e = Empty();
+print("  Empty dataclass created successfully");
+print("  ✓ Passed\n");
+
+// Test 5: Utility class (only methods, no fields)
+print("Test 5: Utility class (methods only)");
+data MathUtils {
+    method square(x) {
+        return x * x;
+    },
+    
+    method cube(x) {
+        return x * x * x;
+    },
+    
+    method double(x) {
+        return x + x;
+    }
+}
+
+let utils = MathUtils();
+print("  square(5): " + string(utils.square(5)));
+print("  cube(3): " + string(utils.cube(3)));
+print("  double(7): " + string(utils.double(7)));
+print("  ✓ Passed\n");
+
+// Test 6: Fields with defaults and computed
+print("Test 6: Defaults + computed");
+data Config {
+    host: string = "localhost",
+    port: number = 8080,
+    
+    computed url => host
+}
+
+let cfg = Config();
+print("  host: " + cfg.host);
+print("  port: " + string(cfg.port));
+print("  url (computed): " + cfg.url);
+print("  ✓ Passed\n");
+
+// Test 7: Operator chaining
+print("Test 7: Operator chaining");
+data Vec {
+    x: number,
+    
+    operator +(other) {
+        return Vec(this.x + other.x);
+    },
+    
+    operator -(other) {
+        return Vec(this.x - other.x);
+    }
+}
+
+let v1 = Vec(10);
+let v2 = Vec(5);
+let v3 = Vec(3);
+let result = v1 + v2;
+let result2 = result - v3;
+print("  (10 + 5 - 3).x: " + string(result2.x));
+print("  ✓ Passed\n");
+
+// Test 8: Method with multiple parameters
+print("Test 8: Methods with parameters");
+data Calculator {
+    value: number,
+    
+    method add(a, b) {
+        return a + b;
+    },
+    
+    method multiply(a, b) {
+        return a * b;
+    }
+}
+
+let calc = Calculator(0);
+print("  add(3, 4): " + string(calc.add(3, 4)));
+print("  multiply(2, 5): " + string(calc.multiply(2, 5)));
+print("  ✓ Passed\n");
+
+// Test 9: Immutable dataclass with methods
+print("Test 9: Immutable with methods");
+data immutable Point {
+    x: number,
+    y: number,
+    
+    method distance() {
+        return this.x + this.y;
+    }
+}
+
+let p = Point(3, 4);
+print("  point.x: " + string(p.x));
+print("  distance(): " + string(p.distance()));
+print("  ✓ Passed\n");
+
+// Test 10: Auto-generated methods
+print("Test 10: Auto-generated methods");
+data Product {
+    id: number,
+    name: string,
+    price: number
+}
+
+let prod = Product(1, "Widget", 19);
+print("  toString(): " + prod.toString());
+let json = prod.toJSON();
+print("  toJSON() length: " + string(len(json)));
+let prod2 = prod.clone();
+print("  clone() works: " + string(prod2.id == 1));
+print("  equals() self: " + string(prod.equals(prod)));
+print("  ✓ Passed\n");
+
+print("=====================================");
+print("All 10 edge case tests passed! ✓✓✓");
+print("=====================================");

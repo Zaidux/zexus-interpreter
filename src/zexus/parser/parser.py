@@ -364,6 +364,9 @@ class UltimateParser:
             elif self.cur_token_is(CONST):
                 print(f"[PARSE_STMT] Matched CONST", file=sys.stderr, flush=True)
                 node = self.parse_const_statement()
+            elif self.cur_token_is(DATA):
+                print(f"[PARSE_STMT] Matched DATA", file=sys.stderr, flush=True)
+                node = self.parse_data_statement()
             elif self.cur_token_is(RETURN):
                 print(f"[PARSE_STMT] Matched RETURN", file=sys.stderr, flush=True)
                 node = self.parse_return_statement()
@@ -849,6 +852,292 @@ class UltimateParser:
             self.next_token()
 
         return stmt
+
+    def parse_data_statement(self):
+        """Parse data statement (dataclass definition)
+        
+        Syntax:
+            data TypeName {
+                field1: type,
+                field2: type = default,
+                field3: type require constraint
+            }
+            
+            data immutable Point { x: number, y: number }
+            data verified Transaction { from: address, to: address }
+            data Box<T> { value: T }
+            data Dog extends Animal { breed: string }
+            @validated data Email { address: string }
+        """
+        from ..zexus_ast import DataStatement, DataField, Identifier
+        
+        # Parse decorators before 'data' keyword (if called from decorator context)
+        decorators = []
+        
+        # Current token is DATA
+        # Check for modifiers (immutable, verified, etc.)
+        modifiers = []
+        
+        # Look ahead for modifiers before type name
+        self.next_token()  # Move past 'data'
+        
+        while self.cur_token and self.cur_token_is(IDENT) and self.cur_token.literal in ["immutable", "verified"]:
+            modifiers.append(self.cur_token.literal)
+            self.next_token()
+        
+        # Type name
+        if not self.cur_token_is(IDENT):
+            self.errors.append("Expected type name after 'data'")
+            return None
+        
+        type_name = self.cur_token.literal
+        self.next_token()
+        
+        # Parse generic type parameters: <T, U, V>
+        type_params = []
+        if self.cur_token_is(LT):
+            self.next_token()  # Skip <
+            
+            # Parse comma-separated type parameter names
+            while not self.cur_token_is(GT) and not self.cur_token_is(EOF):
+                if self.cur_token_is(IDENT):
+                    type_params.append(self.cur_token.literal)
+                    self.next_token()
+                    
+                    # Check for comma or closing >
+                    if self.cur_token_is(COMMA):
+                        self.next_token()  # Skip comma
+                    elif self.cur_token_is(GT):
+                        break  # Will advance past > below
+                    else:
+                        self.errors.append(f"Invalid type parameters: expected ',' or '>', got {self.cur_token.type}")
+                        return None
+                else:
+                    self.errors.append(f"Invalid type parameter: expected identifier, got {self.cur_token.type}")
+                    return None
+            
+            if self.cur_token_is(GT):
+                self.next_token()  # Skip >
+        
+        # Check for inheritance: extends ParentType
+        parent_type = None
+        if self.cur_token_is(IDENT) and self.cur_token.literal == "extends":
+            self.next_token()  # Skip 'extends'
+            if self.cur_token_is(IDENT):
+                parent_type = self.cur_token.literal
+                self.next_token()
+            else:
+                self.errors.append("Expected parent type name after 'extends'")
+                return None
+        
+        # Expect opening brace
+        if not self.cur_token_is(LBRACE):
+            self.errors.append(f"Expected '{{' after data type name, got {self.cur_token.type}")
+            return None
+        
+        # Parse field definitions
+        fields = []
+        self.next_token()  # Move past {
+        
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            
+            # Skip commas and semicolons
+            if self.cur_token_is(COMMA) or self.cur_token_is(SEMICOLON):
+                self.next_token()
+                continue
+            
+            # Check for decorators: @logged, @cached, etc.
+            field_decorators = []
+            while self.cur_token_is(AT):
+                self.next_token()  # Skip @
+                if self.cur_token_is(IDENT):
+                    field_decorators.append(self.cur_token.literal)
+                    self.next_token()
+            
+            # Field must start with identifier (or 'method'/'operator'/'computed' keyword)
+            if not self.cur_token_is(IDENT):
+                self.next_token()
+                continue
+            
+            # Check for special field types
+            if self.cur_token.literal == "computed":
+                # computed area => width * height
+                self.next_token()  # Skip 'computed'
+                if not self.cur_token_is(IDENT):
+                    self.errors.append("Expected field name after 'computed'")
+                    self.next_token()
+                    continue
+                
+                field_name = self.cur_token.literal
+                self.next_token()
+                
+                # Expect => (LAMBDA token)
+                if not self.cur_token_is(LAMBDA):
+                    self.errors.append(f"Expected '=>' after computed field name, got {self.cur_token.type}")
+                    self.next_token()
+                    continue
+                
+                self.next_token()  # Skip =>
+                
+                # Parse the computed expression
+                computed_expr = self.parse_expression(LOWEST)
+                # After parse_expression, cur_token is at the last token of the expression
+                # We need to move to the next token (which should be a delimiter or closing brace)
+                if not self.cur_token_is(RBRACE):
+                    self.next_token()
+                
+                field = DataField(
+                    name=field_name,
+                    field_type=None,
+                    default_value=None,
+                    constraint=None,
+                    computed=computed_expr,
+                    decorators=field_decorators
+                )
+                fields.append(field)
+                # Continue to next field
+                continue
+                
+            elif self.cur_token.literal == "method":
+                # method add(x) { return this.value + x; }
+                self.next_token()  # Skip 'method'
+                if not self.cur_token_is(IDENT):
+                    self.errors.append("Expected method name after 'method'")
+                    self.next_token()
+                    continue
+                
+                method_name = self.cur_token.literal
+                self.next_token()
+                
+                # Parse parameters
+                method_params = []
+                if self.cur_token_is(LPAREN):
+                    self.next_token()  # Skip (
+                    while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+                        if self.cur_token_is(IDENT):
+                            method_params.append(self.cur_token.literal)
+                            self.next_token()
+                        if self.cur_token_is(COMMA):
+                            self.next_token()
+                    if self.cur_token_is(RPAREN):
+                        self.next_token()  # Skip )
+                
+                # Parse method body
+                if not self.cur_token_is(LBRACE):
+                    self.errors.append("Expected '{' after method parameters")
+                    self.next_token()
+                    continue
+                
+                method_body_block = self.parse_block("method")
+                if method_body_block:
+                    field = DataField(
+                        name=method_name,
+                        method_body=method_body_block.statements,
+                        method_params=method_params,
+                        decorators=field_decorators
+                    )
+                    fields.append(field)
+                # After parse_block, cur_token is at method body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
+                # Continue to next field
+                continue
+                
+            elif self.cur_token.literal == "operator":
+                # operator +(other) { return Vector(this.x + other.x, this.y + other.y); }
+                self.next_token()  # Skip 'operator'
+                
+                # Get the operator symbol
+                operator_symbol = None
+                if self.cur_token.type in {PLUS, MINUS, STAR, SLASH, MOD, EQ, NOT_EQ, LT, GT, LTE, GTE}:
+                    operator_symbol = self.cur_token.literal
+                    self.next_token()
+                else:
+                    self.errors.append(f"Invalid operator symbol: {self.cur_token.literal}")
+                    self.next_token()
+                    continue
+                
+                # Parse parameters
+                method_params = []
+                if self.cur_token_is(LPAREN):
+                    self.next_token()  # Skip (
+                    while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+                        if self.cur_token_is(IDENT):
+                            method_params.append(self.cur_token.literal)
+                            self.next_token()
+                        if self.cur_token_is(COMMA):
+                            self.next_token()
+                    if self.cur_token_is(RPAREN):
+                        self.next_token()  # Skip )
+                
+                # Parse operator body
+                if not self.cur_token_is(LBRACE):
+                    self.errors.append("Expected '{' after operator parameters")
+                    self.next_token()
+                    continue
+                
+                operator_body_block = self.parse_block("operator")
+                if operator_body_block:
+                    field = DataField(
+                        name=f"operator_{operator_symbol}",
+                        operator=operator_symbol,
+                        method_body=operator_body_block.statements,
+                        method_params=method_params,
+                        decorators=field_decorators
+                    )
+                    fields.append(field)
+                # After parse_block, cur_token is at operator body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
+                # Continue to next field
+                continue
+                
+            else:
+                # Regular field: name: type = default require constraint
+                field_name = self.cur_token.literal
+                self.next_token()
+                
+                # Check for type annotation
+                field_type = None
+                if self.cur_token_is(COLON):
+                    self.next_token()  # Skip :
+                    if self.cur_token_is(IDENT):
+                        field_type = self.cur_token.literal
+                        self.next_token()
+                
+                # Check for default value
+                default_value = None
+                if self.cur_token_is(ASSIGN):
+                    self.next_token()  # Skip =
+                    default_value = self.parse_expression(LOWEST)
+                
+                # Check for constraint (require clause)
+                constraint = None
+                if self.cur_token_is(IDENT) and self.cur_token.literal == "require":
+                    self.next_token()  # Skip 'require'
+                    constraint = self.parse_expression(LOWEST)
+                
+                field = DataField(
+                    name=field_name,
+                    field_type=field_type,
+                    default_value=default_value,
+                    constraint=constraint,
+                    decorators=field_decorators
+                )
+                fields.append(field)
+        
+        # Note: After parsing, we may be at the dataclass's closing }
+        # - For methods/operators: we advanced past their body's }, so we're already positioned correctly
+        # - For regular fields: we're at the dataclass's }, no need to advance (caller handles it)
+        
+        return DataStatement(
+            name=Identifier(type_name),
+            fields=fields,
+            modifiers=modifiers,
+            parent=parent_type,
+            decorators=decorators,
+            type_params=type_params
+        )
 
     def parse_print_statement(self):
         """Tolerant print statement parser"""
