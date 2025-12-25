@@ -421,4 +421,11 @@ The `CONTINUE` keyword is a powerful tool for:
 - ✅ **Graceful Degradation**: Fall back to safe defaults
 - ⚠️ **Use Carefully**: Understand that errors won't halt execution
 
-**Remember**: With great power comes great responsibility. Use `CONTINUE` when you want to collect all errors and process all data, but ensure your application can handle partial failures gracefully.
+**Critical Safety Warning**: Do NOT use CONTINUE when:
+- Database connections fail (could corrupt data)
+- Security validations fail (could create vulnerabilities)
+- File system operations fail (could lose data)
+- Authentication/authorization errors occur (security risk)
+- Critical system resources are unavailable
+
+**Remember**: With great power comes great responsibility. Use `CONTINUE` when you want to collect all errors and process all data, but ensure your application can handle partial failures gracefully. It's primarily designed for development, testing, and non-critical batch operations.
