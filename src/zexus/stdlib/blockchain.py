@@ -13,6 +13,98 @@ class BlockchainModule:
     """Provides blockchain utility functions."""
 
     @staticmethod
+    def quantum_resistant_hash(data: str, algorithm: str = 'shake256', output_length: int = 64) -> str:
+        """Calculate quantum-resistant hash using SHAKE256 or SHA3.
+        
+        Args:
+            data: Data to hash
+            algorithm: 'shake256', 'shake128', 'sha3_512', 'sha3_384', 'sha3_256'
+            output_length: Output length in bytes for SHAKE (default: 64)
+        
+        Returns:
+            Hexadecimal hash string
+        
+        Note: SHAKE256 and SHA3 are quantum-resistant hash functions from the SHA-3 family.
+        """
+        if algorithm == 'shake256':
+            return hashlib.shake_256(data.encode()).hexdigest(output_length)
+        elif algorithm == 'shake128':
+            return hashlib.shake_128(data.encode()).hexdigest(output_length)
+        elif algorithm == 'sha3_512':
+            return hashlib.sha3_512(data.encode()).hexdigest()
+        elif algorithm == 'sha3_384':
+            return hashlib.sha3_384(data.encode()).hexdigest()
+        elif algorithm == 'sha3_256':
+            return hashlib.sha3_256(data.encode()).hexdigest()
+        elif algorithm == 'sha3_224':
+            return hashlib.sha3_224(data.encode()).hexdigest()
+        else:
+            raise ValueError(f"Unknown algorithm: {algorithm}")
+
+    @staticmethod
+    def quantum_safe_address(public_key: str, prefix: str = "0x") -> str:
+        """Create quantum-safe address from public key using SHAKE256.
+        
+        Uses SHAKE256 (SHA-3 family) which is quantum-resistant.
+        """
+        # Use SHAKE256 for quantum resistance
+        shake_hash = hashlib.shake_256(public_key.encode()).hexdigest(20)  # 20 bytes = 40 hex chars
+        return f"{prefix}{shake_hash}"
+
+    @staticmethod
+    def create_quantum_block(index: int, timestamp: float, data: Any, 
+                            previous_hash: str, nonce: int = 0) -> Dict[str, Any]:
+        """Create a quantum-resistant blockchain block using SHA3-256."""
+        block = {
+            'index': index,
+            'timestamp': timestamp,
+            'data': data,
+            'previous_hash': previous_hash,
+            'nonce': nonce
+        }
+        
+        # Calculate block hash using SHA3-256 (quantum-resistant)
+        block_string = str(block['index']) + str(block['timestamp']) + \
+                      str(block['data']) + block['previous_hash'] + str(block['nonce'])
+        block['hash'] = hashlib.sha3_256(block_string.encode()).hexdigest()
+        
+        return block
+
+    @staticmethod
+    def quantum_proof_of_work(block_data: str, difficulty: int = 4, 
+                             max_iterations: int = MAX_POW_ITERATIONS) -> tuple:
+        """Quantum-resistant proof-of-work using SHA3-256.
+        
+        Args:
+            block_data: Data to hash
+            difficulty: Number of leading zeros required
+            max_iterations: Maximum iterations before giving up
+        
+        Returns:
+            Tuple of (nonce, hash) or (nonce, "") if max iterations reached
+        """
+        nonce = 0
+        prefix = '0' * difficulty
+        
+        while nonce < max_iterations:
+            hash_attempt = hashlib.sha3_256(f"{block_data}{nonce}".encode()).hexdigest()
+            
+            if hash_attempt.startswith(prefix):
+                return nonce, hash_attempt
+            
+            nonce += 1
+        
+        return nonce, ""
+
+    @staticmethod
+    def validate_quantum_proof_of_work(block_data: str, nonce: int, hash_value: str, 
+                                      difficulty: int = 4) -> bool:
+        """Validate quantum-resistant proof-of-work."""
+        prefix = '0' * difficulty
+        calculated_hash = hashlib.sha3_256(f"{block_data}{nonce}".encode()).hexdigest()
+        return calculated_hash == hash_value and hash_value.startswith(prefix)
+
+    @staticmethod
     def create_address(public_key: str, prefix: str = "0x") -> str:
         """Create address from public key (Ethereum-style).
         
@@ -241,3 +333,9 @@ create_transaction = BlockchainModule.create_transaction
 hash_transaction = BlockchainModule.hash_transaction
 create_genesis_block = BlockchainModule.create_genesis_block
 validate_chain = BlockchainModule.validate_chain
+# Quantum-resistant functions
+quantum_resistant_hash = BlockchainModule.quantum_resistant_hash
+quantum_safe_address = BlockchainModule.quantum_safe_address
+create_quantum_block = BlockchainModule.create_quantum_block
+quantum_proof_of_work = BlockchainModule.quantum_proof_of_work
+validate_quantum_proof_of_work = BlockchainModule.validate_quantum_proof_of_work
