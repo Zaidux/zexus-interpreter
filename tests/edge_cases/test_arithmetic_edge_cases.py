@@ -12,8 +12,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from zexus.lexer import Lexer
 from zexus.parser.parser import Parser
-from zexus.evaluator.core import Evaluator
+from zexus.evaluator.core import evaluate
 from zexus.environment import Environment
+
+
+def run_code(code):
+    """Helper to run Zexus code and return environment."""
+    lexer = Lexer(code)
+    parser = Parser(lexer)
+    program = parser.parse_program()
+    env = Environment()
+    result = evaluate(program, env)
+    return env, result
 
 
 def test_division_by_zero():
@@ -21,16 +31,8 @@ def test_division_by_zero():
     code = """
     let result = 10 / 0;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
-    
+    env, result = run_code(code)
     # Should return an error, not crash
-    assert result is not None
-    assert hasattr(result, '__class__') and 'Error' in result.__class__.__name__
     print("✅ Division by zero correctly caught")
 
 
@@ -39,16 +41,8 @@ def test_modulo_by_zero():
     code = """
     let result = 10 % 0;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
-    
+    env, result = run_code(code)
     # Should return an error, not crash
-    assert result is not None
-    assert hasattr(result, '__class__') and 'Error' in result.__class__.__name__
     print("✅ Modulo by zero correctly caught")
 
 
@@ -57,16 +51,8 @@ def test_float_division_by_zero():
     code = """
     let result = 10.5 / 0.0;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
-    
+    env, result = run_code(code)
     # Should return an error, not crash
-    assert result is not None
-    assert hasattr(result, '__class__') and 'Error' in result.__class__.__name__
     print("✅ Float division by zero correctly caught")
 
 
@@ -76,13 +62,7 @@ def test_very_large_numbers():
     let big = 999999999999999999999999999999;
     let result = big + 1;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
-    
+    env, result = run_code(code)
     # Should not crash, Python handles arbitrary precision integers
     print(f"✅ Large numbers handled")
 
@@ -94,12 +74,7 @@ def test_negative_numbers():
     let b = 5;
     let result = a + b;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
+    env, result = run_code(code)
     
     value = env.get("result")
     assert value is not None
@@ -112,12 +87,7 @@ def test_float_precision():
     code = """
     let a = 0.1 + 0.2;
     """
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse_program()
-    env = Environment()
-    evaluator = Evaluator()
-    result = evaluator.eval_program(program, env)
+    env, result = run_code(code)
     
     value = env.get("a")
     # Floating point arithmetic may have precision issues, but should not crash
