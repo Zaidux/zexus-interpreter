@@ -4,7 +4,7 @@ import sys
 
 from .. import zexus_ast
 from ..zexus_ast import (
-    Program, ExpressionStatement, BlockStatement, ReturnStatement, LetStatement, ConstStatement,
+    Program, ExpressionStatement, BlockStatement, ReturnStatement, ContinueStatement, LetStatement, ConstStatement,
     ActionStatement, FunctionStatement, IfStatement, WhileStatement, ForEachStatement,
     TryCatchStatement, UseStatement, FromStatement, ExportStatement,
     ContractStatement, EntityStatement, VerifyStatement, ProtectStatement,
@@ -65,9 +65,20 @@ class StatementEvaluatorMixin:
                         EVAL_SUMMARY['errors'] += 1
                     except Exception:
                         pass
-                    # Execute deferred cleanup even on error
-                    self._execute_deferred_cleanup(env, [])
-                    return res
+                    
+                    # Check if continue_on_error mode is enabled
+                    if self.continue_on_error:
+                        # Log the error and continue execution
+                        error_msg = str(res)
+                        self.error_log.append(error_msg)
+                        print(f"[ERROR] {error_msg}")
+                        debug_log("  Continuing after error", "continue_on_error=True")
+                        result = NULL  # Continue with null result
+                        continue
+                    else:
+                        # Execute deferred cleanup even on error
+                        self._execute_deferred_cleanup(env, [])
+                        return res
                 result = res
             
             debug_log("eval_program completed", result)
@@ -101,6 +112,17 @@ class StatementEvaluatorMixin:
                             EVAL_SUMMARY['errors'] += 1
                         except Exception:
                             pass
+                        
+                        # Check if continue_on_error mode is enabled
+                        if self.continue_on_error:
+                            # Log the error and continue execution
+                            error_msg = str(res)
+                            self.error_log.append(error_msg)
+                            print(f"[ERROR] {error_msg}")
+                            debug_log("  Continuing after error in block", "continue_on_error=True")
+                            result = NULL  # Continue with null result
+                            continue
+                    
                     # Execute deferred cleanup before returning
                     self._execute_deferred_cleanup(env, stack_trace)
                     # Restore stdout before returning
@@ -677,6 +699,12 @@ class StatementEvaluatorMixin:
         if is_error(val): 
             return val
         return ReturnValue(val)
+    
+    def eval_continue_statement(self, node, env, stack_trace):
+        """Enable continue-on-error mode for the evaluator."""
+        debug_log("eval_continue_statement", "Enabling error recovery mode")
+        self.continue_on_error = True
+        return NULL
     
     def eval_assignment_expression(self, node, env, stack_trace):
         # Support assigning to identifiers or property access targets

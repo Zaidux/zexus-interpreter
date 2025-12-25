@@ -123,6 +123,14 @@ class ReturnStatement(Statement):
     def __repr__(self):
         return f"ReturnStatement(return_value={self.return_value})"
 
+class ContinueStatement(Statement):
+    """Continue on error - allows program to continue execution even on errors."""
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "ContinueStatement()"
+
 class ExpressionStatement(Statement):
     def __init__(self, expression): 
         self.expression = expression
