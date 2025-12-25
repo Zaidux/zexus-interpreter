@@ -462,7 +462,7 @@ zexus-interpreter/
 
 #### Testing Verified:
 - ✅ `pip install -e .` successful
-- ✅ `zx --version` shows 0.1.0
+- ✅ `zx --version` shows 1.5.0
 - ✅ `zx --zexus` displays command list
 - ✅ `zx run` executes programs correctly
 - ✅ Syntax highlighting active on GitHub

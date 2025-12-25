@@ -1,6 +1,6 @@
 {
   "name": "testing",
-  "version": "0.1.0",
+  "version": "1.5.0",
   "description": "Testing Zexus math functionality",
   "author": "zaidu abububakar",
   "main": "test_math_core.zx",

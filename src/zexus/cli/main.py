@@ -422,7 +422,7 @@ def repl(ctx):
     env = Environment()
     validator = SyntaxValidator()
     
-    console.print("[bold green]Zexus Hybrid REPL v0.1.0[/bold green]")
+    console.print("[bold green]Zexus Hybrid REPL v1.5.0[/bold green]")
     console.print(f"🚀 [bold blue]Execution mode:[/bold blue] {execution_mode}")
     console.print(f"📝 [bold blue]Syntax style:[/bold blue] {syntax_style}")
     console.print(f"🔧 [bold blue]Advanced parsing:[/bold blue] {'Enabled' if advanced_parsing else 'Disabled'}")
@@ -510,7 +510,7 @@ let app_name = "My Zexus App"
 
 action main() {{
     print("🚀 Hello from " + app_name)
-    print("✨ Running Zexus v0.1.0 in {mode} mode")
+    print("✨ Running Zexus v1.5.0 in {mode} mode")
     
     # Test some features
     let numbers = [1, 2, 3, 4, 5]
@@ -538,7 +538,7 @@ let app_name = "My Zexus App"
 
 action main():
     print "🚀 Hello from " + app_name
-    print "✨ Running Zexus v0.1.0 in {mode} mode"
+    print "✨ Running Zexus v1.5.0 in {mode} mode"
     
     # Test some features
     let numbers = [1, 2, 3, 4, 5]

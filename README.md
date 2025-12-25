@@ -422,8 +422,8 @@ pip install -e .
 ### Verify Installation
 
 ```bash
-zx --version   # Should show: Zexus v0.1.0
-zpm --version  # Should show: ZPM v0.1.0
+zx --version   # Should show: Zexus v1.5.0
+zpm --version  # Should show: ZPM v1.5.0
 ```
 
 ---

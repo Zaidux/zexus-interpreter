@@ -2,7 +2,7 @@
   "name": "zexus-language",
   "displayName": "Zexus Language Support",
   "description": "Syntax highlighting and language support for Zexus programming language",
-  "version": "0.1.0",
+  "version": "1.5.0",
   "publisher": "Zaidux",
   "icon": "images/icon.png",
   "repository": {
