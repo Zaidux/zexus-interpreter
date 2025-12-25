@@ -74,7 +74,7 @@ def test_network_timeout_simulation():
     try:
         # Test that timeout works
         try:
-            result = slow_operation(timeout=0.1)
+            _ = slow_operation(timeout=0.1)
         except TimeoutError:
             print("✅ Network timeout simulation: timeout mechanism works")
             return True
@@ -95,7 +95,7 @@ def test_capability_sandbox():
         
         # Try to create a restricted context
         if hasattr(manager, 'create_context'):
-            context = manager.create_context(capabilities=[])  # No capabilities
+            _ = manager.create_context(capabilities=[])  # No capabilities
             print("✅ Capability sandbox: restriction mechanism present")
         else:
             print("✅ Capability sandbox: framework available")

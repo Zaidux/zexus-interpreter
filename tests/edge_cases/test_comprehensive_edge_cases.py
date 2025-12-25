@@ -31,26 +31,26 @@ def run_code(code):
 
 def test_division_by_zero():
     """Test that division by zero is caught and handled properly."""
-    env, result = run_code("let result = 10 / 0;")
+    _ = run_code("let result = 10 / 0;")
     # Should return an error, not crash
     print("✅ Division by zero: handled gracefully")
 
 
 def test_modulo_by_zero():
     """Test that modulo by zero is caught and handled properly."""
-    env, result = run_code("let result = 10 % 0;")
+    _ = run_code("let result = 10 % 0;")
     print("✅ Modulo by zero: handled gracefully")
 
 
 def test_float_division_by_zero():
     """Test that float division by zero is caught."""
-    env, result = run_code("let result = 10.5 / 0.0;")
+    _ = run_code("let result = 10.5 / 0.0;")
     print("✅ Float division by zero: handled gracefully")
 
 
 def test_very_large_numbers():
     """Test handling of very large numbers."""
-    env, result = run_code("""
+    _ = run_code("""
     let big = 999999999999999999999999999999;
     let result = big + 1;
     """)
@@ -138,6 +138,9 @@ def test_boolean_operations():
     and_val = env.get("and_result")
     or_val = env.get("or_result")
     not_val = env.get("not_result")
+    assert and_val is not None
+    assert or_val is not None
+    assert not_val is not None
     print("✅ Boolean operations: work correctly")
 
 
@@ -220,7 +223,7 @@ def test_nested_functions():
 
 def test_string_escaping():
     """Test string with special characters."""
-    env, result = run_code("""
+    _ = run_code("""
     let str = "Line 1\\nLine 2";
     """)
     # Should not crash
@@ -229,7 +232,7 @@ def test_string_escaping():
 
 def test_map_literal():
     """Test map/dictionary creation."""
-    env, result = run_code("""
+    _ = run_code("""
     let map = {name: "test", value: 42};
     """)
     # Should not crash

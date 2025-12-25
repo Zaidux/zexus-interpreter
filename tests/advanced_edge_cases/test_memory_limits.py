@@ -18,7 +18,7 @@ def test_memory_manager_exists():
     """Test that memory manager can be imported and instantiated."""
     try:
         from zexus.vm.memory_manager import MemoryManager
-        manager = MemoryManager(max_heap_size=1024*1024)  # 1MB limit
+        _ = MemoryManager(max_heap_size=1024*1024)  # 1MB limit
         print("✅ Memory manager: instantiated successfully")
         return True
     except Exception as e:
@@ -33,9 +33,9 @@ def test_memory_allocation_tracking():
         manager = MemoryManager()
         
         # Allocate some objects
-        obj1 = manager.allocate([1, 2, 3, 4, 5])
-        obj2 = manager.allocate({"key": "value"})
-        obj3 = manager.allocate("test string")
+        _ = manager.allocate([1, 2, 3, 4, 5])
+        _ = manager.allocate({"key": "value"})
+        _ = manager.allocate("test string")
         
         stats = manager.get_stats()
         assert stats['allocation_count'] >= 3

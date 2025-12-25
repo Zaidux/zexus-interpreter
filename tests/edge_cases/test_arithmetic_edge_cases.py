@@ -31,7 +31,7 @@ def test_division_by_zero():
     code = """
     let result = 10 / 0;
     """
-    env, result = run_code(code)
+    _ = run_code(code)
     # Should return an error, not crash
     print("✅ Division by zero correctly caught")
 
@@ -41,7 +41,7 @@ def test_modulo_by_zero():
     code = """
     let result = 10 % 0;
     """
-    env, result = run_code(code)
+    _ = run_code(code)
     # Should return an error, not crash
     print("✅ Modulo by zero correctly caught")
 
@@ -51,7 +51,7 @@ def test_float_division_by_zero():
     code = """
     let result = 10.5 / 0.0;
     """
-    env, result = run_code(code)
+    _ = run_code(code)
     # Should return an error, not crash
     print("✅ Float division by zero correctly caught")
 
@@ -62,7 +62,7 @@ def test_very_large_numbers():
     let big = 999999999999999999999999999999;
     let result = big + 1;
     """
-    env, result = run_code(code)
+    _ = run_code(code)
     # Should not crash, Python handles arbitrary precision integers
     print(f"✅ Large numbers handled")
 

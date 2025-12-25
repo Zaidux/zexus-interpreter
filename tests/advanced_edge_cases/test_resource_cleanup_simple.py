@@ -68,7 +68,7 @@ def test_nested_scope_cleanup():
     inner = Environment(outer=outer)
     inner.set("y", 20)
     
-    weak_outer = weakref.ref(outer)
+    _ = weakref.ref(outer)  # Keep reference for consistency
     weak_inner = weakref.ref(inner)
     
     del inner
