@@ -51,7 +51,7 @@ try:
     PYGLS_AVAILABLE = True
 except ImportError:
     PYGLS_AVAILABLE = False
-    print("pygls not installed. Install with: pip install pygls", file=sys.stderr)
+    logger.error("pygls not installed. Install with: pip install pygls")
 
 # Import Zexus modules - these should always be available if zexus is installed
 try:
@@ -65,8 +65,8 @@ try:
     ZEXUS_AVAILABLE = True
 except ImportError as e:
     ZEXUS_AVAILABLE = False
-    print(f"Zexus modules not available: {e}", file=sys.stderr)
-    print("Make sure Zexus is properly installed: pip install -e .", file=sys.stderr)
+    logger.error(f"Zexus modules not available: {e}")
+    logger.error("Make sure Zexus is properly installed: pip install -e .")
 
 # Configure logging
 logging.basicConfig(

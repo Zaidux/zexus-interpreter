@@ -139,8 +139,9 @@ class Profiler:
         
         if call_info['name'] != name:
             # Stack mismatch - log warning
-            print(f"Warning: Profile stack mismatch. Expected {call_info['name']}, got {name}", 
-                  file=sys.stderr)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Profile stack mismatch. Expected {call_info['name']}, got {name}")
             return
         
         # Calculate elapsed time

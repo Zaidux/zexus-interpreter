@@ -101,7 +101,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('zexus.restartLanguageServer', async () => {
             if (client) {
                 await client.stop();
-                startLanguageServer(context);  // Removed await since function is not async
+                startLanguageServer(context);
                 vscode.window.showInformationMessage('Zexus Language Server restarted');
             }
         })

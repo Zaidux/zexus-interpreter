@@ -45,13 +45,13 @@ BUILTINS = {
     # Collections
     'len': 'len(collection)',
     'list': 'list(items...)',
-    'map': 'map(pairs...)',
+    'map': 'map(pairs...)',  # Map data structure
     'set': 'set(items...)',
     'range': 'range(start, end, step)',
     
     # Functional
     'filter': 'filter(collection, predicate)',
-    'map': 'map(collection, transform)',
+    'map_transform': 'map(collection, transform)',  # Functional map
     'reduce': 'reduce(collection, fn, initial)',
     'sort': 'sort(collection, comparator)',
     'reverse': 'reverse(collection)',
