@@ -76,6 +76,7 @@ Zexus is a next-generation, general-purpose programming language designed for se
 ✅ **Stack Trace Formatter** - Beautiful, readable stack traces with source context  
 ✅ **Smart Error Suggestions** - Actionable hints for fixing common errors  
 ✅ **Pattern Matching** - Complete pattern matching with exhaustiveness checking  
+✅ **CONTINUE Keyword** - Error recovery mode for graceful degradation and batch processing  
 
 ### Recent Enhancements (v0.1.3)
 
@@ -749,6 +750,54 @@ action retryableOperation(maxAttempts) {
     
     print("Failed after " + attempts + " attempts")
     return null
+}
+```
+
+### Example 10: Error Recovery with CONTINUE Keyword
+
+```zexus
+# Enable error recovery mode - continue execution despite errors
+print "=== Batch Processing with Error Recovery ==="
+continue;
+
+# Process multiple records, logging errors but not stopping
+action processRecord(id, data) {
+    if (data < 0) {
+        revert("Invalid data for record " + id);
+        return null;  # This executes with CONTINUE
+    }
+    return "Processed: " + data;
+}
+
+let records = [
+    {id: 1, data: 100},
+    {id: 2, data: -50},   # Error - but continues
+    {id: 3, data: 200},
+    {id: 4, data: -30},   # Error - but continues
+    {id: 5, data: 300}
+];
+
+let successCount = 0;
+for each record in records {
+    let result = processRecord(record.id, record.data);
+    if (result != null) {
+        successCount = successCount + 1;
+    }
+}
+
+print "Processed " + successCount + " out of " + length(records) + " records";
+print "Program completed despite errors!";
+
+# Use case: Testing framework
+action runTests() {
+    continue;  # Run all tests even if some fail
+    
+    test_addition();      # Pass
+    test_subtraction();   # Fail - but continue
+    test_multiplication(); # Pass
+    test_division();      # Fail - but continue
+    
+    print "All tests executed!";
 }
 ```
 
@@ -1427,6 +1476,20 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`finally`** - Cleanup block
 - **`require`** - Assert condition (with tolerance blocks for conditional bypasses)
 - **`revert`** - Revert transaction
+- **`continue`** - Enable error recovery mode (execution continues despite errors)
+
+**New in v1.5.0**: CONTINUE enables error recovery mode - program continues running even when errors occur:
+```zexus
+# Enable error recovery mode
+continue;
+
+# Errors are logged but don't halt execution
+revert("Error 1");  # Logged, execution continues
+print "Still running!";
+
+revert("Error 2");  # Logged, execution continues
+print "Program completed despite errors!";
+```
 
 **New in v0.1.3**: REQUIRE supports tolerance blocks for conditional requirement bypasses:
 ```zexus

@@ -85,6 +85,7 @@ LAMBDA = "LAMBDA"
 DEBUG = "DEBUG"      # NEW: Debug token
 TRY = "TRY"          # NEW: Try token
 CATCH = "CATCH"      # NEW: Catch token
+CONTINUE = "CONTINUE" # NEW: Continue on error token
 EXTERNAL = "EXTERNAL" # NEW: From token
 FROM = "FROM"        # NEW: From token
 

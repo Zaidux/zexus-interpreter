@@ -367,6 +367,9 @@ class UltimateParser:
             elif self.cur_token_is(RETURN):
                 print(f"[PARSE_STMT] Matched RETURN", file=sys.stderr, flush=True)
                 node = self.parse_return_statement()
+            elif self.cur_token_is(CONTINUE):
+                print(f"[PARSE_STMT] Matched CONTINUE", file=sys.stderr, flush=True)
+                node = self.parse_continue_statement()
             elif self.cur_token_is(PRINT):
                 print(f"[PARSE_STMT] Matched PRINT", file=sys.stderr, flush=True)
                 node = self.parse_print_statement()
@@ -2160,6 +2163,12 @@ class UltimateParser:
         stmt = ReturnStatement(return_value=None)
         self.next_token()
         stmt.return_value = self.parse_expression(LOWEST)
+        return stmt
+
+    def parse_continue_statement(self):
+        """Parse CONTINUE statement - enables error recovery mode."""
+        stmt = ContinueStatement()
+        self.next_token()  # consume CONTINUE token
         return stmt
 
     def parse_expression_statement(self):

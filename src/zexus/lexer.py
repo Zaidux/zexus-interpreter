@@ -469,6 +469,7 @@ class Lexer:
             "debug": DEBUG,      # DUAL-MODE: Works as both statement (debug x;) and function (debug(x))
             "try": TRY,          # NEW: Try keyword  
             "catch": CATCH,      # NEW: Catch keyword
+            "continue": CONTINUE, # NEW: Continue on error keyword
             "external": EXTERNAL, # NEW: External keyword
             "from": FROM,        # NEW: From keyword
             "screen": SCREEN,         # NEW: renderer keyword

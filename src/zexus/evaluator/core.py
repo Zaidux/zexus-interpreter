@@ -48,6 +48,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             'direct_evals': 0
         }
         
+        # CONTINUE keyword support - error recovery mode
+        self.continue_on_error = False
+        self.error_log = []  # Store errors when continue_on_error is enabled
+        
         if self.use_vm and VM_AVAILABLE:
             self._initialize_vm()
     
@@ -84,6 +88,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif node_type == zexus_ast.ReturnStatement:
                 debug_log("  ReturnStatement node")
                 return self.eval_return_statement(node, env, stack_trace)
+            
+            elif node_type == zexus_ast.ContinueStatement:
+                debug_log("  ContinueStatement node")
+                return self.eval_continue_statement(node, env, stack_trace)
             
             elif node_type == zexus_ast.LetStatement:
                 return self.eval_let_statement(node, env, stack_trace)

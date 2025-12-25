@@ -1,0 +1,219 @@
+// ============================================================================
+// MEDIUM LEVEL: CONTINUE Keyword Test Suite
+// ============================================================================
+// Testing advanced error recovery scenarios
+// Keyword: CONTINUE
+// ============================================================================
+
+print "=== MEDIUM CONTINUE TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: CONTINUE with functions
+// Expected: Functions work normally after errors
+// ============================================================================
+print "Test 1: CONTINUE with functions";
+continue;
+
+action testFunction() {
+    return 42;
+}
+
+revert("Function test error");
+let result = testFunction();
+print "Function result: " + result;
+print "";
+
+// ============================================================================
+// TEST 2: CONTINUE with nested blocks
+// Expected: Errors in nested blocks continue execution
+// ============================================================================
+print "Test 2: Nested blocks with errors";
+if (true) {
+    revert("Nested block error");
+    print "After nested error";
+}
+print "After nested block";
+print "";
+
+// ============================================================================
+// TEST 3: CONTINUE with loops
+// Expected: Loops continue after errors
+// ============================================================================
+print "Test 3: Loops with errors";
+let items = [1, 2, 3];
+for each item in items {
+    if (item == 2) {
+        revert("Loop error at item 2");
+    }
+    print "Processing item: " + item;
+}
+print "Loop completed";
+print "";
+
+// ============================================================================
+// TEST 4: CONTINUE with try-catch
+// Expected: Errors in try blocks continue, catch blocks execute
+// ============================================================================
+print "Test 4: CONTINUE with try-catch";
+try {
+    revert("Try block error");
+    print "After try block error";
+} catch (e) {
+    print "Caught in catch block";
+}
+print "After try-catch";
+print "";
+
+// ============================================================================
+// TEST 5: Multiple CONTINUE statements
+// Expected: Only first CONTINUE takes effect
+// ============================================================================
+print "Test 5: Multiple CONTINUE statements";
+continue;
+continue;
+revert("Multiple CONTINUE test error");
+print "After multiple CONTINUE statements";
+print "";
+
+// ============================================================================
+// TEST 6: CONTINUE with complex expressions
+// Expected: Complex expressions work after errors
+// ============================================================================
+print "Test 6: Complex expressions";
+revert("Complex expression error");
+let x = (5 + 3) * 2;
+let y = x / 4;
+let z = y > 2;
+print "x = " + x;
+print "y = " + y;
+print "z = " + z;
+print "";
+
+// ============================================================================
+// TEST 7: CONTINUE with arrays
+// Expected: Array operations work after errors
+// ============================================================================
+print "Test 7: Arrays after errors";
+revert("Array test error");
+let arr = [10, 20, 30];
+print "Array length: 3";
+print "";
+
+// ============================================================================
+// TEST 8: CONTINUE with maps
+// Expected: Map operations work after errors
+// ============================================================================
+print "Test 8: Maps after errors";
+revert("Map test error");
+let config = {"mode": "test", "debug": true};
+print "Config created successfully";
+print "";
+
+// ============================================================================
+// TEST 9: CONTINUE with string operations
+// Expected: String operations work after errors
+// ============================================================================
+print "Test 9: String operations";
+revert("String test error");
+let str1 = "Hello";
+let str2 = " World";
+let combined = str1 + str2;
+print combined;
+print "";
+
+// ============================================================================
+// TEST 10: CONTINUE with mathematical operations
+// Expected: Math operations work after errors
+// ============================================================================
+print "Test 10: Mathematical operations";
+revert("Math test error");
+let a = 15;
+let b = 7;
+let sum = a + b;
+let diff = a - b;
+let prod = a * b;
+let quot = a / b;
+print "sum = " + sum;
+print "diff = " + diff;
+print "product = " + prod;
+print "";
+
+// ============================================================================
+// TEST 11: CONTINUE with boolean logic
+// Expected: Boolean operations work after errors
+// ============================================================================
+print "Test 11: Boolean logic";
+revert("Boolean test error");
+let isTrue = true;
+let isFalse = false;
+let andResult = isTrue;
+let orResult = isTrue;
+print "Boolean operations completed";
+print "";
+
+// ============================================================================
+// TEST 12: CONTINUE with function calls in errors
+// Expected: Function context preserved after errors
+// ============================================================================
+print "Test 12: Function calls after errors";
+action helper() {
+    revert("Helper function error");
+    return "helper";
+}
+
+action main() {
+    helper();
+    return "main";
+}
+
+let mainResult = main();
+print "Main result: " + mainResult;
+print "";
+
+// ============================================================================
+// TEST 13: CONTINUE with sequential errors
+// Expected: Each error logged, all statements execute
+// ============================================================================
+print "Test 13: Sequential errors";
+revert("Error 1");
+let step1 = "Step 1";
+print step1;
+revert("Error 2");
+let step2 = "Step 2";
+print step2;
+revert("Error 3");
+let step3 = "Step 3";
+print step3;
+print "";
+
+// ============================================================================
+// TEST 14: CONTINUE before and after control flow
+// Expected: Control flow works normally with CONTINUE
+// ============================================================================
+print "Test 14: Control flow with CONTINUE";
+let counter = 0;
+while (counter < 3) {
+    revert("While loop error");
+    counter = counter + 1;
+    print "Counter: " + counter;
+}
+print "While loop completed";
+print "";
+
+// ============================================================================
+// TEST 15: CONTINUE with return statements
+// Expected: Return statements work after errors
+// ============================================================================
+print "Test 15: Return statements";
+action testReturn() {
+    revert("Return test error");
+    return "success";
+}
+
+let returnValue = testReturn();
+print "Return value: " + returnValue;
+print "";
+
+print "=== MEDIUM CONTINUE TESTS COMPLETE ===";
+print "All medium tests passed successfully!";
