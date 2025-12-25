@@ -104,16 +104,14 @@ print("\n12. Testing security features:")
 verify true, "This should pass"
 print("VERIFY passed")
 
-# 13. Test async/await if available
+# 13. Test async/await
 print("\n13. Testing async features:")
 async action async_task() -> string {
     return "Async completed"
 };
 
-# Note: Uncomment if async/await is fully implemented
-# let async_result = await async_task()
-# print("Async result: " + async_result)
-print("Async action defined (await not yet implemented)")
+let async_result = await async_task();
+print("Async result: " + async_result);
 
 # 14. Test main entry point pattern
 print("\n14. Testing main entry point:")

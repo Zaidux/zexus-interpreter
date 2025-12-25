@@ -379,7 +379,6 @@ class StructuralAnalyzer:
                 if i < n and tokens[i].type in statement_starters:
                     # Update t to point to the statement starter
                     t = tokens[i]
-                    start_idx_orig = start_idx  # Remember where modifiers started
                     # Don't increment i - let the statement parsing handle it
                 else:
                     # Modifiers without a following statement - treat as expression
@@ -480,7 +479,8 @@ class StructuralAnalyzer:
                     
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
                     # and not in an assignment context
-                    if nesting == 0 and not in_assignment and not found_colon_block and not found_brace_block:
+                    # EXCEPTION: Don't break if we're parsing ACTION/FUNCTION (their names are followed by LPAREN for parameters)
+                    if nesting == 0 and not in_assignment and not found_colon_block and not found_brace_block and t.type not in {ACTION, FUNCTION}:
                         if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
                             # This looks like a function call starting a new expression statement
                             # Only break if we've already collected some tokens (not the first token)
