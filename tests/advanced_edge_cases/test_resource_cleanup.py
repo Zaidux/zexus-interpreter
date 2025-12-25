@@ -48,7 +48,7 @@ def test_file_handle_cleanup():
         
         # Run code multiple times
         for _ in range(10):
-            env, result = run_code(code)
+            run_code(code)
         
         # Force garbage collection
         gc.collect()
