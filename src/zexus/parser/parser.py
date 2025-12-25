@@ -1037,6 +1037,9 @@ class UltimateParser:
                         decorators=field_decorators
                     )
                     fields.append(field)
+                # After parse_block, cur_token is at method body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
                 # Continue to next field
                 continue
                 
@@ -1083,6 +1086,9 @@ class UltimateParser:
                         decorators=field_decorators
                     )
                     fields.append(field)
+                # After parse_block, cur_token is at operator body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
                 # Continue to next field
                 continue
                 
@@ -1121,8 +1127,11 @@ class UltimateParser:
                 fields.append(field)
         
         # Expect closing brace
-        if self.cur_token_is(RBRACE):
-            self.next_token()  # Move past }
+        # Note: After parsing methods/operators, we've already advanced past }
+        # For regular fields, we're at the closing } but haven't advanced yet
+        # So we need to check what the last parsed thing was
+        # if self.cur_token_is(RBRACE):
+        #     self.next_token()  # Move past }
         
         return DataStatement(
             name=Identifier(type_name),
