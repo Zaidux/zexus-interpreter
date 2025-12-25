@@ -1037,6 +1037,8 @@ class UltimateParser:
                         decorators=field_decorators
                     )
                     fields.append(field)
+                # Continue to next field
+                continue
                 
             elif self.cur_token.literal == "operator":
                 # operator +(other) { return Vector(this.x + other.x, this.y + other.y); }
@@ -1081,6 +1083,8 @@ class UltimateParser:
                         decorators=field_decorators
                     )
                     fields.append(field)
+                # Continue to next field
+                continue
                 
             else:
                 # Regular field: name: type = default require constraint

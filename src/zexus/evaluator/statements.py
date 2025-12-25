@@ -520,8 +520,11 @@ class StatementEvaluatorMixin:
             # Add custom methods defined in the dataclass (parent + child)
             for field in all_fields:
                 if field.method_body is not None:
+                    # Check if this is an operator overload
+                    is_operator = hasattr(field, 'operator') and field.operator is not None
+                    
                     # Create a closure for the method that has access to instance fields
-                    def make_method(method_body, method_params, method_name, decorators):
+                    def make_method(method_body, method_params, method_name, decorators, is_op=False):
                         def custom_method(*args):
                             # Create method environment with instance fields
                             from ..environment import Environment
@@ -537,8 +540,8 @@ class StatementEvaluatorMixin:
                                 else:
                                     method_env.set(param, NULL)
                             
-                            # Apply @logged decorator
-                            if "logged" in decorators:
+                            # Apply @logged decorator (operators don't get logged)
+                            if "logged" in decorators and not is_op:
                                 arg_str = ", ".join([str(arg.value if hasattr(arg, 'value') else arg) for arg in args])
                                 print(f"📝 Calling {method_name}({arg_str})")
                             
@@ -554,7 +557,7 @@ class StatementEvaluatorMixin:
                                     return result.value
                             
                             # Apply @logged decorator (return value)
-                            if "logged" in decorators:
+                            if "logged" in decorators and not is_op:
                                 result_str = str(result.value if hasattr(result, 'value') else result)
                                 print(f"📝 {method_name} returned: {result_str}")
                             
@@ -562,8 +565,8 @@ class StatementEvaluatorMixin:
                         
                         return custom_method
                     
-                    # Add the method to the instance (child methods override parent methods)
-                    method_func = make_method(field.method_body, field.method_params, field.name, field.decorators)
+                    # Create the method function
+                    method_func = make_method(field.method_body, field.method_params, field.name, field.decorators, is_operator)
                     
                     # Apply @cached decorator if present
                     if "cached" in field.decorators:
@@ -581,10 +584,20 @@ class StatementEvaluatorMixin:
                         
                         method_func = cached_method
                     
-                    instance.pairs[String(field.name)] = Builtin(
-                        method_func,
-                        name=field.name
-                    )
+                    # Store the method/operator with appropriate key
+                    if is_operator:
+                        # Store with __operator_{symbol}__ key for operator overloading
+                        operator_key = f"__operator_{field.operator}__"
+                        instance.pairs[String(operator_key)] = Builtin(
+                            method_func,
+                            name=operator_key
+                        )
+                    else:
+                        # Regular method
+                        instance.pairs[String(field.name)] = Builtin(
+                            method_func,
+                            name=field.name
+                        )
             
             # Store computed property definitions for auto-calling on access
             computed_props = {}
