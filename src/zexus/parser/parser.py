@@ -1045,6 +1045,63 @@ class UltimateParser:
                 # Continue to next field
                 continue
                 
+            elif self.cur_token.literal == "action":
+                # action get_value() -> T { return this.value; }
+                # Same as method, just different keyword
+                self.next_token()  # Skip 'action'
+                if not self.cur_token_is(IDENT):
+                    self.errors.append("Expected action name after 'action'")
+                    self.next_token()
+                    continue
+                
+                action_name = self.cur_token.literal
+                self.next_token()
+                
+                # Parse parameters (with or without parentheses, with optional type annotations)
+                action_params = []
+                if self.cur_token_is(LPAREN):
+                    self.next_token()  # Skip (
+                    while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+                        if self.cur_token_is(IDENT):
+                            action_params.append(self.cur_token.literal)
+                            self.next_token()
+                            # Skip optional type annotation: : type
+                            if self.cur_token_is(COLON):
+                                self.next_token()  # Skip :
+                                self.next_token()  # Skip type
+                        if self.cur_token_is(COMMA):
+                            self.next_token()
+                    if self.cur_token_is(RPAREN):
+                        self.next_token()  # Skip )
+                
+                # Skip optional return type: -> type
+                if self.cur_token_is(MINUS):
+                    self.next_token()  # Skip -
+                    if self.cur_token_is(GT):
+                        self.next_token()  # Skip >
+                        self.next_token()  # Skip return type
+                
+                # Parse action body
+                if not self.cur_token_is(LBRACE):
+                    self.errors.append("Expected '{' after action parameters")
+                    self.next_token()
+                    continue
+                
+                action_body_block = self.parse_block("action")
+                if action_body_block:
+                    field = DataField(
+                        name=action_name,
+                        method_body=action_body_block.statements,
+                        method_params=action_params,
+                        decorators=field_decorators
+                    )
+                    fields.append(field)
+                # After parse_block, cur_token is at action body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
+                # Continue to next field
+                continue
+                
             elif self.cur_token.literal == "operator":
                 # operator +(other) { return Vector(this.x + other.x, this.y + other.y); }
                 self.next_token()  # Skip 'operator'
@@ -2260,6 +2317,11 @@ class UltimateParser:
             return None
 
         params.append(Identifier(self.cur_token.literal))
+        
+        # Skip optional type annotation: : type
+        if self.peek_token_is(COLON):
+            self.next_token()  # Move to :
+            self.next_token()  # Move to type (skip it)
 
         while self.peek_token_is(COMMA):
             self.next_token()
@@ -2268,6 +2330,11 @@ class UltimateParser:
                 self.errors.append("Expected parameter name after comma")
                 return None
             params.append(Identifier(self.cur_token.literal))
+            
+            # Skip optional type annotation: : type
+            if self.peek_token_is(COLON):
+                self.next_token()  # Move to :
+                self.next_token()  # Move to type (skip it)
 
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after parameters")
@@ -2347,15 +2414,21 @@ class UltimateParser:
             return None
 
     def parse_while_statement(self):
-        if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after 'while'")
-            return None
-
-        self.next_token()
-        condition = self.parse_expression(LOWEST)
-
-        if not self.expect_peek(RPAREN):
-            self.errors.append("Expected ')' after while condition")
+        """Tolerant while statement parser (with or without parentheses)"""
+        self.next_token()  # Move past WHILE token
+        
+        # Parse condition (with or without parentheses)
+        if self.cur_token_is(LPAREN):
+            self.next_token()  # Skip (
+            condition = self.parse_expression(LOWEST)
+            if self.cur_token_is(RPAREN):
+                self.next_token()  # Skip )
+        else:
+            # No parentheses - parse expression directly
+            condition = self.parse_expression(LOWEST)
+        
+        if not condition:
+            self.errors.append("Expected condition after 'while'")
             return None
 
         body = self.parse_block("while")
@@ -2753,6 +2826,15 @@ class UltimateParser:
 
         entity_name = Identifier(self.cur_token.literal)
 
+        # Check for inheritance: extends ParentEntity
+        parent = None
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "extends":
+            self.next_token()  # Move to 'extends'
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parent entity name after 'extends'")
+                return None
+            parent = Identifier(self.cur_token.literal)
+
         if not self.expect_peek(LBRACE):
             self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after entity name")
             return None
@@ -2802,10 +2884,8 @@ class UltimateParser:
         if not self.cur_token_is(RBRACE):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' to close entity definition")
             # Tolerant: continue anyway
-        else:
-            self.next_token()  # Move past }
 
-        return EntityStatement(name=entity_name, properties=properties)
+        return EntityStatement(name=entity_name, properties=properties, parent=parent)
 
     def recover_to_next_property(self):
         """Recover to the next property in entity definition"""

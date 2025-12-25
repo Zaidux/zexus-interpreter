@@ -1621,15 +1621,39 @@ class StatementEvaluatorMixin:
     
     def eval_entity_statement(self, node, env, stack_trace):
         props = {}
+        
+        # Handle inheritance - get parent properties first
+        if node.parent:
+            parent_entity = env.get(node.parent.value)
+            if parent_entity and isinstance(parent_entity, EntityDefinition):
+                # Copy parent properties
+                props.update(parent_entity.properties)
+            elif not parent_entity:
+                return EvaluationError(f"Parent entity '{node.parent.value}' not found")
+        
         for prop in node.properties:
-            p_name = prop.name.value
-            p_type = prop.type.value
+            # Handle both dict and object formats
+            if isinstance(prop, dict):
+                p_name = prop['name']
+                p_type = prop['type']
+            else:
+                p_name = prop.name.value
+                p_type = prop.type.value
+            
             def_val = NULL
             
-            if getattr(prop, 'default_value', None):
-                def_val = self.eval_node(prop.default_value, env, stack_trace)
-                if is_error(def_val): 
-                    return def_val
+            if isinstance(prop, dict):
+                # For dict format, default_value is in the dict
+                if 'default_value' in prop:
+                    def_val = self.eval_node(prop['default_value'], env, stack_trace)
+                    if is_error(def_val): 
+                        return def_val
+            else:
+                # For object format, default_value is an attribute
+                if getattr(prop, 'default_value', None):
+                    def_val = self.eval_node(prop.default_value, env, stack_trace)
+                    if is_error(def_val): 
+                        return def_val
             
             props[p_name] = {"type": p_type, "default_value": def_val}
         

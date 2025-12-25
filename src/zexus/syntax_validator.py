@@ -73,7 +73,11 @@ class SyntaxValidator:
         # Check catch without parentheses or with double parentheses
         if 'catch' in stripped_line:
             # Case 1: catch without parentheses: catch error { }
-            if 'catch ' in stripped_line and not 'catch(' in stripped_line and '{' in stripped_line:
+            # Check for catch followed by space, not followed by ( (with or without space before it)
+            if ('catch ' in stripped_line and 
+                not 'catch(' in stripped_line and 
+                not 'catch (' in stripped_line and 
+                '{' in stripped_line):
                 self.suggestions.append({
                     'line': line_num,
                     'message': "Use parentheses with catch: catch(error) { }",
