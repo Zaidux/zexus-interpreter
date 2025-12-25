@@ -123,7 +123,7 @@ let is_valid = validate_chain(chain)
 ```zexus
 use {create_address, validate_address, create_genesis_block, 
      create_block, validate_block, calculate_merkle_root, 
-     create_transaction, validate_chain} from "blockchain"
+     create_transaction, hash_transaction, validate_chain} from "blockchain"
 
 # Create and validate address
 let address = create_address("my_public_key_12345")

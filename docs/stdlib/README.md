@@ -51,12 +51,10 @@ use {create_address} from "blockchain"
 ## Module Documentation
 
 See individual module documentation:
-- [fs Module](FS_MODULE.md) - File system operations (30+ functions)
-- [http Module](HTTP_MODULE.md) - HTTP client (5 functions)
-- [json Module](JSON_MODULE.md) - JSON operations (7 functions)
-- [datetime Module](DATETIME_MODULE.md) - Date/time operations (25+ functions)
 - [crypto Module](CRYPTO_MODULE.md) - Cryptographic functions (15+ functions)
 - [blockchain Module](BLOCKCHAIN_MODULE.md) - Blockchain utilities (12+ functions)
+
+Note: Additional modules (fs, http, json, datetime) are available in the standard library but documentation is pending.
 
 ## Quick Examples
 

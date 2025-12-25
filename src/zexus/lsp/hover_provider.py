@@ -11,7 +11,7 @@ except ImportError:
 class HoverProvider:
     """Provides hover information for Zexus code."""
 
-    def get_hover(self, position: Position, doc_info: Dict[str, Any]) -> Optional:
+    def get_hover(self, position: Position, doc_info: Dict[str, Any]) -> Optional[Hover]:
         """Get hover information for the given position."""
         if not PYGLS_AVAILABLE:
             return None

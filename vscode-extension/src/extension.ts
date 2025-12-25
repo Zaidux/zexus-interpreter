@@ -146,7 +146,14 @@ function startLanguageServer(context: vscode.ExtensionContext) {
         clientOptions
     );
 
-    client.start();
+    client.start().catch((error) => {
+        vscode.window.showErrorMessage(
+            `Failed to start Zexus Language Server: ${error.message}. ` +
+            'Make sure Python and the Zexus package are installed. ' +
+            'Install LSP support with: pip install zexus[lsp]'
+        );
+        console.error('Language server error:', error);
+    });
 }
 
 function getPythonPath(): string {

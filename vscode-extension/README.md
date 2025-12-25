@@ -179,14 +179,16 @@ Real-time error detection:
 
 ### Debugging
 
-Full DAP (Debug Adapter Protocol) implementation:
+**Coming Soon**: Full DAP (Debug Adapter Protocol) implementation is planned for a future release.
 
-#### Breakpoints
+Planned features:
+
+#### Breakpoints (Planned)
 - Line breakpoints
 - Conditional breakpoints
 - Log points
 
-#### Execution Control
+#### Execution Control (Planned)
 - Continue (F5)
 - Step Over (F10)
 - Step Into (F11)

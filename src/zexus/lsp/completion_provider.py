@@ -20,7 +20,7 @@ KEYWORDS = [
     'hash', 'signature', 'verify_sig', 'emit', 'event', 'revert', 'this',
     'public', 'private', 'pure', 'view', 'payable', 'modifier', 'sealed', 'secure',
     'async', 'await', 'channel', 'send', 'receive', 'atomic', 'stream', 'watch',
-    'try', 'catch', 'throw', 'finally', 'continue', 'defer',
+    'try', 'catch', 'throw', 'finally', 'defer',
     'native', 'inline', 'gc', 'buffer', 'simd', 'pattern', 'exactly', 'embedded', 'using',
     'screen', 'component', 'theme', 'canvas', 'graphics', 'animation', 'clock', 'color',
     'middleware', 'auth', 'throttle', 'cache', 'inject',

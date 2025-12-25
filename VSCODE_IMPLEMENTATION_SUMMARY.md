@@ -100,7 +100,21 @@ This document summarizes the implementation of VS Code extension support, Langua
 - Helpers: `start_of_day`, `end_of_day`, `start_of_month`
 - Utilities: `weekday_name`, `month_name`, `sleep`
 
-**Total**: 80+ new standard library functions
+#### crypto (Cryptography) - 15+ functions
+- Hash functions: `hash_sha256`, `hash_sha512`, `hash_md5`, `keccak256`, `sha3_256`, `sha3_512`
+- HMAC: `hmac_sha256`, `hmac_sha512`
+- Random: `random_bytes`, `random_int`, `generate_salt`
+- Key derivation: `pbkdf2`
+- Utilities: `compare_digest`, `constant_time_compare`
+
+#### blockchain (Blockchain) - 12+ functions
+- Address management: `create_address`, `validate_address`
+- Block operations: `create_block`, `create_genesis_block`, `validate_block`
+- Merkle trees: `calculate_merkle_root`
+- Transactions: `create_transaction`, `hash_transaction`
+- Validation: `validate_chain`, `validate_proof_of_work`
+
+**Total**: 100+ new standard library functions
 
 ### 4. Performance Profiler ✅
 
@@ -355,7 +369,6 @@ use {fs, http, json, datetime} from "stdlib"
    - Publish to marketplace
 
 2. **Additional stdlib modules**:
-   - crypto module
    - os module
    - regex module
 
