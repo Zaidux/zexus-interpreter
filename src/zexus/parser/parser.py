@@ -2345,15 +2345,21 @@ class UltimateParser:
             return None
 
     def parse_while_statement(self):
-        if not self.expect_peek(LPAREN):
-            self.errors.append("Expected '(' after 'while'")
-            return None
-
-        self.next_token()
-        condition = self.parse_expression(LOWEST)
-
-        if not self.expect_peek(RPAREN):
-            self.errors.append("Expected ')' after while condition")
+        """Tolerant while statement parser (with or without parentheses)"""
+        self.next_token()  # Move past WHILE token
+        
+        # Parse condition (with or without parentheses)
+        if self.cur_token_is(LPAREN):
+            self.next_token()  # Skip (
+            condition = self.parse_expression(LOWEST)
+            if self.cur_token_is(RPAREN):
+                self.next_token()  # Skip )
+        else:
+            # No parentheses - parse expression directly
+            condition = self.parse_expression(LOWEST)
+        
+        if not condition:
+            self.errors.append("Expected condition after 'while'")
             return None
 
         body = self.parse_block("while")

@@ -7,7 +7,7 @@ from ..zexus_ast import (
 )
 from ..object import (
     Integer, Float, String, List, Map, Boolean as BooleanObj,
-    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin
+    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin, DateTime
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
 from ..error_reporter import get_error_reporter, NameError as ZexusNameError, TypeError as ZexusTypeError
@@ -238,6 +238,33 @@ class ExpressionEvaluatorMixin:
             # Concatenate two arrays: [1, 2] + [3, 4] = [1, 2, 3, 4]
             new_elements = left.elements[:] + right.elements[:]
             return List(new_elements)
+        
+        # DateTime arithmetic
+        elif isinstance(left, DateTime) and isinstance(right, DateTime):
+            # DateTime - DateTime = time difference in seconds (as Float)
+            if operator == "-":
+                diff = left.timestamp - right.timestamp
+                # Return the difference as a Float (milliseconds for compatibility)
+                return Float(diff * 1000)  # Convert to milliseconds
+            else:
+                return EvaluationError(f"Unsupported operation: DATETIME {operator} DATETIME")
+        elif isinstance(left, DateTime) and isinstance(right, (Integer, Float)):
+            # DateTime + Number or DateTime - Number (add/subtract seconds)
+            if operator == "+":
+                new_timestamp = left.timestamp + float(right.value)
+                return DateTime(new_timestamp)
+            elif operator == "-":
+                new_timestamp = left.timestamp - float(right.value)
+                return DateTime(new_timestamp)
+            else:
+                return EvaluationError(f"Unsupported operation: DATETIME {operator} {right.type()}")
+        elif isinstance(left, (Integer, Float)) and isinstance(right, DateTime):
+            # Number + DateTime (add seconds to datetime)
+            if operator == "+":
+                new_timestamp = right.timestamp + float(left.value)
+                return DateTime(new_timestamp)
+            else:
+                return EvaluationError(f"Unsupported operation: {left.type()} {operator} DATETIME")
         
         # Mixed String Concatenation
         elif operator == "+":
