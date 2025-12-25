@@ -627,8 +627,13 @@ def debug(ctx, action):
 @click.pass_context
 def profile(ctx, file, memory, top, json_output):
     """Profile performance of a Zexus program"""
-    from ..profiler import Profiler
-    import json as json_lib
+    try:
+        from ..profiler import Profiler
+        import json as json_lib
+    except ImportError as e:
+        console.print(f"[bold red]Error:[/bold red] Profiler module not available: {e}")
+        console.print("[yellow]The profiler requires additional dependencies.[/yellow]")
+        sys.exit(1)
     
     console.print(f"⚡ [bold green]Profiling[/bold green] {file}")
     console.print(f"💾 [bold blue]Memory profiling:[/bold blue] {'Enabled' if memory else 'Disabled'}")

@@ -203,8 +203,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && npm run copy-files",
-    "copy-files": "cp -r ../syntaxes ./dist/ && cp -r ../snippets ./dist/ && cp language-configuration.json ./dist/",
+    "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "node ./dist/test/runTest.js",

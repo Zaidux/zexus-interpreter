@@ -53,13 +53,20 @@ except ImportError:
     PYGLS_AVAILABLE = False
     print("pygls not installed. Install with: pip install pygls", file=sys.stderr)
 
-from zexus.lexer import Lexer
-from zexus.parser import Parser
-from zexus.evaluator.core import Evaluator
-from .completion_provider import CompletionProvider
-from .symbol_provider import SymbolProvider
-from .hover_provider import HoverProvider
-from .definition_provider import DefinitionProvider
+# Import Zexus modules - these should always be available if zexus is installed
+try:
+    from zexus.lexer import Lexer
+    from zexus.parser import Parser
+    from zexus.evaluator.core import Evaluator
+    from .completion_provider import CompletionProvider
+    from .symbol_provider import SymbolProvider
+    from .hover_provider import HoverProvider
+    from .definition_provider import DefinitionProvider
+    ZEXUS_AVAILABLE = True
+except ImportError as e:
+    ZEXUS_AVAILABLE = False
+    print(f"Zexus modules not available: {e}", file=sys.stderr)
+    print("Make sure Zexus is properly installed: pip install -e .", file=sys.stderr)
 
 # Configure logging
 logging.basicConfig(
@@ -72,6 +79,10 @@ logger = logging.getLogger(__name__)
 
 
 if PYGLS_AVAILABLE:
+    if not ZEXUS_AVAILABLE:
+        print("Error: Zexus modules not available. LSP server cannot start.", file=sys.stderr)
+        sys.exit(1)
+    
     class ZexusLanguageServer(LanguageServer):
         """Zexus Language Server implementation."""
 

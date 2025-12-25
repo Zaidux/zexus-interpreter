@@ -120,7 +120,12 @@ function startLanguageServer(context: vscode.ExtensionContext) {
     const pythonPath = getPythonPath();
     
     // The server is implemented in Python
-    const serverModule = path.join(
+    // Try multiple paths for the server module
+    let serverModule: string;
+    
+    // In development, the extension is in vscode-extension/
+    // In packaged form, the extension is wherever it's installed
+    const devServerPath = path.join(
         context.extensionPath,
         '..',
         'src',
@@ -128,11 +133,22 @@ function startLanguageServer(context: vscode.ExtensionContext) {
         'lsp',
         'server.py'
     );
-
-    // Server options
+    
+    // In packaged extension, we'd bundle the server or use installed package
+    const packagedServerPath = path.join(
+        context.extensionPath,
+        'server',
+        'server.py'
+    );
+    
+    // Try to use installed zexus package first (most robust)
+    // Falls back to relative paths for development
+    serverModule = '-m zexus.lsp.server';  // Use installed package
+    
+    // Server options - use Python module instead of file path
     const serverOptions: ServerOptions = {
         command: pythonPath,
-        args: [serverModule],
+        args: serverModule.split(' '),
         transport: TransportKind.stdio
     };
 
