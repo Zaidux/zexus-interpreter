@@ -1126,12 +1126,9 @@ class UltimateParser:
                 )
                 fields.append(field)
         
-        # Expect closing brace
-        # Note: After parsing methods/operators, we've already advanced past }
-        # For regular fields, we're at the closing } but haven't advanced yet
-        # So we need to check what the last parsed thing was
-        # if self.cur_token_is(RBRACE):
-        #     self.next_token()  # Move past }
+        # Note: After parsing, we may be at the dataclass's closing }
+        # - For methods/operators: we advanced past their body's }, so we're already positioned correctly
+        # - For regular fields: we're at the dataclass's }, no need to advance (caller handles it)
         
         return DataStatement(
             name=Identifier(type_name),

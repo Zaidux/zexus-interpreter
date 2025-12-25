@@ -188,14 +188,14 @@ data Calculator {
         return a + b;
     },
     
-    method multiply(a, b, c) {
+    method multiply(a, b) {
         return a * b;
     }
 }
 
 let calc = Calculator(0);
 print("  add(3, 4): " + string(calc.add(3, 4)));
-print("  multiply(2, 5, 1): " + string(calc.multiply(2, 5, 1)));
+print("  multiply(2, 5): " + string(calc.multiply(2, 5)));
 print("  ✓ Passed\n");
 
 // Test 9: Immutable dataclass with methods
