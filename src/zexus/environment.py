@@ -55,16 +55,24 @@ class Environment:
             self.store[name] = value
             return
         
-        # Check if exists in outer scopes
+        # Check if exists in outer scopes by checking the store directly
         if self.outer:
-            existing = self.outer.get(name)
-            if existing is not None:
+            # Recursively check if the name exists in any outer scope
+            if self._has_variable(name):
                 # Try to assign in outer scope
                 self.outer.assign(name, value)
                 return
         
         # Variable doesn't exist anywhere, create it in current scope
         self.store[name] = value
+    
+    def _has_variable(self, name):
+        """Check if a variable name exists in this scope or any outer scope."""
+        if name in self.store:
+            return True
+        if self.outer:
+            return self.outer._has_variable(name)
+        return False
 
     def export(self, name, value):
         """Export a value"""

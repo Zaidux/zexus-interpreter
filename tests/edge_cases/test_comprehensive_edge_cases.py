@@ -9,6 +9,8 @@ Purpose: Verify the interpreter handles edge cases gracefully without crashing
 
 import sys
 import os
+import traceback
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from zexus.lexer import Lexer
@@ -287,7 +289,6 @@ if __name__ == '__main__':
                 total_passed += 1
             except Exception as e:
                 print(f"❌ {test.__name__} failed: {e}")
-                import traceback
                 traceback.print_exc()
                 total_failed += 1
     
