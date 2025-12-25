@@ -1384,7 +1384,7 @@ class ContextStackParser:
             return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype == 'use_statement': # Fix subtype mismatch
             return self._parse_use_statement_block(block_info, all_tokens)
-        elif subtype in {IF, FOR, WHILE, RETURN, DEFER, ENUM, SANDBOX}:
+        elif subtype in {IF, FOR, WHILE, RETURN, CONTINUE, DEFER, ENUM, SANDBOX}:
             # Use the existing logic in _parse_block_statements which handles these keywords
             print(f"🎯 [Context] Calling _parse_block_statements for subtype={subtype}")
             print(f"🎯 [Context] block_info['tokens'] has {len(block_info.get('tokens', []))} tokens")
@@ -2405,6 +2405,19 @@ class ContextStackParser:
                     statements.append(stmt)
                 
                 # Skip trailing semicolon if present
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
+                
+                i = j
+                continue
+
+            elif token.type == CONTINUE:
+                # Parse CONTINUE statement directly (simple statement, no value)
+                stmt = ContinueStatement()
+                statements.append(stmt)
+                
+                # Skip to next token (and skip semicolon if present)
+                j = i + 1
                 if j < len(tokens) and tokens[j].type == SEMICOLON:
                     j += 1
                 
