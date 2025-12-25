@@ -41,6 +41,8 @@ Complete documentation for the Zexus programming language.
 - [http Module](stdlib/HTTP_MODULE.md) - HTTP client (coming soon)
 - [json Module](stdlib/JSON_MODULE.md) - JSON parsing/serialization (coming soon)
 - [datetime Module](stdlib/DATETIME_MODULE.md) - Date/time operations (coming soon)
+- [crypto Module](stdlib/CRYPTO_MODULE.md) - Cryptographic functions
+- [blockchain Module](stdlib/BLOCKCHAIN_MODULE.md) - Blockchain utilities
 
 ## 🔑 Language Features by Category
 
