@@ -32,9 +32,10 @@ if __name__ == "__main__":
         # If there's an explicit command name at argv[1], we still want options before it
         sys.argv.insert(insert_pos, '--syntax-style=auto')
 
-    # Enable advanced parsing by default
-    if not any('--no-advanced-parsing' in arg for arg in sys.argv):
-        # Insert before command as well so Click treats it as a group option
-        sys.argv.insert(1, '--advanced-parsing')
+    # Disable advanced parsing by default (fixes parser bug with block boundaries)
+    # Advanced parsing can be explicitly enabled with --advanced-parsing flag
+    #if not any('--no-advanced-parsing' in arg for arg in sys.argv):
+    #    # Insert before command as well so Click treats it as a group option
+    #    sys.argv.insert(1, '--advanced-parsing')
 
     cli()
