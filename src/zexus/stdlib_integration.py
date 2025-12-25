@@ -215,7 +215,15 @@ def create_stdlib_module(module_name, evaluator=None):
                 return EvaluationError("pbkdf2() requires at least 2 arguments: password, salt")
             password = args[0].value if hasattr(args[0], 'value') else str(args[0])
             salt = args[1].value if hasattr(args[1], 'value') else str(args[1])
-            iterations = args[2].value if len(args) > 2 and hasattr(args[2], 'value') else 100000
+            
+            # Validate iterations parameter
+            iterations = 100000  # default
+            if len(args) > 2:
+                if hasattr(args[2], 'value') and isinstance(args[2].value, int):
+                    iterations = args[2].value
+                elif isinstance(args[2], int):
+                    iterations = args[2]
+            
             try:
                 result = CryptoModule.pbkdf2(password, salt, iterations)
                 return String(result)
