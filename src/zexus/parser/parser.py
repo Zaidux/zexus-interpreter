@@ -2258,6 +2258,11 @@ class UltimateParser:
             return None
 
         params.append(Identifier(self.cur_token.literal))
+        
+        # Skip optional type annotation: : type
+        if self.peek_token_is(COLON):
+            self.next_token()  # Move to :
+            self.next_token()  # Move to type (skip it)
 
         while self.peek_token_is(COMMA):
             self.next_token()
@@ -2266,6 +2271,11 @@ class UltimateParser:
                 self.errors.append("Expected parameter name after comma")
                 return None
             params.append(Identifier(self.cur_token.literal))
+            
+            # Skip optional type annotation: : type
+            if self.peek_token_is(COLON):
+                self.next_token()  # Move to :
+                self.next_token()  # Move to type (skip it)
 
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after parameters")
