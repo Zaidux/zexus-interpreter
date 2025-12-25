@@ -31,6 +31,7 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: click>=8.0
 Requires-Dist: rich>=10.0
+Requires-Dist: pygls>=1.0.0
 Provides-Extra: dev
 Requires-Dist: pytest>=6.0; extra == "dev"
 Requires-Dist: pytest-cov>=2.0; extra == "dev"
@@ -123,6 +124,7 @@ Zexus is a next-generation, general-purpose programming language designed for se
 ✅ **Stack Trace Formatter** - Beautiful, readable stack traces with source context  
 ✅ **Smart Error Suggestions** - Actionable hints for fixing common errors  
 ✅ **Pattern Matching** - Complete pattern matching with exhaustiveness checking  
+✅ **CONTINUE Keyword** - Error recovery mode for graceful degradation and batch processing  
 
 ### Recent Enhancements (v0.1.3)
 
@@ -796,6 +798,54 @@ action retryableOperation(maxAttempts) {
     
     print("Failed after " + attempts + " attempts")
     return null
+}
+```
+
+### Example 10: Error Recovery with CONTINUE Keyword
+
+```zexus
+# Enable error recovery mode - continue execution despite errors
+print "=== Batch Processing with Error Recovery ==="
+continue;
+
+# Process multiple records, logging errors but not stopping
+action processRecord(id, data) {
+    if (data < 0) {
+        revert("Invalid data for record " + id);
+        return null;  # This executes with CONTINUE
+    }
+    return "Processed: " + data;
+}
+
+let records = [
+    {id: 1, data: 100},
+    {id: 2, data: -50},   # Error - but continues
+    {id: 3, data: 200},
+    {id: 4, data: -30},   # Error - but continues
+    {id: 5, data: 300}
+];
+
+let successCount = 0;
+for each record in records {
+    let result = processRecord(record.id, record.data);
+    if (result != null) {
+        successCount = successCount + 1;
+    }
+}
+
+print "Processed " + successCount + " out of " + length(records) + " records";
+print "Program completed despite errors!";
+
+# Use case: Testing framework
+action runTests() {
+    continue;  # Run all tests even if some fail
+    
+    test_addition();      # Pass
+    test_subtraction();   # Fail - but continue
+    test_multiplication(); # Pass
+    test_division();      # Fail - but continue
+    
+    print "All tests executed!";
 }
 ```
 
@@ -1474,6 +1524,20 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`finally`** - Cleanup block
 - **`require`** - Assert condition (with tolerance blocks for conditional bypasses)
 - **`revert`** - Revert transaction
+- **`continue`** - Enable error recovery mode (execution continues despite errors)
+
+**New in v1.5.0**: CONTINUE enables error recovery mode - program continues running even when errors occur:
+```zexus
+# Enable error recovery mode
+continue;
+
+# Errors are logged but don't halt execution
+revert("Error 1");  # Logged, execution continues
+print "Still running!";
+
+revert("Error 2");  # Logged, execution continues
+print "Program completed despite errors!";
+```
 
 **New in v0.1.3**: REQUIRE supports tolerance blocks for conditional requirement bypasses:
 ```zexus
@@ -1716,28 +1780,28 @@ Source Code (.zx)
 
 #### Events & Reactive
 - **[EVENTS_REACTIVE](docs/keywords/EVENTS_REACTIVE.md)** - Event system
-- **[WATCH](docs/COMMAND_watch.md)** - Reactive state management
+- **[WATCH](docs/keywords/COMMAND_watch.md)** - Reactive state management
 
 #### Security Features
 - **[SECURITY](docs/keywords/SECURITY.md)** - Security features overview
-- **[RESTRICT](docs/COMMAND_restrict.md)** - Input validation
-- **[SANDBOX](docs/COMMAND_sandbox.md)** - Isolated execution
-- **[AUDIT](docs/COMMAND_audit.md)** - Compliance logging
-- **[TRAIL](docs/COMMAND_trail.md)** - Event tracking
+- **[RESTRICT](docs/keywords/COMMAND_restrict.md)** - Input validation
+- **[SANDBOX](docs/keywords/COMMAND_sandbox.md)** - Isolated execution
+- **[AUDIT](docs/keywords/COMMAND_audit.md)** - Compliance logging
+- **[TRAIL](docs/keywords/COMMAND_trail.md)** - Event tracking
 
 #### Performance
 - **[PERFORMANCE](docs/keywords/PERFORMANCE.md)** - Performance features
-- **[NATIVE](docs/COMMAND_native.md)** - C/C++ FFI
-- **[INLINE](docs/COMMAND_inline.md)** - Function inlining
-- **[GC](docs/COMMAND_gc.md)** - Garbage collection control
-- **[BUFFER](docs/COMMAND_buffer.md)** - Memory buffers
-- **[SIMD](docs/COMMAND_simd.md)** - SIMD operations
+- **[NATIVE](docs/keywords/COMMAND_native.md)** - C/C++ FFI
+- **[INLINE](docs/keywords/COMMAND_inline.md)** - Function inlining
+- **[GC](docs/keywords/COMMAND_gc.md)** - Garbage collection control
+- **[BUFFER](docs/keywords/COMMAND_buffer.md)** - Memory buffers
+- **[SIMD](docs/keywords/COMMAND_simd.md)** - SIMD operations
 
 #### Advanced Features
-- **[DEFER](docs/COMMAND_defer.md)** - Deferred cleanup
-- **[PATTERN](docs/COMMAND_pattern.md)** - Pattern matching
-- **[ENUM](docs/COMMAND_enum.md)** - Enumerations
-- **[STREAM](docs/COMMAND_stream.md)** - Event streaming
+- **[DEFER](docs/keywords/COMMAND_defer.md)** - Deferred cleanup
+- **[PATTERN](docs/keywords/COMMAND_pattern.md)** - Pattern matching
+- **[ENUM](docs/keywords/COMMAND_enum.md)** - Enumerations
+- **[STREAM](docs/keywords/COMMAND_stream.md)** - Event streaming
 
 #### Blockchain & State
 - **[BLOCKCHAIN_STATE](docs/keywords/BLOCKCHAIN_STATE.md)** - State management
@@ -1761,14 +1825,14 @@ Source Code (.zx)
 ### Command Documentation
 
 Each advanced feature has detailed documentation:
-- [PROTECT](docs/COMMAND_protect.md) - Security policies
-- [WATCH](docs/COMMAND_watch.md) - Reactive state
-- [RESTRICT](docs/COMMAND_restrict.md) - Input validation
-- [SANDBOX](docs/COMMAND_sandbox.md) - Isolated execution
-- [TRAIL](docs/COMMAND_trail.md) - Audit logging
-- [DEFER](docs/COMMAND_defer.md) - Deferred execution
-- [PATTERN](docs/COMMAND_pattern.md) - Pattern matching
-- And many more in [docs/](docs/)
+- [PROTECT](docs/keywords/COMMAND_protect.md) - Security policies
+- [WATCH](docs/keywords/COMMAND_watch.md) - Reactive state
+- [RESTRICT](docs/keywords/COMMAND_restrict.md) - Input validation
+- [SANDBOX](docs/keywords/COMMAND_sandbox.md) - Isolated execution
+- [TRAIL](docs/keywords/COMMAND_trail.md) - Audit logging
+- [DEFER](docs/keywords/COMMAND_defer.md) - Deferred execution
+- [PATTERN](docs/keywords/COMMAND_pattern.md) - Pattern matching
+- And many more in [docs/keywords/](docs/keywords/)
 
 ---
 
@@ -2018,11 +2082,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] **Stack trace formatter with source context (v1.5.0)**
 
 ### In Progress 🚧
-- [ ] VS Code extension with full IntelliSense
-- [ ] Language Server Protocol (LSP)
-- [ ] Standard library expansion (fs, http, json, datetime)
-- [ ] Debugger integration
-- [ ] Performance profiling tools
+- [x] VS Code extension with full IntelliSense ✅
+- [x] Language Server Protocol (LSP) ✅
+- [x] Standard library expansion (fs, http, json, datetime) ✅
+- [x] Performance profiling tools ✅
+- [ ] Debugger integration (Debug Adapter Protocol in progress)
 
 ### Planned 🎯
 - [ ] WASM compilation target

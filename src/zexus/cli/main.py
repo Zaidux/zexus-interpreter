@@ -36,6 +36,7 @@ def show_all_commands():
         ("zx run --zexus", "Show this command list"),
         ("zx check <file>", "Check syntax with detailed validation"),
         ("zx validate <file>", "Validate and auto-fix syntax errors"),
+        ("zx profile <file>", "Profile performance with time and memory tracking"),
         ("zx ast <file>", "Display Abstract Syntax Tree"),
         ("zx tokens <file>", "Show tokenization output"),
         ("zx repl", "Start interactive REPL"),
@@ -50,23 +51,37 @@ def show_all_commands():
         ("--version", "Show Zexus version"),
         ("--help", "Show detailed help"),
         ("", ""),
+        ("[bold]Profile Options:[/bold]", ""),
+        ("--memory/--no-memory", "Enable/disable memory profiling (default: on)"),
+        ("--top N", "Show top N functions (default: 20)"),
+        ("--json-output FILE", "Save profile data as JSON"),
+        ("", ""),
         ("[bold]Examples:[/bold]", ""),
         ("zx run program.zx", "Run a program with auto-detection"),
         ("zx run --syntax-style=universal main.zx", "Run with strict syntax"),
         ("zx run --execution-mode=compiler fast.zx", "Force compiler mode"),
         ("zx check --debug program.zx", "Check syntax with debug info"),
+        ("zx profile myapp.zx", "Profile with memory tracking"),
+        ("zx profile --no-memory --top 10 app.zx", "Profile without memory, show top 10"),
         ("", ""),
-        ("[bold]Built-in Functions:[/bold]", "50+ functions available"),
+        ("[bold]Built-in Functions:[/bold]", "100+ functions available"),
         ("", "Memory: persist_set, persist_get, track_memory"),
         ("", "Policy: protect, verify, restrict, sanitize"),
         ("", "DI: inject, register_dependency, mock_dependency"),
         ("", "Reactive: watch (keyword)"),
         ("", "Blockchain: transaction, emit, require, balance"),
+        ("", "File System: read_file, write_file, mkdir, exists"),
+        ("", "HTTP: http_get, http_post, http_put, http_delete"),
+        ("", "JSON: json_parse, json_stringify, json_load, json_save"),
+        ("", "DateTime: now, timestamp, format, add_days, diff_seconds"),
         ("", ""),
         ("[bold]Documentation:[/bold]", ""),
         ("", "README: github.com/Zaidux/zexus-interpreter"),
         ("", "Features: docs/features/ADVANCED_FEATURES_IMPLEMENTATION.md"),
         ("", "Dev Guide: src/README.md"),
+        ("", "LSP Guide: docs/lsp/LSP_GUIDE.md"),
+        ("", "Profiler: docs/profiler/PROFILER_GUIDE.md"),
+        ("", "Stdlib: docs/stdlib/README.md"),
     ]
     
     for cmd, desc in commands:
@@ -603,6 +618,89 @@ def debug(ctx, action):
         config.disable_debug()
         console.print("✅ Debugging disabled")
         return
+
+@cli.command()
+@click.argument('file', type=click.Path(exists=True))
+@click.option('--memory/--no-memory', default=True, help='Enable memory profiling')
+@click.option('--top', default=20, help='Number of functions to show in report')
+@click.option('--json-output', type=click.Path(), help='Save profile data as JSON')
+@click.pass_context
+def profile(ctx, file, memory, top, json_output):
+    """Profile performance of a Zexus program"""
+    try:
+        from ..profiler import Profiler
+        import json as json_lib
+    except ImportError as e:
+        console.print(f"[bold red]Error:[/bold red] Profiler module not available: {e}")
+        console.print("[yellow]The profiler requires additional dependencies.[/yellow]")
+        sys.exit(1)
+    
+    console.print(f"⚡ [bold green]Profiling[/bold green] {file}")
+    console.print(f"💾 [bold blue]Memory profiling:[/bold blue] {'Enabled' if memory else 'Disabled'}")
+    
+    try:
+        with open(file, 'r') as f:
+            source_code = f.read()
+        
+        syntax_style = ctx.obj['SYNTAX_STYLE']
+        advanced_parsing = ctx.obj['ADVANCED_PARSING']
+        validator = SyntaxValidator()
+        
+        # Auto-detect syntax style if needed
+        if syntax_style == 'auto':
+            syntax_style = validator.suggest_syntax_style(source_code)
+        
+        # Parse the program
+        lexer = Lexer(source_code, filename=file)
+        parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
+        program = parser.parse_program()
+        
+        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+            console.print("[bold red]❌ Critical parser errors, cannot profile:[/bold red]")
+            for error in parser.errors:
+                console.print(f"  ❌ {error}")
+            sys.exit(1)
+        
+        # Set up environment
+        env = Environment()
+        import os
+        abs_file = os.path.abspath(file)
+        env.set("__file__", String(abs_file))
+        env.set("__FILE__", String(abs_file))
+        env.set("__MODULE__", String("__main__"))
+        env.set("__DIR__", String(os.path.dirname(abs_file)))
+        
+        # Create and start profiler
+        profiler = Profiler()
+        profiler.start(enable_memory=memory)
+        
+        # Execute with profiling
+        console.print("[dim]Executing with profiling...[/dim]")
+        result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+        
+        # Stop profiler and get report
+        report = profiler.stop()
+        
+        # Print report
+        profiler.print_report(report, top_n=top)
+        
+        # Save JSON if requested
+        if json_output:
+            data = report.to_dict()
+            with open(json_output, 'w') as f:
+                json_lib.dump(data, f, indent=2)
+            console.print(f"\n💾 [bold green]Profile data saved to:[/bold green] {json_output}")
+        
+        # Print result if any
+        if result and hasattr(result, 'inspect') and result.inspect() != 'null':
+            console.print(f"\n✅ [bold green]Program Result:[/bold green] {result.inspect()}")
+        
+    except Exception as e:
+        console.print(f"[bold red]Error during profiling:[/bold red] {str(e)}")
+        if ctx.obj.get('DEBUG'):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     cli()

@@ -1,5 +1,6 @@
 click>=8.0
 rich>=10.0
+pygls>=1.0.0
 
 [blockchain]
 web3>=5.0

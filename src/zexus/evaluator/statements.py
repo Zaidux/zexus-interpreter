@@ -1024,6 +1024,7 @@ class StatementEvaluatorMixin:
     def eval_use_statement(self, node, env, stack_trace):
         from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
         from ..builtin_modules import is_builtin_module, get_builtin_module
+        from ..stdlib_integration import is_stdlib_module, get_stdlib_module
         
         # 1. Determine File Path
         file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
@@ -1033,7 +1034,40 @@ class StatementEvaluatorMixin:
         
         debug_log("  UseStatement loading", file_path)
         
-        # 1a. Check if this is a builtin module (crypto, datetime, math)
+        # 1a. Check if this is a stdlib module (fs, http, json, datetime, crypto, blockchain)
+        if is_stdlib_module(file_path):
+            debug_log(f"  Loading stdlib module: {file_path}")
+            try:
+                module_env = get_stdlib_module(file_path, self)
+                if module_env:
+                    # Handle named imports: use {read_file, write_file} from "stdlib/fs"
+                    is_named_import = getattr(node, 'is_named_import', False)
+                    names = getattr(node, 'names', [])
+                    alias = getattr(node, 'alias', None)
+                    
+                    if is_named_import and names:
+                        # Import specific functions
+                        for name_node in names:
+                            name = name_node.value if hasattr(name_node, 'value') else str(name_node)
+                            value = module_env.get(name)
+                            if value is None:
+                                return EvaluationError(f"'{name}' is not exported from {file_path}")
+                            env.set(name, value)
+                            debug_log(f"  Imported '{name}' from {file_path}", value)
+                    elif alias:
+                        # Import as alias: use "stdlib/fs" as fs
+                        env.set(alias, module_env)
+                    else:
+                        # Import all functions into current scope
+                        for key in module_env.store.keys():
+                            env.set(key, module_env.get(key))
+                    return NULL
+                else:
+                    return EvaluationError(f"Stdlib module '{file_path}' not available")
+            except Exception as e:
+                return EvaluationError(f"Error loading stdlib module '{file_path}': {str(e)}")
+        
+        # 1b. Check if this is a builtin module (crypto, datetime, math)
         if is_builtin_module(file_path):
             debug_log(f"  Loading builtin module: {file_path}")
             module_env = get_builtin_module(file_path, self)

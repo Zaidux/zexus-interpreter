@@ -1,0 +1,197 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Zexus",
+  "scopeName": "source.zexus",
+  "fileTypes": ["zx"],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#variables"
+    },
+    {
+      "include": "#constants"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.zexus",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.line.number-sign.zexus",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.zexus",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.zexus",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.zexus",
+              "match": "\\\\(n|t|r|\\\\|\"|'|\\{|\\})"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.zexus",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.zexus",
+              "match": "\\\\(n|t|r|\\\\|\"|')"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.zexus",
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.zexus",
+          "match": "\\b\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.hex.zexus",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.zexus",
+          "match": "\\b0[bB][01]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.zexus",
+          "match": "\\b(if|else|for|while|each|in|break|continue|return|match|case|default)\\b"
+        },
+        {
+          "name": "keyword.declaration.zexus",
+          "match": "\\b(let|const|action|entity|contract|interface|trait|module|use|import|export|external)\\b"
+        },
+        {
+          "name": "keyword.modifier.zexus",
+          "match": "\\b(public|private|static|async|immutable)\\b"
+        },
+        {
+          "name": "keyword.operator.zexus",
+          "match": "\\b(and|or|not|is|as|typeof|instanceof)\\b"
+        },
+        {
+          "name": "keyword.blockchain.zexus",
+          "match": "\\b(transaction|emit|revert|require|assert|address|balance|transfer|call)\\b"
+        },
+        {
+          "name": "keyword.security.zexus",
+          "match": "\\b(protect|verify|restrict|sanitize|validate|audit|seal|watch|cache|inject)\\b"
+        },
+        {
+          "name": "keyword.other.zexus",
+          "match": "\\b(try|catch|finally|throw|yield|await|from|to|of)\\b"
+        },
+        {
+          "name": "constant.language.zexus",
+          "match": "\\b(true|false|null|undefined|this|super)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.zexus",
+          "match": "\\+|\\-|\\*|\\/|%|\\*\\*"
+        },
+        {
+          "name": "keyword.operator.comparison.zexus",
+          "match": "==|!=|<|>|<=|>=|==="
+        },
+        {
+          "name": "keyword.operator.logical.zexus",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.zexus",
+          "match": "=|\\+=|\\-=|\\*=|\\/=|%="
+        },
+        {
+          "name": "keyword.operator.bitwise.zexus",
+          "match": "&|\\||\\^|~|<<|>>|>>>"
+        },
+        {
+          "name": "keyword.operator.arrow.zexus",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.spread.zexus",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.pipeline.zexus",
+          "match": "\\|>"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.zexus",
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+        },
+        {
+          "name": "support.function.builtin.zexus",
+          "match": "\\b(print|println|input|len|type|string|int|float|bool|list|map|set|range|filter|reduce|sort|reverse|join|split|replace|uppercase|lowercase|trim|abs|ceil|floor|round|min|max|sum|sqrt|pow|log|exp|sin|cos|tan|random|time|sleep|open|read|write|close|exists|delete|mkdir|rmdir|persist_set|persist_get|persist_clear|track_memory|create_policy|enforce_policy|verify_condition|register_dependency|inject_dependency|mock_dependency|unmock_all|get_mock_stats|test_mode)\\b"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.zexus",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.other.zexus",
+          "match": "\\b[A-Z][A-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}
