@@ -12,14 +12,14 @@ Welcome to the Zexus Programming Language documentation! This index helps you na
 ## 📚 Core Documentation
 
 ### Language Features
-- **[Advanced Features Implementation](features/ADVANCED_FEATURES_IMPLEMENTATION.md)** - Complete feature reference including:
+- **[Advanced Features Implementation](keywords/features/ADVANCED_FEATURES_IMPLEMENTATION.md)** - Complete feature reference including:
   - Persistent Memory Management
   - Policy-as-Code (PROTECT/VERIFY/RESTRICT)
   - Dependency Injection & Mocking
   - All built-in functions
   
-- **[Blockchain Implementation](features/BLOCKCHAIN_IMPLEMENTATION.md)** - Smart contracts, transactions, events
-- **[WATCH Feature](features/WATCH_FEATURE.md)** - Reactive state management
+- **[Blockchain Implementation](keywords/features/BLOCKCHAIN_IMPLEMENTATION.md)** - Smart contracts, transactions, events
+- **[WATCH Feature](WATCH_FEATURE.md)** - Reactive state management
 - **[Plugin System Guide](guides/PLUGIN_SYSTEM_GUIDE.md)** - Extending Zexus
 
 ### Development Guides
@@ -28,7 +28,7 @@ Welcome to the Zexus Programming Language documentation! This index helps you na
 
 ### Status & History
 - **[Status](STATUS.md)** - Current project status
-- **[Phase Summaries](features/)** - Development phase documentation
+- **[Phase Summaries](keywords/features/)** - Development phase documentation
 
 ## 🎯 Quick Reference
 
