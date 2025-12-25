@@ -213,7 +213,7 @@ def test_exception_cleanup():
     # Run code that will error
     for _ in range(10):
         try:
-            env, result = run_code(code)
+            run_code(code)
         except:
             pass
         gc.collect()
