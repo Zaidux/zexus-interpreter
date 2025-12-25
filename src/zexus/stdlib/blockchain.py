@@ -16,8 +16,8 @@ class BlockchainModule:
     def create_address(public_key: str, prefix: str = "0x") -> str:
         """Create address from public key (Ethereum-style).
         
-        Note: Uses Keccak-256 for Ethereum compatibility.
-        Requires pycryptodome for true Keccak-256 hashing.
+        Note: Requires pycryptodome for true Keccak-256 hashing.
+        Raises RuntimeError if pycryptodome is not available.
         """
         try:
             # Try to use Keccak-256 (Ethereum standard)
@@ -25,10 +25,14 @@ class BlockchainModule:
             k = keccak.new(digest_bits=256)
             k.update(public_key.encode())
             hash_hex = k.hexdigest()
-        except ImportError:
-            # Fallback to SHA3-256 if pycryptodome not available
-            # Note: This is NOT Ethereum-compatible!
-            hash_hex = hashlib.sha3_256(public_key.encode()).hexdigest()
+        except ImportError as exc:
+            # Keccak-256 implementation not available; cannot create
+            # Ethereum-compatible address without pycryptodome.
+            raise RuntimeError(
+                "Ethereum-compatible address generation requires the "
+                "'pycryptodome' package providing Crypto.Hash.keccak. "
+                "Install with: pip install pycryptodome"
+            ) from exc
         
         address = hash_hex[-40:]  # Last 20 bytes (40 hex chars)
         return f"{prefix}{address}"

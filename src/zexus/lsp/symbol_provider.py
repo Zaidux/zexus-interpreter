@@ -2,10 +2,13 @@
 
 from typing import List, Dict, Any
 try:
-    from pygls.lsp.types import DocumentSymbol, SymbolKind, Range, Position
+    from pygls.lsp.types import (DocumentSymbol, SymbolKind, Range, Position)
     PYGLS_AVAILABLE = True
 except ImportError:
     PYGLS_AVAILABLE = False
+    # Define minimal stubs when pygls not available
+    class SymbolKind:
+        pass
 
 
 class SymbolProvider:

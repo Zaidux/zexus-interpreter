@@ -80,8 +80,8 @@ logger = logging.getLogger(__name__)
 
 if PYGLS_AVAILABLE:
     if not ZEXUS_AVAILABLE:
-        print("Error: Zexus modules not available. LSP server cannot start.", file=sys.stderr)
-        sys.exit(1)
+        logger.error("Error: Zexus modules not available. LSP server cannot start.")
+        raise RuntimeError("Zexus modules not available. LSP server cannot start.")
     
     class ZexusLanguageServer(LanguageServer):
         """Zexus Language Server implementation."""

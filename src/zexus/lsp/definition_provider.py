@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any, Optional
 try:
-    from pygls.lsp.types import Location, Position, Range
+    from pygls.lsp.types import Position
     PYGLS_AVAILABLE = True
 except ImportError:
     PYGLS_AVAILABLE = False

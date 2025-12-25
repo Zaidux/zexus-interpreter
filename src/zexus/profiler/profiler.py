@@ -1,9 +1,8 @@
 """Performance profiler for Zexus code."""
 
 import time
-import sys
 import tracemalloc
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
 

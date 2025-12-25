@@ -4,7 +4,7 @@ import os
 import shutil
 import glob as glob_module
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 
 class FileSystemModule:
