@@ -18,7 +18,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="ZPM")
+@click.version_option(version="1.5.0", prog_name="ZPM")
 def cli():
     """ZPM - Zexus Package Manager
     
@@ -29,7 +29,7 @@ def cli():
 
 @cli.command()
 @click.option('--name', '-n', help='Package name')
-@click.option('--version', '-v', default='0.1.0', help='Initial version')
+@click.option('--version', '-v', default='1.5.0', help='Initial version')
 def init(name, version):
     """Initialize a new Zexus project"""
     pm = PackageManager()
