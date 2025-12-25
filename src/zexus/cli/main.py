@@ -674,12 +674,13 @@ def profile(ctx, file, memory, top, json_output):
         profiler = Profiler()
         profiler.start(enable_memory=memory)
         
-        # Execute with profiling
-        console.print("[dim]Executing with profiling...[/dim]")
-        result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
-        
-        # Stop profiler and get report
-        report = profiler.stop()
+        try:
+            # Execute with profiling
+            console.print("[dim]Executing with profiling...[/dim]")
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+        finally:
+            # Stop profiler and get report (ensure cleanup even if evaluate fails)
+            report = profiler.stop()
         
         # Print report
         profiler.print_report(report, top_n=top)

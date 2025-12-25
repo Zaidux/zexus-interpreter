@@ -8,6 +8,15 @@ import logging
 import sys
 from typing import List, Optional
 
+# Configure logging first before any imports that might fail
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stderr
+)
+
+logger = logging.getLogger(__name__)
+
 try:
     from pygls.server import LanguageServer
     from pygls.lsp.methods import (
@@ -67,15 +76,6 @@ except ImportError as e:
     ZEXUS_AVAILABLE = False
     logger.error(f"Zexus modules not available: {e}")
     logger.error("Make sure Zexus is properly installed: pip install -e .")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stderr
-)
-
-logger = logging.getLogger(__name__)
 
 
 if PYGLS_AVAILABLE:

@@ -27,6 +27,8 @@ class FileSystemModule:
     @staticmethod
     def append_file(path: str, content: str, encoding: str = 'utf-8') -> None:
         """Append text to file."""
+        # Create parent directory if it doesn't exist (for consistency with write_file)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'a', encoding=encoding) as f:
             f.write(content)
 

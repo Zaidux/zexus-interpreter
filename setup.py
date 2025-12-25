@@ -73,6 +73,9 @@ setup(
             'web3>=5.0',
             'eth-account>=0.5',
         ],
+        'lsp': [
+            'pygls>=1.0.0',
+        ],
     },
     entry_points={
         'console_scripts': [

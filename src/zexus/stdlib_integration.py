@@ -204,6 +204,8 @@ def create_stdlib_module(module_name, evaluator=None):
                     size = args[0].value
                 elif isinstance(args[0], int):
                     size = args[0]
+                else:
+                    return EvaluationError("random_bytes() size argument must be an integer")
             try:
                 result = CryptoModule.random_bytes(size)
                 return String(result)
@@ -223,6 +225,8 @@ def create_stdlib_module(module_name, evaluator=None):
                     iterations = args[2].value
                 elif isinstance(args[2], int):
                     iterations = args[2]
+                else:
+                    return EvaluationError("pbkdf2() iterations argument must be an integer")
             
             try:
                 result = CryptoModule.pbkdf2(password, salt, iterations)

@@ -27,10 +27,14 @@ class HttpModule:
                     'body': body
                 }
         except urllib.error.HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+            except UnicodeDecodeError:
+                error_body = e.read().decode('utf-8', errors='replace')
             return {
                 'status': e.code,
                 'headers': dict(e.headers),
-                'body': e.read().decode('utf-8'),
+                'body': error_body,
                 'error': str(e)
             }
         except Exception as e:
@@ -67,10 +71,14 @@ class HttpModule:
                     'body': body
                 }
         except urllib.error.HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+            except UnicodeDecodeError:
+                error_body = e.read().decode('utf-8', errors='replace')
             return {
                 'status': e.code,
                 'headers': dict(e.headers),
-                'body': e.read().decode('utf-8'),
+                'body': error_body,
                 'error': str(e)
             }
         except Exception as e:
@@ -107,10 +115,14 @@ class HttpModule:
                     'body': body
                 }
         except urllib.error.HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+            except UnicodeDecodeError:
+                error_body = e.read().decode('utf-8', errors='replace')
             return {
                 'status': e.code,
                 'headers': dict(e.headers),
-                'body': e.read().decode('utf-8'),
+                'body': error_body,
                 'error': str(e)
             }
         except Exception as e:
@@ -138,10 +150,14 @@ class HttpModule:
                     'body': body
                 }
         except urllib.error.HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+            except UnicodeDecodeError:
+                error_body = e.read().decode('utf-8', errors='replace')
             return {
                 'status': e.code,
                 'headers': dict(e.headers),
-                'body': e.read().decode('utf-8'),
+                'body': error_body,
                 'error': str(e)
             }
         except Exception as e:
@@ -176,10 +192,14 @@ class HttpModule:
                     'body': body
                 }
         except urllib.error.HTTPError as e:
+            try:
+                error_body = e.read().decode('utf-8')
+            except UnicodeDecodeError:
+                error_body = e.read().decode('utf-8', errors='replace')
             return {
                 'status': e.code,
                 'headers': dict(e.headers),
-                'body': e.read().decode('utf-8'),
+                'body': error_body,
                 'error': str(e)
             }
         except Exception as e:
