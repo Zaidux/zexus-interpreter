@@ -676,7 +676,7 @@ class EntityStatement(Statement):
 
 
 class VerifyStatement(Statement):
-    """Verify security checks - supports multiple forms:
+    r"""Verify security checks - supports multiple forms:
     
     Simple assertion:
         verify condition, "error message"
@@ -715,7 +715,7 @@ class VerifyStatement(Statement):
         }
     
     Pattern matching:
-        verify:pattern email matches "/^[a-z]+@[a-z]+\.[a-z]+$/", "Invalid format"
+        verify:pattern email matches r"/^[a-z]+@[a-z]+\.[a-z]+$/", "Invalid format"
     """
     def __init__(self, condition=None, message=None, target=None, conditions=None, 
                  error_handler=None, mode=None, pattern=None, db_table=None, 

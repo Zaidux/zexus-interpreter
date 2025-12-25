@@ -1758,7 +1758,7 @@ class StatementEvaluatorMixin:
             if pattern:
                 try:
                     is_valid = bool(re.match(pattern, str(value)))
-                except:
+                except (re.error, TypeError, ValueError):
                     is_valid = False
         
         elif verify_type == 'is_type' or verify_type == 'is':
@@ -1951,7 +1951,7 @@ class StatementEvaluatorMixin:
             if env_value and pattern:
                 try:
                     is_valid = bool(re.match(pattern, env_value))
-                except:
+                except (re.error, TypeError, ValueError):
                     is_valid = False
         
         # Handle verification failure
@@ -2092,7 +2092,7 @@ class StatementEvaluatorMixin:
         try:
             policy_legacy = ProtectionPolicy(target_name, rules_dict, enforcement_level)
             get_security_context().register_protection(target_name, policy_legacy)
-        except:
+        except (AttributeError, NameError):
             pass  # Legacy context may not be available
         
         return StringObj(f"Protection policy activated for '{target_name}' (level: {enforcement_level})")
@@ -2416,8 +2416,8 @@ class StatementEvaluatorMixin:
             # Try to set the attribute dynamically
             try:
                 func.is_inlined = True
-            except:
-                pass
+            except AttributeError:
+                pass  # Function object doesn't support dynamic attributes
         
         return String(f"Function '{func_name}' marked for inlining")
     

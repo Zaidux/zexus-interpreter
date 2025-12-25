@@ -452,7 +452,7 @@ class JITCompiler:
                         else:
                             # Runtime computation needed
                             current_frame.variables[result_expr] = f"({a_val} {self._opcode_to_operator(opcode)} {b_val})"
-                    except:
+                    except (TypeError, ValueError, KeyError, NameError):
                         # Fallback to runtime computation
                         current_frame.variables[result_expr] = f"({a_val} {self._opcode_to_operator(opcode)} {b_val})"
                     
@@ -625,7 +625,7 @@ class JITCompiler:
                                         lines.append(f"    {result_var} = {repr(computed)}")
                                     else:
                                         lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
-                                except:
+                                except (TypeError, ValueError, NameError, SyntaxError):
                                     lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
                             else:
                                 lines.append(f"    b = stack.pop()")
