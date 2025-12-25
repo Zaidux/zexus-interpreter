@@ -2034,11 +2034,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] **Stack trace formatter with source context (v1.5.0)**
 
 ### In Progress 🚧
-- [ ] VS Code extension with full IntelliSense
-- [ ] Language Server Protocol (LSP)
-- [ ] Standard library expansion (fs, http, json, datetime)
-- [ ] Debugger integration
-- [ ] Performance profiling tools
+- [x] VS Code extension with full IntelliSense ✅
+- [x] Language Server Protocol (LSP) ✅
+- [x] Standard library expansion (fs, http, json, datetime) ✅
+- [x] Performance profiling tools ✅
+- [ ] Debugger integration (Debug Adapter Protocol in progress)
 
 ### Planned 🎯
 - [ ] WASM compilation target
