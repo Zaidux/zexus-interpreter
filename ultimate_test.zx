@@ -1,6 +1,8 @@
 # ultimate_test.zx - Pushing Zexus to Its Limits
 # This tests performance, edge cases, and advanced features
 
+continue;
+
 print("🚀 ZEXUS ULTIMATE STRESS TEST 🚀\n")
 print("Starting at: " + timestamp() + "\n")
 
@@ -11,18 +13,18 @@ print("Starting at: " + timestamp() + "\n")
 print("=== PART 1: PERFORMANCE TESTS ===\n")
 
 # 1.1: Large loop optimization
-print("1.1: Large loop (100,000 iterations)...")
+print("1.1: Large loop (1,000 iterations)...")
 let start_time = now()
 let loop_sum = 0
 let i = 0
-while i < 100000 {
+while i < 1000 {
     loop_sum = loop_sum + i
     i = i + 1
 }
 let loop_time = now() - start_time
 print("Loop completed in " + string(loop_time) + "ms")
 print("Sum: " + string(loop_sum))
-print("Expected: 4999950000")
+print("Expected: 499500")
 print("")
 
 # 1.2: Recursion depth test

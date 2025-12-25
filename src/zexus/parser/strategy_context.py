@@ -2730,6 +2730,10 @@ class ContextStackParser:
                     # stop at top-level statement terminators or starters
                     if nesting == 0 and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
                         break
+                    
+                    # CRITICAL FIX: stop at new assignment statements (IDENT followed by ASSIGN)
+                    if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT and j + 1 < len(tokens) and tokens[j + 1].type == ASSIGN:
+                        break
 
                     run_tokens.append(t)
                     j += 1
@@ -2956,7 +2960,13 @@ class ContextStackParser:
             left_tokens = tokens[:assign_index]
             right_tokens = tokens[assign_index+1:]
             
-            left = self._parse_expression(left_tokens)
+            # For assignments, left side should be a simple identifier
+            # Don't parse it as a full expression to avoid creating InfixExpression
+            if len(left_tokens) == 1 and left_tokens[0].type == IDENT:
+                left = Identifier(left_tokens[0].literal)
+            else:
+                left = self._parse_expression(left_tokens)
+            
             right = self._parse_expression(right_tokens)
             
             if left and right:

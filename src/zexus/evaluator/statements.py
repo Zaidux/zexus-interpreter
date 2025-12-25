@@ -35,7 +35,7 @@ from .utils import is_error, debug_log, EVAL_SUMMARY, NULL, TRUE, FALSE, _resolv
 class StatementEvaluatorMixin:
     """Handles evaluation of statements, flow control, module loading, and security features."""
     
-    def eval_program(self, statements, env):
+    def ceval_program(self, statements, env):
         debug_log("eval_program", f"Processing {len(statements)} statements")
         
         # Track current environment for builtin functions
@@ -722,12 +722,6 @@ class StatementEvaluatorMixin:
     def eval_assignment_expression(self, node, env, stack_trace):
         # Support assigning to identifiers or property access targets
         from ..object import EvaluationError, NULL
-        
-        # Debug logging
-        if isinstance(node.name, PropertyAccessExpression):
-            debug_log("eval_assignment_expression", f"Assigning to property access")
-        else:
-            debug_log("eval_assignment_expression", f"Assigning to {node.name.value if hasattr(node.name, 'value') else node.name}")
 
         # If target is a property access expression
         if isinstance(node.name, PropertyAccessExpression):

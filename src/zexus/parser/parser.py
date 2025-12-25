@@ -349,9 +349,6 @@ class UltimateParser:
 
     def parse_statement(self):
         """Parse statement with maximum tolerance"""
-        import sys
-        print(f"[PARSE_STMT] Current token: {self.cur_token.type if self.cur_token else 'None'}={repr(self.cur_token.literal if self.cur_token else None)}", file=sys.stderr, flush=True)
-        
         # Support optional leading modifiers: e.g. `secure async action foo {}`
         modifiers = []
         if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}:
@@ -359,115 +356,78 @@ class UltimateParser:
         try:
             node = None
             if self.cur_token_is(LET):
-                print(f"[PARSE_STMT] Matched LET", file=sys.stderr, flush=True)
                 node = self.parse_let_statement()
             elif self.cur_token_is(CONST):
-                print(f"[PARSE_STMT] Matched CONST", file=sys.stderr, flush=True)
                 node = self.parse_const_statement()
             elif self.cur_token_is(DATA):
-                print(f"[PARSE_STMT] Matched DATA", file=sys.stderr, flush=True)
                 node = self.parse_data_statement()
             elif self.cur_token_is(RETURN):
-                print(f"[PARSE_STMT] Matched RETURN", file=sys.stderr, flush=True)
                 node = self.parse_return_statement()
             elif self.cur_token_is(CONTINUE):
-                print(f"[PARSE_STMT] Matched CONTINUE", file=sys.stderr, flush=True)
                 node = self.parse_continue_statement()
             elif self.cur_token_is(PRINT):
-                print(f"[PARSE_STMT] Matched PRINT", file=sys.stderr, flush=True)
                 node = self.parse_print_statement()
             elif self.cur_token_is(FOR):
-                print(f"[PARSE_STMT] Matched FOR", file=sys.stderr, flush=True)
                 node = self.parse_for_each_statement()
             elif self.cur_token_is(SCREEN):
-                print(f"[PARSE_STMT] Matched SCREEN", file=sys.stderr, flush=True)
                 node = self.parse_screen_statement()
             elif self.cur_token_is(ACTION):
-                print(f"[PARSE_STMT] Matched ACTION", file=sys.stderr, flush=True)
                 node = self.parse_action_statement()
             elif self.cur_token_is(FUNCTION):
-                print(f"[PARSE_STMT] Matched FUNCTION", file=sys.stderr, flush=True)
                 node = self.parse_function_statement()
             elif self.cur_token_is(IF):
-                print(f"[PARSE_STMT] Matched IF", file=sys.stderr, flush=True)
                 node = self.parse_if_statement()
             elif self.cur_token_is(WHILE):
-                print(f"[PARSE_STMT] Matched WHILE", file=sys.stderr, flush=True)
                 node = self.parse_while_statement()
             elif self.cur_token_is(USE):
-                print(f"[PARSE_STMT] Matched USE", file=sys.stderr, flush=True)
                 node = self.parse_use_statement()
             elif self.cur_token_is(EXACTLY):
-                print(f"[PARSE_STMT] Matched EXACTLY", file=sys.stderr, flush=True)
                 node = self.parse_exactly_statement()
             elif self.cur_token_is(EXPORT):
-                print(f"[PARSE_STMT] Matched EXPORT", file=sys.stderr, flush=True)
                 node = self.parse_export_statement()
             elif self.cur_token_is(DEBUG):
-                print(f"[PARSE_STMT] Matched DEBUG", file=sys.stderr, flush=True)
                 node = self.parse_debug_statement()
             elif self.cur_token_is(TRY):
-                print(f"[PARSE_STMT] Matched TRY", file=sys.stderr, flush=True)
                 node = self.parse_try_catch_statement()
             elif self.cur_token_is(EXTERNAL):
-                print(f"[PARSE_STMT] Matched EXTERNAL", file=sys.stderr, flush=True)
                 node = self.parse_external_declaration()
             elif self.cur_token_is(ENTITY):
-                print(f"[PARSE_STMT] Matched ENTITY", file=sys.stderr, flush=True)
                 node = self.parse_entity_statement()
             elif self.cur_token_is(VERIFY):
-                print(f"[PARSE_STMT] Matched VERIFY", file=sys.stderr, flush=True)
                 node = self.parse_verify_statement()
             elif self.cur_token_is(CONTRACT):
-                print(f"[PARSE_STMT] Matched CONTRACT", file=sys.stderr, flush=True)
                 node = self.parse_contract_statement()
             elif self.cur_token_is(PROTECT):
-                print(f"[PARSE_STMT] Matched PROTECT", file=sys.stderr, flush=True)
                 node = self.parse_protect_statement()
             elif self.cur_token_is(SEAL):
-                print(f"[PARSE_STMT] Matched SEAL", file=sys.stderr, flush=True)
                 node = self.parse_seal_statement()
             elif self.cur_token_is(AUDIT):
-                print(f"[PARSE_STMT] Matched AUDIT", file=sys.stderr, flush=True)
                 node = self.parse_audit_statement()
             elif self.cur_token_is(RESTRICT):
-                print(f"[PARSE_STMT] Matched RESTRICT", file=sys.stderr, flush=True)
                 node = self.parse_restrict_statement()
             elif self.cur_token_is(SANDBOX):
-                print(f"[PARSE_STMT] Matched SANDBOX", file=sys.stderr, flush=True)
                 node = self.parse_sandbox_statement()
             elif self.cur_token_is(TRAIL):
-                print(f"[PARSE_STMT] Matched TRAIL", file=sys.stderr, flush=True)
                 node = self.parse_trail_statement()
             elif self.cur_token_is(TX):
-                print(f"[PARSE_STMT] Matched TX", file=sys.stderr, flush=True)
                 node = self.parse_tx_statement()
             elif self.cur_token_is(NATIVE):
-                print(f"[PARSE_STMT] Matched NATIVE", file=sys.stderr, flush=True)
                 node = self.parse_native_statement()
             elif self.cur_token_is(GC):
-                print(f"[PARSE_STMT] Matched GC", file=sys.stderr, flush=True)
                 node = self.parse_gc_statement()
             elif self.cur_token_is(INLINE):
-                print(f"[PARSE_STMT] Matched INLINE", file=sys.stderr, flush=True)
                 node = self.parse_inline_statement()
             elif self.cur_token_is(BUFFER):
-                print(f"[PARSE_STMT] Matched BUFFER", file=sys.stderr, flush=True)
                 node = self.parse_buffer_statement()
             elif self.cur_token_is(SIMD):
-                print(f"[PARSE_STMT] Matched SIMD", file=sys.stderr, flush=True)
                 node = self.parse_simd_statement()
             elif self.cur_token_is(DEFER):
-                print(f"[PARSE_STMT] Matched DEFER", file=sys.stderr, flush=True)
                 node = self.parse_defer_statement()
             elif self.cur_token_is(PATTERN):
-                print(f"[PARSE_STMT] Matched PATTERN", file=sys.stderr, flush=True)
                 node = self.parse_pattern_statement()
             elif self.cur_token_is(ENUM):
-                print(f"[PARSE_STMT] Matched ENUM", file=sys.stderr, flush=True)
                 node = self.parse_enum_statement()
             elif self.cur_token_is(STREAM):
-                print(f"[PARSE_STMT] Matched STREAM", file=sys.stderr, flush=True)
                 node = self.parse_stream_statement()
             elif self.cur_token_is(WATCH):
                 print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)

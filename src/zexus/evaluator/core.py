@@ -75,7 +75,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             # === STATEMENTS ===
             if node_type == zexus_ast.Program:
                 debug_log("  Program node", f"{len(node.statements)} statements")
-                return self.eval_program(node.statements, env)
+                return self.ceval_program(node.statements, env)
             
             elif node_type == zexus_ast.ExpressionStatement:
                 debug_log("  ExpressionStatement node")

@@ -422,6 +422,13 @@ class StructuralAnalyzer:
                     if nesting == 0 and tj.type in stop_types and not found_colon_block:
                         break
                     
+                    # CRITICAL FIX: Check if next token starts a new statement (assignment or function call)
+                    if nesting == 0 and len(stmt_tokens) > 1:  # Only check if we've collected some tokens
+                        # IDENT followed by ASSIGN is an assignment statement
+                        if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN:
+                            break
+                        # IDENT followed by LPAREN is a function call (already handled below, but listed for clarity)
+                    
                     # Detect colon-based block (tolerable syntax for action/function/if/while etc.)
                     if tj.type == COLON and nesting == 0 and t.type in {ACTION, FUNCTION, IF, WHILE, FOR}:
                         found_colon_block = True
@@ -526,13 +533,6 @@ class StructuralAnalyzer:
                         'end_index': j,
                         'parent': None
                     }
-                    # Debug: print a short summary for this block
-                    if zexus_config.should_log('debug'):
-                        try:
-                            lit_preview = ' '.join([tk.literal for tk in filtered_stmt_tokens[:8] if getattr(tk, 'literal', None)])
-                        except Exception:
-                            lit_preview = ''
-                        print(f"[STRUCT_BLOCK] id={block_id} type=statement subtype={t.type} start={tokens[stmt_start_idx].type} preview={lit_preview}")
                     block_id += 1
                 i = j
                 continue
@@ -558,8 +558,19 @@ class StructuralAnalyzer:
                         nesting -= 1
 
                 # Only consider these as boundaries when at top-level (nesting == 0)
-                if nesting == 0 and (tj.type in stop_types or tj.type in statement_starters or tj.type == LBRACE or tj.type == TRY):
-                    break
+                if nesting == 0:
+                    # Check if current token (tj) starts a new statement
+                    # CRITICAL FIX: IDENT followed by ASSIGN is an assignment statement
+                    is_assignment_start = (tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN)
+                    is_new_statement = (
+                        tj.type in stop_types or 
+                        tj.type in statement_starters or 
+                        tj.type == LBRACE or 
+                        tj.type == TRY or
+                        is_assignment_start
+                    )
+                    if is_new_statement and j > start_idx:  # Only break if we've collected at least one token
+                        break
                 
                 # FIX: If this is a function call and nesting just became 0 (closed all parens),
                 # check if next token looks like start of new statement
