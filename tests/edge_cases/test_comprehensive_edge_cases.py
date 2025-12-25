@@ -138,9 +138,9 @@ def test_boolean_operations():
     and_val = env.get("and_result")
     or_val = env.get("or_result")
     not_val = env.get("not_result")
-    assert and_val is not None
-    assert or_val is not None
-    assert not_val is not None
+    assert and_val is not None and and_val.value == False
+    assert or_val is not None and or_val.value == True
+    assert not_val is not None and not_val.value == False
     print("✅ Boolean operations: work correctly")
 
 
