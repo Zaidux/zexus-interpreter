@@ -1043,6 +1043,63 @@ class UltimateParser:
                 # Continue to next field
                 continue
                 
+            elif self.cur_token.literal == "action":
+                # action get_value() -> T { return this.value; }
+                # Same as method, just different keyword
+                self.next_token()  # Skip 'action'
+                if not self.cur_token_is(IDENT):
+                    self.errors.append("Expected action name after 'action'")
+                    self.next_token()
+                    continue
+                
+                action_name = self.cur_token.literal
+                self.next_token()
+                
+                # Parse parameters (with or without parentheses, with optional type annotations)
+                action_params = []
+                if self.cur_token_is(LPAREN):
+                    self.next_token()  # Skip (
+                    while not self.cur_token_is(RPAREN) and not self.cur_token_is(EOF):
+                        if self.cur_token_is(IDENT):
+                            action_params.append(self.cur_token.literal)
+                            self.next_token()
+                            # Skip optional type annotation: : type
+                            if self.cur_token_is(COLON):
+                                self.next_token()  # Skip :
+                                self.next_token()  # Skip type
+                        if self.cur_token_is(COMMA):
+                            self.next_token()
+                    if self.cur_token_is(RPAREN):
+                        self.next_token()  # Skip )
+                
+                # Skip optional return type: -> type
+                if self.cur_token_is(MINUS):
+                    self.next_token()  # Skip -
+                    if self.cur_token_is(GT):
+                        self.next_token()  # Skip >
+                        self.next_token()  # Skip return type
+                
+                # Parse action body
+                if not self.cur_token_is(LBRACE):
+                    self.errors.append("Expected '{' after action parameters")
+                    self.next_token()
+                    continue
+                
+                action_body_block = self.parse_block("action")
+                if action_body_block:
+                    field = DataField(
+                        name=action_name,
+                        method_body=action_body_block.statements,
+                        method_params=action_params,
+                        decorators=field_decorators
+                    )
+                    fields.append(field)
+                # After parse_block, cur_token is at action body's }, move past it
+                if self.cur_token_is(RBRACE):
+                    self.next_token()
+                # Continue to next field
+                continue
+                
             elif self.cur_token.literal == "operator":
                 # operator +(other) { return Vector(this.x + other.x, this.y + other.y); }
                 self.next_token()  # Skip 'operator'
