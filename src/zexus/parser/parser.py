@@ -660,8 +660,9 @@ class UltimateParser:
         if self.cur_token_is(LPAREN):
             self.next_token()  # Skip (
             condition = self.parse_expression(LOWEST)
-            if self.cur_token_is(RPAREN):
-                self.next_token()  # Skip )
+            if not self.expect_peek(RPAREN):
+                # Expected closing paren after condition
+                return None
         else:
             # No parentheses - parse expression directly
             condition = self.parse_expression(LOWEST)
@@ -689,8 +690,9 @@ class UltimateParser:
             if self.cur_token_is(LPAREN):
                 self.next_token()  # Skip (
                 elif_condition = self.parse_expression(LOWEST)
-                if self.cur_token_is(RPAREN):
-                    self.next_token()  # Skip )
+                if not self.expect_peek(RPAREN):
+                    # Expected closing paren after elif condition
+                    return None
             else:
                 # No parentheses - parse expression directly
                 elif_condition = self.parse_expression(LOWEST)
@@ -2483,8 +2485,13 @@ class UltimateParser:
         if left_exp is None:
             return None
 
+        # Stop parsing when we hit closing delimiters or terminators
+        # This prevents the parser from trying to parse beyond expression boundaries
         while (not self.peek_token_is(SEMICOLON) and 
-               not self.peek_token_is(EOF) and 
+               not self.peek_token_is(EOF) and
+               not self.peek_token_is(RPAREN) and
+               not self.peek_token_is(RBRACE) and
+               not self.peek_token_is(RBRACKET) and 
                precedence <= self.peek_precedence()):
 
             if self.peek_token.type not in self.infix_parse_fns:
