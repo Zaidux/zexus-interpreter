@@ -1,0 +1,123 @@
+// ============================================================================
+// EASY LEVEL: CONTINUE Keyword Test Suite
+// ============================================================================
+// Testing basic error recovery functionality in Zexus
+// Keyword: CONTINUE
+// ============================================================================
+
+print "=== EASY CONTINUE TESTS ===";
+print "";
+
+// ============================================================================
+// TEST 1: Basic CONTINUE statement
+// Expected: Should enable error recovery mode
+// ============================================================================
+print "Test 1: Basic CONTINUE statement";
+continue;
+print "CONTINUE mode enabled successfully";
+print "";
+
+// ============================================================================
+// TEST 2: Single error with CONTINUE
+// Expected: Error should be logged, execution continues
+// ============================================================================
+print "Test 2: Single error with CONTINUE";
+revert("Test error 1");
+print "After first error - execution continued";
+print "";
+
+// ============================================================================
+// TEST 3: Multiple errors with CONTINUE
+// Expected: All errors logged, execution continues
+// ============================================================================
+print "Test 3: Multiple errors";
+revert("Error A");
+revert("Error B");
+revert("Error C");
+print "After multiple errors - execution continued";
+print "";
+
+// ============================================================================
+// TEST 4: CONTINUE with normal operations
+// Expected: Normal operations work as usual
+// ============================================================================
+print "Test 4: Normal operations with CONTINUE";
+let x = 10;
+let y = 20;
+let z = x + y;
+print "z = " + z;
+print "";
+
+// ============================================================================
+// TEST 5: Error followed by normal operation
+// Expected: Error logged, then normal operation executes
+// ============================================================================
+print "Test 5: Error then normal operation";
+revert("Temporary error");
+let result = 42;
+print "result = " + result;
+print "";
+
+// ============================================================================
+// TEST 6: CONTINUE with variable assignments
+// Expected: Variables can be assigned after errors
+// ============================================================================
+print "Test 6: Variable assignments after errors";
+revert("Variable test error");
+let name = "Alice";
+let age = 25;
+print "name = " + name;
+print "age = " + age;
+print "";
+
+// ============================================================================
+// TEST 7: CONTINUE with print statements
+// Expected: Print statements work after errors
+// ============================================================================
+print "Test 7: Print statements after errors";
+revert("Print test error");
+print "First print after error";
+print "Second print after error";
+print "";
+
+// ============================================================================
+// TEST 8: CONTINUE with expressions
+// Expected: Expressions evaluate after errors
+// ============================================================================
+print "Test 8: Expressions after errors";
+revert("Expression test error");
+let a = 5;
+let b = 3;
+let sum = a + b;
+let product = a * b;
+print "sum = " + sum;
+print "product = " + product;
+print "";
+
+// ============================================================================
+// TEST 9: CONTINUE with conditional logic
+// Expected: If statements work after errors
+// ============================================================================
+print "Test 9: Conditionals after errors";
+revert("Conditional test error");
+let value = 10;
+if (value > 5) {
+    print "value is greater than 5";
+}
+print "";
+
+// ============================================================================
+// TEST 10: CONTINUE placed at different positions
+// Expected: CONTINUE can be anywhere in code block
+// ============================================================================
+print "Test 10: CONTINUE at different positions";
+let before = "before";
+print before;
+continue;
+revert("Mid-program error");
+let after = "after";
+print after;
+print "";
+
+print "=== EASY CONTINUE TESTS COMPLETE ===";
+print "All tests passed successfully!";
