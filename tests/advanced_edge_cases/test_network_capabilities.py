@@ -187,7 +187,7 @@ if __name__ == '__main__':
             if test():
                 passed += 1
             else:
-                passed += 1
+                failed += 1
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")
             traceback.print_exc()
