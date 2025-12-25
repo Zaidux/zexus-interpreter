@@ -214,7 +214,8 @@ def test_exception_cleanup():
     for _ in range(10):
         try:
             run_code(code)
-        except:
+        except Exception:
+            # Ignore expected evaluation errors; we are testing cleanup, not result
             pass
         gc.collect()
     
