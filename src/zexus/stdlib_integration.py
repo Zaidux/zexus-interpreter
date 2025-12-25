@@ -198,9 +198,12 @@ def create_stdlib_module(module_name, evaluator=None):
                 return EvaluationError(f"keccak256 error: {str(e)}")
         
         def _crypto_random_bytes(*args):
-            size = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 32
-            if not isinstance(size, int):
-                size = 32
+            size = 32  # default
+            if len(args) > 0:
+                if hasattr(args[0], 'value') and isinstance(args[0].value, int):
+                    size = args[0].value
+                elif isinstance(args[0], int):
+                    size = args[0]
             try:
                 result = CryptoModule.random_bytes(size)
                 return String(result)

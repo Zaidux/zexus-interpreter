@@ -59,17 +59,25 @@ class CryptoModule:
         """Constant-time string comparison."""
         return hmac.compare_digest(a, b)
 
-    @staticmethod
-    def keccak256(data: str) -> str:
-        """Calculate Keccak-256 hash (Ethereum-style)."""
-        try:
-            from Crypto.Hash import keccak
-            k = keccak.new(digest_bits=256)
-            k.update(data.encode())
-            return k.hexdigest()
-        except ImportError:
-            # Fallback to SHA3-256 if pycryptodome not available
-            return hashlib.sha3_256(data.encode()).hexdigest()
+        def _crypto_pbkdf2(*args):
+            if len(args) < 2:
+                return EvaluationError("pbkdf2() requires at least 2 arguments: password, salt")
+            password = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            salt = args[1].value if hasattr(args[1], 'value') else str(args[1])
+            
+            # Validate iterations parameter
+            iterations = 100000  # default
+            if len(args) > 2:
+                if hasattr(args[2], 'value') and isinstance(args[2].value, int):
+                    iterations = args[2].value
+                elif isinstance(args[2], int):
+                    iterations = args[2]
+            
+            try:
+                result = CryptoModule.pbkdf2(password, salt, iterations)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"pbkdf2 error: {str(e)}")
 
     @staticmethod
     def sha3_256(data: str) -> str:

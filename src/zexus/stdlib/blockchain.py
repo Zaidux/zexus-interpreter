@@ -5,15 +5,32 @@ import hashlib
 import time
 
 
+# Proof of work maximum iterations constant
+MAX_POW_ITERATIONS = 10_000_000
+
+
 class BlockchainModule:
     """Provides blockchain utility functions."""
 
     @staticmethod
     def create_address(public_key: str, prefix: str = "0x") -> str:
-        """Create address from public key (Ethereum-style)."""
-        # Simple address derivation using keccak256
-        hash_obj = hashlib.sha3_256(public_key.encode())
-        address = hash_obj.hexdigest()[-40:]  # Last 20 bytes (40 hex chars)
+        """Create address from public key (Ethereum-style).
+        
+        Note: Uses Keccak-256 for Ethereum compatibility.
+        Requires pycryptodome for true Keccak-256 hashing.
+        """
+        try:
+            # Try to use Keccak-256 (Ethereum standard)
+            from Crypto.Hash import keccak
+            k = keccak.new(digest_bits=256)
+            k.update(public_key.encode())
+            hash_hex = k.hexdigest()
+        except ImportError:
+            # Fallback to SHA3-256 if pycryptodome not available
+            # Note: This is NOT Ethereum-compatible!
+            hash_hex = hashlib.sha3_256(public_key.encode()).hexdigest()
+        
+        address = hash_hex[-40:]  # Last 20 bytes (40 hex chars)
         return f"{prefix}{address}"
 
     @staticmethod
@@ -116,22 +133,27 @@ class BlockchainModule:
         return True
 
     @staticmethod
-    def proof_of_work(block_data: str, difficulty: int = 4) -> tuple:
-        """Simple proof-of-work mining (find nonce)."""
+    def proof_of_work(block_data: str, difficulty: int = 4, max_iterations: int = MAX_POW_ITERATIONS) -> tuple:
+        """Simple proof-of-work mining (find nonce).
+        
+        Args:
+            block_data: Data to hash
+            difficulty: Number of leading zeros required
+            max_iterations: Maximum iterations before giving up (default: 10,000,000)
+        
+        Returns:
+            Tuple of (nonce, hash) or (nonce, "") if max iterations reached
+        """
         nonce = 0
         prefix = '0' * difficulty
         
-        while True:
+        while nonce < max_iterations:
             hash_attempt = hashlib.sha256(f"{block_data}{nonce}".encode()).hexdigest()
             
             if hash_attempt.startswith(prefix):
                 return nonce, hash_attempt
             
             nonce += 1
-            
-            # Safety limit
-            if nonce > 10000000:
-                break
         
         return nonce, ""
 
