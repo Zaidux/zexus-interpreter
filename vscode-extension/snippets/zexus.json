@@ -1,0 +1,95 @@
+{
+  "Contract": {
+    "prefix": "contract",
+    "body": [
+      "contract ${1:ContractName} {",
+      "\tpersistent storage ${2:data}: ${3:Map<Address, integer>}",
+      "\t",
+      "\taction ${4:method_name}(${5:params}) {",
+      "\t\t${6:// Implementation}",
+      "\t}",
+      "}"
+    ],
+    "description": "Create a Zexus contract"
+  },
+  "Entity": {
+    "prefix": "entity",
+    "body": [
+      "entity ${1:EntityName} {",
+      "\t${2:field}: ${3:type},",
+      "\t${4:field2}: ${5:type2}",
+      "}"
+    ],
+    "description": "Create a Zexus entity"
+  },
+  "Action": {
+    "prefix": "action",
+    "body": [
+      "action ${1:function_name}(${2:params}) -> ${3:return_type} {",
+      "\t${4:// Implementation}",
+      "}"
+    ],
+    "description": "Create a Zexus action (function)"
+  },
+  "Protect": {
+    "prefix": "protect",
+    "body": [
+      "protect(${1:target}, {",
+      "\trate_limit: ${2:100},",
+      "\tauth_required: ${3:true},",
+      "\trequire_https: ${4:true}",
+      "}, \"${5:strict}\")"
+    ],
+    "description": "Add protection policy"
+  },
+  "Verify": {
+    "prefix": "verify",
+    "body": [
+      "verify(${1:condition})"
+    ],
+    "description": "Add runtime verification"
+  },
+  "Watch": {
+    "prefix": "watch",
+    "body": [
+      "watch ${1:variable} {",
+      "\t${2:// Callback when variable changes}",
+      "}"
+    ],
+    "description": "Watch variable for changes"
+  },
+  "For Each": {
+    "prefix": "foreach",
+    "body": [
+      "for each ${1:item} in ${2:collection} {",
+      "\t${3:// Loop body}",
+      "}"
+    ],
+    "description": "For each loop"
+  },
+  "Match": {
+    "prefix": "match",
+    "body": [
+      "match ${1:value} {",
+      "\tcase ${2:pattern}: ${3:result}",
+      "\tdefault: ${4:default_result}",
+      "}"
+    ],
+    "description": "Pattern matching"
+  },
+  "Inject": {
+    "prefix": "inject",
+    "body": [
+      "inject ${1:dependency}"
+    ],
+    "description": "Inject dependency"
+  },
+  "Persist": {
+    "prefix": "persist",
+    "body": [
+      "persist_set(\"${1:key}\", ${2:value})",
+      "let ${3:result} = persist_get(\"${1:key}\")"
+    ],
+    "description": "Persistent storage"
+  }
+}
