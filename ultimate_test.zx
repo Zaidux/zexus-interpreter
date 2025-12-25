@@ -114,9 +114,11 @@ channel<integer> number_channel
 channel<string> message_channel
 
 action producer() {
-    for each i in range(1, 6) {
+    let i = 1
+    while i <= 5 {
         send(number_channel, i * 10)
         sleep(0.01)  # Small delay
+        i = i + 1
     }
     close_channel(number_channel)
     send(message_channel, "Producer done")
@@ -461,10 +463,12 @@ action resilient_operation(data: any) -> any {
 }
 
 # Test circuit breaker
-for each i in range(0, 10) {
+let i = 0
+while i < 10 {
     let result = resilient_operation({"test": i})
     print("Attempt " + string(i + 1) + ": " + result["status"])
     sleep(0.1)
+    i = i + 1
 }
 print("")
 
