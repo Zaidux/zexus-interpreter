@@ -2414,8 +2414,7 @@ class ContextStackParser:
             elif token.type == CONTINUE:
                 # Parse CONTINUE statement directly (simple statement, no value)
                 stmt = ContinueStatement()
-                if stmt:
-                    statements.append(stmt)
+                statements.append(stmt)
                 
                 # Skip to next token (and skip semicolon if present)
                 j = i + 1
