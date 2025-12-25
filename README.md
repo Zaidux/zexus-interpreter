@@ -1669,28 +1669,28 @@ Source Code (.zx)
 
 #### Events & Reactive
 - **[EVENTS_REACTIVE](docs/keywords/EVENTS_REACTIVE.md)** - Event system
-- **[WATCH](docs/COMMAND_watch.md)** - Reactive state management
+- **[WATCH](docs/keywords/COMMAND_watch.md)** - Reactive state management
 
 #### Security Features
 - **[SECURITY](docs/keywords/SECURITY.md)** - Security features overview
-- **[RESTRICT](docs/COMMAND_restrict.md)** - Input validation
-- **[SANDBOX](docs/COMMAND_sandbox.md)** - Isolated execution
-- **[AUDIT](docs/COMMAND_audit.md)** - Compliance logging
-- **[TRAIL](docs/COMMAND_trail.md)** - Event tracking
+- **[RESTRICT](docs/keywords/COMMAND_restrict.md)** - Input validation
+- **[SANDBOX](docs/keywords/COMMAND_sandbox.md)** - Isolated execution
+- **[AUDIT](docs/keywords/COMMAND_audit.md)** - Compliance logging
+- **[TRAIL](docs/keywords/COMMAND_trail.md)** - Event tracking
 
 #### Performance
 - **[PERFORMANCE](docs/keywords/PERFORMANCE.md)** - Performance features
-- **[NATIVE](docs/COMMAND_native.md)** - C/C++ FFI
-- **[INLINE](docs/COMMAND_inline.md)** - Function inlining
-- **[GC](docs/COMMAND_gc.md)** - Garbage collection control
-- **[BUFFER](docs/COMMAND_buffer.md)** - Memory buffers
-- **[SIMD](docs/COMMAND_simd.md)** - SIMD operations
+- **[NATIVE](docs/keywords/COMMAND_native.md)** - C/C++ FFI
+- **[INLINE](docs/keywords/COMMAND_inline.md)** - Function inlining
+- **[GC](docs/keywords/COMMAND_gc.md)** - Garbage collection control
+- **[BUFFER](docs/keywords/COMMAND_buffer.md)** - Memory buffers
+- **[SIMD](docs/keywords/COMMAND_simd.md)** - SIMD operations
 
 #### Advanced Features
-- **[DEFER](docs/COMMAND_defer.md)** - Deferred cleanup
-- **[PATTERN](docs/COMMAND_pattern.md)** - Pattern matching
-- **[ENUM](docs/COMMAND_enum.md)** - Enumerations
-- **[STREAM](docs/COMMAND_stream.md)** - Event streaming
+- **[DEFER](docs/keywords/COMMAND_defer.md)** - Deferred cleanup
+- **[PATTERN](docs/keywords/COMMAND_pattern.md)** - Pattern matching
+- **[ENUM](docs/keywords/COMMAND_enum.md)** - Enumerations
+- **[STREAM](docs/keywords/COMMAND_stream.md)** - Event streaming
 
 #### Blockchain & State
 - **[BLOCKCHAIN_STATE](docs/keywords/BLOCKCHAIN_STATE.md)** - State management
@@ -1714,14 +1714,14 @@ Source Code (.zx)
 ### Command Documentation
 
 Each advanced feature has detailed documentation:
-- [PROTECT](docs/COMMAND_protect.md) - Security policies
-- [WATCH](docs/COMMAND_watch.md) - Reactive state
-- [RESTRICT](docs/COMMAND_restrict.md) - Input validation
-- [SANDBOX](docs/COMMAND_sandbox.md) - Isolated execution
-- [TRAIL](docs/COMMAND_trail.md) - Audit logging
-- [DEFER](docs/COMMAND_defer.md) - Deferred execution
-- [PATTERN](docs/COMMAND_pattern.md) - Pattern matching
-- And many more in [docs/](docs/)
+- [PROTECT](docs/keywords/COMMAND_protect.md) - Security policies
+- [WATCH](docs/keywords/COMMAND_watch.md) - Reactive state
+- [RESTRICT](docs/keywords/COMMAND_restrict.md) - Input validation
+- [SANDBOX](docs/keywords/COMMAND_sandbox.md) - Isolated execution
+- [TRAIL](docs/keywords/COMMAND_trail.md) - Audit logging
+- [DEFER](docs/keywords/COMMAND_defer.md) - Deferred execution
+- [PATTERN](docs/keywords/COMMAND_pattern.md) - Pattern matching
+- And many more in [docs/keywords/](docs/keywords/)
 
 ---
 
