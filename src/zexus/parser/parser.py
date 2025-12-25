@@ -2762,6 +2762,15 @@ class UltimateParser:
 
         entity_name = Identifier(self.cur_token.literal)
 
+        # Check for inheritance: extends ParentEntity
+        parent = None
+        if self.peek_token_is(IDENT) and self.peek_token.literal == "extends":
+            self.next_token()  # Move to 'extends'
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parent entity name after 'extends'")
+                return None
+            parent = Identifier(self.cur_token.literal)
+
         if not self.expect_peek(LBRACE):
             self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after entity name")
             return None
@@ -2811,10 +2820,8 @@ class UltimateParser:
         if not self.cur_token_is(RBRACE):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' to close entity definition")
             # Tolerant: continue anyway
-        else:
-            self.next_token()  # Move past }
 
-        return EntityStatement(name=entity_name, properties=properties)
+        return EntityStatement(name=entity_name, properties=properties, parent=parent)
 
     def recover_to_next_property(self):
         """Recover to the next property in entity definition"""
