@@ -9,8 +9,6 @@ from ..config import config  # Import the config
 from ..error_reporter import (
     get_error_reporter,
     SyntaxError as ZexusSyntaxError,
-    TypeError as ZexusTypeError,
-    NameError as ZexusNameError,
 )
 
 # Precedence constants

@@ -2,7 +2,6 @@
 import os
 import sys
 
-from .. import zexus_ast
 from ..zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, ContinueStatement, LetStatement, ConstStatement,
     ActionStatement, FunctionStatement, IfStatement, WhileStatement, ForEachStatement,

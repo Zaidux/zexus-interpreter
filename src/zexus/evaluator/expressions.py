@@ -1,16 +1,14 @@
 # src/zexus/evaluator/expressions.py
-from .. import zexus_ast
 from ..zexus_ast import (
     IntegerLiteral, FloatLiteral, StringLiteral, ListLiteral, MapLiteral, 
     Identifier, PrefixExpression, InfixExpression, IfExpression, 
     Boolean as AST_Boolean, EmbeddedLiteral, ActionLiteral, LambdaExpression
 )
 from ..object import (
-    Integer, Float, String, List, Map, Boolean as BooleanObj,
-    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin, DateTime
+    Integer, Float, String, List, Map,
+    EvaluationError, Builtin, DateTime
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
-from ..error_reporter import get_error_reporter, NameError as ZexusNameError, TypeError as ZexusTypeError
 
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
