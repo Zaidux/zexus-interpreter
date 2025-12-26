@@ -7,12 +7,12 @@ from zexus.vm.bytecode import BytecodeBuilder
 # Check if JIT and Register VM are available
 try:
     JIT_AVAILABLE = True
-except:
+except (ImportError, ModuleNotFoundError, AttributeError):
     JIT_AVAILABLE = False
 
 try:
     REGISTER_VM_AVAILABLE = True
-except:
+except (ImportError, ModuleNotFoundError, AttributeError):
     REGISTER_VM_AVAILABLE = False
 
 class TestPerformanceValidation(unittest.TestCase):

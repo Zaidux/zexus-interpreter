@@ -7,7 +7,7 @@ from zexus.vm.bytecode import BytecodeBuilder
 # Check if memory manager is available
 try:
     MEMORY_MANAGER_AVAILABLE = True
-except:
+except (ImportError, ModuleNotFoundError, AttributeError):
     MEMORY_MANAGER_AVAILABLE = False
 
 class TestMemoryLeakValidation(unittest.TestCase):

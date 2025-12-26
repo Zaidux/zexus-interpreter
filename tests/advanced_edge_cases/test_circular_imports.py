@@ -44,7 +44,7 @@ def test_self_import_detection():
     try:
         code = f'use {{something}} from "{temp_file}";\n'
         try:
-            env, result = run_code(code)
+            _, result = run_code(code)
             print("✅ Self-import: handled gracefully (may allow or detect)")
         except Exception as e:
             print(f"✅ Self-import: caught {type(e).__name__}")
@@ -86,7 +86,7 @@ def test_missing_module():
     """
     
     try:
-        env, result = run_code(code)
+        _, _ = run_code(code)
         print("✅ Missing module: handled gracefully")
     except Exception as e:
         print(f"✅ Missing module: caught {type(e).__name__}")
@@ -112,7 +112,7 @@ def test_circular_import_scenario():
         """
         
         try:
-            env, result = run_code(code)
+            _, _ = run_code(code)
             print("✅ Multiple imports: handled (circular detection may be present)")
         except Exception as e:
             print(f"✅ Multiple imports: handled - {type(e).__name__}")

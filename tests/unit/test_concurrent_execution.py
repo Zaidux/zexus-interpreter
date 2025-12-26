@@ -7,7 +7,7 @@ from zexus.vm.bytecode import BytecodeBuilder
 # Check if JIT is available
 try:
     JIT_AVAILABLE = True
-except:
+except (ImportError, ModuleNotFoundError, AttributeError):
     JIT_AVAILABLE = False
 
 class TestConcurrentExecution(unittest.TestCase):

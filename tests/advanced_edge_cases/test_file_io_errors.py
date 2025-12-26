@@ -109,7 +109,7 @@ def test_directory_vs_file():
     """
     
     try:
-        env, result = run_code(code)
+        _, _ = run_code(code)
         print("✅ Directory vs file: handled gracefully")
     except Exception as e:
         print(f"✅ Directory vs file: caught {type(e).__name__}")

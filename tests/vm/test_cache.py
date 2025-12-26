@@ -517,7 +517,7 @@ class TestCacheWithCompiler(unittest.TestCase):
             from src.zexus.evaluator.bytecode_compiler import EvaluatorBytecodeCompiler
             self.compiler = EvaluatorBytecodeCompiler(use_cache=True, cache_size=100)
             self.compiler_available = True
-        except:
+        except (ImportError, ModuleNotFoundError, AttributeError):
             self.compiler_available = False
     
     def test_compiler_uses_cache(self):

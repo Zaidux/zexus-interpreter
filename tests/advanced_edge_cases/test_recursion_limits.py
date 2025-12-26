@@ -46,7 +46,7 @@ def test_deep_recursion_graceful_failure():
     """
     
     try:
-        env, result = run_code(code)
+        _, result = run_code(code)
         # If we get here without crash, good!
         print("✅ Deep recursion: handled gracefully (may hit recursion limit)")
     except RecursionError:
