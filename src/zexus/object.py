@@ -303,9 +303,10 @@ class Coroutine(Object):
 # === ENTITY OBJECTS ===
 
 class EntityDefinition(Object):
-    def __init__(self, name, properties):
+    def __init__(self, name, properties, parent=None):
         self.name = name
         self.properties = properties  # List of property definitions
+        self.parent = parent  # Optional parent entity for inheritance
         
     def type(self):
         return "ENTITY_DEF"

@@ -973,6 +973,10 @@ class UltimateParser:
                         if self.cur_token_is(IDENT):
                             method_params.append(self.cur_token.literal)
                             self.next_token()
+                            # Skip optional type annotation: : type
+                            if self.cur_token_is(COLON):
+                                self.next_token()  # Skip :
+                                self.skip_type_annotation()
                         if self.cur_token_is(COMMA):
                             self.next_token()
                     if self.cur_token_is(RPAREN):
@@ -1022,7 +1026,7 @@ class UltimateParser:
                             # Skip optional type annotation: : type
                             if self.cur_token_is(COLON):
                                 self.next_token()  # Skip :
-                                self.next_token()  # Skip type
+                                self.skip_type_annotation()
                         if self.cur_token_is(COMMA):
                             self.next_token()
                     if self.cur_token_is(RPAREN):
@@ -1033,7 +1037,7 @@ class UltimateParser:
                     self.next_token()  # Skip -
                     if self.cur_token_is(GT):
                         self.next_token()  # Skip >
-                        self.next_token()  # Skip return type
+                        self.skip_type_annotation()
                 
                 # Parse action body
                 if not self.cur_token_is(LBRACE):
@@ -1078,6 +1082,10 @@ class UltimateParser:
                         if self.cur_token_is(IDENT):
                             method_params.append(self.cur_token.literal)
                             self.next_token()
+                            # Skip optional type annotation: : type
+                            if self.cur_token_is(COLON):
+                                self.next_token()  # Skip :
+                                self.skip_type_annotation()
                         if self.cur_token_is(COMMA):
                             self.next_token()
                     if self.cur_token_is(RPAREN):
@@ -2374,8 +2382,12 @@ class UltimateParser:
         if self.cur_token_is(LPAREN):
             self.next_token()  # Skip (
             condition = self.parse_expression(LOWEST)
-            if self.cur_token_is(RPAREN):
-                self.next_token()  # Skip )
+            # After parse_expression, need to check if we need to advance to RPAREN
+            if not self.cur_token_is(RPAREN):
+                if not self.expect_peek(RPAREN):
+                    self.errors.append("Expected ')' after while condition")
+                    return None
+            self.next_token()  # Skip )
         else:
             # No parentheses - parse expression directly
             condition = self.parse_expression(LOWEST)
@@ -2836,6 +2848,9 @@ class UltimateParser:
         if not self.cur_token_is(RBRACE):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' to close entity definition")
             # Tolerant: continue anyway
+        else:
+            # Consume the closing brace
+            self.next_token()
 
         return EntityStatement(name=entity_name, properties=properties, parent=parent)
 
@@ -3010,6 +3025,35 @@ class UltimateParser:
     def cur_precedence(self):
         return precedences.get(self.cur_token.type, LOWEST)
 
+    def skip_type_annotation(self):
+        """Skip a type annotation, handling generic types like List<T>, Map<K,V>, etc.
+        
+        Assumes cur_token is on the first token of the type (e.g., 'List', 'string', etc.)
+        After calling, cur_token will be on the token after the complete type annotation.
+        """
+        if not self.cur_token_is(IDENT):
+            return
+        
+        # Skip the type name
+        self.next_token()
+        
+        # Check for generic type parameters: <...>
+        if self.cur_token_is(LT):
+            # We have a generic type, need to skip the entire <...> part
+            depth = 1
+            self.next_token()  # Skip <
+            
+            while depth > 0 and not self.cur_token_is(EOF):
+                if self.cur_token_is(LT):
+                    depth += 1
+                elif self.cur_token_is(GT):
+                    depth -= 1
+                self.next_token()
+            
+            # After the loop, cur_token is already past the closing >
+        
+        # cur_token is now on the token after the type annotation
+
     # === SECURITY STATEMENT PARSERS ===
 
     def parse_capability_statement(self):
@@ -3114,7 +3158,7 @@ class UltimateParser:
                 encoding_type = self.cur_token.literal
                 self.next_token()
         
-        return SanitizeStatement(data=data_expr, encoding_type=encoding_type)
+        return SanitizeStatement(data=data_expr, encoding=encoding_type)
 
     def parse_inject_statement(self):
         """Parse inject statement - dependency injection"""

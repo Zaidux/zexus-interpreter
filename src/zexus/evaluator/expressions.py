@@ -242,8 +242,8 @@ class ExpressionEvaluatorMixin:
             # DateTime - DateTime = time difference in seconds (as Float)
             if operator == "-":
                 diff = left.timestamp - right.timestamp
-                # Return the difference as a Float (milliseconds for compatibility)
-                return Float(diff * 1000)  # Convert to milliseconds
+                # Return the difference as a Float in seconds
+                return Float(diff)
             else:
                 return EvaluationError(f"Unsupported operation: DATETIME {operator} DATETIME")
         elif isinstance(left, DateTime) and isinstance(right, (Integer, Float)):

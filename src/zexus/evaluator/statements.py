@@ -1622,6 +1622,9 @@ class StatementEvaluatorMixin:
                 props.update(parent_entity.properties)
             elif not parent_entity:
                 return EvaluationError(f"Parent entity '{node.parent.value}' not found")
+            else:
+                # Parent exists but is not an EntityDefinition
+                return EvaluationError(f"'{node.parent.value}' exists but is not an entity")
         
         for prop in node.properties:
             # Handle both dict and object formats
@@ -1649,7 +1652,9 @@ class StatementEvaluatorMixin:
             
             props[p_name] = {"type": p_type, "default_value": def_val}
         
-        entity = EntityDefinition(node.name.value, props)
+        # Create entity with parent reference if available
+        parent_ref = parent_entity if (node.parent and isinstance(parent_entity, EntityDefinition)) else None
+        entity = EntityDefinition(node.name.value, props, parent_ref)
         env.set(node.name.value, entity)
         return NULL
     
