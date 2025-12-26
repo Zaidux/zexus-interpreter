@@ -3924,3 +3924,107 @@ class StatementEvaluatorMixin:
         env.set(modifier_name, modifier)
         
         return NULL
+    # === CONCURRENCY STATEMENT EVALUATORS ===
+    
+    def eval_channel_statement(self, node, env, stack_trace):
+        """Evaluate channel declaration: channel<T> name [= capacity]
+        
+        Examples:
+            channel<integer> numbers
+            channel<string> messages = 10
+        """
+        from ..concurrency_system import Channel
+        
+        # Get channel name
+        channel_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        
+        # Get element type (optional)
+        element_type = node.element_type if hasattr(node, 'element_type') else None
+        if element_type and hasattr(element_type, 'value'):
+            element_type = element_type.value
+        
+        # Get capacity (optional, default 0 = unbuffered)
+        capacity = 0
+        if hasattr(node, 'capacity') and node.capacity:
+            cap_val = self.eval_node(node.capacity, env, stack_trace)
+            if is_error(cap_val):
+                return cap_val
+            if isinstance(cap_val, Integer):
+                capacity = cap_val.value
+        
+        # Create channel object
+        channel = Channel(
+            name=channel_name,
+            element_type=element_type,
+            capacity=capacity
+        )
+        
+        # Store in environment
+        env.set(channel_name, channel)
+        
+        debug_log("eval_channel_statement", f"Created channel '{channel_name}' (capacity={capacity})")
+        return NULL
+
+    def eval_send_statement(self, node, env, stack_trace):
+        """Evaluate send statement: send(channel, value)
+        
+        This is for the statement form, not the builtin function.
+        """
+        # Evaluate channel
+        channel = self.eval_node(node.channel, env, stack_trace)
+        if is_error(channel):
+            return channel
+        
+        # Evaluate value
+        value = self.eval_node(node.value, env, stack_trace)
+        if is_error(value):
+            return value
+        
+        # Send to channel
+        if not hasattr(channel, 'send'):
+            return EvaluationError(f"send target is not a channel: {type(channel).__name__}")
+        
+        try:
+            channel.send(value, timeout=5.0)
+            return NULL
+        except Exception as e:
+            return EvaluationError(f"send error: {str(e)}")
+
+    def eval_receive_statement(self, node, env, stack_trace):
+        """Evaluate receive statement: value = receive(channel)
+        
+        This is for the statement form, not the builtin function.
+        """
+        # Evaluate channel
+        channel = self.eval_node(node.channel, env, stack_trace)
+        if is_error(channel):
+            return channel
+        
+        # Receive from channel
+        if not hasattr(channel, 'receive'):
+            return EvaluationError(f"receive target is not a channel: {type(channel).__name__}")
+        
+        try:
+            value = channel.receive(timeout=5.0)
+            return value if value is not None else NULL
+        except Exception as e:
+            return EvaluationError(f"receive error: {str(e)}")
+
+    def eval_atomic_statement(self, node, env, stack_trace):
+        """Evaluate atomic block: atomic { statements }
+        
+        Ensures all statements execute atomically (thread-safe).
+        Uses a global lock to serialize atomic blocks.
+        """
+        from threading import Lock
+        
+        # Global atomic lock (class-level to share across all evaluators)
+        if not hasattr(self.__class__, '_atomic_lock'):
+            self.__class__._atomic_lock = Lock()
+        
+        # Execute block under lock
+        with self.__class__._atomic_lock:
+            result = self.eval_node(node.body, env, stack_trace)
+            if is_error(result):
+                return result
+            return result if not isinstance(result, ReturnValue) else result

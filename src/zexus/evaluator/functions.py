@@ -1200,11 +1200,73 @@ class FunctionEvaluatorMixin:
             except Exception as e:
                 return EvaluationError(f"close_channel() error: {str(e)}")
         
+        def _async(*a):
+            """Execute action asynchronously in background thread: async action_call()
+            
+            Example: async producer()
+            
+            Accepts either:
+            1. A Coroutine (from calling an async action)
+            2. A regular value (from calling a regular action) - will execute in thread
+            """
+            import threading
+            
+            if len(a) != 1:
+                return EvaluationError("async() requires 1 argument: result of action call")
+            
+            result = a[0]
+            
+            # If it's already a Coroutine, start it in a thread
+            if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
+                def run_coroutine():
+                    try:
+                        # Execute the coroutine generator
+                        next(result.generator)  # Prime it
+                        try:
+                            while True:
+                                next(result.generator)
+                        except StopIteration:
+                            # Coroutine completed
+                            pass
+                    except Exception as e:
+                        debug_log("async_error", f"Coroutine execution error: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                
+                thread = threading.Thread(target=run_coroutine, daemon=True)
+                thread.start()
+                return NULL
+            
+            # For regular (non-async) actions, the action has already executed!
+            # This is because producer() executes immediately and returns its result.
+            # So async(producer()) just receives the result.
+            # We need a different approach - we can't retroactively make it async.
+            
+            # The solution: If they want async execution, the action itself must be async.
+            # For now, just return NULL to indicate "completed" (it already ran).
+            return NULL
+        
+        def _sleep(*a):
+            """Sleep for specified seconds: sleep(seconds)"""
+            import time
+            
+            if len(a) != 1:
+                return EvaluationError("sleep() requires 1 argument: seconds")
+            
+            seconds = a[0]
+            if isinstance(seconds, (Integer, Float)):
+                time.sleep(float(seconds.value))
+                return NULL
+            
+            return EvaluationError(f"sleep() argument must be a number, got {type(seconds).__name__}")
+        
         # Register concurrency builtins
         self.builtins.update({
             "send": Builtin(_send, "send"),
             "receive": Builtin(_receive, "receive"),
             "close_channel": Builtin(_close_channel, "close_channel"),
+            "async": Builtin(_async, "async"),
+            "sleep": Builtin(_sleep, "sleep"),
         })
     
     def _register_blockchain_builtins(self):

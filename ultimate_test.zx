@@ -115,7 +115,7 @@ print("3.1: Channel communication...")
 channel<integer> number_channel
 channel<string> message_channel
 
-action producer() {
+async action producer() {
     let i = 1
     while i <= 5 {
         send(number_channel, i * 10)
@@ -127,7 +127,7 @@ action producer() {
     close_channel(message_channel)
 }
 
-action consumer() {
+async action consumer() {
     let total = 0
     while true {
         let num = receive(number_channel)
@@ -155,7 +155,7 @@ print("")
 # 3.2: Atomic operations
 print("3.2: Atomic operations test...")
 let shared_counter = 0
-action incrementer() {
+async action incrementer() {
     let i = 0
     while i < 1000 {
         atomic {

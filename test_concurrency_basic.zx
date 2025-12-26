@@ -1,0 +1,29 @@
+# Test channel implementation
+print("=== Channel Test ===\n")
+
+# Create a channel
+channel<integer> test_channel
+
+# Test send/receive
+print("Sending value 42...")
+send(test_channel, 42)
+
+print("Receiving value...")
+let value = receive(test_channel)
+print("Received: " + string(value))
+
+print("\n=== Atomic Test ===\n")
+
+let counter = 0
+action increment() {
+    atomic {
+        counter = counter + 1
+    }
+}
+
+increment()
+increment()
+increment()
+
+print("Counter after 3 increments: " + string(counter))
+print("Expected: 3")
