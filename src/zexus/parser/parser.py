@@ -180,7 +180,6 @@ class UltimateParser:
 
     def parse_map_literal(self):
         """Parse a map/object literal: { key: value, ... }"""
-        token = self.cur_token
         # consume '{'
         self.next_token()
 
@@ -496,9 +495,6 @@ class UltimateParser:
                 print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
                 node = self.parse_state_statement()
             # REQUIRE is now handled by ContextStackParser for enhanced syntax support
-            # elif self.cur_token_is(REQUIRE):
-            #     print(f"[PARSE_STMT] Matched REQUIRE", file=sys.stderr, flush=True)
-            #     node = self.parse_require_statement()
             elif self.cur_token_is(REVERT):
                 print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
                 node = self.parse_revert_statement()
@@ -1215,7 +1211,6 @@ class UltimateParser:
         When debug is followed by (, it's treated as a function call expression.
         This allows debug(x) to return the value, while debug x; logs without returning.
         """
-        token = self.cur_token
         
         # DUAL-MODE: If followed by (, treat as identifier for function call
         # This allows: let x = debug(42); to work
@@ -2409,7 +2404,6 @@ class UltimateParser:
 
     def parse_use_with_braces(self):
         """Parse use statement with brace syntax: use { Name1, Name2 } from './module.zx'"""
-        token = self.cur_token
 
         if not self.expect_peek(LBRACE):
             return None

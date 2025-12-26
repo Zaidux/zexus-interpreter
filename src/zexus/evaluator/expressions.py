@@ -457,11 +457,6 @@ class ExpressionEvaluatorMixin:
             
             # Await a Promise
             if obj_type == "PROMISE":
-                # Propagate stack trace context from promise
-                if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
-                    # Merge promise's stack trace with current context
-                    stack_trace = stack_trace + [f"  at await <promise>"]
-                
                 # Since promises execute immediately in executor, they should be resolved
                 if awaitable.is_resolved():
                     try:
