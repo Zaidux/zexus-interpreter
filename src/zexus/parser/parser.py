@@ -2382,12 +2382,15 @@ class UltimateParser:
         if self.cur_token_is(LPAREN):
             self.next_token()  # Skip (
             condition = self.parse_expression(LOWEST)
-            # After parse_expression, need to check if we need to advance to RPAREN
-            if not self.cur_token_is(RPAREN):
-                if not self.expect_peek(RPAREN):
-                    self.errors.append("Expected ')' after while condition")
-                    return None
-            self.next_token()  # Skip )
+            # After parse_expression, check if RPAREN is current or peek token
+            if self.cur_token_is(RPAREN):
+                self.next_token()  # Skip ) - it's already in cur_token
+            elif self.peek_token_is(RPAREN):
+                self.next_token()  # Advance to )
+                self.next_token()  # Skip )
+            else:
+                self.errors.append("Expected ')' after while condition")
+                return None
         else:
             # No parentheses - parse expression directly
             condition = self.parse_expression(LOWEST)
@@ -3050,7 +3053,9 @@ class UltimateParser:
                     depth -= 1
                 self.next_token()
             
-            # After the loop, cur_token is already past the closing >
+            # Check if we exited due to EOF with unmatched brackets
+            if depth > 0 and self.cur_token_is(EOF):
+                self.errors.append(f"Malformed type annotation: unmatched '<' in generic type")
         
         # cur_token is now on the token after the type annotation
 
