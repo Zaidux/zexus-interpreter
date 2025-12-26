@@ -1,0 +1,16 @@
+# Test if async is callable
+print("Testing async function...")
+
+async action test_action() {
+    print("Test action running")
+}
+
+print("Calling test_action()...")
+let result = test_action()
+print("Result type: " + type(result))
+
+print("Calling async()...")
+async(result)
+
+print("Done")
+sleep(1)

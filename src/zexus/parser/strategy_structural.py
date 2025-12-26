@@ -484,6 +484,10 @@ class StructuralAnalyzer:
                             if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
                                 break
                     
+                    # CRITICAL FIX: Also break on modifier tokens at nesting 0 (they start a new modified statement)
+                    if nesting == 0 and tj.type in modifier_tokens and not found_colon_block and len(stmt_tokens) > 0:
+                        break
+                    
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
                     # and not in an assignment context
                     # EXCEPTION: Don't break if we're parsing ACTION/FUNCTION (their names are followed by LPAREN for parameters)

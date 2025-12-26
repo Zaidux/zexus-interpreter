@@ -710,7 +710,8 @@ class UltimateParser:
         if not body:
             return None
 
-        return ActionStatement(name=name, parameters=parameters, body=body, return_type=return_type)
+        # Note: is_async will be set by parse_statement if async modifier is present
+        return ActionStatement(name=name, parameters=parameters, body=body, is_async=False, return_type=return_type)
 
     def parse_function_statement(self):
         """Tolerant function parser supporting both syntax styles"""

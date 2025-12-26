@@ -13,6 +13,7 @@ async action producer() {
 }
 
 async action consumer() {
+    print("CONSUMER: Function entry point")
     print("Consumer: Waiting for first value...")
     let val1 = receive(test_chan)
     print("Consumer received: " + string(val1))
@@ -26,8 +27,10 @@ async action consumer() {
 
 print("Starting async tasks...")
 async producer()
+print("Producer task started")
 async consumer()
+print("Consumer task started")
 
 print("Waiting for completion...")
-sleep(1)
+sleep(2)
 print("Test complete")

@@ -1210,31 +1210,45 @@ class FunctionEvaluatorMixin:
             2. A regular value (from calling a regular action) - will execute in thread
             """
             import threading
+            import sys
             
             if len(a) != 1:
                 return EvaluationError("async() requires 1 argument: result of action call")
             
             result = a[0]
             
+            # Debug: Check what we got
+            print(f"[ASYNC DEBUG] Got result type: {type(result)}, class: {result.__class__.__name__ if hasattr(result, '__class__') else 'N/A'}", file=sys.stderr)
+            print(f"[ASYNC DEBUG] Result value: {result}", file=sys.stderr)
+            
             # If it's already a Coroutine, start it in a thread
             if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
+                print(f"[ASYNC DEBUG] Starting coroutine in thread", file=sys.stderr)
+                
                 def run_coroutine():
+                    print(f"[ASYNC DEBUG] Thread started, about to prime generator", file=sys.stderr)
                     try:
-                        # Execute the coroutine generator
-                        next(result.generator)  # Prime it
+                        # Prime the generator
+                        val = next(result.generator)
+                        print(f"[ASYNC DEBUG] Generator primed, returned: {val}", file=sys.stderr)
+                        # Execute until completion
                         try:
                             while True:
-                                next(result.generator)
-                        except StopIteration:
-                            # Coroutine completed
+                                val = next(result.generator)
+                                print(f"[ASYNC DEBUG] Generator yielded: {val}", file=sys.stderr)
+                        except StopIteration as e:
+                            # Coroutine completed successfully
+                            print(f"[ASYNC DEBUG] Coroutine completed", file=sys.stderr)
                             pass
                     except Exception as e:
-                        debug_log("async_error", f"Coroutine execution error: {str(e)}")
+                        # Print error to stderr for visibility
+                        print(f"[ASYNC ERROR] Coroutine execution failed: {str(e)}", file=sys.stderr)
                         import traceback
-                        traceback.print_exc()
+                        traceback.print_exc(file=sys.stderr)
                 
                 thread = threading.Thread(target=run_coroutine, daemon=True)
                 thread.start()
+                print(f"[ASYNC DEBUG] Thread started and returning NULL", file=sys.stderr)
                 return NULL
             
             # For regular (non-async) actions, the action has already executed!
