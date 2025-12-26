@@ -1,16 +1,14 @@
 # src/zexus/evaluator/expressions.py
-from .. import zexus_ast
 from ..zexus_ast import (
     IntegerLiteral, FloatLiteral, StringLiteral, ListLiteral, MapLiteral, 
     Identifier, PrefixExpression, InfixExpression, IfExpression, 
     Boolean as AST_Boolean, EmbeddedLiteral, ActionLiteral, LambdaExpression
 )
 from ..object import (
-    Integer, Float, String, List, Map, Boolean as BooleanObj,
-    Null, Action, LambdaFunction, EmbeddedCode, EvaluationError, Builtin, DateTime
+    Integer, Float, String, List, Map,
+    EvaluationError, Builtin, DateTime
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
-from ..error_reporter import get_error_reporter, NameError as ZexusNameError, TypeError as ZexusTypeError
 
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
@@ -244,8 +242,8 @@ class ExpressionEvaluatorMixin:
             # DateTime - DateTime = time difference in seconds (as Float)
             if operator == "-":
                 diff = left.timestamp - right.timestamp
-                # Return the difference as a Float (milliseconds for compatibility)
-                return Float(diff * 1000)  # Convert to milliseconds
+                # Return the difference as a Float in seconds
+                return Float(diff)
             else:
                 return EvaluationError(f"Unsupported operation: DATETIME {operator} DATETIME")
         elif isinstance(left, DateTime) and isinstance(right, (Integer, Float)):
@@ -457,11 +455,6 @@ class ExpressionEvaluatorMixin:
             
             # Await a Promise
             if obj_type == "PROMISE":
-                # Propagate stack trace context from promise
-                if hasattr(awaitable, 'stack_trace') and awaitable.stack_trace:
-                    # Merge promise's stack trace with current context
-                    stack_trace = stack_trace + [f"  at await <promise>"]
-                
                 # Since promises execute immediately in executor, they should be resolved
                 if awaitable.is_resolved():
                     try:

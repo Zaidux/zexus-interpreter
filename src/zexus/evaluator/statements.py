@@ -2,7 +2,6 @@
 import os
 import sys
 
-from .. import zexus_ast
 from ..zexus_ast import (
     Program, ExpressionStatement, BlockStatement, ReturnStatement, ContinueStatement, LetStatement, ConstStatement,
     ActionStatement, FunctionStatement, IfStatement, WhileStatement, ForEachStatement,
@@ -140,7 +139,6 @@ class StatementEvaluatorMixin:
     
     def eval_expression_statement(self, node, env, stack_trace):
         # Debug: Check if expression is being evaluated
-        expr_type = type(node.expression).__name__
         if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
             func_name = node.expression.function.value
             if func_name in ['persist_set', 'persist_get']:
@@ -1624,6 +1622,9 @@ class StatementEvaluatorMixin:
                 props.update(parent_entity.properties)
             elif not parent_entity:
                 return EvaluationError(f"Parent entity '{node.parent.value}' not found")
+            else:
+                # Parent exists but is not an EntityDefinition
+                return EvaluationError(f"'{node.parent.value}' exists but is not an entity")
         
         for prop in node.properties:
             # Handle both dict and object formats
@@ -1651,7 +1652,9 @@ class StatementEvaluatorMixin:
             
             props[p_name] = {"type": p_type, "default_value": def_val}
         
-        entity = EntityDefinition(node.name.value, props)
+        # Create entity with parent reference if available
+        parent_ref = parent_entity if (node.parent and isinstance(parent_entity, EntityDefinition)) else None
+        entity = EntityDefinition(node.name.value, props, parent_ref)
         env.set(node.name.value, entity)
         return NULL
     
@@ -1839,7 +1842,7 @@ class StatementEvaluatorMixin:
             
             # Execute action block (blocking actions)
             if node.action_block:
-                block_result = self.eval_node(node.action_block, env, stack_trace)
+                self.eval_node(node.action_block, env, stack_trace)
                 # Don't return error from block - it's for logging/actions
                 # The access denial itself is the error
             
@@ -2138,7 +2141,6 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_throttle_statement(self, node, env, stack_trace):
-        target = self.eval_node(node.target, env)
         limits = self.eval_node(node.limits, env)
         
         rpm, burst, per_user = 100, 10, False
@@ -2160,7 +2162,6 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_cache_statement(self, node, env, stack_trace):
-        target = self.eval_node(node.target, env)
         policy = self.eval_node(node.policy, env)
         
         ttl, inv = 3600, []
@@ -2689,7 +2690,6 @@ class StatementEvaluatorMixin:
         cap_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
         
         # Extract definition details
-        description = ""
         scope = ""
         level = CapabilityLevel.ALLOWED
         
@@ -2697,9 +2697,7 @@ class StatementEvaluatorMixin:
             # Extract from map
             for key, val in node.definition.pairs:
                 if hasattr(key, 'value'):
-                    if key.value == "description" and hasattr(val, 'value'):
-                        description = val.value
-                    elif key.value == "scope" and hasattr(val, 'value'):
+                    if key.value == "scope" and hasattr(val, 'value'):
                         scope = val.value
         
         # Create capability object
@@ -2829,9 +2827,7 @@ class StatementEvaluatorMixin:
 
     def eval_sanitize_statement(self, node, env, stack_trace):
         """Evaluate sanitize statement - sanitize untrusted input."""
-        from ..validation_system import Sanitizer, Encoding, get_validation_manager
-        
-        manager = get_validation_manager()
+        from ..validation_system import Sanitizer, Encoding
         
         # Evaluate data to sanitize
         data = self.eval_node(node.data, env, stack_trace)
@@ -3002,9 +2998,7 @@ class StatementEvaluatorMixin:
 
     def eval_module_statement(self, node, env, stack_trace):
         """Evaluate module statement - create namespaced module."""
-        from ..complexity_system import get_complexity_manager, Module, ModuleMember, Visibility
-        
-        manager = get_complexity_manager()
+        from ..complexity_system import Module, ModuleMember, Visibility
         
         # Get module name
         module_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
@@ -3016,7 +3010,7 @@ class StatementEvaluatorMixin:
         module_env = Environment(outer=env)
         
         if hasattr(node, 'body') and node.body:
-            body_result = self.eval_node(node.body, module_env, stack_trace)
+            self.eval_node(node.body, module_env, stack_trace)
         
         # Collect module members using AST modifiers when available
         seen = set()
@@ -3100,9 +3094,7 @@ class StatementEvaluatorMixin:
 
     def eval_package_statement(self, node, env, stack_trace):
         """Evaluate package statement - create package with hierarchical support."""
-        from ..complexity_system import get_complexity_manager, Package
-        
-        manager = get_complexity_manager()
+        from ..complexity_system import Package
         
         # Get package name (may be dotted like app.api.v1)
         package_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
@@ -3117,7 +3109,7 @@ class StatementEvaluatorMixin:
         package_env = Environment(outer=env)
         
         if hasattr(node, 'body') and node.body:
-            body_result = self.eval_node(node.body, package_env, stack_trace)
+            self.eval_node(node.body, package_env, stack_trace)
         
         # Collect package members from package environment
         for key in package_env.store:
@@ -3237,9 +3229,6 @@ class StatementEvaluatorMixin:
 
     def eval_send_statement(self, node, env, stack_trace):
         """Evaluate send statement - send value to a channel."""
-        from ..concurrency_system import get_concurrency_manager
-        
-        manager = get_concurrency_manager()
         
         # Evaluate channel expression
         channel = self.eval_node(node.channel_expr, env, stack_trace)
@@ -3260,9 +3249,6 @@ class StatementEvaluatorMixin:
 
     def eval_receive_statement(self, node, env, stack_trace):
         """Evaluate receive statement - receive value from a channel."""
-        from ..concurrency_system import get_concurrency_manager
-        
-        manager = get_concurrency_manager()
         
         # Evaluate channel expression
         channel = self.eval_node(node.channel_expr, env, stack_trace)
