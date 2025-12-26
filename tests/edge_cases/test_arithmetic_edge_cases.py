@@ -87,7 +87,7 @@ def test_float_precision():
     code = """
     let a = 0.1 + 0.2;
     """
-    env, result = run_code(code)
+    env, _ = run_code(code)
     
     value = env.get("a")
     # Floating point arithmetic may have precision issues, but should not crash
