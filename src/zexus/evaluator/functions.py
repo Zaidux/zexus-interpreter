@@ -1341,14 +1341,39 @@ class FunctionEvaluatorMixin:
         
         def _memory_stats(*a):
             """Get memory tracking statistics: memory_stats()"""
+            import sys
+            import gc
+            
+            # Get process memory usage
+            try:
+                import psutil
+                process = psutil.Process()
+                mem_info = process.memory_info()
+                current_bytes = mem_info.rss  # Resident Set Size
+                peak_bytes = getattr(mem_info, 'peak_wset', mem_info.rss)  # Windows has peak_wset
+            except (ImportError, AttributeError):
+                # Fallback: use Python's internal memory tracking
+                current_bytes = sys.getsizeof(gc.get_objects())
+                peak_bytes = current_bytes
+            
+            # Get GC statistics
+            gc_count = len(gc.get_objects())
+            gc_collections = sum(gc.get_count())
+            
+            # Get environment-specific tracking if available
             env = getattr(self, '_current_env', None)
+            tracked_objects = 0
             if env and hasattr(env, 'get_memory_stats'):
                 stats = env.get_memory_stats()
-                return Map({
-                    String("tracked_objects"): Integer(stats.get("tracked_objects", 0)),
-                    String("message"): String(stats.get("message", ""))
-                })
-            return Map({String("message"): String("Memory tracking not enabled")})
+                tracked_objects = stats.get("tracked_objects", 0)
+            
+            return Map({
+                String("current"): Integer(current_bytes),
+                String("peak"): Integer(peak_bytes),
+                String("gc_count"): Integer(gc_collections),
+                String("objects"): Integer(gc_count),
+                String("tracked_objects"): Integer(tracked_objects)
+            })
         
         # === POLICY & PROTECTION BUILTINS ===
         

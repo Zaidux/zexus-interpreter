@@ -82,3 +82,45 @@ module DynamicMath {
   }
 }
 # Generated at 1766750674
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766751272
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766751287
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766751302
