@@ -486,6 +486,18 @@ class CallExpression(Expression):
         targs = f", type_args={self.type_args}" if self.type_args else ""
         return f"CallExpression(function={self.function}, arguments={len(self.arguments)}{targs})"
 
+class AsyncExpression(Expression):
+    """Async expression: async <expression>
+    
+    Executes the expression asynchronously in a background thread.
+    Example: async producer()
+    """
+    def __init__(self, expression):
+        self.expression = expression  # The expression to execute asynchronously
+    
+    def __repr__(self):
+        return f"AsyncExpression(expression={self.expression})"
+
 class MethodCallExpression(Expression):
     def __init__(self, object, method, arguments):
         self.object = object

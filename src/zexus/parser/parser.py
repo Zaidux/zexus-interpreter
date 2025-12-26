@@ -79,6 +79,7 @@ class UltimateParser:
             DEBUG: self.parse_debug_statement,
             TRY: self.parse_try_catch_statement,
             EXTERNAL: self.parse_external_declaration,
+            ASYNC: self.parse_async_expression,  # Support async <expression>
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -346,6 +347,18 @@ class UltimateParser:
 
     def parse_statement(self):
         """Parse statement with maximum tolerance"""
+        # Special case: Check for async expression (async <expr>) before parsing modifiers
+        # This must come FIRST before modifier parsing
+        if self.cur_token_is(ASYNC) and self.peek_token and self.peek_token.type not in {ACTION, FUNCTION}:
+            # This is an async expression, not a modifier
+            # Parse it as an expression statement containing AsyncExpression
+            from ..zexus_ast import ExpressionStatement
+            expr = self.parse_expression(LOWEST)
+            node = ExpressionStatement(expression=expr)
+            if self.peek_token_is(SEMICOLON):
+                self.next_token()
+            return node
+        
         # Support optional leading modifiers: e.g. `secure async action foo {}`
         modifiers = []
         if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}:
@@ -2604,6 +2617,19 @@ class UltimateParser:
         self.next_token()
         expression.right = self.parse_expression(PREFIX)
         return expression
+    
+    def parse_async_expression(self):
+        """Parse async expression: async <expression>
+        
+        Example: async producer()
+        This executes the expression asynchronously in a background thread.
+        """
+        from ..zexus_ast import AsyncExpression
+        # Consume 'async' token
+        self.next_token()
+        # Parse the expression to execute asynchronously
+        expr = self.parse_expression(PREFIX)
+        return AsyncExpression(expression=expr)
 
     def parse_infix_expression(self, left):
         expression = InfixExpression(left=left, operator=self.cur_token.literal, right=None)

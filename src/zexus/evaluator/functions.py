@@ -188,10 +188,15 @@ class FunctionEvaluatorMixin:
             if is_async:
                 # Create a coroutine that lazily executes the async action
                 from ..object import Coroutine
+                import sys
+                
+                print(f"[ASYNC CREATE] Creating coroutine for async action, fn.env has keys: {list(fn.env.store.keys()) if hasattr(fn.env, 'store') else 'N/A'}", file=sys.stderr)
                 
                 def async_generator():
                     """Generator that executes the async action body"""
                     new_env = Environment(outer=fn.env)
+                    
+                    print(f"[ASYNC GEN] Generator started, new_env outer: {new_env.outer is not None}, outer keys: {list(new_env.outer.store.keys())[:10] if new_env.outer and hasattr(new_env.outer, 'store') else 'N/A'}", file=sys.stderr)
                     
                     # Bind parameters
                     for i, param in enumerate(fn.parameters):

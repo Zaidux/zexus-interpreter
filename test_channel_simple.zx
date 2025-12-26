@@ -1,0 +1,12 @@
+# Simple channel test without async
+print("Creating channel...")
+channel<integer> test_chan
+
+print("Sending 42...")
+send(test_chan, 42)
+
+print("Receiving...")
+let val = receive(test_chan)
+print("Received: " + string(val))
+
+print("Done")

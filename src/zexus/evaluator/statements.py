@@ -3970,24 +3970,34 @@ class StatementEvaluatorMixin:
         
         This is for the statement form, not the builtin function.
         """
+        import sys
+        print(f"[SEND] Evaluating send statement", file=sys.stderr)
+        
         # Evaluate channel
         channel = self.eval_node(node.channel, env, stack_trace)
         if is_error(channel):
             return channel
+        
+        print(f"[SEND] Channel: {channel}, type: {type(channel).__name__}", file=sys.stderr)
         
         # Evaluate value
         value = self.eval_node(node.value, env, stack_trace)
         if is_error(value):
             return value
         
+        print(f"[SEND] Value: {value}", file=sys.stderr)
+        
         # Send to channel
         if not hasattr(channel, 'send'):
             return EvaluationError(f"send target is not a channel: {type(channel).__name__}")
         
         try:
+            print(f"[SEND] Calling channel.send()", file=sys.stderr)
             channel.send(value, timeout=5.0)
+            print(f"[SEND] Successfully sent value", file=sys.stderr)
             return NULL
         except Exception as e:
+            print(f"[SEND ERROR] {str(e)}", file=sys.stderr)
             return EvaluationError(f"send error: {str(e)}")
 
     def eval_receive_statement(self, node, env, stack_trace):
@@ -3995,19 +4005,27 @@ class StatementEvaluatorMixin:
         
         This is for the statement form, not the builtin function.
         """
+        import sys
+        print(f"[RECEIVE] Evaluating receive statement", file=sys.stderr)
+        
         # Evaluate channel
         channel = self.eval_node(node.channel, env, stack_trace)
         if is_error(channel):
             return channel
+        
+        print(f"[RECEIVE] Channel: {channel}, type: {type(channel).__name__}", file=sys.stderr)
         
         # Receive from channel
         if not hasattr(channel, 'receive'):
             return EvaluationError(f"receive target is not a channel: {type(channel).__name__}")
         
         try:
+            print(f"[RECEIVE] Calling channel.receive()", file=sys.stderr)
             value = channel.receive(timeout=5.0)
+            print(f"[RECEIVE] Received value: {value}", file=sys.stderr)
             return value if value is not None else NULL
         except Exception as e:
+            print(f"[RECEIVE ERROR] {str(e)}", file=sys.stderr)
             return EvaluationError(f"receive error: {str(e)}")
 
     def eval_atomic_statement(self, node, env, stack_trace):
@@ -4017,6 +4035,10 @@ class StatementEvaluatorMixin:
         Uses a global lock to serialize atomic blocks.
         """
         from threading import Lock
+        import sys
+        
+        print(f"[ATOMIC] Entering atomic block", file=sys.stderr)
+        print(f"[ATOMIC] Current env keys: {list(env.store.keys())[:10] if hasattr(env, 'store') else 'N/A'}", file=sys.stderr)
         
         # Global atomic lock (class-level to share across all evaluators)
         if not hasattr(self.__class__, '_atomic_lock'):

@@ -445,6 +445,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)
             
+            elif node_type == zexus_ast.AsyncExpression:
+                debug_log("⚡ AsyncExpression node", f"Async execution of {node.expression}")
+                return self.eval_async_expression(node, env, stack_trace)
+            
             elif node_type == zexus_ast.MatchExpression:
                 debug_log("🎯 MatchExpression node", "Pattern matching")
                 return self.eval_match_expression(node, env, stack_trace)

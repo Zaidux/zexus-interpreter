@@ -484,9 +484,18 @@ class StructuralAnalyzer:
                             if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
                                 break
                     
-                    # CRITICAL FIX: Also break on modifier tokens at nesting 0 (they start a new modified statement)
+                    # CRITICAL FIX: Also break on modifier tokens at nesting 0 when followed by statement keywords
+                    # This prevents previous statements from consuming modifiers like "async action foo()"
+                    # But ALLOWS "async foo()" expressions to stay together
                     if nesting == 0 and tj.type in modifier_tokens and not found_colon_block and len(stmt_tokens) > 0:
-                        break
+                        # Look ahead to see if modifier is followed by a statement keyword
+                        next_idx = j + 1
+                        while next_idx < n and tokens[next_idx].type in modifier_tokens:
+                            next_idx += 1
+                        if next_idx < n and tokens[next_idx].type in statement_starters:
+                            # Modifier followed by statement keyword - break here
+                            break
+                        # Otherwise, continue collecting (async expression case)
                     
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
                     # and not in an assignment context
