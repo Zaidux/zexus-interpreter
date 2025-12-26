@@ -179,6 +179,10 @@ class ExpressionEvaluatorMixin:
             return TRUE if left.value == right.value else FALSE
         elif operator == "!=": 
             return TRUE if left.value != right.value else FALSE
+        elif operator == "*":
+            # String repetition: "x" * 3 = "xxx"
+            # Only works with String * Integer, not String * String
+            return EvaluationError(f"Type mismatch: STRING * STRING (use STRING * INTEGER for repetition)")
         return EvaluationError(f"Unknown string operator: {operator}")
     
     def eval_infix_expression(self, node, env, stack_trace):
@@ -230,6 +234,15 @@ class ExpressionEvaluatorMixin:
             return self.eval_float_infix(operator, left, right)
         elif isinstance(left, String) and isinstance(right, String):
             return self.eval_string_infix(operator, left, right)
+        
+        # String repetition: "x" * 100 or 100 * "x"
+        elif operator == "*":
+            if isinstance(left, String) and isinstance(right, Integer):
+                # "x" * 100
+                return String(left.value * right.value)
+            elif isinstance(left, Integer) and isinstance(right, String):
+                # 100 * "x"
+                return String(right.value * left.value)
         
         # Array Concatenation
         elif operator == "+" and isinstance(left, List) and isinstance(right, List):
