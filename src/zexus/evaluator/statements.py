@@ -2049,9 +2049,9 @@ class StatementEvaluatorMixin:
             return target
         
         # Get target name (for registration)
-        target_name = str(node.target) if hasattr(node.target, 'value') else str(target)
+        target_name = str(node.target.value) if hasattr(node.target, 'value') else str(target)
         
-        # Evaluate rules block
+        # Evaluate rules - could be a Map literal or BlockStatement
         rules_val = self.eval_node(node.rules, env, stack_trace)
         if is_error(rules_val): 
             return rules_val
@@ -2059,16 +2059,30 @@ class StatementEvaluatorMixin:
         # Convert rules to dictionary
         rules_dict = {}
         if isinstance(rules_val, Map):
+            # Direct map literal: {rate_limit: 10, auth_required: true, ...}
             for k, v in rules_val.pairs.items():
                 key = k.value if isinstance(k, String) else str(k)
-                rules_dict[key] = v
+                # Convert Zexus objects to Python values
+                if isinstance(v, Integer):
+                    rules_dict[key] = v.value
+                elif isinstance(v, String):
+                    rules_dict[key] = v.value
+                elif isinstance(v, (TRUE.__class__, FALSE.__class__)):
+                    rules_dict[key] = v == TRUE
+                elif isinstance(v, List):
+                    rules_dict[key] = [item.value if hasattr(item, 'value') else item for item in v.elements]
+                else:
+                    rules_dict[key] = v
+        elif hasattr(rules_val, 'statements'):
+            # Block statement (old style)
+            for stmt in rules_val.statements:
+                # Handle statement-based rules
+                pass
         
-        # Determine enforcement level (string-based)
+        # Determine enforcement level
         enforcement_level = "strict"  # Default
         if hasattr(node, 'enforcement_level') and node.enforcement_level:
-            level_str = node.enforcement_level.lower()
-            if level_str in ["strict", "warn", "audit", "permissive"]:
-                enforcement_level = level_str
+            enforcement_level = node.enforcement_level.lower()
         
         # Build policy using PolicyBuilder
         builder = PolicyBuilder(target_name)
@@ -2078,24 +2092,17 @@ class StatementEvaluatorMixin:
         for rule_type, rule_config in rules_dict.items():
             if rule_type == "verify":
                 # Add verification rules
-                if isinstance(rule_config, List):
-                    for condition in rule_config.elements:
-                        condition_str = condition.value if hasattr(condition, 'value') else str(condition)
-                        builder.add_verify_rule(condition_str)
+                if isinstance(rule_config, list):
+                    for condition in rule_config:
+                        builder.add_verify_rule(str(condition))
             
             elif rule_type == "restrict":
                 # Add restriction rules
-                if isinstance(rule_config, Map):
-                    for field, constraints in rule_config.pairs.items():
-                        field_name = field.value if hasattr(field, 'value') else str(field)
-                        constraint_list = []
-                        if isinstance(constraints, List):
-                            for c in constraints.elements:
-                                constraint_str = c.value if hasattr(c, 'value') else str(c)
-                                constraint_list.append(constraint_str)
-                        builder.add_restrict_rule(field_name, constraint_list)
+                if isinstance(rule_config, dict):
+                    for field, constraints in rule_config.items():
+                        builder.add_restrict_rule(field, constraints if isinstance(constraints, list) else [constraints])
             
-            elif rule_type == "audit":
+            elif rule_type in ("audit", "log_access") and rule_config:
                 # Enable audit logging
                 builder.enable_audit()
         
@@ -2111,9 +2118,10 @@ class StatementEvaluatorMixin:
         
         # Also register with legacy security context for backwards compatibility
         try:
+            from ..security import ProtectionPolicy, get_security_context
             policy_legacy = ProtectionPolicy(target_name, rules_dict, enforcement_level)
             get_security_context().register_protection(target_name, policy_legacy)
-        except (AttributeError, NameError):
+        except (AttributeError, NameError, ImportError):
             pass  # Legacy context may not be available
         
         return StringObj(f"Protection policy activated for '{target_name}' (level: {enforcement_level})")

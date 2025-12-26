@@ -1,0 +1,53 @@
+# Memory optimization comparison test
+print("=== Memory Optimization Test ===\n")
+
+# Baseline
+let baseline = memory_stats().current
+
+# Test 1: BAD - List concatenation (creates new list each time)
+print("Test 1: List concatenation (SLOW - creates new list each time)")
+let slow_list = []
+let i = 0
+let start_mem = memory_stats().current
+while i < 1000 {
+    slow_list = slow_list + [{
+        id: i,
+        name: "Item " + string(i),
+        data: "x" * 100,
+        nested: {a: 1, b: 2, c: [1, 2, 3]}
+    }]
+    i = i + 1
+}
+let slow_mem = memory_stats().current - start_mem
+print("✓ Created " + string(len(slow_list)) + " items")
+print("✓ Memory used: " + string(slow_mem) + " bytes (" + string(slow_mem / 1000) + " bytes/item)")
+print("")
+
+# Test 2: BETTER - Using append() (mutates in-place)
+print("Test 2: Using append() (FASTER - mutates in-place)")
+let fast_list = []
+let j = 0
+let start_mem2 = memory_stats().current
+while j < 1000 {
+    append(fast_list, {
+        id: j,
+        name: "Item " + string(j),
+        data: "x" * 100,
+        nested: {a: 1, b: 2, c: [1, 2, 3]}
+    })
+    j = j + 1
+}
+let fast_mem = memory_stats().current - start_mem2
+print("✓ Created " + string(len(fast_list)) + " items")
+print("✓ Memory used: " + string(fast_mem) + " bytes (" + string(fast_mem / 1000) + " bytes/item)")
+print("")
+
+# Comparison
+print("=== COMPARISON ===")
+print("Concatenation method: " + string(slow_mem) + " bytes")
+print("Append method:        " + string(fast_mem) + " bytes")
+let savings = slow_mem - fast_mem
+let percent = (savings * 100) / slow_mem
+print("Memory saved:         " + string(savings) + " bytes (" + string(percent) + "%)")
+print("")
+print("💡 Recommendation: Use append() instead of list concatenation for better performance!")

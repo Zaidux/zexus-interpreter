@@ -897,6 +897,28 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("push(list, item)")
             return List(a[0].elements + [a[1]])
         
+        def _append(*a):
+            """Mutating append: modifies list in-place and returns it"""
+            if len(a) != 2: 
+                return EvaluationError("append() takes 2 arguments: append(list, item)")
+            if not isinstance(a[0], List): 
+                return EvaluationError("append() first argument must be a list")
+            # Mutate the list in-place
+            a[0].append(a[1])
+            return a[0]
+        
+        def _extend(*a):
+            """Mutating extend: modifies list in-place by adding elements from another list"""
+            if len(a) != 2: 
+                return EvaluationError("extend() takes 2 arguments: extend(list, other_list)")
+            if not isinstance(a[0], List): 
+                return EvaluationError("extend() first argument must be a list")
+            if not isinstance(a[1], List): 
+                return EvaluationError("extend() second argument must be a list")
+            # Mutate the list in-place
+            a[0].extend(a[1])
+            return a[0]
+        
         def _reduce(*a):
             if len(a) < 2: 
                 return EvaluationError("reduce(arr, fn, [init])")
@@ -1108,6 +1130,8 @@ class FunctionEvaluatorMixin:
             "first": Builtin(_first, "first"),
             "rest": Builtin(_rest, "rest"),
             "push": Builtin(_push, "push"),
+            "append": Builtin(_append, "append"),  # Mutating list append
+            "extend": Builtin(_extend, "extend"),  # Mutating list extend
             "reduce": Builtin(_reduce, "reduce"),
             "map": Builtin(_map, "map"),
             "filter": Builtin(_filter, "filter"),

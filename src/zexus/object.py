@@ -62,6 +62,17 @@ class List(Object):
             return NULL
         except Exception:
             return NULL
+    
+    def append(self, item):
+        """Append item to list in-place (mutating operation)"""
+        self.elements.append(item)
+        return self  # Return self for method chaining
+    
+    def extend(self, other_list):
+        """Extend list with another list in-place"""
+        if isinstance(other_list, List):
+            self.elements.extend(other_list.elements)
+        return self
 
 class Map(Object):
     def __init__(self, pairs):

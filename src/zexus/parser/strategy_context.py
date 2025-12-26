@@ -5576,8 +5576,8 @@ class ContextStackParser:
     def _parse_protect_statement(self, block_info, all_tokens):
         """Parse protect statement.
         
-        Form: protect <target> { <rules> }
-        Example: protect Profile.update_email { verify(...) restrict(...) }
+        Form: protect(<target>, <rules>, <level>)
+        Example: protect(transfer_funds, {rate_limit: 10}, "strict")
         """
         parser_debug("🔧 [Context] Parsing protect statement")
         tokens = block_info.get('tokens', [])
@@ -5586,6 +5586,66 @@ class ContextStackParser:
             parser_debug("  ❌ Expected PROTECT keyword")
             return None
         
+        # Check if it's function-call style: protect(...)
+        if len(tokens) > 1 and tokens[1].type == LPAREN:
+            # Find matching RPAREN
+            paren_depth = 0
+            rparen_idx = -1
+            for i in range(1, len(tokens)):
+                if tokens[i].type == LPAREN:
+                    paren_depth += 1
+                elif tokens[i].type == RPAREN:
+                    paren_depth -= 1
+                    if paren_depth == 0:
+                        rparen_idx = i
+                        break
+            
+            if rparen_idx == -1:
+                parser_debug("  ❌ Unmatched parentheses in protect")
+                return None
+            
+            # Parse arguments: target, rules, [enforcement_level]
+            args_tokens = tokens[2:rparen_idx]
+            args = []
+            current_arg = []
+            depth = 0
+            
+            for t in args_tokens:
+                if t.type in (LPAREN, LBRACE, LBRACKET):
+                    depth += 1
+                    current_arg.append(t)
+                elif t.type in (RPAREN, RBRACE, RBRACKET):
+                    depth -= 1
+                    current_arg.append(t)
+                elif t.type == COMMA and depth == 0:
+                    if current_arg:
+                        args.append(current_arg)
+                        current_arg = []
+                else:
+                    current_arg.append(t)
+            
+            if current_arg:
+                args.append(current_arg)
+            
+            # Parse target (first argument)
+            target = self._parse_expression(args[0]) if len(args) > 0 else None
+            
+            # Parse rules (second argument - should be a map literal)
+            rules = self._parse_expression(args[1]) if len(args) > 1 else None
+            
+            # Parse enforcement level (third argument - optional string)
+            enforcement_level = None
+            if len(args) > 2:
+                level_expr = self._parse_expression(args[2])
+                if isinstance(level_expr, StringLiteral):
+                    enforcement_level = level_expr.value
+            
+            parser_debug("  ✅ Protect statement (function-call style)")
+            stmt = ProtectStatement(target=target, rules=rules)
+            stmt.enforcement_level = enforcement_level
+            return stmt
+        
+        # Old style: protect <target> { <rules> }
         # Find LBRACE to separate target from rules
         brace_idx = -1
         for i, t in enumerate(tokens):
@@ -5607,7 +5667,7 @@ class ContextStackParser:
         rules_block = BlockStatement()
         rules_block.statements = rules
         
-        parser_debug("  ✅ Protect statement")
+        parser_debug("  ✅ Protect statement (block style)")
         return ProtectStatement(target=target, rules=rules_block)
 
     def _parse_middleware_statement(self, block_info, all_tokens):
