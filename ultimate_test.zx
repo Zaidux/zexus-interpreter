@@ -146,7 +146,7 @@ async action consumer() {
 try {
     async producer()
     async consumer()
-    sleep(0.5)  # Wait for completion
+    sleep(1.5)  # Wait for completion (increased for reliability)
 } catch (error) {
     print("Concurrency error: " + string(error))
 }

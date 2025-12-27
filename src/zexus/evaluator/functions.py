@@ -1300,6 +1300,154 @@ class FunctionEvaluatorMixin:
             
             return EvaluationError(f"sleep() argument must be a number, got {type(seconds).__name__}")
         
+        def _wait_group(*a):
+            """Create a wait group for synchronizing async operations: wg = wait_group()
+            
+            Example:
+                let wg = wait_group()
+                wg.add(2)  # Expecting 2 tasks
+                async task1()
+                async task2()
+                wg.wait()  # Blocks until both tasks call wg.done()
+            """
+            from ..concurrency_system import WaitGroup
+            
+            if len(a) != 0:
+                return EvaluationError("wait_group() takes no arguments")
+            
+            return WaitGroup()
+        
+        def _wg_add(*a):
+            """Add delta to wait group counter: wg.add(delta)"""
+            if len(a) != 2:
+                return EvaluationError("wg_add() requires 2 arguments: wait_group, delta")
+            
+            wg = a[0]
+            delta_obj = a[1]
+            
+            if not hasattr(wg, 'add'):
+                return EvaluationError(f"wg_add() first argument must be a WaitGroup, got {type(wg).__name__}")
+            
+            if isinstance(delta_obj, Integer):
+                try:
+                    wg.add(delta_obj.value)
+                    return NULL
+                except Exception as e:
+                    return EvaluationError(f"wg_add() error: {str(e)}")
+            elif isinstance(delta_obj, int):
+                try:
+                    wg.add(delta_obj)
+                    return NULL
+                except Exception as e:
+                    return EvaluationError(f"wg_add() error: {str(e)}")
+            
+            return EvaluationError(f"wg_add() delta must be an integer, got {type(delta_obj).__name__}")
+        
+        def _wg_done(*a):
+            """Decrement wait group counter: wg.done()"""
+            if len(a) != 1:
+                return EvaluationError("wg_done() requires 1 argument: wait_group")
+            
+            wg = a[0]
+            
+            if not hasattr(wg, 'done'):
+                return EvaluationError(f"wg_done() argument must be a WaitGroup, got {type(wg).__name__}")
+            
+            try:
+                wg.done()
+                return NULL
+            except Exception as e:
+                return EvaluationError(f"wg_done() error: {str(e)}")
+        
+        def _wg_wait(*a):
+            """Wait for wait group counter to reach zero: wg.wait()"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("wg_wait() requires 1 or 2 arguments: wait_group [, timeout]")
+            
+            wg = a[0]
+            timeout = None
+            
+            if len(a) == 2:
+                timeout_obj = a[1]
+                if isinstance(timeout_obj, (Integer, Float)):
+                    timeout = float(timeout_obj.value)
+                elif isinstance(timeout_obj, (int, float)):
+                    timeout = float(timeout_obj)
+                else:
+                    return EvaluationError(f"wg_wait() timeout must be a number, got {type(timeout_obj).__name__}")
+            
+            if not hasattr(wg, 'wait'):
+                return EvaluationError(f"wg_wait() first argument must be a WaitGroup, got {type(wg).__name__}")
+            
+            try:
+                success = wg.wait(timeout=timeout)
+                return TRUE if success else FALSE
+            except Exception as e:
+                return EvaluationError(f"wg_wait() error: {str(e)}")
+        
+        def _barrier(*a):
+            """Create a barrier for synchronizing N tasks: barrier = barrier(parties)
+            
+            Example:
+                let barrier = barrier(2)  # Wait for 2 tasks
+                async task1()  # Will call barrier.wait()
+                async task2()  # Will call barrier.wait()
+                # Both released once both reach barrier
+            """
+            from ..concurrency_system import Barrier
+            
+            if len(a) != 1:
+                return EvaluationError("barrier() requires 1 argument: parties")
+            
+            parties_obj = a[0]
+            if isinstance(parties_obj, Integer):
+                try:
+                    return Barrier(parties=parties_obj.value)
+                except Exception as e:
+                    return EvaluationError(f"barrier() error: {str(e)}")
+            
+            return EvaluationError(f"barrier() parties must be an integer, got {type(parties_obj).__name__}")
+        
+        def _barrier_wait(*a):
+            """Wait at barrier until all parties arrive: barrier.wait()"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("barrier_wait() requires 1 or 2 arguments: barrier [, timeout]")
+            
+            barrier = a[0]
+            timeout = None
+            
+            if len(a) == 2:
+                timeout_obj = a[1]
+                if isinstance(timeout_obj, (Integer, Float)):
+                    timeout = float(timeout_obj.value)
+                else:
+                    return EvaluationError(f"barrier_wait() timeout must be a number, got {type(timeout_obj).__name__}")
+            
+            if not hasattr(barrier, 'wait'):
+                return EvaluationError(f"barrier_wait() first argument must be a Barrier, got {type(barrier).__name__}")
+            
+            try:
+                generation = barrier.wait(timeout=timeout)
+                return Integer(generation)
+            except Exception as e:
+                return EvaluationError(f"barrier_wait() error: {str(e)}")
+        
+        def _barrier_reset(*a):
+            """Reset barrier to initial state: barrier.reset()"""
+            if len(a) != 1:
+                return EvaluationError("barrier_reset() requires 1 argument: barrier")
+            
+            barrier = a[0]
+            
+            if not hasattr(barrier, 'reset'):
+                return EvaluationError(f"barrier_reset() argument must be a Barrier, got {type(barrier).__name__}")
+            
+            try:
+                barrier.reset()
+                return NULL
+            except Exception as e:
+                return EvaluationError(f"barrier_reset() error: {str(e)}")
+        
         # Register concurrency builtins
         self.builtins.update({
             "send": Builtin(_send, "send"),
@@ -1307,6 +1455,13 @@ class FunctionEvaluatorMixin:
             "close_channel": Builtin(_close_channel, "close_channel"),
             "async": Builtin(_async, "async"),
             "sleep": Builtin(_sleep, "sleep"),
+            "wait_group": Builtin(_wait_group, "wait_group"),
+            "wg_add": Builtin(_wg_add, "wg_add"),
+            "wg_done": Builtin(_wg_done, "wg_done"),
+            "wg_wait": Builtin(_wg_wait, "wg_wait"),
+            "barrier": Builtin(_barrier, "barrier"),
+            "barrier_wait": Builtin(_barrier_wait, "barrier_wait"),
+            "barrier_reset": Builtin(_barrier_reset, "barrier_reset"),
         })
     
     def _register_blockchain_builtins(self):

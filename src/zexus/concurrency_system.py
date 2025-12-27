@@ -187,6 +187,146 @@ class Atomic:
     def is_locked(self) -> bool:
         """Check if currently locked"""
         return self._depth > 0
+
+
+@dataclass
+class WaitGroup:
+    """
+    Wait group for synchronizing multiple async operations
+    
+    Similar to Go's sync.WaitGroup - allows waiting for a collection
+    of tasks to complete. Useful for coordinating producer-consumer patterns.
+    
+    Example:
+        let wg = wait_group()
+        wg.add(2)  # Expecting 2 tasks
+        
+        async action task1() {
+            # ... work ...
+            wg.done()
+        }
+        
+        async action task2() {
+            # ... work ...
+            wg.done()
+        }
+        
+        async task1()
+        async task2()
+        wg.wait()  # Blocks until both tasks call done()
+    """
+    _count: int = field(default=0)
+    _lock: Lock = field(default_factory=Lock)
+    _zero_event: Event = field(default_factory=Event)
+    
+    def __post_init__(self):
+        # Start with event set (count is 0)
+        self._zero_event.set()
+    
+    def add(self, delta: int = 1):
+        """Add delta to the wait group counter"""
+        with self._lock:
+            self._count += delta
+            if self._count < 0:
+                raise ValueError("WaitGroup counter cannot be negative")
+            if self._count == 0:
+                self._zero_event.set()
+            else:
+                self._zero_event.clear()
+    
+    def done(self):
+        """Decrement the wait group counter by 1"""
+        self.add(-1)
+    
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """
+        Wait until the counter reaches zero
+        
+        Args:
+            timeout: Maximum wait time in seconds (None = infinite)
+            
+        Returns:
+            True if counter reached zero, False if timeout
+        """
+        return self._zero_event.wait(timeout=timeout)
+    
+    def count(self) -> int:
+        """Get current counter value"""
+        with self._lock:
+            return self._count
+
+
+@dataclass
+class Barrier:
+    """
+    Synchronization barrier for coordinating multiple tasks
+    
+    Allows multiple tasks to wait at a barrier point until all have arrived.
+    Once all parties arrive, all are released simultaneously.
+    
+    Example:
+        let barrier = barrier(2)  # Wait for 2 tasks
+        
+        async action task1() {
+            # ... phase 1 work ...
+            barrier.wait()  # Wait for task2
+            # ... phase 2 work ...
+        }
+        
+        async action task2() {
+            # ... phase 1 work ...
+            barrier.wait()  # Wait for task1
+            # ... phase 2 work ...
+        }
+    """
+    parties: int  # Number of tasks that must call wait()
+    _count: int = field(default=0)
+    _generation: int = field(default=0)
+    _lock: Lock = field(default_factory=Lock)
+    _condition: Condition = field(default=None)
+    
+    def __post_init__(self):
+        if self.parties <= 0:
+            raise ValueError("Barrier parties must be positive")
+        if self._condition is None:
+            self._condition = Condition(self._lock)
+    
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """
+        Wait at the barrier until all parties arrive
+        
+        Args:
+            timeout: Maximum wait time in seconds (None = infinite)
+            
+        Returns:
+            Barrier generation number (increments each cycle)
+            
+        Raises:
+            RuntimeError: On timeout
+        """
+        with self._condition:
+            generation = self._generation
+            self._count += 1
+            
+            if self._count == self.parties:
+                # Last one to arrive - release all
+                self._count = 0
+                self._generation += 1
+                self._condition.notify_all()
+                return generation
+            else:
+                # Wait for others
+                while generation == self._generation:
+                    if not self._condition.wait(timeout=timeout):
+                        raise RuntimeError(f"Barrier timeout waiting for {self.parties - self._count} more tasks")
+                return generation
+    
+    def reset(self):
+        """Reset the barrier to initial state"""
+        with self._condition:
+            self._count = 0
+            self._generation += 1
+            self._condition.notify_all()
     
     def __repr__(self) -> str:
         return f"Atomic(depth={self._depth}, locked={self.is_locked()})"
