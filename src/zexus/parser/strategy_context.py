@@ -882,20 +882,66 @@ class ContextStackParser:
         return fields
 
     def _parse_print_statement_block(self, block_info, all_tokens):
-        """Parse print statement block - RETURNS PrintStatement"""
+        """Parse print statement block with support for multiple comma-separated arguments"""
         parser_debug("🔧 [Context] Parsing print statement")
         tokens = block_info['tokens']
 
         if len(tokens) < 2:
-            return PrintStatement(StringLiteral(""))
+            return PrintStatement(values=[])
 
+        # Get all tokens after PRINT keyword
         expression_tokens = tokens[1:]
-        expression = self._parse_expression(expression_tokens)
-
-        if expression is None:
-            expression = StringLiteral("")
-
-        return PrintStatement(expression)
+        
+        # If the tokens start with ( and end with ), strip them (they're the print() parens, not nesting)
+        tokens_to_parse = expression_tokens
+        if len(expression_tokens) >= 2 and expression_tokens[0].type == LPAREN and expression_tokens[-1].type == RPAREN:
+            # Strip outer parentheses
+            tokens_to_parse = expression_tokens[1:-1]
+        
+        # Split by commas to get individual expressions
+        values = []
+        current_expr_tokens = []
+        paren_depth = 0
+        bracket_depth = 0
+        brace_depth = 0
+        
+        for token in tokens_to_parse:
+            # Track nesting depth
+            if token.type == LPAREN:
+                paren_depth += 1
+            elif token.type == RPAREN:
+                paren_depth -= 1
+            elif token.type == LBRACKET:
+                bracket_depth += 1
+            elif token.type == RBRACKET:
+                bracket_depth -= 1
+            elif token.type == LBRACE:
+                brace_depth += 1
+            elif token.type == RBRACE:
+                brace_depth -= 1
+            
+            # If we find a comma at depth 0, it's a separator
+            if token.type == COMMA and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
+                # Parse the accumulated tokens as an expression
+                if current_expr_tokens:
+                    expr = self._parse_expression(current_expr_tokens)
+                    if expr:
+                        values.append(expr)
+                    current_expr_tokens = []
+            else:
+                current_expr_tokens.append(token)
+        
+        # Parse the last expression
+        if current_expr_tokens:
+            expr = self._parse_expression(current_expr_tokens)
+            if expr:
+                values.append(expr)
+        
+        # If no values found, use empty string for backward compatibility
+        if not values:
+            values = [StringLiteral("")]
+        
+        return PrintStatement(values=values)
 
     def _parse_debug_statement_block(self, block_info, all_tokens):
         """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
@@ -1032,9 +1078,35 @@ class ContextStackParser:
                     break
 
         if brace_start != -1 and brace_end != -1:
-            # Parse properties and actions inside braces
+            # Parse properties, injections, and actions inside braces
             i = brace_start + 1
             while i < brace_end:
+                # Check for inject statements (dependency injection)
+                if tokens[i].type == INJECT:
+                    parser_debug(f"  🔌 Found inject statement")
+                    i += 1  # Move past INJECT
+                    
+                    # Get dependency name
+                    if i < brace_end and tokens[i].type == IDENT:
+                        dep_name = tokens[i].literal
+                        i += 1
+                        
+                        # Skip optional type annotation (: Type)
+                        if i < brace_end and tokens[i].type == COLON:
+                            i += 1  # Skip colon
+                            if i < brace_end and tokens[i].type == IDENT:
+                                i += 1  # Skip type
+                        
+                        # Add as a special property with inject flag
+                        properties.append(AstNodeShim(
+                            name=Identifier(dep_name),
+                            type=Identifier("injected"),
+                            default_value=None,
+                            is_injected=True
+                        ))
+                        parser_debug(f"  🔌 Injected dependency: {dep_name}")
+                    continue
+                
                 # Check for action (method) definitions
                 if tokens[i].type == ACTION:
                     # Parse action like in contract parser
@@ -1613,17 +1685,56 @@ class ContextStackParser:
                     parser_debug(f"    📝 Found print statement: {[t.literal for t in print_tokens]}")
 
                 if len(print_tokens) > 1:
-                    # Fast-path: if the print contains exactly a single string literal
-                    # (e.g. print "hello"; or print("hello");), treat it as a literal.
-                    if len(print_tokens) == 2 and print_tokens[1].type == STRING:
-                        statements.append(PrintStatement(StringLiteral(print_tokens[1].literal)))
-                    else:
-                        # Otherwise parse the full expression (handles concatenation and variables)
-                        expr = self._parse_expression(print_tokens[1:])
-                        if expr:
-                            statements.append(PrintStatement(expr))
+                    # Parse the expression tokens (skip PRINT keyword)
+                    expr_tokens = print_tokens[1:]
+                    
+                    # If tokens start with ( and end with ), strip them (print() syntax)
+                    tokens_to_parse = expr_tokens
+                    if len(expr_tokens) >= 2 and expr_tokens[0].type == LPAREN and expr_tokens[-1].type == RPAREN:
+                        tokens_to_parse = expr_tokens[1:-1]
+                    
+                    # Split by commas to get multiple arguments
+                    values = []
+                    current_expr_tokens = []
+                    paren_depth = 0
+                    bracket_depth = 0
+                    brace_depth = 0
+                    
+                    for token in tokens_to_parse:
+                        if token.type == LPAREN:
+                            paren_depth += 1
+                        elif token.type == RPAREN:
+                            paren_depth -= 1
+                        elif token.type == LBRACKET:
+                            bracket_depth += 1
+                        elif token.type == RBRACKET:
+                            bracket_depth -= 1
+                        elif token.type == LBRACE:
+                            brace_depth += 1
+                        elif token.type == RBRACE:
+                            brace_depth -= 1
+                        
+                        # Comma at depth 0 is a separator
+                        if token.type == COMMA and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
+                            if current_expr_tokens:
+                                expr = self._parse_expression(current_expr_tokens)
+                                if expr:
+                                    values.append(expr)
+                                current_expr_tokens = []
                         else:
-                            statements.append(PrintStatement(StringLiteral("")))
+                            current_expr_tokens.append(token)
+                    
+                    # Parse the last expression
+                    if current_expr_tokens:
+                        expr = self._parse_expression(current_expr_tokens)
+                        if expr:
+                            values.append(expr)
+                    
+                    # If no values found, use empty string
+                    if not values:
+                        values = [StringLiteral("")]
+                    
+                    statements.append(PrintStatement(values=values))
 
                 i = j
 
@@ -3063,13 +3174,13 @@ class ContextStackParser:
             return None
 
     def _parse_print_statement(self, block_info, all_tokens):
-        """Parse print statement with sophisticated expression parsing and boundary detection"""
+        """Parse print statement with support for multiple comma-separated arguments"""
         parser_debug("🔧 [Context] Parsing print statement with enhanced expression boundary detection")
         tokens = block_info['tokens']
 
         # Need at least PRINT token + one value token
         if len(tokens) < 2:
-            return PrintStatement(StringLiteral(""))
+            return PrintStatement(values=[])
 
         # Collect tokens up to a statement boundary
         inner_tokens = []
@@ -3094,12 +3205,62 @@ class ContextStackParser:
             inner_tokens.append(token)
 
         if not inner_tokens:
-            return PrintStatement(StringLiteral(""))
+            return PrintStatement(values=[])
 
         parser_debug(f"  📝 Print statement tokens: {[t.literal for t in inner_tokens]}")
-        expression = self._parse_expression(inner_tokens)
-        parser_debug(f"  ✅ Parsed print expression: {type(expression).__name__ if expression else 'None'}")
-        return PrintStatement(expression if expression is not None else StringLiteral(""))
+        
+        # NEW: Handle comma-separated arguments
+        # If the tokens start with ( and end with ), strip them (they're the print() parens, not nesting)
+        tokens_to_parse = inner_tokens
+        if len(inner_tokens) >= 2 and inner_tokens[0].type == LPAREN and inner_tokens[-1].type == RPAREN:
+            # Strip outer parentheses
+            tokens_to_parse = inner_tokens[1:-1]
+        
+        # Split by commas to get individual expressions
+        values = []
+        current_expr_tokens = []
+        paren_depth = 0
+        bracket_depth = 0
+        brace_depth = 0
+        
+        for token in tokens_to_parse:
+            # Track nesting depth
+            if token.type == LPAREN:
+                paren_depth += 1
+            elif token.type == RPAREN:
+                paren_depth -= 1
+            elif token.type == LBRACKET:
+                bracket_depth += 1
+            elif token.type == RBRACKET:
+                bracket_depth -= 1
+            elif token.type == LBRACE:
+                brace_depth += 1
+            elif token.type == RBRACE:
+                brace_depth -= 1
+            
+            # If we find a comma at depth 0, it's a separator
+            if token.type == COMMA and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
+                # Parse the accumulated tokens as an expression
+                if current_expr_tokens:
+                    expr = self._parse_expression(current_expr_tokens)
+                    if expr:
+                        values.append(expr)
+                    current_expr_tokens = []
+            else:
+                current_expr_tokens.append(token)
+        
+        # Parse the last expression
+        if current_expr_tokens:
+            expr = self._parse_expression(current_expr_tokens)
+            if expr:
+                values.append(expr)
+        
+        # If no values found, use empty string for backward compatibility
+        if not values:
+            values = [StringLiteral("")]
+        
+        parser_debug(f"  ✅ Parsed {len(values)} print arguments")
+        return PrintStatement(values=values)
 
     def _parse_return_statement(self, block_info, all_tokens):
         """Parse return statement"""

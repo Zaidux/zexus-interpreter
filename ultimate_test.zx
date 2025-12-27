@@ -1,8 +1,6 @@
 # ultimate_test.zx - Pushing Zexus to Its Limits
 # This tests performance, edge cases, and advanced features
 
-continue;
-
 print("🚀 ZEXUS ULTIMATE STRESS TEST 🚀\n")
 print("Starting at: " + timestamp() + "\n")
 

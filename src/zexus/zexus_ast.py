@@ -176,11 +176,13 @@ class TxStatement(Statement):
         return f"TxStatement(body={self.body})"
 
 class PrintStatement(Statement):
-    def __init__(self, value): 
+    def __init__(self, value=None, values=None): 
+        # Support both single value (legacy) and multiple values
         self.value = value
+        self.values = values if values is not None else ([value] if value is not None else [])
 
     def __repr__(self):
-        return f"PrintStatement(value={self.value})"
+        return f"PrintStatement(values={self.values})"
 
 class ForEachStatement(Statement):
     def __init__(self, item, iterable, body):

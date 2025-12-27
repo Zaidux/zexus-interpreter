@@ -1686,6 +1686,7 @@ class StatementEvaluatorMixin:
     def eval_entity_statement(self, node, env, stack_trace):
         props = {}
         methods = {}
+        injected_deps = []  # Track which properties are injected dependencies
         
         # Handle inheritance - get parent properties first
         if node.parent:
@@ -1700,30 +1701,39 @@ class StatementEvaluatorMixin:
                 return EvaluationError(f"'{node.parent.value}' exists but is not an entity")
         
         for prop in node.properties:
+            # Check if this is an injected dependency
+            is_injected = getattr(prop, 'is_injected', False)
+            
             # Handle both dict and object formats
             if isinstance(prop, dict):
                 p_name = prop['name']
                 p_type = prop['type']
             else:
                 p_name = prop.name.value
-                p_type = prop.type.value
+                p_type = prop.type.value if hasattr(prop.type, 'value') else str(prop.type)
             
-            def_val = NULL
-            
-            if isinstance(prop, dict):
-                # For dict format, default_value is in the dict
-                if 'default_value' in prop:
-                    def_val = self.eval_node(prop['default_value'], env, stack_trace)
-                    if is_error(def_val): 
-                        return def_val
+            if is_injected:
+                # This is an injected dependency - mark for injection during instantiation
+                injected_deps.append(p_name)
+                props[p_name] = {"type": p_type, "default_value": NULL, "injected": True}
+                debug_log("eval_entity_statement", f"Marked {p_name} as injected dependency")
             else:
-                # For object format, default_value is an attribute
-                if getattr(prop, 'default_value', None):
-                    def_val = self.eval_node(prop.default_value, env, stack_trace)
-                    if is_error(def_val): 
-                        return def_val
-            
-            props[p_name] = {"type": p_type, "default_value": def_val}
+                def_val = NULL
+                
+                if isinstance(prop, dict):
+                    # For dict format, default_value is in the dict
+                    if 'default_value' in prop:
+                        def_val = self.eval_node(prop['default_value'], env, stack_trace)
+                        if is_error(def_val): 
+                            return def_val
+                else:
+                    # For object format, default_value is an attribute
+                    if getattr(prop, 'default_value', None):
+                        def_val = self.eval_node(prop.default_value, env, stack_trace)
+                        if is_error(def_val): 
+                            return def_val
+                
+                props[p_name] = {"type": p_type, "default_value": def_val}
         
         # Process methods (actions defined inside the entity)
         if hasattr(node, 'methods') and node.methods:
@@ -1743,6 +1753,10 @@ class StatementEvaluatorMixin:
         # Use the EntityDefinition from security.py which supports methods
         from ..security import EntityDefinition as SecurityEntityDef
         entity = SecurityEntityDef(node.name.value, props, methods, parent_ref)
+        
+        # Store injected dependencies list for constructor use
+        entity.injected_deps = injected_deps
+        
         env.set(node.name.value, entity)
         return NULL
     
@@ -2281,21 +2295,42 @@ class StatementEvaluatorMixin:
     # === MISC STATEMENTS ===
     
     def eval_print_statement(self, node, env, stack_trace):
-        if not hasattr(node, 'value') or node.value is None:
+        # Handle both legacy single value and new multiple values
+        values_to_print = []
+        
+        if hasattr(node, 'values') and node.values:
+            # New format with multiple values
+            for expr in node.values:
+                val = self.eval_node(expr, env, stack_trace)
+                if is_error(val):
+                    print(f"❌ Error: {val}", file=sys.stderr)
+                    return NULL
+                values_to_print.append(val)
+        elif hasattr(node, 'value') and node.value is not None:
+            # Legacy single value format
+            val = self.eval_node(node.value, env, stack_trace)
+            if is_error(val):
+                print(f"❌ Error: {val}", file=sys.stderr)
+                return NULL
+            values_to_print.append(val)
+        else:
             return NULL
         
-        val = self.eval_node(node.value, env, stack_trace)
-        if is_error(val):
-            print(f"❌ Error: {val}", file=sys.stderr)
-            return NULL
-        # Emit print output and trail events
-        output = val.inspect() if hasattr(val, 'inspect') else str(val)
+        # Convert all values to strings and join with space
+        output_parts = []
+        for v in values_to_print:
+            part = v.inspect() if hasattr(v, 'inspect') else str(v)
+            output_parts.append(part)
+        
+        output = ' '.join(output_parts)
         print(output)
+        
         try:
             ctx = get_security_context()
             ctx.emit_event('print', {'value': output})
         except Exception:
             pass
+        
         return NULL
     
     def eval_screen_statement(self, node, env, stack_trace):

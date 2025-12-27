@@ -552,9 +552,9 @@ class StructuralAnalyzer:
                     stmt_tokens.append(tj)
                     j += 1
                     
-                    # CRITICAL: For simple statements (PRINT, RETURN, etc.), stop after closing parens
-                    # This prevents collecting tokens from the next line
-                    if t.type in {PRINT, RETURN, CONTINUE} and nesting == 0 and tj.type == RPAREN:
+                    # MODIFIED: For RETURN and CONTINUE, stop after closing parens
+                    # But PRINT can have multiple comma-separated arguments, so don't break for PRINT
+                    if t.type in {RETURN, CONTINUE} and nesting == 0 and tj.type == RPAREN:
                         break
                     
                     # If we just closed a brace block and are back at nesting 0, stop

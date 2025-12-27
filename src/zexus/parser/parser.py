@@ -1179,10 +1179,25 @@ class UltimateParser:
         )
 
     def parse_print_statement(self):
-        """Tolerant print statement parser"""
-        stmt = PrintStatement(value=None)
+        """Tolerant print statement parser with support for multiple arguments"""
+        stmt = PrintStatement(values=[])
         self.next_token()
-        stmt.value = self.parse_expression(LOWEST)
+        
+        # Parse first expression
+        first_expr = self.parse_expression(LOWEST)
+        if first_expr:
+            stmt.values.append(first_expr)
+        
+        # Parse additional comma-separated expressions
+        while self.peek_token_is(COMMA):
+            self.next_token()  # consume comma
+            self.next_token()  # move to next expression
+            expr = self.parse_expression(LOWEST)
+            if expr:
+                stmt.values.append(expr)
+        
+        # Keep backward compatibility with .value for single-expression prints
+        stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
 
         # TOLERANT: Semicolon is optional
         if self.peek_token_is(SEMICOLON):

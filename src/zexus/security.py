@@ -509,8 +509,30 @@ class EntityDefinition:
         self.parent = parent          # Parent entity (inheritance)
 
     def create_instance(self, values=None):
-        """Create an instance of this entity"""
-        instance = EntityInstance(self, values or {})
+        """Create an instance of this entity with dependency injection support"""
+        # Perform dependency injection for marked properties
+        injected_values = values or {}
+        
+        # Check if this entity has injected dependencies
+        if hasattr(self, 'injected_deps') and self.injected_deps:
+            from ..dependency_injection import get_di_registry
+            
+            registry = get_di_registry()
+            # Use __main__ as default module context
+            container = registry.get_container("__main__")
+            
+            for dep_name in self.injected_deps:
+                if dep_name not in injected_values:
+                    # Try to inject from DI container
+                    try:
+                        injected_value = container.get(dep_name)
+                        injected_values[dep_name] = injected_value
+                    except Exception as e:
+                        # Dependency not available - use NULL placeholder
+                        from ..object import NULL
+                        injected_values[dep_name] = NULL
+        
+        instance = EntityInstance(self, injected_values)
         return instance
 
     def get_all_properties(self):
@@ -583,8 +605,8 @@ class EntityInstance:
         from src.zexus.evaluator.core import Evaluator
         evaluator = Evaluator()
         
-        # Execute the method body
-        result = evaluator.eval_node(method.body, method_env)
+        # Execute the method body with stack trace
+        result = evaluator.eval_node(method.body, method_env, stack_trace=[])
         
         # Unwrap return values
         from src.zexus.object import ReturnValue
