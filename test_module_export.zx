@@ -1,0 +1,9 @@
+module TestMod {
+  action greet() {
+    return "Hello"
+  }
+  export greet
+}
+
+from test_module_export use greet
+print(greet())

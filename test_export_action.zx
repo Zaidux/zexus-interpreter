@@ -1,0 +1,13 @@
+// Test export action syntax
+export action add(a, b) {
+    return a + b
+}
+
+export function multiply(x, y) {
+    return x * y
+}
+
+// Test using the exported functions
+print("Testing export action syntax:")
+print("add(5, 3) = " + string(add(5, 3)))
+print("multiply(4, 7) = " + string(multiply(4, 7)))

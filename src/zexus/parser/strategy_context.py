@@ -1746,6 +1746,57 @@ class ContextStackParser:
 
             # EXPORT statement heuristic
             elif token.type == EXPORT:
+                # Check for syntactic sugar: export action/function
+                if i + 1 < len(tokens) and tokens[i + 1].type in [ACTION, FUNCTION]:
+                    # This is "export action name() {}" or "export function name() {}"
+                    # Parse the action/function definition first
+                    j = i + 2  # Start after EXPORT ACTION/FUNCTION
+                    
+                    # Find the function name
+                    if j < len(tokens) and tokens[j].type == IDENT:
+                        func_name = tokens[j].literal
+                        j += 1
+                        
+                        # Skip parameters (find matching parens)
+                        if j < len(tokens) and tokens[j].type == LPAREN:
+                            paren_depth = 1
+                            j += 1
+                            while j < len(tokens) and paren_depth > 0:
+                                if tokens[j].type == LPAREN:
+                                    paren_depth += 1
+                                elif tokens[j].type == RPAREN:
+                                    paren_depth -= 1
+                                j += 1
+                        
+                        # Find the body block
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            brace_depth = 1
+                            j += 1
+                            while j < len(tokens) and brace_depth > 0:
+                                if tokens[j].type == LBRACE:
+                                    brace_depth += 1
+                                elif tokens[j].type == RBRACE:
+                                    brace_depth -= 1
+                                j += 1
+                        
+                        # Now parse the function tokens (excluding EXPORT)
+                        func_tokens = tokens[i + 1:j]
+                        parser_debug(f"    📝 Found export action/function: {func_name}")
+                        
+                        # Create a sub-parser for the function
+                        from .parser import Parser as MainParser
+                        func_parser = MainParser(func_tokens)
+                        func_stmt = func_parser.parse_statement()
+                        
+                        if func_stmt:
+                            statements.append(func_stmt)
+                            # Add export statement for the function name
+                            statements.append(ExportStatement(names=[Identifier(func_name)]))
+                        
+                        i = j
+                        continue
+                
+                # Standard export syntax
                 j = i + 1
                 # if the export uses a brace block, include the whole brace section
                 if j < len(tokens) and tokens[j].type == LBRACE:

@@ -1192,8 +1192,21 @@ class StatementEvaluatorMixin:
             for name_node in names:
                 name = name_node.value if hasattr(name_node, 'value') else str(name_node)
                 
-                # Try to get from exports first
-                value = exports.get(name)
+                # First check if there's a Module object with exports
+                value = None
+                for key in module_env.store if hasattr(module_env, 'store') else []:
+                    potential_module = module_env.get(key)
+                    if potential_module and hasattr(potential_module, 'exports') and hasattr(potential_module, 'get_member'):
+                        if name in potential_module.exports:
+                            member = potential_module.get_member(name)
+                            if member:
+                                value = member.value
+                                break
+                
+                # Try to get from exports if not found in Module
+                if value is None:
+                    value = exports.get(name)
+                
                 if value is None:
                     # Fallback: try to get from module environment directly
                     value = module_env.get(name)
@@ -1312,16 +1325,34 @@ class StatementEvaluatorMixin:
             src = name_pair[0].value if hasattr(name_pair[0], 'value') else str(name_pair[0])
             dest = name_pair[1].value if len(name_pair) > 1 and name_pair[1] else src
             
-            # Retrieve from module exports
-            exports = module_env.get_exports() if hasattr(module_env, 'get_exports') else {}
-            val = exports.get(src)
+            # First, check if there's a Module object in the environment
+            val = None
+            found_in_module = False
+            
+            # Look for modules in the module_env
+            for key in module_env.store if hasattr(module_env, 'store') else []:
+                potential_module = module_env.get(key)
+                if potential_module and hasattr(potential_module, 'exports') and hasattr(potential_module, 'get_member'):
+                    # This is a Module object - check if src is in its exports
+                    if src in potential_module.exports:
+                        member = potential_module.get_member(src)
+                        if member:
+                            val = member.value
+                            found_in_module = True
+                            break
+            
+            # If not found in module exports, try standard exports
+            if not found_in_module:
+                # Retrieve from module exports
+                exports = module_env.get_exports() if hasattr(module_env, 'get_exports') else {}
+                val = exports.get(src)
             
             if val is None:
                 # Fallback: check if it's in the environment directly
                 val = module_env.get(src)
             
             if val is None:
-                return EvaluationError(f"From import: '{src}' not found in {file_path}")
+                return EvaluationError(f"'{src}' is not exported from {file_path}")
             
             # Security Check
             if importer_file and not self._check_import_permission(val, importer_file):
@@ -1338,10 +1369,19 @@ class StatementEvaluatorMixin:
         elif hasattr(node, 'name') and node.name:
             names = [node.name.value]
         
+        # Check if we're inside a module
+        current_module = env.get('__current_module__') if env else None
+        
         for nm in names:
             val = env.get(nm)
             if not val: 
                 return EvaluationError(f"Cannot export undefined: {nm}")
+            
+            # If inside a module, add to module's exports list
+            if current_module and hasattr(current_module, 'add_export'):
+                current_module.add_export(nm)
+            
+            # Also do standard env export
             try: 
                 env.export(nm, val)
             except Exception as e: 
@@ -3064,6 +3104,9 @@ class StatementEvaluatorMixin:
         
         # Execute module body in new environment
         module_env = Environment(outer=env)
+        
+        # Track current module for export statement handling
+        module_env.set('__current_module__', module)
         
         if hasattr(node, 'body') and node.body:
             self.eval_node(node.body, module_env, stack_trace)

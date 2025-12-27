@@ -1437,6 +1437,30 @@ class UltimateParser:
     def parse_export_statement(self):
         token = self.cur_token
 
+        # Check for syntactic sugar: export action name() {} or export function name() {}
+        if self.peek_token_is(ACTION) or self.peek_token_is(FUNCTION):
+            self.next_token()  # Move to ACTION/FUNCTION token
+            
+            # Parse the action/function normally
+            if self.cur_token_is(ACTION):
+                func_stmt = self.parse_action_statement()
+            else:  # FUNCTION
+                func_stmt = self.parse_function_statement()
+            
+            if func_stmt is None:
+                return None
+            
+            # Extract the function name for export
+            func_name = func_stmt.name.value if hasattr(func_stmt.name, 'value') else str(func_stmt.name)
+            
+            # Create a compound statement: the function definition + export
+            # We'll use a BlockStatement to hold both
+            from ..zexus_ast import BlockStatement, ExportStatement
+            export_stmt = ExportStatement(names=[Identifier(func_name)])
+            
+            # Return a block containing both statements
+            return BlockStatement(statements=[func_stmt, export_stmt])
+
         names = []
 
         # Support multiple forms: export { a, b }, export(a, b), export a, b ; export a:b; etc.
