@@ -1906,13 +1906,12 @@ class ContextStackParser:
                         func_tokens = tokens[i + 1:j]
                         parser_debug(f"    📝 Found export action/function: {func_name}")
                         
-                        # Create a sub-parser for the function
-                        from .parser import Parser as MainParser
-                        func_parser = MainParser(func_tokens)
-                        func_stmt = func_parser.parse_statement()
+                        # Parse using _parse_block_statements since we have tokens
+                        func_stmts = self._parse_block_statements(func_tokens)
                         
-                        if func_stmt:
-                            statements.append(func_stmt)
+                        if func_stmts:
+                            # Add the function statement
+                            statements.extend(func_stmts)
                             # Add export statement for the function name
                             statements.append(ExportStatement(names=[Identifier(func_name)]))
                         

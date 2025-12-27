@@ -109,6 +109,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif isinstance(node, zexus_ast.TryCatchStatement):
                 return self.eval_try_catch_statement(node, env, stack_trace)
             
+            elif isinstance(node, zexus_ast.ThrowStatement):
+                debug_log("  ThrowStatement node")
+                return self.eval_throw_statement(node, env, stack_trace)
+            
             elif isinstance(node, zexus_ast.IfStatement):
                 debug_log("  IfStatement node")
                 return self.eval_if_statement(node, env, stack_trace)

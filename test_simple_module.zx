@@ -1,0 +1,3 @@
+eval_file("test_module.zx")
+use {greet} from "test_module"
+print(greet("World"))
