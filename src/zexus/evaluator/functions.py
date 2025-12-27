@@ -831,6 +831,8 @@ class FunctionEvaluatorMixin:
         
         def _to_python_value(obj):
             """Helper to convert Zexus object to Python value"""
+            from ..security import EntityInstance as SecurityEntityInstance
+            
             if isinstance(obj, String):
                 return obj.value
             elif isinstance(obj, (Integer, Float)):
@@ -841,6 +843,12 @@ class FunctionEvaluatorMixin:
                 return [_to_python_value(v) for v in obj.elements]
             elif isinstance(obj, Map):
                 return {str(k): _to_python_value(v) for k, v in obj.pairs.items()}
+            elif isinstance(obj, SecurityEntityInstance):
+                # Convert entity to a dict with its properties
+                result = {}
+                for key, value in obj.data.items():
+                    result[key] = _to_python_value(value)
+                return result
             elif obj == NULL:
                 return None
             else:
@@ -859,7 +867,12 @@ class FunctionEvaluatorMixin:
             elif isinstance(val, list):
                 return List([_from_python_value(v) for v in val])
             elif isinstance(val, dict):
-                return Map({String(k): _from_python_value(v) for k, v in val.items()})
+                # Convert dict to Map with String keys
+                pairs = {}
+                for k, v in val.items():
+                    key = String(str(k)) if not isinstance(k, str) else String(k)
+                    pairs[key] = _from_python_value(v)
+                return Map(pairs)
             elif val is None:
                 return NULL
             else:

@@ -1,5 +1,0 @@
-module TestMod {
-  export action greet(name) {
-    return "Hello, " + name
-  }
-}

@@ -213,6 +213,55 @@ class StructuralAnalyzer:
                 block_id += 1
                 continue
 
+            # VERIFY statement detection - handle verify { ... }, "message" pattern
+            elif t.type == VERIFY:
+                start_idx = i
+                verify_tokens = [t]
+                i += 1
+
+                # Check if next token is LBRACE (block form)
+                if i < n and tokens[i].type == LBRACE:
+                    # Collect until matching closing brace
+                    brace_count = 1
+                    verify_tokens.append(tokens[i])
+                    i += 1
+
+                    while i < n and brace_count > 0:
+                        verify_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+
+                    # Check for comma and message after the block
+                    if i < n and tokens[i].type == COMMA:
+                        verify_tokens.append(tokens[i])
+                        i += 1
+
+                        # Collect the message (until semicolon, EOF, or next statement starter)
+                        while i < n and tokens[i].type not in stop_types and tokens[i].type not in statement_starters:
+                            verify_tokens.append(tokens[i])
+                            i += 1
+
+                    # Create block for verify statement
+                    filtered_tokens = [tk for tk in verify_tokens if not _is_empty_token(tk)]
+                    self.blocks[block_id] = {
+                        'id': block_id,
+                        'type': 'statement',
+                        'subtype': VERIFY,
+                        'tokens': filtered_tokens,
+                        'start_token': tokens[start_idx],
+                        'start_index': start_idx,
+                        'end_index': i - 1,
+                        'parent': None
+                    }
+                    block_id += 1
+                    continue
+                else:
+                    # Not a block form, let it fall through to generic handling
+                    i = start_idx
+
             # Try-catch: collect the try block and catch block TOGETHER
             if t.type == TRY:
                 start_idx = i
@@ -552,9 +601,9 @@ class StructuralAnalyzer:
                     stmt_tokens.append(tj)
                     j += 1
                     
-                    # MODIFIED: For RETURN and CONTINUE, stop after closing parens
-                    # But PRINT can have multiple comma-separated arguments, so don't break for PRINT
-                    if t.type in {RETURN, CONTINUE} and nesting == 0 and tj.type == RPAREN:
+                    # MODIFIED: For RETURN, CONTINUE, and PRINT, stop after closing parens at nesting 0
+                    # PRINT can have multiple comma-separated arguments inside the parens
+                    if t.type in {RETURN, CONTINUE, PRINT} and nesting == 0 and tj.type == RPAREN:
                         break
                     
                     # If we just closed a brace block and are back at nesting 0, stop
@@ -620,7 +669,14 @@ class StructuralAnalyzer:
                 if nesting == 0:
                     # Check if current token (tj) starts a new statement
                     # CRITICAL FIX: IDENT followed by ASSIGN is an assignment statement
-                    is_assignment_start = (tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN)
+                    # BUT: Don't treat it as a new statement if the previous token was DOT (property access)
+                    is_assignment_start = False
+                    if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN:
+                        # Check if previous token was DOT (part of property access)
+                        prev_is_dot = (j > 0 and tokens[j - 1].type == DOT)
+                        if not prev_is_dot:
+                            is_assignment_start = True
+                    
                     is_new_statement = (
                         tj.type in stop_types or 
                         tj.type in statement_starters or 

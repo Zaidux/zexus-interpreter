@@ -1777,6 +1777,39 @@ class StatementEvaluatorMixin:
         if node.mode:
             return self._eval_verify_mode(node, env, stack_trace)
         
+        # Special case: verify { cond1, cond2, ... }, "message"
+        # When condition is None but logic_block exists, the block contains the conditions
+        if node.condition is None and node.logic_block is not None:
+            # The logic_block contains expressions that should all be true
+            from ..zexus_ast import BlockStatement, ExpressionStatement
+            if isinstance(node.logic_block, BlockStatement):
+                all_true = True
+                for stmt in node.logic_block.statements:
+                    # Each statement should be an expression to evaluate
+                    if isinstance(stmt, ExpressionStatement):
+                        cond_val = self.eval_node(stmt.expression, env, stack_trace)
+                    else:
+                        cond_val = self.eval_node(stmt, env, stack_trace)
+                    
+                    if is_error(cond_val):
+                        return cond_val
+                    
+                    if not check_truthy(cond_val):
+                        all_true = False
+                        break
+                
+                if not all_true:
+                    error_msg = "Verification failed"
+                    if node.message:
+                        msg_val = self.eval_node(node.message, env, stack_trace)
+                        if not is_error(msg_val):
+                            error_msg = str(msg_val.value if hasattr(msg_val, 'value') else msg_val)
+                    return EvaluationError(error_msg)
+                
+                # All conditions passed
+                from ..object import Boolean
+                return Boolean(True)
+        
         # Simple assertion form: verify condition, "message"
         if node.condition is not None:
             condition_val = self.eval_node(node.condition, env, stack_trace)

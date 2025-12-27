@@ -981,16 +981,42 @@ class ContextStackParser:
         parser_debug("🔧 [Context] Parsing assignment statement")
         tokens = block_info['tokens']
 
-        if len(tokens) < 3 or tokens[1].type != ASSIGN:
-            parser_debug("  ❌ Invalid assignment: no assignment operator")
+        # Find the ASSIGN operator
+        assign_idx = None
+        for i, tok in enumerate(tokens):
+            if tok.type == ASSIGN:
+                assign_idx = i
+                break
+        
+        if assign_idx is None or assign_idx == 0:
+            parser_debug("  ❌ Invalid assignment: no assignment operator or nothing before it")
             return None
 
-        variable_name = tokens[0].literal
+        # Parse the left-hand side (could be identifier or property access)
+        lhs_tokens = tokens[:assign_idx]
+        
+        print(f"[ASSIGN PARSE] lhs_tokens: {[t.literal for t in lhs_tokens]}")
+        
+        # Check if this is a property access (e.g., obj.property or obj["key"])
+        target_expr = None
+        if len(lhs_tokens) == 1:
+            # Simple identifier assignment
+            target_expr = Identifier(lhs_tokens[0].literal)
+        else:
+            # Could be property access or index access
+            target_expr = self._parse_expression(lhs_tokens)
+        
+        print(f"[ASSIGN PARSE] target_expr type: {type(target_expr).__name__}")
+        
+        if target_expr is None:
+            parser_debug("  ❌ Could not parse assignment target")
+            return None
+        
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
         value_tokens = []
         stop_types = {SEMICOLON, RBRACE}
         statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
-        j = 2
+        j = assign_idx + 1
         while j < len(tokens):
             t = tokens[j]
             if t.type in stop_types:
@@ -1028,7 +1054,7 @@ class ContextStackParser:
             return None
 
         return AssignmentExpression(
-            name=Identifier(variable_name),
+            name=target_expr,
             value=value_expression
         )
 
@@ -3068,6 +3094,35 @@ class ContextStackParser:
                 nesting = 0
                 while j < len(tokens):
                     t = tokens[j]
+                    
+                    # Before adding this token, check if it starts a NEW assignment statement
+                    # Only check when we've completed a previous statement (e.g., after function call)
+                    # Don't check if the last token was DOT (we're in the middle of property access)
+                    if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT:
+                        # Only detect new assignment if previous token suggests end of previous statement
+                        # E.g., after RPAREN (end of function call) or after a complete value
+                        prev_token = run_tokens[-1] if run_tokens else None
+                        if prev_token and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE}:
+                            # Check next tokens for assignment pattern
+                            k = j + 1
+                            is_assignment_start = False
+                            # Skip DOT IDENT sequences
+                            while k < len(tokens) and k < j + 10:
+                                if tokens[k].type == DOT:
+                                    k += 1
+                                    if k < len(tokens) and tokens[k].type == IDENT:
+                                        k += 1
+                                    else:
+                                        break
+                                elif tokens[k].type == ASSIGN:
+                                    is_assignment_start = True
+                                    break
+                                else:
+                                    break
+                            
+                            if is_assignment_start:
+                                break
+                    
                     # update nesting for parentheses/brackets/braces
                     if t.type in {LPAREN, LBRACE, LBRACKET}:
                         nesting += 1
@@ -3078,18 +3133,27 @@ class ContextStackParser:
                     # stop at top-level statement terminators or starters
                     if nesting == 0 and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
                         break
-                    
-                    # CRITICAL FIX: stop at new assignment statements (IDENT followed by ASSIGN)
-                    if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT and j + 1 < len(tokens) and tokens[j + 1].type == ASSIGN:
-                        break
 
                     run_tokens.append(t)
                     j += 1
 
                 if run_tokens:
-                    expr = self._parse_expression(run_tokens)
-                    if expr:
-                        statements.append(ExpressionStatement(expr))
+                    # Check if this is an assignment (contains ASSIGN token)
+                    has_assign = any(t.type == ASSIGN for t in run_tokens)
+                    if has_assign:
+                        # Parse as assignment statement
+                        block_info = {'tokens': run_tokens}
+                        stmt = self._parse_assignment_statement(block_info, tokens)
+                        if stmt:
+                            # Assignment parser returns AssignmentExpression, wrap in ExpressionStatement
+                            if not isinstance(stmt, Statement):
+                                stmt = ExpressionStatement(stmt)
+                            statements.append(stmt)
+                    else:
+                        # Parse as regular expression
+                        expr = self._parse_expression(run_tokens)
+                        if expr:
+                            statements.append(ExpressionStatement(expr))
                 # Advance to the token after the run (or by one to avoid infinite loop)
                 if j == i:
                     i += 1
@@ -4745,6 +4809,7 @@ class ContextStackParser:
     def _parse_generic_block(self, block_info, all_tokens):
         """Fallback parser for unknown block types - intelligently detects statement type"""
         tokens = block_info.get('tokens', [])
+        print(f"[_parse_generic_block] Received {len(tokens)} tokens: {[t.literal for t in tokens]}")
         if not tokens:
             return BlockStatement()
         
@@ -4785,9 +4850,17 @@ class ContextStackParser:
                 return statements[0]  # Return the first (and likely only) statement
             return None
         
-        # Check if this is an assignment statement (identifier = value)
-        if len(tokens) >= 3 and tokens[0].type == IDENT and tokens[1].type == ASSIGN:
-            parser_debug(f"  🎯 [Generic] Detected assignment statement")
+        # Check if this is an assignment statement (identifier = value OR property.access = value)
+        # Look for ASSIGN token anywhere in the statement
+        assign_idx = None
+        for i, tok in enumerate(tokens):
+            if tok.type == ASSIGN:
+                assign_idx = i
+                break
+        
+        if assign_idx is not None and assign_idx > 0:
+            parser_debug(f"  🎯 [Generic] Detected assignment statement (assign at index {assign_idx})")
+            print(f"[GENERIC] Passing block to _parse_assignment_statement with tokens: {[t.literal for t in tokens]}")
             return self._parse_assignment_statement(block_info, all_tokens)
         
         # Check if this is a print statement
@@ -6389,18 +6462,117 @@ class ContextStackParser:
         
         # Check for logic block at the end
         logic_block = None
+        message = None
         block_start = None
+        block_end_idx = None  # Track where block ends
+        
+        # Find the block
         for i in range(len(tokens) - 1, -1, -1):
             if tokens[i].type == LBRACE:
                 block_start = i
+                # Find matching RBRACE
+                brace_count = 0
+                for j in range(i, len(tokens)):
+                    if tokens[j].type == LBRACE:
+                        brace_count += 1
+                    elif tokens[j].type == RBRACE:
+                        brace_count -= 1
+                        if brace_count == 0:
+                            block_end_idx = j
+                            break
                 break
         
+        # Check for comma AFTER the block (if block exists)
+        if block_end_idx and block_end_idx + 1 < len(tokens) and tokens[block_end_idx + 1].type == COMMA:
+            # This is the pattern: verify { ... }, "message"
+            # Parse the block
+            block_tokens = tokens[block_start:block_end_idx+1]
+            brace_count = 0
+            block_end = None
+            for i, tok in enumerate(block_tokens):
+                if tok.type == LBRACE:
+                    brace_count += 1
+                elif tok.type == RBRACE:
+                    brace_count -= 1
+                    if brace_count == 0:
+                        block_end = i
+                        break
+            
+            if block_end and block_end > 1:
+                inner_tokens = block_tokens[1:block_end]
+                
+                # Split inner tokens by commas to get individual conditions
+                condition_token_groups = []
+                current_group = []
+                paren_depth = 0
+                
+                for tok in inner_tokens:
+                    if tok.type == LPAREN:
+                        paren_depth += 1
+                    elif tok.type == RPAREN:
+                        paren_depth -= 1
+                    
+                    if tok.type == COMMA and paren_depth == 0:
+                        # Comma at depth 0 separates conditions
+                        if current_group:
+                            condition_token_groups.append(current_group)
+                            current_group = []
+                    else:
+                        current_group.append(tok)
+                
+                # Add the last group
+                if current_group:
+                    condition_token_groups.append(current_group)
+                
+                # Parse each condition as an expression and wrap in ExpressionStatement
+                from ..zexus_ast import ExpressionStatement
+                inner_statements = []
+                for group in condition_token_groups:
+                    if group:
+                        expr = self._parse_expression(group)
+                        if expr:
+                            inner_statements.append(ExpressionStatement(expr))
+                
+                logic_block = BlockStatement()
+                logic_block.statements = inner_statements
+            else:
+                logic_block = BlockStatement()
+            
+            # Parse the message
+            message_tokens = tokens[block_end_idx + 2:]
+            message = self._parse_expression(message_tokens) if message_tokens else None
+            
+            parser_debug(f"  ✅ Verify block with {len(logic_block.statements) if logic_block else 0} conditions and message")
+            return VerifyStatement(condition=None, message=message, logic_block=logic_block)
+        
+        # Handle logic block WITHOUT comma (verify condition { ... })
         if block_start:
             # Extract and parse logic block
-            block_tokens = tokens[block_start:]
+            block_tokens = tokens[block_start:block_end_idx+1] if block_end_idx else tokens[block_start:]
             tokens = tokens[:block_start]  # Remove block from main tokens
-            logic_block = self._parse_block_statement({'tokens': block_tokens}, all_tokens)
-            parser_debug(f"  🧩 Found logic block")
+            
+            # Parse the block: skip LBRACE and find matching RBRACE
+            brace_count = 0
+            block_end = None
+            for i, tok in enumerate(block_tokens):
+                if tok.type == LBRACE:
+                    brace_count += 1
+                elif tok.type == RBRACE:
+                    brace_count -= 1
+                    if brace_count == 0:
+                        block_end = i
+                        break
+            
+            if block_end and block_end > 1:
+                # Extract tokens between braces
+                inner_tokens = block_tokens[1:block_end]
+                inner_statements = self._parse_block_statements(inner_tokens)
+                logic_block = BlockStatement()
+                logic_block.statements = inner_statements
+            else:
+                logic_block = BlockStatement()
+            
+            parser_debug(f"  🧩 Found logic block with {len(logic_block.statements) if logic_block else 0} statements")
         
         # Parse based on mode
         if mode == 'data':
