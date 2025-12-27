@@ -67,9 +67,9 @@ class ExpressionEvaluatorMixin:
             # Use direct print to ensure visibility during debugging
             import traceback as _tb
             stack_snip = ''.join(_tb.format_stack(limit=5)[-3:])
-            print(f"[DEBUG] Identifier not found: {node.value}; env_keys={env_keys}\nStack snippet:\n{stack_snip}")
+            # print(f"[DEBUG] Identifier not found: {node.value}; env_keys={env_keys}\nStack snippet:\n{stack_snip}")
         except Exception:
-            print(f"[DEBUG] Identifier not found: {node.value}")
+            pass # print(f"[DEBUG] Identifier not found: {node.value}")
         
         # Try to find similar names for helpful suggestion
         suggestion = None
@@ -767,14 +767,14 @@ class ExpressionEvaluatorMixin:
         if is_error(result):
             return result
         
-        print(f"[ASYNC EXPR] Expression evaluated to: {type(result).__name__}", file=sys.stderr)
+        # print(f"[ASYNC EXPR] Expression evaluated to: {type(result).__name__}", file=sys.stderr)
         
         # If it's a Coroutine (from calling an async action), execute it in a thread
         if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-            print(f"[ASYNC EXPR] Starting coroutine in thread", file=sys.stderr)
+            # print(f"[ASYNC EXPR] Starting coroutine in thread", file=sys.stderr)
             
             def run_coroutine():
-                print(f"[ASYNC EXPR THREAD] Thread started", file=sys.stderr)
+                # print(f"[ASYNC EXPR THREAD] Thread started", file=sys.stderr)
                 try:
                     # Prime the generator
                     val = next(result.generator)
@@ -783,7 +783,7 @@ class ExpressionEvaluatorMixin:
                         while True:
                             val = next(result.generator)
                     except StopIteration:
-                        print(f"[ASYNC EXPR THREAD] Coroutine completed", file=sys.stderr)
+                        pass # print(f"[ASYNC EXPR THREAD] Coroutine completed", file=sys.stderr)
                 except Exception as e:
                     print(f"[ASYNC EXPR THREAD ERROR] {str(e)}", file=sys.stderr)
                     import traceback
@@ -796,5 +796,5 @@ class ExpressionEvaluatorMixin:
         # For any other result (including NULL from regular actions),
         # we can't execute it asynchronously since it already executed.
         # Just return NULL to indicate "async operation initiated"
-        print(f"[ASYNC EXPR] Result is not a coroutine, returning NULL", file=sys.stderr)
+        # print(f"[ASYNC EXPR] Result is not a coroutine, returning NULL", file=sys.stderr)
         return NULL

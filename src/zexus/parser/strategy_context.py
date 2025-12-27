@@ -1127,14 +1127,26 @@ class ContextStackParser:
                             while i < brace_end and paren_depth > 0:
                                 if tokens[i].type == LPAREN:
                                     paren_depth += 1
+                                    i += 1
                                 elif tokens[i].type == RPAREN:
                                     paren_depth -= 1
                                     if paren_depth == 0:
                                         break
+                                    i += 1
                                 elif tokens[i].type == IDENT:
-                                    # Add parameter
+                                    # Add parameter name
                                     param_list.append(Identifier(tokens[i].literal))
-                                i += 1
+                                    i += 1
+                                    # Skip type annotation (: type)
+                                    if i < brace_end and tokens[i].type == COLON:
+                                        i += 1  # Skip colon
+                                        if i < brace_end and tokens[i].type == IDENT:
+                                            i += 1  # Skip type name
+                                    # Skip comma if present
+                                    if i < brace_end and tokens[i].type == COMMA:
+                                        i += 1
+                                else:
+                                    i += 1
                             i += 1  # Skip closing paren
                         
                         # Skip return type annotation if present (-> type)
@@ -1505,7 +1517,7 @@ class ContextStackParser:
     def _parse_statement_block_context(self, block_info, all_tokens):
         """Parse standalone statement blocks - use direct parsers where available"""
         subtype = block_info.get('subtype', 'unknown')
-        print(f"🔧 [Context] Parsing statement block: {subtype} (type: {type(subtype)})")
+        # print(f"🔧 [Context] Parsing statement block: {subtype} (type: {type(subtype)})")
 
         # Use the direct parser methods
         if subtype == 'let_statement':
@@ -1530,10 +1542,10 @@ class ContextStackParser:
             return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype in {IF, FOR, WHILE, RETURN, CONTINUE, DEFER, ENUM, SANDBOX}:
             # Use the existing logic in _parse_block_statements which handles these keywords
-            print(f"🎯 [Context] Calling _parse_block_statements for subtype={subtype}")
-            print(f"🎯 [Context] block_info['tokens'] has {len(block_info.get('tokens', []))} tokens")
+            # print(f"🎯 [Context] Calling _parse_block_statements for subtype={subtype}")
+            # print(f"🎯 [Context] block_info['tokens'] has {len(block_info.get('tokens', []))} tokens")
             stmts = self._parse_block_statements(block_info['tokens'])
-            print(f"🎯 [Context] Got {len(stmts) if stmts else 0} statements back")
+            # print(f"🎯 [Context] Got {len(stmts) if stmts else 0} statements back")
             return stmts[0] if stmts else None
         else:
             return self._parse_generic_statement_block(block_info, all_tokens)
@@ -1566,7 +1578,7 @@ class ContextStackParser:
 
     def _parse_try_block(self, tokens):
         """Parse the try block from tokens"""
-        print("  🔧 [Try] Parsing try block")
+        # print("  🔧 [Try] Parsing try block")
         try_start = -1
         try_end = -1
         brace_count = 0
@@ -1587,7 +1599,7 @@ class ContextStackParser:
 
         if try_start != -1 and try_end != -1 and try_end > try_start:
             try_tokens = tokens[try_start:try_end]
-            print(f"  🔧 [Try] Found {len(try_tokens)} tokens in try block: {[t.literal for t in try_tokens]}")
+            # print(f"  🔧 [Try] Found {len(try_tokens)} tokens in try block: {[t.literal for t in try_tokens]}")
             try_block_statements = self._parse_block_statements(try_tokens)
             block = BlockStatement()
             block.statements = try_block_statements
@@ -1598,7 +1610,7 @@ class ContextStackParser:
 
     def _parse_catch_block(self, tokens):
         """Parse the catch block from tokens"""
-        print("  🔧 [Catch] Parsing catch block")
+        # print("  🔧 [Catch] Parsing catch block")
         catch_start = -1
         catch_end = -1
         brace_count = 0
@@ -1619,7 +1631,7 @@ class ContextStackParser:
 
         if catch_start != -1 and catch_end != -1 and catch_end > catch_start:
             catch_tokens = tokens[catch_start:catch_end]
-            print(f"  🔧 [Catch] Found {len(catch_tokens)} tokens in catch block: {[t.literal for t in catch_tokens]}")
+            # print(f"  🔧 [Catch] Found {len(catch_tokens)} tokens in catch block: {[t.literal for t in catch_tokens]}")
             catch_block_statements = self._parse_block_statements(catch_tokens)
             block = BlockStatement()
             block.statements = catch_block_statements
@@ -1769,7 +1781,7 @@ class ContextStackParser:
                                 elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
                                     # Statement indicators before THEN
                                     break
-                            print(f"[LET_IF_DEBUG] Found IF at j={j}, is_if_expression={is_if_expression}")
+                            # print(f"[LET_IF_DEBUG] Found IF at j={j}, is_if_expression={is_if_expression}")
                             if is_if_expression:
                                 # This is if-then-else expression, continue collecting
                                 j += 1
@@ -2393,7 +2405,7 @@ class ContextStackParser:
                     cond_tokens.append(tokens[j])
                     j += 1
                 
-                print(f"  [IF_COND] Condition tokens: {[t.literal for t in cond_tokens]}")
+                # print(f"  [IF_COND] Condition tokens: {[t.literal for t in cond_tokens]}")
                 
                 # Parse condition expression
                 condition = self._parse_expression(cond_tokens) if cond_tokens else Identifier("true")
@@ -3085,14 +3097,14 @@ class ContextStackParser:
                 else:
                     i = j
 
-        print(f"    ✅ Parsed {len(statements)} statements from block")
+        # print(f"    ✅ Parsed {len(statements)} statements from block")
         return statements
 
     # === MAP LITERAL PARSING ===
 
     def _parse_map_literal(self, tokens):
         """Parse a map literal { key: value, ... }"""
-        parser_debug("  🗺️ [Map] Parsing map literal")
+        # parser_debug("  🗺️ [Map] Parsing map literal")
 
         if not tokens or tokens[0].type != LBRACE:
             parser_debug("  ❌ [Map] Not a map literal - no opening brace")
@@ -3138,7 +3150,7 @@ class ContextStackParser:
                         key_node = StringLiteral(key_token.literal)
 
                     pairs_list.append((key_node, value_expr))
-                    print(f"  🗺️ [Map] Added pair: {key_token.literal} -> {type(value_expr).__name__}")
+                    # print(f"  🗺️ [Map] Added pair: {key_token.literal} -> {type(value_expr).__name__}")
 
                 i = j
                 if i < len(tokens) and tokens[i].type == COMMA:
@@ -3148,7 +3160,7 @@ class ContextStackParser:
                 i += 1
 
         map_literal = MapLiteral(pairs_list)
-        print(f"  🗺️ [Map] Successfully parsed map with {len(pairs_list)} pairs")
+        # print(f"  🗺️ [Map] Successfully parsed map with {len(pairs_list)} pairs")
         return map_literal
 
     # === EXPRESSION PARSING METHODS ===
@@ -3870,7 +3882,7 @@ class ContextStackParser:
 
     def _parse_list_literal(self, tokens):
         """Parse a list literal [a, b, c] from a token list"""
-        print("  🔧 [List] Parsing list literal")
+        # print("  🔧 [List] Parsing list literal")
         if not tokens or tokens[0].type != LBRACKET:
             parser_debug("  ❌ [List] Not a list literal")
             return None
@@ -5257,7 +5269,7 @@ class ContextStackParser:
             return None
         
         module_name = tokens[1].literal
-        print(f"  📦 Module: {module_name}")
+        # print(f"  📦 Module: {module_name}")
         
         # Parse module body
         body = None

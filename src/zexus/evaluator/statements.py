@@ -551,8 +551,15 @@ class StatementEvaluatorMixin:
                             
                             # Execute method body
                             from ..object import ReturnValue
+                            from .. import zexus_ast
                             result = NULL
-                            for stmt in method_body:
+                            
+                            # Handle both BlockStatement and list of statements
+                            statements = method_body
+                            if isinstance(method_body, zexus_ast.BlockStatement):
+                                statements = method_body.statements
+                            
+                            for stmt in statements:
                                 result = evaluator_self.eval_node(stmt, method_env, stack_trace)
                                 if is_error(result):
                                     return result

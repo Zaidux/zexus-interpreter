@@ -95,11 +95,35 @@ print("User email: " + user.email)
 print("Profile theme: " + user.profile.settings["theme"])
 print("")
 
-# 2.2: Generic data types (if implemented)
+# 2.2: Generic data types
 print("2.2: Generic data types test...")
-# Note: Generic types with methods are not fully implemented yet
-# The syntax Container<T> with embedded actions causes parsing issues
-print("Generics not fully implemented: skipping test")
+
+# Define a generic Container data type
+data Container<T> {
+    value: T,
+    label: string
+}
+
+# Test with different type instantiations
+let int_container = Container<integer>(42, "My Integer")
+let str_container = Container<string>("Hello", "My String")
+let list_container = Container<list>([1, 2, 3], "My List")
+
+print("Integer container value: " + string(int_container.value))
+print("String container value: " + str_container.value)
+print("List container length: " + string(len(list_container.value)))
+
+# Test generic with map type
+data Pair<K, V> {
+    key: K,
+    value: V
+}
+
+let pair1 = Pair<string, integer>("age", 25)
+let pair2 = Pair<integer, string>(1, "first")
+
+print("Pair1: " + pair1.key + " = " + string(pair1.value))
+print("Pair2: " + string(pair2.key) + " = " + pair2.value)
 print("")
 
 # ============================================
@@ -319,6 +343,9 @@ entity MockDatabase implements Database {
     }
     
     action insert(table: string, data: Map<string, any>) -> integer {
+        if this.storage == null {
+            this.storage = {}
+        }
         if !this.storage.has_key(table) {
             this.storage[table] = []
         }
@@ -329,7 +356,7 @@ entity MockDatabase implements Database {
 
 # Register dependencies
 register_dependency("logger", FileLogger("/tmp/zexus_test.log"))
-register_dependency("database", MockDatabase())
+register_dependency("database", MockDatabase({}))
 
 # Service using DI
 entity UserService {
