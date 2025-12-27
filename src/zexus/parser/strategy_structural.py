@@ -37,7 +37,7 @@ class StructuralAnalyzer:
         # Statement starters (keywords that begin a new statement)
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION, TRY, EXTERNAL,
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL,
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
@@ -381,18 +381,53 @@ class StructuralAnalyzer:
                     t = tokens[i]
                     # Don't increment i - let the statement parsing handle it
                 else:
-                    # Modifiers without a following statement - treat as expression
+                    # Modifiers without a following statement - this is an async expression!
+                    # Collect the modifiers AND the following expression into one block
+                    # Example: "async producer()" should be one block
+                    
+                    # Start collecting the expression that follows
+                    j = i
+                    expr_tokens = modifier_list[:]  # Include modifiers in the block
+                    nesting = 0
+                    started_expr = False
+                    
+                    # Collect tokens for the expression
+                    while j < n:
+                        tj = tokens[j]
+                        
+                        # Track nesting
+                        if tj.type in {LPAREN, LBRACKET, LBRACE}:
+                            nesting += 1
+                            started_expr = True
+                        elif tj.type in {RPAREN, RBRACKET, RBRACE}:
+                            nesting -= 1
+                        
+                        expr_tokens.append(tj)
+                        j += 1
+                        
+                        # Stop at semicolon when at nesting 0
+                        if nesting == 0 and tj.type == SEMICOLON:
+                            break
+                        
+                        # Stop after completing a simple expression at nesting 0
+                        # (identifier with optional call, or after closing all parens)
+                        if started_expr and nesting == 0:
+                            break
+                    
+                    # Create block for async expression
                     self.blocks[block_id] = {
                         'id': block_id,
                         'type': 'statement',
-                        'subtype': modifier_list[0].type,
-                        'tokens': modifier_list,
+                        'subtype': modifier_list[0].type,  # ASYNC
+                        'tokens': expr_tokens,
                         'start_token': modifier_list[0],
                         'start_index': start_idx,
-                        'end_index': start_idx + len(modifier_list)
+                        'end_index': j
                     }
                     block_id += 1
-                    i = start_idx + len(modifier_list)
+                    i = j
+                    # Clear modifier_list so it doesn't affect next statement
+                    del modifier_list
                     continue
             
             # Statement-like tokens: try to collect tokens up to a statement boundary
@@ -495,6 +530,12 @@ class StructuralAnalyzer:
                         if next_idx < n and tokens[next_idx].type in statement_starters:
                             # Modifier followed by statement keyword - break here
                             break
+                        # ALSO break if this is an ASYNC modifier followed by IDENT+LPAREN (async expression)
+                        # This prevents LET statements from consuming "async func()" on the next line
+                        if tj.type == ASYNC and next_idx < n and tokens[next_idx].type == IDENT:
+                            if next_idx + 1 < n and tokens[next_idx + 1].type == LPAREN:
+                                # This is "async ident(" - an async expression
+                                break
                         # Otherwise, continue collecting (async expression case)
                     
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
@@ -510,6 +551,11 @@ class StructuralAnalyzer:
                     # Always collect tokens
                     stmt_tokens.append(tj)
                     j += 1
+                    
+                    # CRITICAL: For simple statements (PRINT, RETURN, etc.), stop after closing parens
+                    # This prevents collecting tokens from the next line
+                    if t.type in {PRINT, RETURN, CONTINUE} and nesting == 0 and tj.type == RPAREN:
+                        break
                     
                     # If we just closed a brace block and are back at nesting 0, stop
                     if found_brace_block and nesting == 0:
@@ -674,13 +720,13 @@ class StructuralAnalyzer:
         stop_types = {SEMICOLON, RBRACE}
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION, TRY, EXTERNAL, 
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL, 
               SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, ATOMIC
+              CHANNEL, ATOMIC, ASYNC  # Added ASYNC to recognize async expressions as statement boundaries
           }
 
         cur = []
@@ -777,10 +823,17 @@ class StructuralAnalyzer:
 
             # Assignment RHS vs function-call heuristic:
             # if current token is IDENT followed by LPAREN and we've seen ASSIGN in cur, treat as a boundary
+            # ALSO: if current token is IDENT+LPAREN and the previous token was RPAREN (end of prev call), new statement
             if t.type == IDENT and i + 1 < n and tokens[i + 1].type == LPAREN:
                 if any(st.type == ASSIGN for st in cur):
                     results.append(cur)
                     cur = []
+                    continue
+                # New heuristic: if previous token was RPAREN (completing a call), this is likely a new statement
+                if cur and cur[-1].type == RPAREN:
+                    results.append(cur)
+                    cur = [t]
+                    i += 1
                     continue
 
             cur.append(t)

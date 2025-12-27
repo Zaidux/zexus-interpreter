@@ -715,10 +715,11 @@ class Environment:
         """Assign to an existing variable in the scope chain, or create in current if not found."""
         # 1. Check current scope
         if name in self.store:
-            if name in self.const_vars:
+            if hasattr(self, 'const_vars') and name in self.const_vars:
                 raise ValueError(f"Cannot reassign const variable '{name}'")
             self.store[name] = val
-            self.notify_watchers(name, val)
+            if hasattr(self, 'notify_watchers'):
+                self.notify_watchers(name, val)
             return val
         
         # 2. Check outer scope
@@ -727,23 +728,27 @@ class Environment:
             scope = self.outer
             while scope is not None:
                 if name in scope.store:
-                    if name in scope.const_vars:
+                    # Check for const (defensive - some envs might not have const_vars)
+                    if hasattr(scope, 'const_vars') and name in scope.const_vars:
                         raise ValueError(f"Cannot reassign const variable '{name}'")
                     scope.store[name] = val
-                    scope.notify_watchers(name, val)
+                    if hasattr(scope, 'notify_watchers'):
+                        scope.notify_watchers(name, val)
                     return val
                 scope = scope.outer
             
             # Not found anywhere -> Create in CURRENT scope (local)
             self.store[name] = val
-            self.notify_watchers(name, val)
+            if hasattr(self, 'notify_watchers'):
+                self.notify_watchers(name, val)
             if name == "passedTests":
                 print(f"[DEBUG] passedTests not found in chain, creating in current scope {id(self)}")
             return val
         
         # 3. No outer scope (Global) -> Create here
         self.store[name] = val
-        self.notify_watchers(name, val)
+        if hasattr(self, 'notify_watchers'):
+            self.notify_watchers(name, val)
         if name == "passedTests":
             print(f"[DEBUG] passedTests not found (global), creating in global scope {id(self)}")
         return val

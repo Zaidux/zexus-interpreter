@@ -554,6 +554,44 @@ class EntityInstance:
     def to_dict(self):
         """Convert to dictionary"""
         return self.data
+    
+    def call_method(self, method_name, args):
+        """Call a method on this entity instance"""
+        if method_name not in self.entity_def.methods:
+            from src.zexus.object import EvaluationError
+            return EvaluationError(f"Method '{method_name}' not supported for ENTITY_INSTANCE")
+        
+        # Get the method (Action or Function)
+        method = self.entity_def.methods[method_name]
+        
+        # Create a new environment for the method execution
+        from src.zexus.object import Environment
+        method_env = Environment(outer=method.env if hasattr(method, 'env') else None)
+        
+        # Bind 'this' to the current instance in the method environment
+        method_env.set('this', self)
+        
+        # Bind method parameters to arguments
+        if hasattr(method, 'parameters'):
+            for i, param in enumerate(method.parameters):
+                if i < len(args):
+                    param_name = param.value if hasattr(param, 'value') else str(param)
+                    method_env.set(param_name, args[i])
+        
+        # Import evaluator to execute the method body
+        # Avoid circular import by importing here
+        from src.zexus.evaluator.core import Evaluator
+        evaluator = Evaluator()
+        
+        # Execute the method body
+        result = evaluator.eval_node(method.body, method_env)
+        
+        # Unwrap return values
+        from src.zexus.object import ReturnValue
+        if isinstance(result, ReturnValue):
+            return result.value
+        
+        return result
 
 
 # ===============================================

@@ -196,8 +196,6 @@ class FunctionEvaluatorMixin:
                     """Generator that executes the async action body"""
                     new_env = Environment(outer=fn.env)
                     
-                    print(f"[ASYNC GEN] Generator started, new_env outer: {new_env.outer is not None}, outer keys: {list(new_env.outer.store.keys())[:10] if new_env.outer and hasattr(new_env.outer, 'store') else 'N/A'}", file=sys.stderr)
-                    
                     # Bind parameters
                     for i, param in enumerate(fn.parameters):
                         if i < len(args):
@@ -308,7 +306,7 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"Builtin error: {str(e)}")
         
         elif isinstance(fn, EntityDefinition):
-            debug_log("  Creating entity instance")
+            debug_log("  Creating entity instance (old format)")
             # Entity constructor: Person("Alice", 30)
             # Create instance with positional arguments mapped to properties
             from ..object import EntityInstance, String, Integer
@@ -325,6 +323,21 @@ class FunctionEvaluatorMixin:
                     values[prop_names[i]] = arg
             
             return EntityInstance(fn, values)
+        
+        # Handle SecurityEntityDefinition (from security.py with methods support)
+        from ..security import EntityDefinition as SecurityEntityDef, EntityInstance as SecurityEntityInstance
+        if isinstance(fn, SecurityEntityDef):
+            debug_log("  Creating entity instance (with methods)")
+            
+            values = {}
+            # Map positional arguments to property names
+            prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
+            
+            for i, arg in enumerate(args):
+                if i < len(prop_names):
+                    values[prop_names[i]] = arg
+            
+            return SecurityEntityInstance(fn, values)
         
         return EvaluationError(f"Not a function: {fn}")
     
@@ -462,6 +475,14 @@ class FunctionEvaluatorMixin:
             
             # Call the function/action using apply_function
             return self.apply_function(member_value, args, env)
+        
+        # === Entity Instance Methods ===
+        from ..security import EntityInstance as SecurityEntityInstance
+        if isinstance(obj, SecurityEntityInstance):
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            return obj.call_method(method_name, args)
         
         # === Contract Instance Methods ===
         if hasattr(obj, 'call_method'):

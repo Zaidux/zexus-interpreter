@@ -470,6 +470,8 @@ class Lexer:
             "try": TRY,          # NEW: Try keyword  
             "catch": CATCH,      # NEW: Catch keyword
             "continue": CONTINUE, # NEW: Continue on error keyword
+            "break": BREAK,      # NEW: Break loop keyword
+            "throw": THROW,      # NEW: Throw error keyword
             "external": EXTERNAL, # NEW: External keyword
             "from": FROM,        # NEW: From keyword
             "screen": SCREEN,         # NEW: renderer keyword

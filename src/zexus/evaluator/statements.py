@@ -3,7 +3,7 @@ import os
 import sys
 
 from ..zexus_ast import (
-    Program, ExpressionStatement, BlockStatement, ReturnStatement, ContinueStatement, LetStatement, ConstStatement,
+    Program, ExpressionStatement, BlockStatement, ReturnStatement, ContinueStatement, BreakStatement, ThrowStatement, LetStatement, ConstStatement,
     ActionStatement, FunctionStatement, IfStatement, WhileStatement, ForEachStatement,
     TryCatchStatement, UseStatement, FromStatement, ExportStatement,
     ContractStatement, EntityStatement, VerifyStatement, ProtectStatement,
@@ -30,6 +30,12 @@ from ..security import (
     ProtectionPolicy, Middleware, AuthConfig, RateLimiter, CachePolicy
 )
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL, TRUE, FALSE, _resolve_awaitable, _zexus_to_python, _python_to_zexus, is_truthy
+
+# Break exception for loop control flow
+class BreakException:
+    """Exception raised when break statement is encountered in a loop."""
+    def __repr__(self):
+        return "BreakException()"
 
 class StatementEvaluatorMixin:
     """Handles evaluation of statements, flow control, module loading, and security features."""
@@ -104,7 +110,7 @@ class StatementEvaluatorMixin:
                 res = _resolve_awaitable(res)
                 EVAL_SUMMARY['evaluated_statements'] += 1
                 
-                if isinstance(res, (ReturnValue, EvaluationError)):
+                if isinstance(res, (ReturnValue, BreakException, EvaluationError)):
                     debug_log("  Block interrupted", res)
                     if is_error(res):
                         try:
@@ -717,6 +723,22 @@ class StatementEvaluatorMixin:
         self.continue_on_error = True
         return NULL
     
+    def eval_break_statement(self, node, env, stack_trace):
+        """Return BreakException to signal loop exit."""
+        debug_log("eval_break_statement", "Breaking out of loop")
+        return BreakException()
+    
+    def eval_throw_statement(self, node, env, stack_trace):
+        """Throw an error/exception."""
+        debug_log("eval_throw_statement", "Throwing error")
+        # Evaluate error message
+        message = self.eval_node(node.message, env, stack_trace)
+        if is_error(message):
+            return message
+        # Convert to string
+        error_msg = str(message) if hasattr(message, '__str__') else "Unknown error"
+        return EvaluationError(error_msg, stack_trace=stack_trace)
+    
     def eval_assignment_expression(self, node, env, stack_trace):
         # Support assigning to identifiers or property access targets
         from ..object import EvaluationError, NULL
@@ -855,7 +877,12 @@ class StatementEvaluatorMixin:
                 break
             
             result = self.eval_node(node.body, env, stack_trace)
-            if isinstance(result, (ReturnValue, EvaluationError)):
+            if isinstance(result, ReturnValue):
+                return result
+            if isinstance(result, BreakException):
+                # Break out of loop, return NULL
+                return NULL
+            if isinstance(result, EvaluationError):
                 return result
         
         return result
@@ -872,7 +899,12 @@ class StatementEvaluatorMixin:
         for item in iterable.elements:
             env.set(node.item.value, item)
             result = self.eval_node(node.body, env, stack_trace)
-            if isinstance(result, (ReturnValue, EvaluationError)):
+            if isinstance(result, ReturnValue):
+                return result
+            if isinstance(result, BreakException):
+                # Break out of loop, return NULL
+                return NULL
+            if isinstance(result, EvaluationError):
                 return result
         
         return result
@@ -1613,6 +1645,7 @@ class StatementEvaluatorMixin:
     
     def eval_entity_statement(self, node, env, stack_trace):
         props = {}
+        methods = {}
         
         # Handle inheritance - get parent properties first
         if node.parent:
@@ -1652,9 +1685,29 @@ class StatementEvaluatorMixin:
             
             props[p_name] = {"type": p_type, "default_value": def_val}
         
-        # Create entity with parent reference if available
+        # Process methods (actions defined inside the entity)
+        if hasattr(node, 'methods') and node.methods:
+            print(f"[DEBUG ENTITY] Processing {len(node.methods)} methods")
+            for method in node.methods:
+                # Don't evaluate the action statement - that would just store it in env and return NULL
+                # Instead, create the Action object directly
+                from ..object import Action
+                method_action = Action(method.parameters, method.body, env)
+                
+                # Store the method by name
+                method_name = method.name.value if hasattr(method, 'name') else str(method)
+                methods[method_name] = method_action
+                print(f"[DEBUG ENTITY] Stored method: {method_name}")
+        else:
+            print(f"[DEBUG ENTITY] No methods found. hasattr={hasattr(node, 'methods')}, methods={getattr(node, 'methods', None)}")
+        
+        # Create entity with methods and parent reference
         parent_ref = parent_entity if (node.parent and isinstance(parent_entity, EntityDefinition)) else None
-        entity = EntityDefinition(node.name.value, props, parent_ref)
+        
+        # Use the EntityDefinition from security.py which supports methods
+        from ..security import EntityDefinition as SecurityEntityDef
+        entity = SecurityEntityDef(node.name.value, props, methods, parent_ref)
+        print(f"[DEBUG ENTITY] Created entity {node.name.value} with {len(methods)} methods")
         env.set(node.name.value, entity)
         return NULL
     
@@ -3840,11 +3893,12 @@ class StatementEvaluatorMixin:
         return NULL
 
     def eval_this_expression(self, node, env, stack_trace):
-        """Evaluate THIS expression - reference to current contract instance or data method instance.
+        """Evaluate THIS expression - reference to current contract instance, data method instance, or entity instance.
         
         this.balances[account]
         this.owner = TX.caller
         this.width  # in data method
+        this.logger.log()  # in entity method
         """
         from ..object import EvaluationError
         
@@ -3854,13 +3908,13 @@ class StatementEvaluatorMixin:
         if contract_instance is not None:
             return contract_instance
         
-        # For data methods, look for 'this' binding
-        data_instance = env.get("this")
+        # For data methods and entity methods, look for 'this' binding
+        instance = env.get("this")
         
-        if data_instance is not None:
-            return data_instance
+        if instance is not None:
+            return instance
         
-        return EvaluationError("'this' can only be used inside a contract or data method")
+        return EvaluationError("'this' can only be used inside a contract, data method, or entity method")
 
     def eval_emit_statement(self, node, env, stack_trace):
         """Evaluate EMIT statement - emit an event.

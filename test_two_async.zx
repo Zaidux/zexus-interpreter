@@ -1,0 +1,11 @@
+let counter = 0
+async action inc() {
+    counter = counter + 1
+    print("Inc: " + string(counter))
+}
+
+let start = counter
+async inc()
+async inc()
+sleep(0.5)
+print("Final: " + string(counter))

@@ -1,5 +1,0 @@
-# Test what async(x) actually does
-print("Before async call")
-let x = 42
-async(x)
-print("After async call")

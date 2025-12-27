@@ -73,312 +73,313 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         
         try:
             # === STATEMENTS ===
-            if node_type == zexus_ast.Program:
+            if isinstance(node, zexus_ast.Program):
                 debug_log("  Program node", f"{len(node.statements)} statements")
                 return self.ceval_program(node.statements, env)
             
-            elif node_type == zexus_ast.ExpressionStatement:
+            elif isinstance(node, zexus_ast.ExpressionStatement):
                 debug_log("  ExpressionStatement node")
                 return self.eval_node(node.expression, env, stack_trace)
             
-            elif node_type == zexus_ast.BlockStatement:
+            elif isinstance(node, zexus_ast.BlockStatement):
+                print(f"[DEBUG] Matched BlockStatement! About to call eval_block_statement")
                 debug_log("  BlockStatement node", f"{len(node.statements)} statements")
                 return self.eval_block_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ReturnStatement:
+            elif isinstance(node, zexus_ast.ReturnStatement):
                 debug_log("  ReturnStatement node")
                 return self.eval_return_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ContinueStatement:
+            elif isinstance(node, zexus_ast.ContinueStatement):
                 debug_log("  ContinueStatement node")
                 return self.eval_continue_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.LetStatement:
+            elif isinstance(node, zexus_ast.LetStatement):
                 return self.eval_let_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ConstStatement:
+            elif isinstance(node, zexus_ast.ConstStatement):
                 return self.eval_const_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.DataStatement:
+            elif isinstance(node, zexus_ast.DataStatement):
                 return self.eval_data_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.AssignmentExpression:
+            elif isinstance(node, zexus_ast.AssignmentExpression):
                 debug_log("  AssignmentExpression node")
                 return self.eval_assignment_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.TryCatchStatement:
+            elif isinstance(node, zexus_ast.TryCatchStatement):
                 return self.eval_try_catch_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.IfStatement:
+            elif isinstance(node, zexus_ast.IfStatement):
                 debug_log("  IfStatement node")
                 return self.eval_if_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.WhileStatement:
+            elif isinstance(node, zexus_ast.WhileStatement):
                 debug_log("  WhileStatement node")
                 return self.eval_while_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ForEachStatement:
+            elif isinstance(node, zexus_ast.ForEachStatement):
                 debug_log("  ForEachStatement node", f"for each {node.item.value}")
                 return self.eval_foreach_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.WatchStatement:
+            elif isinstance(node, zexus_ast.WatchStatement):
                 debug_log("  WatchStatement node")
                 return self.eval_watch_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.SealStatement:
+            elif isinstance(node, zexus_ast.SealStatement):
                 return self.eval_seal_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.RestrictStatement:
+            elif isinstance(node, zexus_ast.RestrictStatement):
                 return self.eval_restrict_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.SandboxStatement:
+            elif isinstance(node, zexus_ast.SandboxStatement):
                 return self.eval_sandbox_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.TrailStatement:
+            elif isinstance(node, zexus_ast.TrailStatement):
                 return self.eval_trail_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.TxStatement:
+            elif isinstance(node, zexus_ast.TxStatement):
                 return self.eval_tx_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.EntityStatement:
+            elif isinstance(node, zexus_ast.EntityStatement):
                 return self.eval_entity_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ContractStatement:
+            elif isinstance(node, zexus_ast.ContractStatement):
                 return self.eval_contract_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ExportStatement:
+            elif isinstance(node, zexus_ast.ExportStatement):
                 return self.eval_export_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.UseStatement:
+            elif isinstance(node, zexus_ast.UseStatement):
                 debug_log("  UseStatement node", node.file_path)
                 return self.eval_use_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.FromStatement:
+            elif isinstance(node, zexus_ast.FromStatement):
                 debug_log("  FromStatement node", node.file_path)
                 return self.eval_from_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.VerifyStatement:
+            elif isinstance(node, zexus_ast.VerifyStatement):
                 return self.eval_verify_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ProtectStatement:
+            elif isinstance(node, zexus_ast.ProtectStatement):
                 return self.eval_protect_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.MiddlewareStatement:
+            elif isinstance(node, zexus_ast.MiddlewareStatement):
                 return self.eval_middleware_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.AuthStatement:
+            elif isinstance(node, zexus_ast.AuthStatement):
                 return self.eval_auth_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ThrottleStatement:
+            elif isinstance(node, zexus_ast.ThrottleStatement):
                 return self.eval_throttle_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.CacheStatement:
+            elif isinstance(node, zexus_ast.CacheStatement):
                 return self.eval_cache_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.PrintStatement:
+            elif isinstance(node, zexus_ast.PrintStatement):
                 debug_log("  PrintStatement node")
                 return self.eval_print_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ScreenStatement:
+            elif isinstance(node, zexus_ast.ScreenStatement):
                 debug_log("  ScreenStatement node", node.name.value)
                 return self.eval_screen_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.EmbeddedCodeStatement:
+            elif isinstance(node, zexus_ast.EmbeddedCodeStatement):
                 debug_log("  EmbeddedCodeStatement node", node.name.value)
                 return self.eval_embedded_code_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ComponentStatement:
+            elif isinstance(node, zexus_ast.ComponentStatement):
                 debug_log("  ComponentStatement node", node.name.value)
                 return self.eval_component_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ThemeStatement:
+            elif isinstance(node, zexus_ast.ThemeStatement):
                 debug_log("  ThemeStatement node", node.name.value)
                 return self.eval_theme_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.DebugStatement:
+            elif isinstance(node, zexus_ast.DebugStatement):
                 debug_log("  DebugStatement node")
                 return self.eval_debug_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ExternalDeclaration:
+            elif isinstance(node, zexus_ast.ExternalDeclaration):
                 debug_log("  ExternalDeclaration node", node.name.value)
                 return self.eval_external_declaration(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ExactlyStatement:
+            elif isinstance(node, zexus_ast.ExactlyStatement):
                 debug_log("  ExactlyStatement node")
                 return self.eval_exactly_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ActionStatement:
+            elif isinstance(node, zexus_ast.ActionStatement):
                 debug_log("  ActionStatement node", f"action {node.name.value}")
                 return self.eval_action_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.FunctionStatement:
+            elif isinstance(node, zexus_ast.FunctionStatement):
                 debug_log("  FunctionStatement node", f"function {node.name.value}")
                 return self.eval_function_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.NativeStatement:
+            elif isinstance(node, zexus_ast.NativeStatement):
                 debug_log("  NativeStatement node", f"native {node.function_name}")
                 return self.eval_native_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.GCStatement:
+            elif isinstance(node, zexus_ast.GCStatement):
                 debug_log("  GCStatement node", f"gc {node.action}")
                 return self.eval_gc_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.InlineStatement:
+            elif isinstance(node, zexus_ast.InlineStatement):
                 debug_log("  InlineStatement node", f"inline {node.function_name}")
                 return self.eval_inline_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.BufferStatement:
+            elif isinstance(node, zexus_ast.BufferStatement):
                 debug_log("  BufferStatement node", f"buffer {node.buffer_name}")
                 return self.eval_buffer_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.SIMDStatement:
+            elif isinstance(node, zexus_ast.SIMDStatement):
                 debug_log("  SIMDStatement node")
                 return self.eval_simd_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.DeferStatement:
+            elif isinstance(node, zexus_ast.DeferStatement):
                 debug_log("  DeferStatement node")
                 return self.eval_defer_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.PatternStatement:
+            elif isinstance(node, zexus_ast.PatternStatement):
                 debug_log("  PatternStatement node")
                 return self.eval_pattern_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.EnumStatement:
+            elif isinstance(node, zexus_ast.EnumStatement):
                 debug_log("  EnumStatement node", f"enum {node.name}")
                 return self.eval_enum_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.StreamStatement:
+            elif isinstance(node, zexus_ast.StreamStatement):
                 debug_log("  StreamStatement node", f"stream {node.stream_name}")
                 return self.eval_stream_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.WatchStatement:
+            elif isinstance(node, zexus_ast.WatchStatement):
                 debug_log("  WatchStatement node")
                 return self.eval_watch_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.LogStatement:
+            elif isinstance(node, zexus_ast.LogStatement):
                 debug_log("  LogStatement node")
                 return self.eval_log_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ImportLogStatement:
+            elif isinstance(node, zexus_ast.ImportLogStatement):
                 debug_log("  ImportLogStatement node", "log <<")
                 return self.eval_import_log_statement(node, env, stack_trace)
             
             # === NEW SECURITY STATEMENTS ===
-            elif node_type == zexus_ast.CapabilityStatement:
+            elif isinstance(node, zexus_ast.CapabilityStatement):
                 debug_log("  CapabilityStatement node", f"capability {node.name}")
                 return self.eval_capability_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.GrantStatement:
+            elif isinstance(node, zexus_ast.GrantStatement):
                 debug_log("  GrantStatement node", f"grant {node.entity_name}")
                 return self.eval_grant_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.RevokeStatement:
+            elif isinstance(node, zexus_ast.RevokeStatement):
                 debug_log("  RevokeStatement node", f"revoke {node.entity_name}")
                 return self.eval_revoke_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ValidateStatement:
+            elif isinstance(node, zexus_ast.ValidateStatement):
                 debug_log("  ValidateStatement node")
                 return self.eval_validate_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.SanitizeStatement:
+            elif isinstance(node, zexus_ast.SanitizeStatement):
                 debug_log("  SanitizeStatement node")
                 return self.eval_sanitize_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.InjectStatement:
+            elif isinstance(node, zexus_ast.InjectStatement):
                 debug_log("  InjectStatement node")
                 return self.eval_inject_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ImmutableStatement:
+            elif isinstance(node, zexus_ast.ImmutableStatement):
                 debug_log("  ImmutableStatement node", f"immutable {node.target}")
                 return self.eval_immutable_statement(node, env, stack_trace)
             
             # === COMPLEXITY & LARGE PROJECT MANAGEMENT STATEMENTS ===
-            elif node_type == zexus_ast.InterfaceStatement:
+            elif isinstance(node, zexus_ast.InterfaceStatement):
                 debug_log("  InterfaceStatement node", f"interface {node.name.value}")
                 return self.eval_interface_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.TypeAliasStatement:
+            elif isinstance(node, zexus_ast.TypeAliasStatement):
                 debug_log("  TypeAliasStatement node", f"type_alias {node.name.value}")
                 return self.eval_type_alias_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ModuleStatement:
+            elif isinstance(node, zexus_ast.ModuleStatement):
                 debug_log("  ModuleStatement node", f"module {node.name.value}")
                 return self.eval_module_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.PackageStatement:
+            elif isinstance(node, zexus_ast.PackageStatement):
                 debug_log("  PackageStatement node", f"package {node.name.value}")
                 return self.eval_package_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.UsingStatement:
+            elif isinstance(node, zexus_ast.UsingStatement):
                 debug_log("  UsingStatement node", f"using {node.resource_name.value}")
                 return self.eval_using_statement(node, env, stack_trace)
             
             # === EXPRESSIONS ===
             # === CONCURRENCY & PERFORMANCE STATEMENTS ===
-            elif node_type == zexus_ast.ChannelStatement:
+            elif isinstance(node, zexus_ast.ChannelStatement):
                 debug_log("  ChannelStatement node", f"channel {node.name.value}")
                 return self.eval_channel_statement(node, env, stack_trace)
 
-            elif node_type == zexus_ast.SendStatement:
+            elif isinstance(node, zexus_ast.SendStatement):
                 debug_log("  SendStatement node", "send to channel")
                 return self.eval_send_statement(node, env, stack_trace)
 
-            elif node_type == zexus_ast.ReceiveStatement:
+            elif isinstance(node, zexus_ast.ReceiveStatement):
                 debug_log("  ReceiveStatement node", "receive from channel")
                 return self.eval_receive_statement(node, env, stack_trace)
 
-            elif node_type == zexus_ast.AtomicStatement:
+            elif isinstance(node, zexus_ast.AtomicStatement):
                 debug_log("  AtomicStatement node", "atomic operation")
                 return self.eval_atomic_statement(node, env, stack_trace)
 
             # === BLOCKCHAIN STATEMENTS ===
-            elif node_type == zexus_ast.LedgerStatement:
+            elif isinstance(node, zexus_ast.LedgerStatement):
                 debug_log("  LedgerStatement node", f"ledger {node.name.value}")
                 return self.eval_ledger_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.StateStatement:
+            elif isinstance(node, zexus_ast.StateStatement):
                 debug_log("  StateStatement node", f"state {node.name.value}")
                 return self.eval_state_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.RequireStatement:
+            elif isinstance(node, zexus_ast.RequireStatement):
                 debug_log("  RequireStatement node", "require condition")
                 return self.eval_require_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.RevertStatement:
+            elif isinstance(node, zexus_ast.RevertStatement):
                 debug_log("  RevertStatement node", "revert transaction")
                 return self.eval_revert_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.LimitStatement:
+            elif isinstance(node, zexus_ast.LimitStatement):
                 debug_log("  LimitStatement node", "set gas limit")
                 return self.eval_limit_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ProtocolStatement:
+            elif isinstance(node, zexus_ast.ProtocolStatement):
                 debug_log("  ProtocolStatement node", f"protocol {node.name}")
                 return self.eval_protocol_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.PersistentStatement:
+            elif isinstance(node, zexus_ast.PersistentStatement):
                 debug_log("  PersistentStatement node", f"persistent {node.name}")
                 return self.eval_persistent_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.EmitStatement:
+            elif isinstance(node, zexus_ast.EmitStatement):
                 debug_log("  EmitStatement node", f"emit {node.event_name}")
                 return self.eval_emit_statement(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ModifierDeclaration:
+            elif isinstance(node, zexus_ast.ModifierDeclaration):
                 debug_log("  ModifierDeclaration node", f"modifier {node.name}")
                 return self.eval_modifier_declaration(node, env, stack_trace)
 
             # === EXPRESSIONS ===
-            elif node_type == zexus_ast.Identifier:
+            elif isinstance(node, zexus_ast.Identifier):
                 debug_log("  Identifier node", node.value)
                 return self.eval_identifier(node, env)
             
-            elif node_type == zexus_ast.IntegerLiteral:
+            elif isinstance(node, zexus_ast.IntegerLiteral):
                 debug_log("  IntegerLiteral node", node.value)
                 from ..object import Integer
                 return Integer(node.value)
             
-            elif node_type == zexus_ast.FloatLiteral or node_type.__name__ == 'FloatLiteral':
+            elif node_type == zexus_ast.FloatLiteral or isinstance(node, zexus_ast.FloatLiteral):
                 debug_log("  FloatLiteral node", getattr(node, 'value', 'unknown'))
                 from ..object import Float
                 try:
@@ -387,7 +388,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 except Exception:
                     return EvaluationError(f"Invalid float literal: {getattr(node, 'value', None)}")
             
-            elif node_type == zexus_ast.StringLiteral:
+            elif isinstance(node, zexus_ast.StringLiteral):
                 debug_log("  StringLiteral node", node.value)
                 from ..object import String
                 # Process escape sequences in the string
@@ -400,76 +401,76 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 value = value.replace("\\'", "'")
                 return String(value)
             
-            elif node_type == zexus_ast.Boolean:
+            elif isinstance(node, zexus_ast.Boolean):
                 debug_log("  Boolean node", f"value: {node.value}")
                 from ..object import Boolean
                 return Boolean(node.value)
             
-            elif node_type == zexus_ast.NullLiteral:
+            elif isinstance(node, zexus_ast.NullLiteral):
                 debug_log("  NullLiteral node")
                 return NULL
             
-            elif node_type == zexus_ast.ThisExpression:
+            elif isinstance(node, zexus_ast.ThisExpression):
                 debug_log("  ThisExpression node")
                 return self.eval_this_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.InfixExpression:
+            elif isinstance(node, zexus_ast.InfixExpression):
                 debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
                 return self.eval_infix_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.PrefixExpression:
+            elif isinstance(node, zexus_ast.PrefixExpression):
                 debug_log("  PrefixExpression node", f"{node.operator} {node.right}")
                 return self.eval_prefix_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.IfExpression:
+            elif isinstance(node, zexus_ast.IfExpression):
                 debug_log("  IfExpression node")
                 return self.eval_if_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.TernaryExpression:
+            elif isinstance(node, zexus_ast.TernaryExpression):
                 debug_log("  TernaryExpression node")
                 return self.eval_ternary_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.NullishExpression:
+            elif isinstance(node, zexus_ast.NullishExpression):
                 debug_log("  NullishExpression node")
                 return self.eval_nullish_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.AwaitExpression:
+            elif isinstance(node, zexus_ast.AwaitExpression):
                 debug_log("  AwaitExpression node")
                 return self.eval_await_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.FileImportExpression:
+            elif isinstance(node, zexus_ast.FileImportExpression):
                 debug_log("  FileImportExpression node", "<< file import")
                 return self.eval_file_import_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.CallExpression:
+            elif isinstance(node, zexus_ast.CallExpression):
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.AsyncExpression:
+            elif isinstance(node, zexus_ast.AsyncExpression):
                 debug_log("⚡ AsyncExpression node", f"Async execution of {node.expression}")
                 return self.eval_async_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.MatchExpression:
+            elif isinstance(node, zexus_ast.MatchExpression):
                 debug_log("🎯 MatchExpression node", "Pattern matching")
                 return self.eval_match_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.MethodCallExpression:
+            elif isinstance(node, zexus_ast.MethodCallExpression):
                 debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
                 return self.eval_method_call_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.ListLiteral:
+            elif isinstance(node, zexus_ast.ListLiteral):
                 debug_log("  ListLiteral node", f"{len(node.elements)} elements")
                 elems = self.eval_expressions(node.elements, env)
                 if is_error(elems):
                     return elems
                 return List(elems)
             
-            elif node_type == zexus_ast.MapLiteral:
+            elif isinstance(node, zexus_ast.MapLiteral):
                 debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
                 pairs = {}
                 for k, v in node.pairs:
                     # If the key is a bare identifier (e.g. io.read) treat it as a string key
-                    if type(k) == zexus_ast.Identifier:
+                    if isinstance(k, zexus_ast.Identifier):
                         key_str = k.value
                     else:
                         key = self.eval_node(k, env, stack_trace)
@@ -483,19 +484,19 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     pairs[key_str] = val
                 return Map(pairs)
             
-            elif node_type == zexus_ast.ActionLiteral:
+            elif isinstance(node, zexus_ast.ActionLiteral):
                 debug_log("  ActionLiteral node")
                 return Action(node.parameters, node.body, env)
             
-            elif node_type == zexus_ast.LambdaExpression:
+            elif isinstance(node, zexus_ast.LambdaExpression):
                 debug_log("  LambdaExpression node")
                 return LambdaFunction(node.parameters, node.body, env)
             
-            elif node_type == zexus_ast.EmbeddedLiteral:
+            elif isinstance(node, zexus_ast.EmbeddedLiteral):
                 debug_log("  EmbeddedLiteral node")
                 return EmbeddedCode("embedded_block", node.language, node.code)
             
-            elif node_type == zexus_ast.PropertyAccessExpression:
+            elif isinstance(node, zexus_ast.PropertyAccessExpression):
                 debug_log("  PropertyAccessExpression node", f"{node.object}.{node.property}")
                 obj = self.eval_node(node.object, env, stack_trace)
                 if is_error(obj): 
@@ -616,23 +617,23 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 return NULL
             
             # === BLOCKCHAIN EXPRESSIONS ===
-            elif node_type == zexus_ast.TXExpression:
+            elif isinstance(node, zexus_ast.TXExpression):
                 debug_log("  TXExpression node", f"tx.{node.property_name}")
                 return self.eval_tx_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.HashExpression:
+            elif isinstance(node, zexus_ast.HashExpression):
                 debug_log("  HashExpression node", "hash()")
                 return self.eval_hash_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.SignatureExpression:
+            elif isinstance(node, zexus_ast.SignatureExpression):
                 debug_log("  SignatureExpression node", "signature()")
                 return self.eval_signature_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.VerifySignatureExpression:
+            elif isinstance(node, zexus_ast.VerifySignatureExpression):
                 debug_log("  VerifySignatureExpression node", "verify_sig()")
                 return self.eval_verify_signature_expression(node, env, stack_trace)
             
-            elif node_type == zexus_ast.GasExpression:
+            elif isinstance(node, zexus_ast.GasExpression):
                 debug_log("  GasExpression node", f"gas.{node.property_name}")
                 return self.eval_gas_expression(node, env, stack_trace)
             

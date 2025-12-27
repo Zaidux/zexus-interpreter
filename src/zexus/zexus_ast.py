@@ -131,6 +131,22 @@ class ContinueStatement(Statement):
     def __repr__(self):
         return "ContinueStatement()"
 
+class BreakStatement(Statement):
+    """Break statement - exits the current loop."""
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "BreakStatement()"
+
+class ThrowStatement(Statement):
+    """Throw statement - throws an error/exception."""
+    def __init__(self, message):
+        self.message = message
+
+    def __repr__(self):
+        return f"ThrowStatement(message={self.message})"
+
 class ExpressionStatement(Statement):
     def __init__(self, expression): 
         self.expression = expression

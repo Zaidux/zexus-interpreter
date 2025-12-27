@@ -769,8 +769,6 @@ class ExpressionEvaluatorMixin:
         import threading
         import sys
         
-        print(f"[ASYNC EXPR] Evaluating async expression", file=sys.stderr)
-        
         # Evaluate the expression to get the result
         result = self.eval_node(node.expression, env, stack_trace)
         
@@ -808,53 +806,3 @@ class ExpressionEvaluatorMixin:
         # Just return NULL to indicate "async operation initiated"
         print(f"[ASYNC EXPR] Result is not a coroutine, returning NULL", file=sys.stderr)
         return NULL
-
-    def eval_async_expression(self, node, env, stack_trace):
-        """Evaluate async expression: async <expression>
-        
-        Executes the expression in a background thread.
-        Example: async producer()
-        """
-        import threading
-        import sys
-        
-        print(f"[ASYNC EXPR] Evaluating async expression", file=sys.stderr)
-        
-        # Evaluate the expression to get the result
-        result = self.eval_node(node.expression, env, stack_trace)
-        
-        if is_error(result):
-            return result
-        
-        print(f"[ASYNC EXPR] Expression evaluated to: {type(result).__name__}", file=sys.stderr)
-        
-        # If it's a Coroutine (from calling an async action), execute it in a thread
-        if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-            print(f"[ASYNC EXPR] Starting coroutine in thread", file=sys.stderr)
-            
-            def run_coroutine():
-                print(f"[ASYNC EXPR THREAD] Thread started", file=sys.stderr)
-                try:
-                    # Prime the generator
-                    val = next(result.generator)
-                    # Execute until completion
-                    try:
-                        while True:
-                            val = next(result.generator)
-                    except StopIteration:
-                        print(f"[ASYNC EXPR THREAD] Coroutine completed", file=sys.stderr)
-                except Exception as e:
-                    print(f"[ASYNC EXPR THREAD ERROR] {str(e)}", file=sys.stderr)
-                    import traceback
-                    traceback.print_exc(file=sys.stderr)
-            
-            thread = threading.Thread(target=run_coroutine, daemon=True)
-            thread.start()
-            return NULL
-        
-        # For any other result (including NULL from regular actions),
-        # we can't execute it asynchronously since it already executed.
-        # Just return NULL to indicate "async operation initiated"
-        print(f"[ASYNC EXPR] Result is not a coroutine, returning NULL", file=sys.stderr)
-        return NULL
-

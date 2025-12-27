@@ -375,6 +375,10 @@ class UltimateParser:
                 node = self.parse_return_statement()
             elif self.cur_token_is(CONTINUE):
                 node = self.parse_continue_statement()
+            elif self.cur_token_is(BREAK):
+                node = self.parse_break_statement()
+            elif self.cur_token_is(THROW):
+                node = self.parse_throw_statement()
             elif self.cur_token_is(PRINT):
                 node = self.parse_print_statement()
             elif self.cur_token_is(FOR):
@@ -2516,6 +2520,20 @@ class UltimateParser:
         self.next_token()  # consume CONTINUE token
         return stmt
 
+    def parse_break_statement(self):
+        """Parse BREAK statement - exits current loop."""
+        stmt = BreakStatement()
+        self.next_token()  # consume BREAK token
+        return stmt
+
+    def parse_throw_statement(self):
+        """Parse THROW statement - throws an error."""
+        self.next_token()  # consume THROW token
+        # Parse error message expression
+        message = self.parse_expression(LOWEST)
+        stmt = ThrowStatement(message=message)
+        return stmt
+
     def parse_expression_statement(self):
         stmt = ExpressionStatement(expression=self.parse_expression(LOWEST))
         if self.peek_token_is(SEMICOLON):
@@ -2834,11 +2852,19 @@ class UltimateParser:
             return None
 
         properties = []
+        methods = []
 
-        # Parse properties until we hit closing brace
+        # Parse properties and methods until we hit closing brace
         self.next_token()  # Move past {
 
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            # Check if this is an action/method definition
+            if self.cur_token_is(ACTION) or self.cur_token_is(FUNCTION):
+                method = self.parse_action_statement() if self.cur_token_is(ACTION) else self.parse_function_statement()
+                if method:
+                    methods.append(method)
+                continue
+            
             if self.cur_token_is(IDENT):
                 prop_name = self.cur_token.literal
 
@@ -2882,7 +2908,7 @@ class UltimateParser:
             # Consume the closing brace
             self.next_token()
 
-        return EntityStatement(name=entity_name, properties=properties, parent=parent)
+        return EntityStatement(name=entity_name, properties=properties, parent=parent, methods=methods)
 
     def recover_to_next_property(self):
         """Recover to the next property in entity definition"""

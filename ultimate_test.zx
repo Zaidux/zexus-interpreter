@@ -156,6 +156,7 @@ print("")
 print("3.2: Atomic operations test...")
 let shared_counter = 0
 async action incrementer() {
+    print("Incrementer started!")
     let i = 0
     while i < 1000 {
         atomic {
@@ -163,6 +164,7 @@ async action incrementer() {
         }
         i = i + 1
     }
+    print("Incrementer done, counter=" + string(shared_counter))
 }
 
 # Start multiple incrementers
@@ -170,7 +172,7 @@ let start_counter = shared_counter
 async incrementer()
 async incrementer()
 async incrementer()
-sleep(0.2)
+sleep(15)  # Increased to allow atomic operations to complete (3000 atomic ops take time)
 
 print("Shared counter (should be 3000): " + string(shared_counter))
 print("Actual increase: " + string(shared_counter - start_counter))

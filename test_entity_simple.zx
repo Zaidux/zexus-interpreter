@@ -1,0 +1,12 @@
+entity Test {
+    name: string
+    
+    action greet() {
+        print("Hello from " + this.name)
+    }
+}
+
+let t = Test("World")
+print("Created entity instance")
+print("Calling method...")
+t.greet()

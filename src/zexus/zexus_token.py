@@ -86,6 +86,8 @@ DEBUG = "DEBUG"      # NEW: Debug token
 TRY = "TRY"          # NEW: Try token
 CATCH = "CATCH"      # NEW: Catch token
 CONTINUE = "CONTINUE" # NEW: Continue on error token
+BREAK = "BREAK"      # NEW: Break loop statement
+THROW = "THROW"      # NEW: Throw error statement
 EXTERNAL = "EXTERNAL" # NEW: From token
 FROM = "FROM"        # NEW: From token
 

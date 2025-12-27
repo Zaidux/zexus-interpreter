@@ -46,6 +46,7 @@ class ContextStackParser:
             'function': self._parse_function_context,
             FUNCTION: self._parse_function_statement_context,
             ACTION: self._parse_action_statement_context,
+            ASYNC: self._parse_async_expression_block,  # Handle async expressions
             'try_catch': self._parse_try_catch_context,
             'try_catch_statement': self._parse_try_catch_statement,
             'conditional': self._parse_conditional_context,
@@ -1002,7 +1003,7 @@ class ContextStackParser:
         return ExpressionStatement(call_expression)
 
     def _parse_entity_statement_block(self, block_info, all_tokens):
-        """Parse entity declaration block"""
+        """Parse entity declaration block with properties and methods"""
         parser_debug("🔧 [Context] Parsing entity statement")
         tokens = block_info['tokens']
 
@@ -1012,8 +1013,9 @@ class ContextStackParser:
         entity_name = tokens[1].literal if tokens[1].type == IDENT else "Unknown"
         parser_debug(f"  📝 Entity: {entity_name}")
 
-        # Parse properties between braces
+        # Parse properties and methods between braces
         properties = []
+        methods = []
         brace_start = -1
         brace_end = -1
         brace_count = 0
@@ -1030,9 +1032,78 @@ class ContextStackParser:
                     break
 
         if brace_start != -1 and brace_end != -1:
-            # Parse properties inside braces
+            # Parse properties and actions inside braces
             i = brace_start + 1
             while i < brace_end:
+                # Check for action (method) definitions
+                if tokens[i].type == ACTION:
+                    # Parse action like in contract parser
+                    action_start = i
+                    i += 1  # Move past ACTION
+                    
+                    # Get action name
+                    if i < brace_end and tokens[i].type == IDENT:
+                        action_name = tokens[i].literal
+                        parser_debug(f"  📝 Found method: {action_name}")
+                        i += 1
+                        
+                        # Collect parameters
+                        param_list = []
+                        if i < brace_end and tokens[i].type == LPAREN:
+                            i += 1
+                            paren_depth = 1
+                            while i < brace_end and paren_depth > 0:
+                                if tokens[i].type == LPAREN:
+                                    paren_depth += 1
+                                elif tokens[i].type == RPAREN:
+                                    paren_depth -= 1
+                                    if paren_depth == 0:
+                                        break
+                                elif tokens[i].type == IDENT:
+                                    # Add parameter
+                                    param_list.append(Identifier(tokens[i].literal))
+                                i += 1
+                            i += 1  # Skip closing paren
+                        
+                        # Skip return type annotation if present (-> type)
+                        if i < brace_end and tokens[i].type == MINUS and i + 1 < brace_end and tokens[i + 1].type == GT:
+                            i += 2  # Skip ->
+                            if i < brace_end and tokens[i].type == IDENT:
+                                i += 1  # Skip return type
+                        
+                        # Find action body (between braces)
+                        if i < brace_end and tokens[i].type == LBRACE:
+                            action_brace_start = i
+                            action_brace_count = 1
+                            i += 1
+                            while i < brace_end and action_brace_count > 0:
+                                if tokens[i].type == LBRACE:
+                                    action_brace_count += 1
+                                elif tokens[i].type == RBRACE:
+                                    action_brace_count -= 1
+                                i += 1
+                            action_brace_end = i - 1
+                            
+                            # Parse action body
+                            body_tokens = tokens[action_brace_start + 1:action_brace_end]
+                            body_statements = self._parse_block_statements(body_tokens)
+                            
+                            # Create block statement
+                            block_stmt = BlockStatement()
+                            block_stmt.statements = body_statements
+                            
+                            # Create action statement
+                            action_stmt = ActionStatement(
+                                name=Identifier(action_name),
+                                parameters=param_list,
+                                body=block_stmt,
+                                return_type=None
+                            )
+                            methods.append(action_stmt)
+                            parser_debug(f"  ✅ Parsed method: {action_name}")
+                    continue
+                
+                # Parse regular properties
                 if tokens[i].type == IDENT:
                     prop_name = tokens[i].literal
                     parser_debug(f"  📝 Found property name: {prop_name}")
@@ -1055,7 +1126,8 @@ class ContextStackParser:
 
         return EntityStatement(
             name=Identifier(entity_name),
-            properties=properties
+            properties=properties,
+            methods=methods
         )
 
     def _parse_contract_statement_block(self, block_info, all_tokens):
@@ -2424,6 +2496,44 @@ class ContextStackParser:
                 i = j
                 continue
 
+            elif token.type == BREAK:
+                # Parse BREAK statement directly (simple statement, no value)
+                stmt = BreakStatement()
+                statements.append(stmt)
+                
+                # Skip to next token (and skip semicolon if present)
+                j = i + 1
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
+                
+                i = j
+                continue
+
+            elif token.type == THROW:
+                # Parse THROW statement - throw error_message
+                j = i + 1
+                # Collect message expression tokens until semicolon or newline
+                msg_tokens = []
+                while j < len(tokens) and tokens[j].type not in {SEMICOLON, RBRACE}:
+                    msg_tokens.append(tokens[j])
+                    j += 1
+                
+                # Parse message expression
+                if msg_tokens:
+                    msg_expr = self._parse_expression(msg_tokens)
+                else:
+                    msg_expr = StringLiteral(value="Error")
+                
+                stmt = ThrowStatement(message=msg_expr)
+                statements.append(stmt)
+                
+                # Skip semicolon if present
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
+                
+                i = j
+                continue
+
             elif token.type == WHILE:
                 # Parse WHILE statement directly
                 j = i + 1
@@ -2709,6 +2819,71 @@ class ContextStackParser:
                 stmt = self._parse_require_statement(block_info, tokens)
                 if stmt:
                     statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == ATOMIC:
+                # Parse ATOMIC statement: atomic { statements }
+                j = i + 1
+                
+                # Collect tokens until after closing brace
+                atomic_tokens = [token]
+                brace_nest = 0
+                while j < len(tokens):
+                    tj = tokens[j]
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            atomic_tokens.append(tj)
+                            j += 1
+                            break
+                    atomic_tokens.append(tj)
+                    j += 1
+                
+                parser_debug(f"    📝 Found atomic statement with {len(atomic_tokens)} tokens")
+                
+                # Use the handler to parse it
+                block_info = {'tokens': atomic_tokens}
+                stmt = self._parse_atomic_statement(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == ASYNC:
+                # Parse ASYNC expression: async <expression>
+                j = i + 1
+                
+                # Collect tokens for the async expression (usually just async + ident + parens)
+                async_tokens = [token]
+                nesting = 0
+                while j < len(tokens):
+                    tj = tokens[j]
+                    if tj.type == LPAREN:
+                        nesting += 1
+                    elif tj.type == RPAREN:
+                        nesting -= 1
+                        async_tokens.append(tj)
+                        if nesting == 0:
+                            j += 1
+                            break
+                    elif nesting == 0 and tj.type in statement_starters:
+                        break
+                    async_tokens.append(tj)
+                    j += 1
+                
+                parser_debug(f"    📝 Found async expression with {len(async_tokens)} tokens")
+                
+                # Use the handler to parse it
+                block_info = {'tokens': async_tokens}
+                stmt = self._parse_async_expression_block(block_info, tokens)
+                if stmt:
+                    # Wrap in ExpressionStatement since async expressions are expressions
+                    statements.append(ExpressionStatement(stmt))
                 
                 i = j
                 continue
@@ -4101,6 +4276,61 @@ class ContextStackParser:
             is_async=is_async,
             return_type=return_type
         )
+
+    def _parse_async_expression_block(self, block_info, all_tokens):
+        """Parse async expression: async <expression>
+        
+        Example: async producer()
+        This creates an AsyncExpression that executes the expression in a background thread.
+        """
+        from ..zexus_ast import AsyncExpression, ExpressionStatement
+        import sys
+        
+        tokens = block_info.get('tokens', [])
+        if not tokens or tokens[0].type != ASYNC:
+            return None
+        
+        # The tokens are [ASYNC, ...expression tokens...]
+        # We can just call parse_async_expression from the main parser!
+        # But wait, that expects to see ASYNC as cur_token. We need to create a mini-parser.
+        #
+        # Actually, simpler approach: Just parse the expression part and wrap it in AsyncExpression
+        expr_tokens = tokens[1:]  # Skip ASYNC
+        
+        if not expr_tokens:
+            return None
+        
+        # Create a mini-parser for the expression tokens
+        from ..parser.parser import UltimateParser
+        from ..zexus_token import Token, EOF
+        
+        class TokenLexer:
+            """A lexer that reads from a list of tokens instead of source code"""
+            def __init__(self, tokens):
+                self.tokens = tokens + [Token(EOF, 'EOF', 0, 0)]  # Add EOF token
+                self.pos = 0
+            
+            def next_token(self):
+                if self.pos < len(self.tokens):
+                    tok = self.tokens[self.pos]
+                    self.pos += 1
+                    return tok
+                return Token(EOF, 'EOF', 0, 0)
+        
+        token_lexer = TokenLexer(expr_tokens)
+        mini_parser = UltimateParser(token_lexer, enable_advanced_strategies=False)
+        
+        # The parser already primes itself in __init__ by calling next_token() twice!
+        # So cur_token is already set to the first token, peek_token to the second.
+        
+        expr = mini_parser.parse_expression(1)  # LOWEST precedence
+        
+        if expr:
+            # Wrap in AsyncExpression
+            async_expr = AsyncExpression(expression=expr)
+            return ExpressionStatement(async_expr)
+        
+        return None
 
     def _parse_function_statement_context(self, block_info, all_tokens):
         """Parse function statement: function name(params) [-> return_type] { body }"""
