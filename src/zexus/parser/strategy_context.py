@@ -995,8 +995,6 @@ class ContextStackParser:
         # Parse the left-hand side (could be identifier or property access)
         lhs_tokens = tokens[:assign_idx]
         
-        print(f"[ASSIGN PARSE] lhs_tokens: {[t.literal for t in lhs_tokens]}")
-        
         # Check if this is a property access (e.g., obj.property or obj["key"])
         target_expr = None
         if len(lhs_tokens) == 1:
@@ -1005,8 +1003,6 @@ class ContextStackParser:
         else:
             # Could be property access or index access
             target_expr = self._parse_expression(lhs_tokens)
-        
-        print(f"[ASSIGN PARSE] target_expr type: {type(target_expr).__name__}")
         
         if target_expr is None:
             parser_debug("  ❌ Could not parse assignment target")
@@ -1780,22 +1776,71 @@ class ContextStackParser:
             elif token.type == LET:
                 j = i + 1
                 nesting = 0
+                paren_nesting = 0  # Track parentheses separately for expressions
+                has_equals = False  # Track if we've seen the = sign
+                
                 while j < len(tokens):
                     t = tokens[j]
-                    if t.type == LBRACE:
+                    
+                    # Track nesting
+                    if t.type == LPAREN:
+                        paren_nesting += 1
+                    elif t.type == RPAREN:
+                        paren_nesting -= 1
+                    elif t.type == LBRACE:
                         nesting += 1
                     elif t.type == RBRACE:
                         nesting -= 1
                         if nesting < 0:
                             break
+                    elif t.type == ASSIGN:
+                        has_equals = True
                     
-                    # Stop at semicolon or when we hit another statement keyword (at nesting 0)
-                    if nesting == 0 and t.type == SEMICOLON:
+                    # Stop at semicolon (at nesting 0 and paren_nesting 0)
+                    if nesting == 0 and paren_nesting == 0 and t.type == SEMICOLON:
                         break
+                    
+                    # CRITICAL: Detect start of new IDENT-based statements
+                    # ONLY after we've collected a complete LET (has variable name, =, and value)
+                    # The value is complete when we're back at paren_nesting 0 and nesting 0
+                    if nesting == 0 and paren_nesting == 0 and has_equals and j > i + 3 and t.type == IDENT:
+                        # We've collected at least: let name = value
+                        # Now check if this IDENT starts a new statement
+                        lookahead_idx = j + 1
+                        is_new_statement = False
+                        
+                        if lookahead_idx < len(tokens):
+                            next_tok = tokens[lookahead_idx]
+                            # Function call: ident(
+                            if next_tok.type == LPAREN:
+                                is_new_statement = True
+                            # Simple assignment: ident =
+                            elif next_tok.type == ASSIGN:
+                                is_new_statement = True
+                            # Property assignment: ident.prop...=
+                            elif next_tok.type == DOT:
+                                # Scan through property chain to find ASSIGN
+                                k = lookahead_idx + 1
+                                while k < len(tokens) and k < j + 10:
+                                    if tokens[k].type == IDENT:
+                                        k += 1
+                                        if k < len(tokens):
+                                            if tokens[k].type == ASSIGN:
+                                                is_new_statement = True
+                                                break
+                                            elif tokens[k].type == DOT:
+                                                k += 1  # Continue chain
+                                            else:
+                                                break
+                                    else:
+                                        break
+                        
+                        if is_new_statement:
+                            break
                     
                     # Stop when we hit another statement starter (at nesting 0)
                     # EXCEPT: Allow IF when followed by THEN (if-then-else expression)
-                    if nesting == 0 and t.type in statement_starters and j > i + 1:
+                    if nesting == 0 and paren_nesting == 0 and t.type in statement_starters and j > i + 1:
                         # Check if this is IF followed by THEN (expression form)
                         if t.type == IF:
                             # Look ahead for THEN to determine if this is an expression
@@ -3103,24 +3148,34 @@ class ContextStackParser:
                         # E.g., after RPAREN (end of function call) or after a complete value
                         prev_token = run_tokens[-1] if run_tokens else None
                         if prev_token and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE}:
-                            # Check next tokens for assignment pattern
+                            # Check if this starts a new statement (assignment or function call)
                             k = j + 1
-                            is_assignment_start = False
-                            # Skip DOT IDENT sequences
-                            while k < len(tokens) and k < j + 10:
-                                if tokens[k].type == DOT:
-                                    k += 1
-                                    if k < len(tokens) and tokens[k].type == IDENT:
-                                        k += 1
-                                    else:
-                                        break
-                                elif tokens[k].type == ASSIGN:
-                                    is_assignment_start = True
-                                    break
-                                else:
-                                    break
+                            is_new_statement_start = False
                             
-                            if is_assignment_start:
+                            if k < len(tokens):
+                                next_tok = tokens[k]
+                                # Function call: ident(
+                                if next_tok.type == LPAREN:
+                                    is_new_statement_start = True
+                                # Assignment: ident = or ident.prop =
+                                elif next_tok.type == ASSIGN:
+                                    is_new_statement_start = True
+                                elif next_tok.type == DOT:
+                                    # Property assignment: scan for ASSIGN
+                                    while k < len(tokens) and k < j + 10:
+                                        if tokens[k].type == DOT:
+                                            k += 1
+                                            if k < len(tokens) and tokens[k].type == IDENT:
+                                                k += 1
+                                            else:
+                                                break
+                                        elif tokens[k].type == ASSIGN:
+                                            is_new_statement_start = True
+                                            break
+                                        else:
+                                            break
+                            
+                            if is_new_statement_start:
                                 break
                     
                     # update nesting for parentheses/brackets/braces
@@ -4809,7 +4864,6 @@ class ContextStackParser:
     def _parse_generic_block(self, block_info, all_tokens):
         """Fallback parser for unknown block types - intelligently detects statement type"""
         tokens = block_info.get('tokens', [])
-        print(f"[_parse_generic_block] Received {len(tokens)} tokens: {[t.literal for t in tokens]}")
         if not tokens:
             return BlockStatement()
         
@@ -4860,7 +4914,6 @@ class ContextStackParser:
         
         if assign_idx is not None and assign_idx > 0:
             parser_debug(f"  🎯 [Generic] Detected assignment statement (assign at index {assign_idx})")
-            print(f"[GENERIC] Passing block to _parse_assignment_statement with tokens: {[t.literal for t in tokens]}")
             return self._parse_assignment_statement(block_info, all_tokens)
         
         # Check if this is a print statement

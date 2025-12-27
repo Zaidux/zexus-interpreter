@@ -1,0 +1,64 @@
+# Reproduce the exact ultimate_test.zx Part 10 structure
+
+entity Order {
+    id: integer,
+    items: list,
+    total: float,
+    status: string
+}
+
+action process_order(order: Order) -> string {
+    # Security policies (applied to order instead of 'this')
+    protect(order, {
+        rate_limit: 100,
+        auth_required: true
+    }, "strict")
+    
+    # Verification
+    verify order.total > 0, "Invalid order total"
+    verify len(order.items) > 0, "Empty order"
+    verify order.status in ["pending", "processing", "completed"], "Invalid status"
+    
+    # Reactive tracking
+    watch order.status => {
+        print("Order " + string(order.id) + " status changed to: " + order.status)
+    }
+    
+    # Business logic
+    order.status = "processing"
+    print("Processing order " + string(order.id) + " with total: $" + string(order.total))
+    
+    # Simulate async processing
+    sleep(0.1)
+    order.status = "completed"
+    
+    # Persist result - ADD DEBUG
+    print("DEBUG: About to persist order with status: " + order.status)
+    let persist_result = persist_set("order_" + string(order.id), order)
+    print("DEBUG: persist_set returned: " + string(persist_result))
+    
+    return "Order " + string(order.id) + " completed successfully"
+}
+
+try {
+    let order = Order(999, [{"item": "Laptop", "price": 999.99}], 999.99, "pending")
+    let result = process_order(order)
+    print(result)
+    
+    # Retrieve persisted - ADD DEBUG
+    print("DEBUG: About to retrieve order_999")
+    let persisted_order = persist_get("order_999")
+    print("DEBUG: persist_get returned: " + string(persisted_order))
+    print("DEBUG: persisted_order is null? " + string(persisted_order == null))
+    
+    if persisted_order != null {
+        print("DEBUG: Attempting to access status key...")
+        let status_value = persisted_order["status"]
+        print("DEBUG: status_value = " + string(status_value))
+        print("Persisted order status: " + status_value)
+    } else {
+        print("ERROR: persisted_order is null!")
+    }
+} catch (error) {
+    print("Integration test error: " + string(error))
+}

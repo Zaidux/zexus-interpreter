@@ -1,0 +1,15 @@
+entity Order {
+    id: integer,
+    status: string
+}
+
+action test_simple() -> string {
+    let order = Order(1, "pending")
+    order.status = "completed"
+    persist_set("test_simple", order)
+    return "done"
+}
+
+print("Running simple test...")
+test_simple()
+print("Done")
