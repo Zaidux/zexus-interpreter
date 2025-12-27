@@ -1687,7 +1687,6 @@ class StatementEvaluatorMixin:
         
         # Process methods (actions defined inside the entity)
         if hasattr(node, 'methods') and node.methods:
-            print(f"[DEBUG ENTITY] Processing {len(node.methods)} methods")
             for method in node.methods:
                 # Don't evaluate the action statement - that would just store it in env and return NULL
                 # Instead, create the Action object directly
@@ -1697,9 +1696,6 @@ class StatementEvaluatorMixin:
                 # Store the method by name
                 method_name = method.name.value if hasattr(method, 'name') else str(method)
                 methods[method_name] = method_action
-                print(f"[DEBUG ENTITY] Stored method: {method_name}")
-        else:
-            print(f"[DEBUG ENTITY] No methods found. hasattr={hasattr(node, 'methods')}, methods={getattr(node, 'methods', None)}")
         
         # Create entity with methods and parent reference
         parent_ref = parent_entity if (node.parent and isinstance(parent_entity, EntityDefinition)) else None
@@ -1707,7 +1703,6 @@ class StatementEvaluatorMixin:
         # Use the EntityDefinition from security.py which supports methods
         from ..security import EntityDefinition as SecurityEntityDef
         entity = SecurityEntityDef(node.name.value, props, methods, parent_ref)
-        print(f"[DEBUG ENTITY] Created entity {node.name.value} with {len(methods)} methods")
         env.set(node.name.value, entity)
         return NULL
     
@@ -4089,10 +4084,6 @@ class StatementEvaluatorMixin:
         Uses a global lock to serialize atomic blocks.
         """
         from threading import Lock
-        import sys
-        
-        print(f"[ATOMIC] Entering atomic block", file=sys.stderr)
-        print(f"[ATOMIC] Current env keys: {list(env.store.keys())[:10] if hasattr(env, 'store') else 'N/A'}", file=sys.stderr)
         
         # Global atomic lock (class-level to share across all evaluators)
         if not hasattr(self.__class__, '_atomic_lock'):

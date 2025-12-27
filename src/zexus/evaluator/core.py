@@ -82,7 +82,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 return self.eval_node(node.expression, env, stack_trace)
             
             elif isinstance(node, zexus_ast.BlockStatement):
-                print(f"[DEBUG] Matched BlockStatement! About to call eval_block_statement")
                 debug_log("  BlockStatement node", f"{len(node.statements)} statements")
                 return self.eval_block_statement(node, env, stack_trace)
             

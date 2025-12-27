@@ -16,14 +16,6 @@ class ExpressionEvaluatorMixin:
     def eval_identifier(self, node, env):
         debug_log("eval_identifier", f"Looking up: {node.value}")
         
-        # Debug: Track channel and counter lookups
-        import sys
-        if node.value in ['number_channel', 'message_channel', 'shared_counter']:
-            print(f"[IDENTIFIER] Looking up '{node.value}' in environment", file=sys.stderr)
-            print(f"[IDENTIFIER] Current env keys: {list(env.store.keys())[:20] if hasattr(env, 'store') else 'N/A'}", file=sys.stderr)
-            if env.outer:
-                print(f"[IDENTIFIER] Outer env keys: {list(env.outer.store.keys())[:20] if hasattr(env.outer, 'store') else 'N/A'}", file=sys.stderr)
-        
         # Special case: 'this' keyword should be treated like ThisExpression
         if node.value == "this":
             # Look for contract instance first
