@@ -498,6 +498,7 @@ class StructuralAnalyzer:
                 found_colon_block = False  # Did we encounter a : (tolerable syntax)?
                 baseline_column = None  # Track indentation for colon-based blocks
                 in_assignment = (t.type in {LET, CONST})  # Are we in an assignment RHS?
+                seen_assign = False  # Track if we've seen the main ASSIGN in LET/CONST
 
                 while j < n:
                     tj = tokens[j]
@@ -506,11 +507,38 @@ class StructuralAnalyzer:
                     if nesting == 0 and tj.type in stop_types and not found_colon_block:
                         break
                     
+                    # Track when we see the main ASSIGN in LET/CONST statements
+                    if in_assignment and tj.type == ASSIGN and nesting == 0:
+                        seen_assign = True
+                    
                     # CRITICAL FIX: Check if next token starts a new statement (assignment or function call)
+                    # BUT: Don't break if we're in a LET/CONST before the main ASSIGN (type annotation case)
+                    # ALSO: Don't break if we're in the middle of a property access chain (obj.prop = ...)
                     if nesting == 0 and len(stmt_tokens) > 1:  # Only check if we've collected some tokens
-                        # IDENT followed by ASSIGN is an assignment statement
+                        # Pattern 1: IDENT followed by ASSIGN is an assignment statement
+                        # EXCEPT: In LET/CONST before main assign (e.g., "let x : string =" - string is type, not new var)
+                        # EXCEPT: After DOT (property access within same statement: obj.prop = ...)
                         if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN:
-                            break
+                            # Check if previous token was DOT (we're in property chain)
+                            prev_token = stmt_tokens[-1] if stmt_tokens else None
+                            is_property_access = prev_token and prev_token.type == DOT
+                            
+                            # Only break if:
+                            # 1. NOT in property access chain, AND
+                            # 2. (NOT in LET/CONST, OR we've already seen the main assign)
+                            if not is_property_access and (not in_assignment or seen_assign):
+                                break
+                        
+                        # Pattern 2: IDENT followed by DOT could be start of property assignment (obj.prop = ...)
+                        # This is a NEW statement if we're in LET/CONST and have seen the main assign
+                        elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == DOT:
+                            # Look ahead to see if this becomes a property assignment
+                            # Pattern: IDENT DOT IDENT ASSIGN
+                            if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type == ASSIGN:
+                                # This is a property assignment starting!
+                                # Break if we've already completed the LET/CONST
+                                if in_assignment and seen_assign:
+                                    break
                         # IDENT followed by LPAREN is a function call (already handled below, but listed for clarity)
                     
                     # Detect colon-based block (tolerable syntax for action/function/if/while etc.)
@@ -675,6 +703,11 @@ class StructuralAnalyzer:
                         # Check if previous token was DOT (part of property access)
                         prev_is_dot = (j > 0 and tokens[j - 1].type == DOT)
                         if not prev_is_dot:
+                            is_assignment_start = True
+                    # Pattern 2: IDENT followed by DOT could be property assignment (obj.prop = ...)
+                    elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == DOT:
+                        # Look ahead: IDENT DOT IDENT ASSIGN is a property assignment
+                        if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type == ASSIGN:
                             is_assignment_start = True
                     
                     is_new_statement = (

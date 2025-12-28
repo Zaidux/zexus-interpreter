@@ -1,0 +1,15 @@
+{
+  "source_code": "# Golden Test: Type Annotations\n# Tests that type annotations in LET statements parse correctly\n# Critical regression: Parser must not break at type annotation ASSIGN\n\nlet simple_typed : string = \"hello\"\nlet number_typed : integer = 42\nlet complex_typed : Map<string, integer> = {\"key\": 123}\n\nprint(\"Simple: \" + simple_typed)\nprint(\"Number: \" + string(number_typed))\n",
+  "source_hash": "af906b716135949d020830daef5b9176",
+  "statements_count": 0,
+  "token_boundaries": [],
+  "ast_structure": {
+    "error": "'Lexer' object has no attribute 'tokenize'"
+  },
+  "variable_declarations": [],
+  "statement_types": [],
+  "parse_metadata": {
+    "parse_failed": true,
+    "error": "'Lexer' object has no attribute 'tokenize'"
+  }
+}

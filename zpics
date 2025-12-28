@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+ZPICS CLI - Zexus Parser Invariant Checking System
+Command-line interface for validating parser changes
+"""
+
+import sys
+import argparse
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from zexus.testing.zpics import validate_parser_changes, ZPICSValidator
+from zexus.testing.zpics_runtime import validate_runtime_changes, ZPICSEvaluatorValidator
+
+
+def create_baseline(golden_dir: str):
+    """Create baseline snapshots for all golden tests"""
+    validator = ZPICSValidator()
+    runtime_validator = ZPICSEvaluatorValidator()
+    
+    golden_path = Path(golden_dir)
+    if not golden_path.exists():
+        print(f"❌ Golden tests directory not found: {golden_dir}")
+        return False
+    
+    count = 0
+    for test_file in golden_path.glob("*.zx"):
+        test_name = test_file.stem
+        source_code = test_file.read_text()
+        
+        print(f"📸 Creating baseline for: {test_name}")
+        snapshot = validator.create_snapshot(test_name, source_code)
+        validator.save_snapshot(test_name, snapshot)
+        
+        # Also create runtime baseline
+        runtime_snapshot = runtime_validator.create_snapshot(test_name, source_code)
+        runtime_validator.save_snapshot(test_name, runtime_snapshot)
+        count += 1
+    
+    print(f"\n✅ Created {count} baseline snapshots (parser + runtime)")
+    return True
+
+
+def validate(golden_dir: str):
+    """Validate parser and runtime against golden tests"""
+    print("=" * 70)
+    print("VALIDATING PARSER INVARIANTS")
+    print("=" * 70)
+    parser_success = validate_parser_changes(golden_dir)
+    
+    print("\n" + "=" * 70)
+    print("VALIDATING RUNTIME BEHAVIOR")
+    print("=" * 70)
+    runtime_success = validate_runtime_changes(golden_dir)
+    
+    return parser_success and runtime_success
+
+
+def list_snapshots(snapshot_dir: str = ".zpics_snapshots"):
+    """List all available snapshots"""
+    snapshot_path = Path(snapshot_dir)
+    if not snapshot_path.exists():
+        print("No snapshots found")
+        return
+    
+    snapshots = list(snapshot_path.glob("*.json"))
+    if not snapshots:
+        print("No snapshots found")
+        return
+    
+    print("Available snapshots:")
+    print("-" * 60)
+    for snapshot in snapshots:
+        print(f"  📸 {snapshot.stem}")
+    print(f"\nTotal: {len(snapshots)} snapshots")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="ZPICS - Zexus Parser Invariant Checking System"
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    
+    # Baseline command
+    baseline_parser = subparsers.add_parser('baseline', help='Create baseline snapshots')
+    baseline_parser.add_argument(
+        '--golden-dir',
+        default='tests/golden',
+        help='Directory containing golden test files'
+    )
+    
+    # Validate command
+    validate_parser = subparsers.add_parser('validate', help='Validate parser changes')
+    validate_parser.add_argument(
+        '--golden-dir',
+        default='tests/golden',
+        help='Directory containing golden test files'
+    )
+    
+    # List command
+    list_parser = subparsers.add_parser('list', help='List all snapshots')
+    list_parser.add_argument(
+        '--snapshot-dir',
+        default='.zpics_snapshots',
+        help='Directory containing snapshots'
+    )
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        return 1
+    
+    if args.command == 'baseline':
+        success = create_baseline(args.golden_dir)
+        return 0 if success else 1
+    
+    elif args.command == 'validate':
+        success = validate(args.golden_dir)
+        return 0 if success else 1
+    
+    elif args.command == 'list':
+        list_snapshots(args.snapshot_dir)
+        return 0
+    
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

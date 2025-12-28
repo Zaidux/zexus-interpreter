@@ -1332,7 +1332,6 @@ class ContextStackParser:
                              body_tokens = action_tokens[act_brace_start+1:-1]
                              body_block.statements = self._parse_block_statements(body_tokens)
 
-                        print(f"  ⚡ Found Contract Action: {act_name}")
                         actions.append(ActionStatement(
                             name=Identifier(act_name),
                             parameters=params,
@@ -1429,7 +1428,6 @@ class ContextStackParser:
         # 4. Inject Name property if missing (Fixes runtime error)
         has_name = any(p.name.value == 'name' for p in storage_vars)
         if not has_name:
-            print(f"  ⚡ Injecting .name property for runtime compatibility: {contract_name}")
             storage_vars.append(AstNodeShim(
                 name=Identifier("name"),
                 type=Identifier("string"),
@@ -1803,40 +1801,54 @@ class ContextStackParser:
                     # CRITICAL: Detect start of new IDENT-based statements
                     # ONLY after we've collected a complete LET (has variable name, =, and value)
                     # The value is complete when we're back at paren_nesting 0 and nesting 0
-                    if nesting == 0 and paren_nesting == 0 and has_equals and j > i + 3 and t.type == IDENT:
-                        # We've collected at least: let name = value
-                        # Now check if this IDENT starts a new statement
-                        lookahead_idx = j + 1
-                        is_new_statement = False
+                    # IMPORTANT: We need at least let var = value (minimum 4 tokens after initial =)
+                    # AND we must have already seen the = sign AND be past it
+                    if nesting == 0 and paren_nesting == 0 and has_equals and t.type == IDENT:
+                        # We've seen the = sign and are back at nesting level 0
+                        # Check if this IDENT starts a new statement
+                        # BUT: Ensure we've collected at least one value token after the =
+                        # Count tokens since the = sign
+                        equals_pos = -1
+                        for eq_idx in range(i, j):
+                            if tokens[eq_idx].type == ASSIGN:
+                                equals_pos = eq_idx
+                                break
                         
-                        if lookahead_idx < len(tokens):
-                            next_tok = tokens[lookahead_idx]
-                            # Function call: ident(
-                            if next_tok.type == LPAREN:
-                                is_new_statement = True
-                            # Simple assignment: ident =
-                            elif next_tok.type == ASSIGN:
-                                is_new_statement = True
-                            # Property assignment: ident.prop...=
-                            elif next_tok.type == DOT:
-                                # Scan through property chain to find ASSIGN
-                                k = lookahead_idx + 1
-                                while k < len(tokens) and k < j + 10:
-                                    if tokens[k].type == IDENT:
-                                        k += 1
-                                        if k < len(tokens):
-                                            if tokens[k].type == ASSIGN:
-                                                is_new_statement = True
-                                                break
-                                            elif tokens[k].type == DOT:
-                                                k += 1  # Continue chain
-                                            else:
-                                                break
-                                    else:
-                                        break
-                        
-                        if is_new_statement:
-                            break
+                        # Only check for new statements if we're at least 2 positions past the =
+                        # (This allows for at least one value token after =)
+                        if equals_pos >= 0 and j > equals_pos + 1:
+                            lookahead_idx = j + 1
+                            is_new_statement = False
+                            
+                            if lookahead_idx < len(tokens):
+                                next_tok = tokens[lookahead_idx]
+                                # Function call: ident(
+                                if next_tok.type == LPAREN:
+                                    is_new_statement = True
+                                # Simple assignment: ident =
+                                # BUT NOT if it's part of type annotation (before first =)
+                                elif next_tok.type == ASSIGN and j > equals_pos + 1:
+                                    is_new_statement = True
+                                # Property assignment: ident.prop...=
+                                elif next_tok.type == DOT:
+                                    # Scan through property chain to find ASSIGN
+                                    k = lookahead_idx + 1
+                                    while k < len(tokens) and k < j + 10:
+                                        if tokens[k].type == IDENT:
+                                            k += 1
+                                            if k < len(tokens):
+                                                if tokens[k].type == ASSIGN:
+                                                    is_new_statement = True
+                                                    break
+                                                elif tokens[k].type == DOT:
+                                                    k += 1  # Continue chain
+                                                else:
+                                                    break
+                                        else:
+                                            break
+                            
+                            if is_new_statement:
+                                break
                     
                     # Stop when we hit another statement starter (at nesting 0)
                     # EXCEPT: Allow IF when followed by THEN (if-then-else expression)
@@ -4421,27 +4433,22 @@ class ContextStackParser:
         
         Returns an AwaitExpression AST node.
         """
-        print("  🔧 [Await Expression] Parsing await expression")
         
         if not tokens or tokens[0].type != AWAIT:
-            print("  ⚠️  [Await Expression] Expected AWAIT token")
             return None
         
         # Skip AWAIT token
         expr_tokens = tokens[1:]
         
         if not expr_tokens:
-            print("  ⚠️  [Await Expression] Missing expression after await")
             return None
         
         # Parse the expression to await
         expression = self._parse_expression(expr_tokens)
         
         if not expression:
-            print("  ⚠️  [Await Expression] Failed to parse await expression")
             return None
         
-        print(f"  ✅ [Await Expression] Successfully parsed: await {type(expression).__name__}")
         return AwaitExpression(expression)
 
     def _parse_argument_list(self, tokens):
@@ -4513,7 +4520,6 @@ class ContextStackParser:
 
     def _parse_screen_context(self, block_info, all_tokens):
         """Parse screen blocks with context awareness"""
-        print(f"🔧 [Context] Parsing screen: {block_info.get('name', 'anonymous')}")
         return ScreenStatement(
             name=Identifier(block_info.get('name', 'anonymous')),
             body=BlockStatement()
@@ -4531,7 +4537,6 @@ class ContextStackParser:
 
     def _parse_function_context(self, block_info, all_tokens):
         """Parse function block with context awareness"""
-        print(f"🔧 [Context] Parsing function: {block_info.get('name', 'anonymous')}")
         params = self._extract_function_parameters(block_info, all_tokens)
         return ActionStatement(
             name=Identifier(block_info.get('name', 'anonymous')),
@@ -4573,13 +4578,30 @@ class ContextStackParser:
         if name and i < len(tokens):
             i += 1
             if i < len(tokens) and tokens[i].type == LPAREN:
-                # Collect tokens until RPAREN
+                # Collect tokens until RPAREN, handling type annotations
                 i += 1
                 while i < len(tokens) and tokens[i].type != RPAREN:
                     if tokens[i].type == IDENT:
+                        # This is a parameter name
                         params.append(Identifier(tokens[i].literal))
-                    i += 1
-                i += 1  # Skip RPAREN
+                        i += 1
+                        
+                        # Check for type annotation: : type
+                        if i < len(tokens) and tokens[i].type == COLON:
+                            i += 1  # Skip COLON
+                            if i < len(tokens) and tokens[i].type == IDENT:
+                                i += 1  # Skip type name
+                        
+                        # Check for comma (more parameters)
+                        if i < len(tokens) and tokens[i].type == COMMA:
+                            i += 1  # Skip COMMA
+                    else:
+                        # Unexpected token, skip it
+                        i += 1
+                
+                # Now i should be at RPAREN
+                if i < len(tokens) and tokens[i].type == RPAREN:
+                    i += 1  # Skip RPAREN
         
         # Check for return type annotation: -> type
         if i < len(tokens) and tokens[i].type == MINUS:
@@ -5821,10 +5843,8 @@ class ContextStackParser:
         5. require \"file.zx\" imported, message
         6. require module \"name\" available, message
         """
-        print(f"⚙️ [REQUIRE PARSER] Starting to parse require statement")
         parser_debug("🔧 [Context] Parsing require statement")
         tokens = block_info.get('tokens', [])
-        print(f"⚙️ [REQUIRE PARSER] Have {len(tokens)} tokens")
         
         if not tokens or tokens[0].type != REQUIRE:
             parser_debug("  ❌ Expected REQUIRE keyword")

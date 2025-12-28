@@ -1,0 +1,8 @@
+data User {
+    name: string
+}
+
+let user = User("Alice")
+print("Before: " + user.name)
+user.name = "Bob"
+print("After: " + user.name)

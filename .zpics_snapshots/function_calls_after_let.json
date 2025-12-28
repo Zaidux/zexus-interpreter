@@ -1,0 +1,15 @@
+{
+  "source_code": "# Golden Test: Function Calls After Assignments\n# Tests that function calls are not consumed by previous LET statements\n# Critical regression: LET must stop collecting before function call statements\n\nlet value = 42\n\naction process(x: integer) -> integer {\n    return x * 2\n}\n\nlet result = process(value)\nprint(\"Result: \" + string(result))\n",
+  "source_hash": "a834483ecd7941770f74ea2503dc13c6",
+  "statements_count": 0,
+  "token_boundaries": [],
+  "ast_structure": {
+    "error": "'Lexer' object has no attribute 'tokenize'"
+  },
+  "variable_declarations": [],
+  "statement_types": [],
+  "parse_metadata": {
+    "parse_failed": true,
+    "error": "'Lexer' object has no attribute 'tokenize'"
+  }
+}

@@ -1,0 +1,12 @@
+# Golden Test: Function Calls After Assignments
+# Tests that function calls are not consumed by previous LET statements
+# Critical regression: LET must stop collecting before function call statements
+
+let value = 42
+
+action process(x: integer) -> integer {
+    return x * 2
+}
+
+let result = process(value)
+print("Result: " + string(result))

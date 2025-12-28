@@ -1,0 +1,12 @@
+{
+  "source_code": "# Golden Test: Property Assignments\n# Tests that basic property assignments work correctly, including consecutive assignments\n\ndata User {\n    name: string\n    email: string\n}\n\nlet user = User()\nuser.name = \"Alice\"\nuser.email = \"alice@example.com\"\n\nprint(user.name)\nprint(user.email)\n",
+  "source_hash": "82c0a0d782749bcbc7219718ab46c91a",
+  "stdout_output": "",
+  "stderr_output": "Error: 'Lexer' object has no attribute 'tokenize'\n",
+  "exit_code": 1,
+  "execution_metadata": {
+    "test_name": "property_assignments"
+  },
+  "variables_final": {},
+  "execution_time_ms": 0.0
+}

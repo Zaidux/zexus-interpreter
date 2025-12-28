@@ -1,0 +1,10 @@
+# Golden Test: Nested Expressions
+# Tests that nested expressions don't interfere with statement parsing
+# Critical regression: Parentheses nesting must be tracked correctly
+
+let nested = (10 + (5 * (2 + 3)))
+let list_expr = [1, 2, [3, 4, [5, 6]]]
+let map_expr = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+
+print("Nested: " + string(nested))
+print("List length: " + string(len(list_expr)))

@@ -1,0 +1,10 @@
+# Golden Test: Type Annotations
+# Tests that type annotations in LET statements parse correctly
+# Critical regression: Parser must not break at type annotation ASSIGN
+
+let simple_typed : string = "hello"
+let number_typed : integer = 42
+let complex_typed : Map<string, integer> = {"key": 123}
+
+print("Simple: " + simple_typed)
+print("Number: " + string(number_typed))

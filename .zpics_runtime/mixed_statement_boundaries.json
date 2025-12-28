@@ -1,0 +1,12 @@
+{
+  "source_code": "# Golden Test: Mixed Statement Boundaries\n# Tests complex scenarios with multiple statement types including multi-parameter functions\n# Critical regression: All statement boundaries must be correctly identified\n\nlet x : integer = 10\nlet y = 20\n\naction calc(a: integer, b: integer) -> integer {\n    return a * b\n}\n\nlet z = calc(x, y)\nprint(\"Z: \" + string(z))\n\ndata Point {\n    x: integer\n}\n\nlet point = Point(5)\nprint(\"Point: \" + string(point.x))\n",
+  "source_hash": "178b9bbe37ac30b799de464516f4c5c6",
+  "stdout_output": "",
+  "stderr_output": "Error: 'Lexer' object has no attribute 'tokenize'\n",
+  "exit_code": 1,
+  "execution_metadata": {
+    "test_name": "mixed_statement_boundaries"
+  },
+  "variables_final": {},
+  "execution_time_ms": 0.0
+}

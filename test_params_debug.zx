@@ -1,0 +1,8 @@
+action test_params(a: integer, b: integer) -> integer {
+    print("a: " + string(a))
+    print("b: " + string(b))
+    return a + b
+}
+
+let result = test_params(5, 10)
+print("Result: " + string(result))

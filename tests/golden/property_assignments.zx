@@ -1,0 +1,14 @@
+# Golden Test: Property Assignments
+# Tests that basic property assignments work correctly, including consecutive assignments
+
+data User {
+    name: string
+    email: string
+}
+
+let user = User()
+user.name = "Alice"
+user.email = "alice@example.com"
+
+print(user.name)
+print(user.email)

@@ -1,0 +1,12 @@
+{
+  "source_code": "# Golden Test: Persistence Operations\n# Tests that persist_set and persist_get work correctly after LET statements\n# Critical regression: Function calls after property assignments must execute\n\ndata Order {\n    id: integer,\n    status: string\n}\n\naction test_persistence() {\n    let order = Order(1, \"pending\")\n    order.status = \"completed\"\n    persist_set(\"order_1\", order)\n    \n    let retrieved = persist_get(\"order_1\")\n    print(\"Status: \" + retrieved[\"status\"])\n}\n\ntest_persistence()\n",
+  "source_hash": "d0c8e6b10a150d5d01e20055908a040e",
+  "stdout_output": "",
+  "stderr_output": "Error: 'Lexer' object has no attribute 'tokenize'\n",
+  "exit_code": 1,
+  "execution_metadata": {
+    "test_name": "persistence_after_assignment"
+  },
+  "variables_final": {},
+  "execution_time_ms": 0.0
+}

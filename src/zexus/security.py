@@ -782,13 +782,10 @@ class ContractStorage:
         # Initialize Backend
         if db_type == "leveldb" and _LEVELDB_AVAILABLE:
             self.backend = LevelDBBackend(base_path)
-            print(f"   💾 Storage: LevelDB ({base_path})")
         elif db_type == "rocksdb" and _ROCKSDB_AVAILABLE:
             self.backend = RocksDBBackend(f"{base_path}.rdb")
-            print(f"   💾 Storage: RocksDB ({base_path}.rdb)")
         elif db_type == "sqlite":
             self.backend = SQLiteBackend(f"{base_path}.sqlite")
-            print(f"   💾 Storage: SQLite ({base_path}.sqlite)")
         else:
             print(f"   ⚠️ Storage Warning: '{db_type}' unavailable or unknown. Falling back to In-Memory.")
             self.backend = InMemoryBackend()

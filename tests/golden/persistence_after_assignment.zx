@@ -1,0 +1,19 @@
+# Golden Test: Persistence Operations
+# Tests that persist_set and persist_get work correctly after LET statements
+# Critical regression: Function calls after property assignments must execute
+
+data Order {
+    id: integer,
+    status: string
+}
+
+action test_persistence() {
+    let order = Order(1, "pending")
+    order.status = "completed"
+    persist_set("order_1", order)
+    
+    let retrieved = persist_get("order_1")
+    print("Status: " + retrieved["status"])
+}
+
+test_persistence()

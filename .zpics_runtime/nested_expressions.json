@@ -1,0 +1,12 @@
+{
+  "source_code": "# Golden Test: Nested Expressions\n# Tests that nested expressions don't interfere with statement parsing\n# Critical regression: Parentheses nesting must be tracked correctly\n\nlet nested = (10 + (5 * (2 + 3)))\nlet list_expr = [1, 2, [3, 4, [5, 6]]]\nlet map_expr = {\"a\": 1, \"b\": {\"c\": 2, \"d\": {\"e\": 3}}}\n\nprint(\"Nested: \" + string(nested))\nprint(\"List length: \" + string(len(list_expr)))\n",
+  "source_hash": "02293138435701be4faa9c8d48ccb2dc",
+  "stdout_output": "",
+  "stderr_output": "Error: 'Lexer' object has no attribute 'tokenize'\n",
+  "exit_code": 1,
+  "execution_metadata": {
+    "test_name": "nested_expressions"
+  },
+  "variables_final": {},
+  "execution_time_ms": 0.0
+}

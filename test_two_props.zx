@@ -1,0 +1,9 @@
+data User {
+    name: string,
+    email: string
+}
+
+let user = User("Alice", "alice@example.com")
+user.name = "Bob"
+user.email = "bob@example.com"
+print("Done")
