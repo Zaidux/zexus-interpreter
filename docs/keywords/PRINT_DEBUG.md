@@ -10,7 +10,16 @@ These two keywords provide output and debugging capabilities in Zexus:
 ### Syntax
 ```zexus
 print expression;
+print(expression);
+print(arg1, arg2, arg3, ...);  # Multi-argument print
+print(condition, message);      # Conditional print (NEW!)
 ```
+
+### Overview
+PRINT outputs values to the console. It supports:
+- **Single expressions**: `print "hello"`
+- **Multiple arguments**: `print("Value:", x, "Result:", y)` - outputs all arguments separated by spaces
+- **Conditional printing**: `print(condition, message)` - only prints if condition is truthy (NEW!)
 
 ### Basic Usage
 
@@ -358,6 +367,52 @@ action process(input) {
 }
 ```
 
+### Pattern 7: Conditional Print (NEW!)
+```zexus
+# Conditional print: print(condition, message)
+# Only prints if condition is truthy
+
+let debugMode = true
+let verbose = false
+let x = 42
+
+# Print only if debugMode is true
+print(debugMode, "Debug mode is enabled")  # Prints: "Debug mode is enabled"
+
+# Print only if verbose is true
+print(verbose, "Verbose logging active")  # Does NOT print
+
+# Conditional logging with expressions
+let errorCount = 5
+print(errorCount > 0, "Errors detected: " + string(errorCount))  # Prints: "Errors detected: 5"
+
+# Dynamic conditional printing
+let threshold = 10
+let value = 15
+print(value > threshold, "Value exceeds threshold: " + string(value))  # Prints
+
+# Use in loops
+for each item in [1, 2, 3, 4, 5] {
+    print(item > 3, "Large item: " + string(item))
+}
+# Output:
+# Large item: 4
+# Large item: 5
+```
+
+**How Conditional Print Works:**
+- When `print()` has **exactly 2 arguments**, it's treated as conditional
+- First argument is the **condition** (evaluated for truthiness)
+- Second argument is the **message** (only printed if condition is true)
+- Condition can be: boolean, integer (0=false, non-zero=true), string (empty=false, non-empty=true)
+
+**Use Cases:**
+- Debug logging that can be toggled
+- Verbose mode output
+- Error reporting based on counts
+- Conditional status messages
+- Dynamic logging levels
+
 ---
 
 ## Best Practices
@@ -659,18 +714,25 @@ print.to("output.txt", message);
 2. Both accept any expression or value
 3. Print outputs one value per line
 4. Debug adds [DEBUG] prefix for visibility
-5. Use sparingly in loops to avoid output spam
-6. Remove or disable debug statements in production
-7. Format output with string concatenation for clarity
+5. **Conditional print**: `print(condition, message)` only prints if condition is true
+6. Use sparingly in loops to avoid output spam
+7. Remove or disable debug statements in production
+8. Format output with string concatenation for clarity
 
 ---
 
 **Related Keywords**: STRING, CONCAT (for formatting)  
 **Category**: I/O Operations  
-**Status**: ✅ Fully Working (print fully functional, debug dual-mode complete)  
+**Status**: ✅ Fully Working (print fully functional with conditional support, debug dual-mode complete)  
 **Tests Created**: 20 easy, 20 medium, 20 complex  
 **Documentation**: Complete  
-**Last Updated**: December 18, 2025
+**Last Updated**: December 29, 2025
+
+### New Feature: Conditional Print (December 2025)
+- **Syntax**: `print(condition, message)` - prints message only if condition is truthy
+- **Detection**: Exactly 2 arguments triggers conditional mode
+- **Implementation**: Parser checks argument count and sets `condition` field
+- **Use Cases**: Debug mode, verbose logging, error reporting, dynamic output control
 
 ### DEBUG Implementation Details
 

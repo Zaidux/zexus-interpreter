@@ -82,6 +82,7 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ✅ **130+ Keywords Fully Operational** - All core language features tested and verified  
 ✅ **Dual-Mode DEBUG** - Function mode (`debug(x)`) and statement mode (`debug x;`)  
+✅ **Conditional Print** - `print(condition, message)` for dynamic output control  
 ✅ **Multiple Syntax Styles** - `let x = 5`, `let x : 5`, `let x : int = 5` all supported  
 ✅ **Enterprise Keywords** - MIDDLEWARE, AUTH, THROTTLE, CACHE, INJECT fully functional  
 ✅ **Async/Await Runtime** - Complete Promise-based async system with context propagation  
@@ -89,6 +90,8 @@ Zexus is a next-generation, general-purpose programming language designed for se
 ✅ **UI Renderer** - SCREEN, COMPONENT, THEME keywords with 120+ tests  
 ✅ **Enhanced VERIFY** - Email, URL, phone validation, pattern matching, database checks  
 ✅ **Blockchain Keywords** - implements, pure, view, payable, modifier, this, emit  
+✅ **Loop Control** - BREAK keyword for early loop exit  
+✅ **Error Handling** - THROW keyword for explicit error raising, THIS for instance reference  
 ✅ **100+ Built-in Functions** - Comprehensive standard library  
 ✅ **LOG Keyword Enhancements** - `read_file()` and `eval_file()` for dynamic code generation  
 ✅ **REQUIRE Tolerance Blocks** - Conditional bypasses for VIP/admin/emergency scenarios  
@@ -848,6 +851,17 @@ let x = debug(42)           # Outputs: [DEBUG] 42, x = 42
 # Statement mode - logs with metadata
 debug myVariable;           # Outputs: 🔍 DEBUG: <value> with context
 
+# CONDITIONAL PRINT (NEW!):
+# Only prints if condition is true
+let debugMode = true
+print(debugMode, "Debug mode active")  # Prints: "Debug mode active"
+
+let verbose = false
+print(verbose, "Verbose output")       # Does NOT print
+
+# Multi-argument print
+print("Value:", x, "Result:", y)       # Outputs all separated by spaces
+
 # Other debug tools
 debug_log("message", context)
 debug_trace()               # Stack trace
@@ -873,11 +887,68 @@ for each item in collection {
     # code
 }
 
+# Loop Control - BREAK
+while true {
+    if shouldExit {
+        break  # Exit loop immediately
+    }
+    # process data
+}
+
 # Pattern Matching
 match value {
     case 1: print("One")
     case 2: print("Two")
     default: print("Other")
+}
+```
+
+#### Error Handling - THROW
+```zexus
+# Throw errors explicitly
+action validateAge(age) {
+    if age < 0 {
+        throw "Age cannot be negative"
+    }
+    if age > 150 {
+        throw "Age is unrealistic"
+    }
+    return age
+}
+
+# Combine with try-catch
+try {
+    let userAge = validateAge(-5)
+    print("Valid age: " + string(userAge))
+} catch (error) {
+    print("Error: " + error)
+}
+```
+
+#### Contract Self-Reference - THIS
+```zexus
+# Access current instance in contracts
+contract Token {
+    state balances: Map<Address, integer>
+    
+    action transfer(to, amount) {
+        # Use 'this' to access instance state
+        let senderBalance = this.balances[TX.caller]
+        require senderBalance >= amount, "Insufficient balance"
+        
+        this.balances[TX.caller] = senderBalance - amount
+        this.balances[to] = this.balances.get(to, 0) + amount
+    }
+}
+
+# Use in data classes
+data Rectangle {
+    width: number
+    height: number
+    
+    area() {
+        return this.width * this.height
+    }
 }
 ```
 
@@ -1443,7 +1514,8 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`while`** - While loop
 - **`for`** / **`each`** / **`in`** - For-each iteration
 - **`match`** / **`case`** / **`default`** - Pattern matching
-- **`break`** / **`continue`** - Loop control
+- **`break`** - Exit current loop immediately
+- **`continue`** - Enable error recovery mode (different from loop continue)
 - **`return`** - Return from function
 
 #### Functions & Actions
@@ -1453,7 +1525,7 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`defer`** - Deferred cleanup execution
 
 #### I/O & Output
-- **`print`** - Output to console
+- **`print`** - Output to console (supports multi-argument and conditional printing)
 - **`debug`** - Debug output (dual-mode: function returns value, statement logs with metadata)
 - **`log`** - Redirect output to file (scope-aware, supports any extension)
 
@@ -1518,7 +1590,7 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`emit`** - Emit event
 - **`event`** - Event type
 - **`revert`** - Revert transaction
-- **`this`** - Current contract reference
+- **`this`** - Current contract/data instance reference ([Full Docs →](docs/keywords/THIS.md))
 
 ### Modifiers
 
@@ -1546,11 +1618,80 @@ Zexus supports **130+ keywords** organized into functional categories:
 ### Error Handling Keywords
 
 - **`try`** / **`catch`** - Exception handling
-- **`throw`** - Throw exception
+- **`throw`** - Throw exception with custom message
 - **`finally`** - Cleanup block
 - **`require`** - Assert condition (with tolerance blocks for conditional bypasses)
 - **`revert`** - Revert transaction
 - **`continue`** - Enable error recovery mode (execution continues despite errors)
+
+**BREAK Keyword** ([Full Documentation →](docs/keywords/BREAK.md)):
+```zexus
+# Exit loops early
+while true {
+    let data = fetchData()
+    if data == null {
+        break  # Exits the loop
+    }
+    process(data)
+}
+
+# Search with early termination
+for each item in items {
+    if item == target {
+        print("Found: " + string(target))
+        break  # Stop searching
+    }
+}
+```
+
+**THROW Keyword** ([Full Documentation →](docs/keywords/THROW.md)):
+```zexus
+# Throw explicit errors
+action validateInput(value) {
+    if value < 0 {
+        throw "Value cannot be negative"
+    }
+    if value > 100 {
+        throw "Value exceeds maximum: 100"
+    }
+    return value
+}
+
+# Use with try-catch
+try {
+    let result = validateInput(-5)
+} catch (error) {
+    print("Validation error: " + error)
+}
+```
+
+**THIS Keyword** ([Full Documentation →](docs/keywords/THIS.md)):
+```zexus
+# Reference current contract/data instance
+contract Wallet {
+    state balance: integer
+    
+    action deposit(amount) {
+        this.balance = this.balance + amount
+        emit Deposit(TX.caller, amount)
+    }
+    
+    action withdraw(amount) {
+        require this.balance >= amount, "Insufficient funds"
+        this.balance = this.balance - amount
+    }
+}
+
+# Use in data classes for method chaining
+data Builder {
+    value: number
+    
+    add(n) {
+        this.value = this.value + n
+        return this  # Enable chaining
+    }
+}
+```
 
 **New in v1.5.0**: CONTINUE enables error recovery mode - program continues running even when errors occur:
 ```zexus
@@ -1793,8 +1934,16 @@ Source Code (.zx)
 - **[ACTION/FUNCTION/LAMBDA/RETURN](docs/keywords/ACTION_FUNCTION_LAMBDA_RETURN.md)** - Function definitions
 - **[IF/ELIF/ELSE](docs/keywords/IF_ELIF_ELSE.md)** - Conditional execution
 - **[WHILE/FOR/EACH/IN](docs/keywords/WHILE_FOR_EACH_IN.md)** - Loops and iteration
-- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging
+- **[BREAK](docs/keywords/BREAK.md)** - Loop control - exit loops early
+- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging (includes conditional print)
 - **[LOG](docs/keywords/LOG.md)** - Output redirection and code generation
+
+#### Error Handling
+- **[Error Handling](docs/keywords/ERROR_HANDLING.md)** - TRY/CATCH/REQUIRE/REVERT
+- **[THROW](docs/keywords/THROW.md)** - Explicit error throwing with custom messages
+
+#### Object-Oriented & Contracts
+- **[THIS](docs/keywords/THIS.md)** - Current instance reference for contracts and data classes
 
 #### Module System
 - **[MODULE_SYSTEM](docs/keywords/MODULE_SYSTEM.md)** - USE, IMPORT, EXPORT, MODULE, PACKAGE
@@ -1831,7 +1980,6 @@ Source Code (.zx)
 
 #### Blockchain & State
 - **[BLOCKCHAIN_STATE](docs/keywords/BLOCKCHAIN_STATE.md)** - State management
-- **[Error Handling](docs/keywords/ERROR_HANDLING.md)** - TRY/CATCH/REQUIRE/REVERT
 
 #### Renderer/UI
 - **[RENDERER_UI](docs/keywords/RENDERER_UI.md)** - UI and rendering system
