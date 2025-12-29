@@ -1,4 +1,6 @@
 ## src/zexus/parser.py
+import tempfile
+import os
 from ..zexus_token import *
 from ..lexer import Lexer
 from ..zexus_ast import *
@@ -1185,9 +1187,14 @@ class UltimateParser:
         - Conditional print: print(condition, message) - exactly 2 args
         """
         import sys
-        with open('/tmp/parser_log.txt', 'a') as f:
-            f.write(f"===  parse_print_statement CALLED ===\n")
-            f.flush()
+        # Debug logging (fail silently if file operations fail)
+        try:
+            log_path = os.path.join(tempfile.gettempdir(), 'parser_log.txt')
+            with open(log_path, 'a') as f:
+                f.write(f"===  parse_print_statement CALLED ===\n")
+                f.flush()
+        except (IOError, OSError, PermissionError):
+            pass  # Silently ignore debug logging errors
         
         stmt = PrintStatement(values=[])
         self.next_token()
@@ -1208,20 +1215,12 @@ class UltimateParser:
         # Check if this is conditional print (exactly 2 arguments)
         if len(stmt.values) == 2:
             # Conditional print: print(condition, message)
-            with open('/tmp/parser_log.txt', 'a') as f:
-                f.write(f"CONDITIONAL PRINT: 2 values found\n")
-                f.flush()
-            print(f"DEBUG PARSER: Creating conditional print", file=sys.stderr, flush=True)
             stmt.condition = stmt.values[0]
             stmt.values = [stmt.values[1]]
             stmt.value = stmt.values[0]
         else:
             # Regular print: print(arg) or print(arg1, arg2, arg3, ...)
             # Keep backward compatibility with .value for single-expression prints
-            with open('/tmp/parser_log.txt', 'a') as f:
-                f.write(f"REGULAR PRINT: {len(stmt.values)} values\n")
-                f.flush()
-            print(f"DEBUG PARSER: Creating regular print with {len(stmt.values)} values", file=sys.stderr, flush=True)
             stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
 
         # TOLERANT: Semicolon is optional

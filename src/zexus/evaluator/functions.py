@@ -1287,7 +1287,6 @@ class FunctionEvaluatorMixin:
                 
                 thread = threading.Thread(target=run_coroutine, daemon=True)
                 thread.start()
-                print(f"[ASYNC DEBUG] Thread started and returning NULL", file=sys.stderr)
                 return NULL
             
             # For regular (non-async) actions, the action has already executed!

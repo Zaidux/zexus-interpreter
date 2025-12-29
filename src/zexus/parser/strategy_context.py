@@ -1,5 +1,7 @@
 # strategy_context.py (FINAL FIXED VERSION)
 import sys
+import tempfile
+import os
 from ..zexus_token import *
 from ..zexus_ast import *
 from ..config import config as zexus_config
@@ -893,9 +895,14 @@ class ContextStackParser:
         
         If exactly 2 arguments are provided, treat first as condition, second as message.
         """
-        with open('/tmp/context_parser_log.txt', 'a') as f:
-            f.write(f"=== _parse_print_statement_block CALLED ===\n")
-            f.flush()
+        # Debug logging (fail silently if file operations fail)
+        try:
+            log_path = os.path.join(tempfile.gettempdir(), 'context_parser_log.txt')
+            with open(log_path, 'a') as f:
+                f.write(f"=== _parse_print_statement_block CALLED ===\n")
+                f.flush()
+        except (IOError, OSError, PermissionError):
+            pass  # Silently ignore debug logging errors
         
         parser_debug("🔧 [Context] Parsing print statement")
         tokens = block_info['tokens']
