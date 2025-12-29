@@ -66,7 +66,9 @@ class ContextStackParser:
             ENUM: self._parse_statement_block_context,
             SANDBOX: self._parse_statement_block_context,
             'let_statement': self._parse_let_statement_block,
+            LET: self._parse_let_statement_block,  # Handle LET token type from structural analyzer
             'const_statement': self._parse_const_statement_block,
+            CONST: self._parse_const_statement_block,  # Handle CONST token type
             'print_statement': self._parse_print_statement_block,
             'debug_statement': self._parse_debug_statement_block,
             DEBUG: self._parse_debug_statement_block,
@@ -1164,8 +1166,8 @@ class ContextStackParser:
                     action_start = i
                     i += 1  # Move past ACTION
                     
-                    # Get action name
-                    if i < brace_end and tokens[i].type == IDENT:
+                    # Get action name (accept any token with a literal, including keywords)
+                    if i < brace_end and tokens[i].literal:
                         action_name = tokens[i].literal
                         parser_debug(f"  📝 Found method: {action_name}")
                         i += 1
@@ -1847,13 +1849,30 @@ class ContextStackParser:
                         # Only check for new statements if we're at least 2 positions past the =
                         # (This allows for at least one value token after =)
                         if equals_pos >= 0 and j > equals_pos + 1:
+                            # NEW: Check if token is on a new line (line-based statement boundary)
+                            prev_line = tokens[j-1].line if j > 0 else 0
+                            curr_line = t.line
+                            is_new_line = curr_line > prev_line
+                            
                             lookahead_idx = j + 1
                             is_new_statement = False
                             
-                            if lookahead_idx < len(tokens):
+                            # If on a new line and current token could start a statement, it's likely a new statement
+                            if is_new_line and lookahead_idx < len(tokens):
+                                next_tok = tokens[lookahead_idx]
+                                # IDENT followed by DOT (method call) or LPAREN (function call) on new line
+                                if next_tok.type in {DOT, LPAREN}:
+                                    is_new_statement = True
+                            
+                            # Original checks (keep for non-newline cases)
+                            if not is_new_statement and lookahead_idx < len(tokens):
                                 next_tok = tokens[lookahead_idx]
                                 # Function call: ident(
-                                if next_tok.type == LPAREN:
+                                # BUT NOT if previous token is DOT (method call continuation)
+                                prev_tok = tokens[j-1] if j > 0 else None
+                                is_method_call_continuation = prev_tok and prev_tok.type == DOT
+                                
+                                if next_tok.type == LPAREN and not is_method_call_continuation:
                                     is_new_statement = True
                                 # Simple assignment: ident =
                                 # BUT NOT if it's part of type annotation (before first =)

@@ -532,6 +532,13 @@ class StructuralAnalyzer:
                         # Pattern 2: IDENT followed by DOT could be start of property assignment (obj.prop = ...)
                         # This is a NEW statement if we're in LET/CONST and have seen the main assign
                         elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == DOT:
+                            # Check if this is on a new line (likely a new statement)
+                            if stmt_tokens:
+                                last_line = stmt_tokens[-1].line
+                                if tj.line > last_line and in_assignment and seen_assign:
+                                    # New line after completed assignment - this is a new statement
+                                    break
+                            
                             # Look ahead to see if this becomes a property assignment
                             # Pattern: IDENT DOT IDENT ASSIGN
                             if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type == ASSIGN:
@@ -695,6 +702,23 @@ class StructuralAnalyzer:
 
                 # Only consider these as boundaries when at top-level (nesting == 0)
                 if nesting == 0:
+                    # NEW: Line-based statement boundary detection
+                    # If we have balanced parens and the next token is on a new line and could start a new statement, create boundary
+                    last_line = run_tokens[-1].line if run_tokens else 0
+                    if tj.line > last_line:
+                        # Check if we have balanced parens in run_tokens (statement is syntactically complete)
+                        paren_count = sum(1 if tok.type == LPAREN else -1 if tok.type == RPAREN else 0 for tok in run_tokens)
+                        if paren_count == 0:
+                            # Check if run_tokens contains an assignment (this is a complete assignment statement)
+                            has_assign = any(tok.type == ASSIGN for tok in run_tokens)
+                            if has_assign:
+                                # Current token is on a new line and could start a new statement
+                                # Check if it's IDENT (could be method call, function call, or property access)
+                                if tj.type == IDENT:
+                                    # This is likely a new statement on a new line
+                                    # Don't add tj to run_tokens, break here
+                                    break
+                    
                     # Check if current token (tj) starts a new statement
                     # CRITICAL FIX: IDENT followed by ASSIGN is an assignment statement
                     # BUT: Don't treat it as a new statement if the previous token was DOT (property access)
@@ -911,19 +935,56 @@ class StructuralAnalyzer:
                 continue
 
             # Assignment RHS vs function-call heuristic:
-            # if current token is IDENT followed by LPAREN and we've seen ASSIGN in cur, treat as a boundary
-            # ALSO: if current token is IDENT+LPAREN and the previous token was RPAREN (end of prev call), new statement
+            # if current token is IDENT followed by LPAREN and the previous token was RPAREN (end of prev call), new statement
             if t.type == IDENT and i + 1 < n and tokens[i + 1].type == LPAREN:
-                if any(st.type == ASSIGN for st in cur):
-                    results.append(cur)
-                    cur = []
-                    continue
                 # New heuristic: if previous token was RPAREN (completing a call), this is likely a new statement
+                # BUT: if the token before RPAREN is DOT+IDENT (method call), don't create boundary
                 if cur and cur[-1].type == RPAREN:
-                    results.append(cur)
-                    cur = [t]
-                    i += 1
-                    continue
+                    # Check if this is a method call continuation (e.g., obj.method1().method2())
+                    # Look for pattern: ... DOT IDENT LPAREN ... RPAREN <-- we are here
+                    # Find the LPAREN that matches this RPAREN
+                    paren_depth = 0
+                    is_method_chain = False
+                    for j in range(len(cur) - 1, -1, -1):
+                        if cur[j].type == RPAREN:
+                            paren_depth += 1
+                        elif cur[j].type == LPAREN:
+                            if paren_depth == 0:
+                                # This is the matching LPAREN
+                                # Check if it's preceded by DOT+IDENT (method call)
+                                if j >= 2 and cur[j-1].type == IDENT and cur[j-2].type == DOT:
+                                    is_method_chain = True
+                                break
+                            else:
+                                paren_depth -= 1
+                    
+                    if not is_method_chain:
+                        # Previous call is complete, and next is IDENT+LPAREN, so new statement
+                        results.append(cur)
+                        cur = [t]
+                        i += 1
+                        continue
+            
+            # NEW: Check for line-based statement boundaries
+            # If we have balanced parens and the next token is on a new line and could start a new statement, create boundary
+            if cur:
+                # Check if parens are balanced
+                paren_count = sum(1 if tok.type == LPAREN else -1 if tok.type == RPAREN else 0 for tok in cur)
+                if paren_count == 0:
+                    # Check if there's an ASSIGN in cur (this is a complete assignment statement)
+                    has_assign = any(tok.type == ASSIGN for tok in cur)
+                    if has_assign:
+                        # Check if current token is on a new line
+                        last_line = cur[-1].line if cur else 0
+                        if t.line > last_line:
+                            # Check if current token could start a new statement
+                            # IDENT followed by DOT or LPAREN could be a new statement
+                            if t.type == IDENT:
+                                # This is likely a new statement on a new line
+                                results.append(cur)
+                                cur = [t]
+                                i += 1
+                                continue
 
             cur.append(t)
             i += 1

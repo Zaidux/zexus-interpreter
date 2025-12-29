@@ -42,9 +42,13 @@ class FunctionEvaluatorMixin:
     
     def eval_call_expression(self, node, env, stack_trace):
         debug_log("🚀 CallExpression node", f"Calling {node.function}")
+        import sys
+        print(f"[CALL DEBUG] node.function type: {type(node.function).__name__}", file=sys.stderr, flush=True)
         
         fn = self.eval_node(node.function, env, stack_trace)
-        if is_error(fn): 
+        print(f"[CALL DEBUG] fn result: {fn}, type: {type(fn).__name__}", file=sys.stderr, flush=True)
+        if is_error(fn):
+            print(f"[CALL DEBUG] fn is error: {fn}", file=sys.stderr, flush=True)
             return fn
         
         # Check if this is a generic type instantiation: Box<number>(42)
@@ -345,7 +349,8 @@ class FunctionEvaluatorMixin:
                     values[prop_names[i]] = arg
             
             debug_log(f"  Entity instance created with {len(values)} properties: {list(values.keys())}")
-            return SecurityEntityInstance(fn, values)
+            # Use create_instance to handle dependency injection
+            return fn.create_instance(values)
         
         return EvaluationError(f"Not a function: {fn}")
     

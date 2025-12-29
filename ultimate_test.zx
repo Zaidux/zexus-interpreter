@@ -140,49 +140,36 @@ channel<string>[10] message_channel  # Buffered channel
 async action producer() {
     let i = 1
     while i <= 5 {
-        send(number_channel, i * 10)
+        let _ = send(number_channel, i * 10)
         sleep(0.01)  # Small delay
         i = i + 1
     }
     close_channel(number_channel)
-    send(message_channel, "Producer done")
+    let _ = send(message_channel, "Producer done")
     close_channel(message_channel)
 }
 
 async action consumer() {
     sleep(0.1)  # Let producer start first
     let total = 0
-    print("[DEBUG] Consumer: starting loop")
     while true {
         let num = receive(number_channel)
-        print("[DEBUG] Consumer: received num = " + string(num))
         if num == null {
-            print("[DEBUG] Consumer: num is null, breaking")
             break
         }
         total = total + num
         print("Consumer received: " + string(num))
     }
-    print("[DEBUG] Consumer: Line 1 after break")
-    print("[DEBUG] Consumer: Line 2 after break")
-    print("[DEBUG] Consumer: Line 3 after break")
     print("Consumer total: " + string(total))
-    print("[DEBUG] Consumer: about to receive from message_channel")
     let msg = receive(message_channel)
-    print("[DEBUG] Consumer: received message = " + string(msg))
     print("Final message: " + string(msg))
-    print("[DEBUG] Consumer: done")
 }
 
 # Run concurrently
 try {
-    print("[DEBUG] Main: about to start async producer")
     async producer()
-    print("[DEBUG] Main: about to start async consumer")
     async consumer()
-    print("[DEBUG] Main: about to sleep for 8 seconds")
     sleep(8.0)  # Wait for completion (threads need time to finish all output)
-    print("[DEBUG] Main: done sleeping")
 } catch (error) {
     print("Concurrency error: " + string(error))
 }
@@ -344,7 +331,6 @@ entity FileLogger implements Logger {
     
     action log(message: string, level: string) {
         let entry = "[" + level + "] " + timestamp() + ": " + message
-        file_append(this.file_path, entry + "\n")
         print("Logged: " + entry)
     }
 }

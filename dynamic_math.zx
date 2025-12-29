@@ -264,3 +264,549 @@ module DynamicMath {
   }
 }
 # Generated at 1766978793
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766979939
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980115
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980168
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980218
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980276
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980340
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980364
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980389
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980413
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980438
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980505
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980609
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980726
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980804
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766980942
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766981516
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766981552
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766981697
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766981744
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766982058
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766982469
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766982508
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766982629
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766985391
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986155
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986264
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986304
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986653
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986689
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986864
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1766986957
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767013965
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767014001
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767014049
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767014099
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767014171
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767017426
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767017461
+module DynamicMath {
+  export action add(a, b) { return a + b }
+  export action multiply(a, b) { return a * b }
+  export action power(a, b) {
+    let result = 1
+    let i = 0
+    while i < b {
+      result = result * a
+      i = i + 1
+    }
+    return result
+  }
+}
+# Generated at 1767017510

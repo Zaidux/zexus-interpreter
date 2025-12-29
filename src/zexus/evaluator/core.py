@@ -93,6 +93,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  ContinueStatement node")
                 return self.eval_continue_statement(node, env, stack_trace)
             
+            elif isinstance(node, zexus_ast.BreakStatement):
+                debug_log("  BreakStatement node")
+                return self.eval_break_statement(node, env, stack_trace)
+            
             elif isinstance(node, zexus_ast.LetStatement):
                 return self.eval_let_statement(node, env, stack_trace)
             
@@ -445,7 +449,17 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  FileImportExpression node", "<< file import")
                 return self.eval_file_import_expression(node, env, stack_trace)
             
+            elif isinstance(node, zexus_ast.MethodCallExpression):
+                import sys
+                print(f"[METHOD CALL DEBUG] MethodCallExpression: object={node.object}, method={node.method}", file=sys.stderr, flush=True)
+                debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
+                return self.eval_method_call_expression(node, env, stack_trace)
+            
             elif isinstance(node, zexus_ast.CallExpression):
+                import sys
+                print(f"[CORE DEBUG] CallExpression: function type={type(node.function).__name__}", file=sys.stderr, flush=True)
+                if hasattr(node.function, 'value'):
+                    print(f"[CORE DEBUG] function value={node.function.value}", file=sys.stderr, flush=True)
                 debug_log("🚀 CallExpression node", f"Calling {node.function}")
                 return self.eval_call_expression(node, env, stack_trace)
             
@@ -456,10 +470,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif isinstance(node, zexus_ast.MatchExpression):
                 debug_log("🎯 MatchExpression node", "Pattern matching")
                 return self.eval_match_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.MethodCallExpression):
-                debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
-                return self.eval_method_call_expression(node, env, stack_trace)
             
             elif isinstance(node, zexus_ast.ListLiteral):
                 debug_log("  ListLiteral node", f"{len(node.elements)} elements")

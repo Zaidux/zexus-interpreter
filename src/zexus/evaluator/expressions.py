@@ -801,33 +801,23 @@ class ExpressionEvaluatorMixin:
         
         # If it's a Coroutine (from calling an async action), execute it in a thread
         if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-            print(f"[DEBUG-ASYNC] Starting coroutine in thread", file=sys.stderr, flush=True)
-            
             def run_coroutine():
-                print(f"[DEBUG-ASYNC-THREAD] Thread started", file=sys.stderr, flush=True)
                 try:
                     # Prime the generator
-                    val = next(result.generator)
-                    print(f"[DEBUG-ASYNC-THREAD] Generator primed, got: {val}", file=sys.stderr, flush=True)
+                    next(result.generator)
                     # Execute until completion
-                    try:
-                        step = 0
-                        while True:
-                            val = next(result.generator)
-                            step += 1
-                            print(f"[DEBUG-ASYNC-THREAD] Step {step}, got: {val}", file=sys.stderr, flush=True)
-                    except StopIteration:
-                        print(f"[DEBUG-ASYNC-THREAD] Coroutine completed normally after {step} steps", file=sys.stderr, flush=True)
+                    while True:
+                        next(result.generator)
+                except StopIteration:
+                    pass  # Coroutine completed normally
                 except Exception as e:
-                    print(f"[DEBUG-ASYNC-THREAD ERROR] {str(e)}", file=sys.stderr, flush=True)
+                    import sys
+                    print(f"[ASYNC ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
                     import traceback
                     traceback.print_exc(file=sys.stderr)
-                finally:
-                    print(f"[DEBUG-ASYNC-THREAD] Thread finishing", file=sys.stderr, flush=True)
             
             thread = threading.Thread(target=run_coroutine, daemon=True)
             thread.start()
-            print(f"[DEBUG-ASYNC] Thread started, returning NULL", file=sys.stderr, flush=True)
             return NULL
         
         # For any other result (including NULL from regular actions),

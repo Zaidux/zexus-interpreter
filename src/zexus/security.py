@@ -515,7 +515,7 @@ class EntityDefinition:
         
         # Check if this entity has injected dependencies
         if hasattr(self, 'injected_deps') and self.injected_deps:
-            from ..dependency_injection import get_di_registry
+            from zexus.dependency_injection import get_di_registry
             
             registry = get_di_registry()
             # Use __main__ as default module context
@@ -527,9 +527,9 @@ class EntityDefinition:
                     try:
                         injected_value = container.get(dep_name)
                         injected_values[dep_name] = injected_value
-                    except Exception as e:
+                    except BaseException as e:
                         # Dependency not available - use NULL placeholder
-                        from ..object import NULL
+                        from zexus.object import NULL
                         injected_values[dep_name] = NULL
         
         instance = EntityInstance(self, injected_values)
