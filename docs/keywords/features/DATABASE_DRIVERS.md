@@ -356,8 +356,10 @@ data ConnectionPool {
         }
         
         # Wait for available connection
-        # TODO: Implement waiting with timeout
-        throw "Connection pool exhausted"
+        # TODO: Implement waiting with timeout in production version
+        # For now, fail fast to prevent indefinite hangs
+        # Future: Use channels or async wait with configurable timeout
+        throw "Connection pool exhausted - no connections available"
     }
     
     release(conn: Connection) {

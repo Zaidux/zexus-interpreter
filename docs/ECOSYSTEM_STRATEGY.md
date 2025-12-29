@@ -156,7 +156,12 @@ module zexus.test {
 
 **Documentation**: [TESTING_FRAMEWORK.md](./keywords/features/TESTING_FRAMEWORK.md)
 
-**Timeline**: Phase 1 establishes foundational libraries (3-6 months)
+**Timeline**: Phase 1 establishes foundational libraries
+
+- **Month 1-2**: HTTP Server + PostgreSQL driver foundations
+- **Month 3-4**: Complete HTTP Server, add MySQL/MongoDB drivers
+- **Month 5-6**: CLI & Testing frameworks, polish and production-ready
+- **Total**: 4-6 months depending on team size and complexity discovered
 
 ---
 

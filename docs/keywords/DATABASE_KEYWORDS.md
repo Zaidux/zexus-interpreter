@@ -264,6 +264,8 @@ users.find_by_id()  # ERROR: Missing required parameter 'id'
 users.find_by_name("Alice")  # ERROR: No query 'find_by_name' defined
 ```
 
+**Note**: Type checking is performed on the Zexus function signature (parameter types), not on the SQL query itself. The compiler validates that calls to `find_by_id` receive an integer parameter. SQL syntax validation and result type checking are future enhancements that may leverage query analysis tools.
+
 ## Multiple Databases
 
 ```zexus
