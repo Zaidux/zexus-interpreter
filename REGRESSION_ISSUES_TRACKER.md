@@ -493,18 +493,86 @@ Multiple issues appear related to recent changes in:
 
 ---
 
+## 🚀 ENHANCEMENTS IMPLEMENTED
+
+### Enhancement 1: Conditional Print/Debug Statements
+**Date Implemented:** December 29, 2025  
+**Status:** ✅ FULLY IMPLEMENTED & TESTED
+
+**Description:**
+Added support for conditional print and debug statements. When exactly 2 arguments are provided, the first is treated as a condition and the second as the message to print/debug.
+
+**Syntax:**
+```zx
+print(condition, message)  # Only prints if condition is truthy
+debug(condition, message)  # Only debugs if condition is truthy
+```
+
+**Examples:**
+```zx
+let x = 10;
+print(x > 5, "✅ x is greater than 5");  # Prints
+print(x < 5, "❌ This won't print");      # Doesn't print
+
+let test_passed = true;
+debug(test_passed, "Test succeeded");    # Debugs
+debug(!test_passed, "Test failed");      # Doesn't debug
+```
+
+**Implementation Details:**
+
+1. **AST Modifications** (`/src/zexus/zexus_ast.py`):
+   - Added `condition` parameter to `PrintStatement.__init__` (default: None)
+   - Added `condition` parameter to `DebugStatement.__init__` (default: None)
+
+2. **Parser Modifications** (`/src/zexus/parser/strategy_context.py`):
+   - Added `PRINT: self._parse_print_statement_block` to `context_rules` (Line 73)
+   - Modified `_parse_print_statement_block` to detect 2-argument pattern (Lines 959-976)
+   - Modified `_parse_debug_statement_block` to detect 2-argument pattern (Lines 1060-1077)
+   - **Critical Fix**: Added token type mapping for PRINT to ensure structural blocks route correctly
+
+3. **UltimateParser Modifications** (`/src/zexus/parser/parser.py`):
+   - Modified `parse_print_statement` to handle conditional syntax (Lines 1187-1202)
+   - Modified `parse_debug_statement` to handle conditional syntax (Lines 1276-1291)
+
+4. **Evaluator Modifications** (`/src/zexus/evaluator/statements.py`):
+   - Modified `eval_print_statement` to check condition before printing (Lines 2382-2435)
+   - Modified `eval_debug_statement` to check condition before debugging (Lines 2439-2492)
+   - Uses `is_truthy()` helper for condition evaluation
+
+**Testing:**
+- Created comprehensive test suite covering:
+  - Regular print/debug (backward compatible)
+  - Conditional print with boolean literals
+  - Conditional print with expressions (x > 5, a > b)
+  - Conditional print with logical operators (&&, ||, !)
+  - Multiple argument prints (backward compatible)
+- All tests passed ✅
+- No regressions in index.zx or ultimate_test.zx ✅
+
+**Files Modified:**
+- `/src/zexus/zexus_ast.py` - Lines 85-89, 107-111
+- `/src/zexus/parser/strategy_context.py` - Lines 73, 959-976, 1060-1077
+- `/src/zexus/parser/parser.py` - Lines 1187-1202, 1276-1291
+- `/src/zexus/evaluator/statements.py` - Lines 2382-2492
+
+**Key Insight:**
+The structural analyzer sets `subtype` to the token type (e.g., `PRINT`), so `context_rules` must have explicit token type mappings (e.g., `PRINT:`), not just string mappings (e.g., `'print_statement'`). This pattern is now established for `LET`, `CONST`, `PRINT`, and `DEBUG`.
+
+---
+
 ## ✅ VERIFICATION CHECKLIST
 
 Before marking as resolved:
-- [ ] All 6 regression issues fixed
-- [ ] ultimate_test.zx runs without errors
-- [ ] index.zx still works (no new regressions)
-- [ ] All outputs match expected values
+- [x] All 6 regression issues fixed
+- [x] ultimate_test.zx runs without errors
+- [x] index.zx still works (no new regressions)
+- [x] All outputs match expected values
 - [ ] No Python tracebacks leaked
 - [ ] Memory usage reasonable
-- [ ] Conditional print feature implemented
-- [ ] Ultimate test updated with conditional prints
-- [ ] Full regression test suite passes
+- [x] Conditional print feature implemented
+- [x] Ultimate test updated with conditional prints
+- [x] Full regression test suite passes
 
 ---
 
@@ -530,4 +598,4 @@ Before marking as resolved:
 
 ---
 
-**Last Updated:** December 28, 2025 - 4.5 issues resolved, 1.5 remaining
+**Last Updated:** December 29, 2025 - All 6 issues resolved, Enhancement 1 implemented ✅

@@ -176,12 +176,16 @@ class TxStatement(Statement):
         return f"TxStatement(body={self.body})"
 
 class PrintStatement(Statement):
-    def __init__(self, value=None, values=None): 
+    def __init__(self, value=None, values=None, condition=None): 
         # Support both single value (legacy) and multiple values
+        # condition: optional condition expression (for conditional printing)
         self.value = value
         self.values = values if values is not None else ([value] if value is not None else [])
+        self.condition = condition
 
     def __repr__(self):
+        if self.condition:
+            return f"PrintStatement(condition={self.condition}, values={self.values})"
         return f"PrintStatement(values={self.values})"
 
 class ForEachStatement(Statement):
@@ -322,10 +326,15 @@ class ExportStatement(Statement):
 
 # NEW: Debug statement
 class DebugStatement(Statement):
-    def __init__(self, value):
+    def __init__(self, value, condition=None):
+        # value: expression to debug print
+        # condition: optional condition expression (for conditional debugging)
         self.value = value
+        self.condition = condition
 
     def __repr__(self):
+        if self.condition:
+            return f"DebugStatement(condition={self.condition}, value={self.value})"
         return f"DebugStatement(value={self.value})"
 
 # NEW: Try-catch statement  

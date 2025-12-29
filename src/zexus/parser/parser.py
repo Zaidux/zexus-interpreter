@@ -1179,7 +1179,16 @@ class UltimateParser:
         )
 
     def parse_print_statement(self):
-        """Tolerant print statement parser with support for multiple arguments"""
+        """Tolerant print statement parser with support for:
+        - Single argument: print(message)
+        - Multiple arguments: print(arg1, arg2, arg3)
+        - Conditional print: print(condition, message) - exactly 2 args
+        """
+        import sys
+        with open('/tmp/parser_log.txt', 'a') as f:
+            f.write(f"===  parse_print_statement CALLED ===\n")
+            f.flush()
+        
         stmt = PrintStatement(values=[])
         self.next_token()
         
@@ -1196,8 +1205,24 @@ class UltimateParser:
             if expr:
                 stmt.values.append(expr)
         
-        # Keep backward compatibility with .value for single-expression prints
-        stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
+        # Check if this is conditional print (exactly 2 arguments)
+        if len(stmt.values) == 2:
+            # Conditional print: print(condition, message)
+            with open('/tmp/parser_log.txt', 'a') as f:
+                f.write(f"CONDITIONAL PRINT: 2 values found\n")
+                f.flush()
+            print(f"DEBUG PARSER: Creating conditional print", file=sys.stderr, flush=True)
+            stmt.condition = stmt.values[0]
+            stmt.values = [stmt.values[1]]
+            stmt.value = stmt.values[0]
+        else:
+            # Regular print: print(arg) or print(arg1, arg2, arg3, ...)
+            # Keep backward compatibility with .value for single-expression prints
+            with open('/tmp/parser_log.txt', 'a') as f:
+                f.write(f"REGULAR PRINT: {len(stmt.values)} values\n")
+                f.flush()
+            print(f"DEBUG PARSER: Creating regular print with {len(stmt.values)} values", file=sys.stderr, flush=True)
+            stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
 
         # TOLERANT: Semicolon is optional
         if self.peek_token_is(SEMICOLON):
@@ -1245,24 +1270,57 @@ class UltimateParser:
         )
 
     def parse_debug_statement(self):
-        """Parse debug - dual mode: statement (debug x;) or function call (debug(x))
+        """Parse debug - dual mode: statement (debug x;) or function call (debug(x) or debug(cond, x))
         
         When debug is followed by (, it's treated as a function call expression.
-        This allows debug(x) to return the value, while debug x; logs without returning.
+        Supports:
+        - debug(value) - regular debug
+        - debug(condition, value) - conditional debug (exactly 2 args)
+        - debug value; - statement mode
         """
         
-        # DUAL-MODE: If followed by (, treat as identifier for function call
-        # This allows: let x = debug(42); to work
+        # DUAL-MODE: If followed by (, parse as function call with potential conditional
         if self.peek_token_is(LPAREN):
-            # Advance past DEBUG token so infix parsing can work
-            self.next_token()
-            return Identifier(value="debug")
+            # We need to parse the function call arguments
+            self.next_token()  # Move to LPAREN
+            self.next_token()  # Move to first argument
+            
+            # Collect arguments
+            args = []
+            if not self.cur_token_is(RPAREN):
+                arg = self.parse_expression(LOWEST)
+                if arg:
+                    args.append(arg)
+                
+                while self.peek_token_is(COMMA):
+                    self.next_token()  # consume comma
+                    self.next_token()  # move to next arg
+                    arg = self.parse_expression(LOWEST)
+                    if arg:
+                        args.append(arg)
+            
+            # Expect closing paren
+            if not self.peek_token_is(RPAREN):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected ')' after debug arguments")
+                return None
+            self.next_token()  # consume RPAREN
+            
+            # Check if conditional debug (2 args) or regular debug (1 arg)
+            if len(args) == 2:
+                # Conditional debug: debug(condition, value)
+                return DebugStatement(value=args[1], condition=args[0])
+            elif len(args) == 1:
+                # Regular debug: debug(value)
+                return DebugStatement(value=args[0])
+            else:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - debug() requires 1 or 2 arguments")
+                return None
         
         # Otherwise, it's a debug statement (debug x;)
         self.next_token()
         value = self.parse_expression(LOWEST)
         if not value:
-            self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'debug'")
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected expression after 'debug'")
             return None
 
         return DebugStatement(value=value)

@@ -1,4 +1,5 @@
 # strategy_context.py (FINAL FIXED VERSION)
+import sys
 from ..zexus_token import *
 from ..zexus_ast import *
 from ..config import config as zexus_config
@@ -70,6 +71,7 @@ class ContextStackParser:
             'const_statement': self._parse_const_statement_block,
             CONST: self._parse_const_statement_block,  # Handle CONST token type
             'print_statement': self._parse_print_statement_block,
+            PRINT: self._parse_print_statement_block,  # Handle PRINT token type from structural analyzer
             'debug_statement': self._parse_debug_statement_block,
             DEBUG: self._parse_debug_statement_block,
             'assignment_statement': self._parse_assignment_statement,
@@ -884,7 +886,17 @@ class ContextStackParser:
         return fields
 
     def _parse_print_statement_block(self, block_info, all_tokens):
-        """Parse print statement block with support for multiple comma-separated arguments"""
+        """Parse print statement block with support for:
+        - Single argument: print(message) or print(expr)
+        - Multiple arguments: print(arg1, arg2, arg3)
+        - Conditional print: print(condition, message)
+        
+        If exactly 2 arguments are provided, treat first as condition, second as message.
+        """
+        with open('/tmp/context_parser_log.txt', 'a') as f:
+            f.write(f"=== _parse_print_statement_block CALLED ===\n")
+            f.flush()
+        
         parser_debug("🔧 [Context] Parsing print statement")
         tokens = block_info['tokens']
 
@@ -943,22 +955,87 @@ class ContextStackParser:
         if not values:
             values = [StringLiteral("")]
         
-        return PrintStatement(values=values)
+        # Check if this is conditional print: exactly 2 arguments
+        if len(values) == 2:
+            # Conditional print: print(condition, message)
+            return PrintStatement(values=[values[1]], condition=values[0])
+        else:
+            # Regular print: print(arg1, arg2, ...) or print(single_arg)
+            return PrintStatement(values=values)
 
     def _parse_debug_statement_block(self, block_info, all_tokens):
         """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
         
-        Note: This handles 'debug x;' (statement mode).
-        Function mode 'debug(x)' is handled via call expression parsing.
+        Supports:
+        - Statement mode: debug value;
+        - Function mode: debug(value) or debug(condition, value)
+        
+        If exactly 2 arguments in function mode, treat as conditional debug.
         """
+        # Import DebugStatement at the top to avoid UnboundLocalError
+        from ..zexus_ast import DebugStatement
+        
         parser_debug("🔧 [Context] Parsing debug statement")
         tokens = block_info['tokens']
 
         # Check if this is actually a function call: debug(...)
         if len(tokens) >= 2 and tokens[1].type == LPAREN:
-            parser_debug("  ℹ️ DEBUG followed by ( - treating as function call expression")
-            # This should be parsed as a CallExpression, not a DebugStatement
-            # Return the expression directly
+            parser_debug("  ℹ️ DEBUG followed by ( - parsing as function call with potential condition")
+            
+            # Find the matching RPAREN
+            tokens_to_parse = tokens[1:]  # All tokens starting from LPAREN
+            if len(tokens_to_parse) >= 2 and tokens_to_parse[0].type == LPAREN and tokens_to_parse[-1].type == RPAREN:
+                # Extract arguments between parentheses
+                arg_tokens = tokens_to_parse[1:-1]
+                
+                # Split by commas at depth 0 to get individual arguments
+                args = []
+                current_arg = []
+                paren_depth = 0
+                bracket_depth = 0
+                brace_depth = 0
+                
+                for token in arg_tokens:
+                    if token.type == LPAREN:
+                        paren_depth += 1
+                    elif token.type == RPAREN:
+                        paren_depth -= 1
+                    elif token.type == LBRACKET:
+                        bracket_depth += 1
+                    elif token.type == RBRACKET:
+                        bracket_depth -= 1
+                    elif token.type == LBRACE:
+                        brace_depth += 1
+                    elif token.type == RBRACE:
+                        brace_depth -= 1
+                    
+                    if token.type == COMMA and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
+                        if current_arg:
+                            expr = self._parse_expression(current_arg)
+                            if expr:
+                                args.append(expr)
+                            current_arg = []
+                    else:
+                        current_arg.append(token)
+                
+                # Parse last argument
+                if current_arg:
+                    expr = self._parse_expression(current_arg)
+                    if expr:
+                        args.append(expr)
+                
+                # Check if conditional debug (2 args) or regular debug (1 arg)
+                if len(args) == 2:
+                    # Conditional debug: debug(condition, value)
+                    return DebugStatement(value=args[1], condition=args[0])
+                elif len(args) == 1:
+                    # Regular debug: debug(value)
+                    return DebugStatement(value=args[0])
+                else:
+                    parser_debug("  ❌ DEBUG function call requires 1 or 2 arguments")
+                    return None
+            
+            # Fallback: treat as regular expression statement
             expression = self._parse_expression(tokens)
             return ExpressionStatement(expression) if expression else None
 

@@ -2381,6 +2381,34 @@ class StatementEvaluatorMixin:
     # === MISC STATEMENTS ===
     
     def eval_print_statement(self, node, env, stack_trace):
+        # Check if conditional print
+        if hasattr(node, 'condition') and node.condition is not None:
+            # Evaluate the condition
+            condition_val = self.eval_node(node.condition, env, stack_trace)
+            if is_error(condition_val):
+                print(f"❌ Error in print condition: {condition_val}", file=sys.stderr)
+                return NULL
+            
+            # Check if condition is truthy
+            is_truthy = False
+            if hasattr(condition_val, 'value'):
+                # Boolean, Integer, etc.
+                if isinstance(condition_val.value, bool):
+                    is_truthy = condition_val.value
+                elif isinstance(condition_val.value, (int, float)):
+                    is_truthy = condition_val.value != 0
+                elif isinstance(condition_val.value, str):
+                    is_truthy = len(condition_val.value) > 0
+                else:
+                    is_truthy = bool(condition_val.value)
+            else:
+                # For objects without .value, check if it's NULL
+                is_truthy = not (hasattr(condition_val, 'type') and condition_val.type == 'NULL')
+            
+            # If condition is false, don't print
+            if not is_truthy:
+                return NULL
+        
         # Handle both legacy single value and new multiple values
         values_to_print = []
         
@@ -2452,6 +2480,33 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_debug_statement(self, node, env, stack_trace):
+        # Check if conditional debug
+        if hasattr(node, 'condition') and node.condition is not None:
+            # Evaluate the condition
+            condition_val = self.eval_node(node.condition, env, stack_trace)
+            if is_error(condition_val):
+                return condition_val
+            
+            # Check if condition is truthy
+            is_truthy = False
+            if hasattr(condition_val, 'value'):
+                # Boolean, Integer, etc.
+                if isinstance(condition_val.value, bool):
+                    is_truthy = condition_val.value
+                elif isinstance(condition_val.value, (int, float)):
+                    is_truthy = condition_val.value != 0
+                elif isinstance(condition_val.value, str):
+                    is_truthy = len(condition_val.value) > 0
+                else:
+                    is_truthy = bool(condition_val.value)
+            else:
+                # For objects without .value, check if it's NULL
+                is_truthy = not (hasattr(condition_val, 'type') and condition_val.type == 'NULL')
+            
+            # If condition is false, don't debug
+            if not is_truthy:
+                return NULL
+        
         val = self.eval_node(node.value, env, stack_trace)
         if is_error(val): 
             return val
