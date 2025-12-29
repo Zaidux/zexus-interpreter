@@ -741,16 +741,12 @@ class Environment:
             self.store[name] = val
             if hasattr(self, 'notify_watchers'):
                 self.notify_watchers(name, val)
-            if name == "passedTests":
-                print(f"[DEBUG] passedTests not found in chain, creating in current scope {id(self)}")
             return val
         
         # 3. No outer scope (Global) -> Create here
         self.store[name] = val
         if hasattr(self, 'notify_watchers'):
             self.notify_watchers(name, val)
-        if name == "passedTests":
-            print(f"[DEBUG] passedTests not found (global), creating in global scope {id(self)}")
         return val
 
     def set_const(self, name, val):

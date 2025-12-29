@@ -42,13 +42,9 @@ class FunctionEvaluatorMixin:
     
     def eval_call_expression(self, node, env, stack_trace):
         debug_log("🚀 CallExpression node", f"Calling {node.function}")
-        import sys
-        print(f"[CALL DEBUG] node.function type: {type(node.function).__name__}", file=sys.stderr, flush=True)
         
         fn = self.eval_node(node.function, env, stack_trace)
-        print(f"[CALL DEBUG] fn result: {fn}, type: {type(fn).__name__}", file=sys.stderr, flush=True)
         if is_error(fn):
-            print(f"[CALL DEBUG] fn is error: {fn}", file=sys.stderr, flush=True)
             return fn
         
         # Check if this is a generic type instantiation: Box<number>(42)
@@ -680,8 +676,8 @@ class FunctionEvaluatorMixin:
                 output = msg.inspect()
             else:
                 output = str(msg)
-            # Output with DEBUG prefix
-            print(f"[DEBUG] {output}", flush=True)
+            # Output the debug information
+            print(output, flush=True)
             return msg  # Return the original value for use in expressions
         
         def _debug_log(*a):
@@ -1269,28 +1265,19 @@ class FunctionEvaluatorMixin:
             
             result = a[0]
             
-            # Debug: Check what we got
-            print(f"[ASYNC DEBUG] Got result type: {type(result)}, class: {result.__class__.__name__ if hasattr(result, '__class__') else 'N/A'}", file=sys.stderr)
-            print(f"[ASYNC DEBUG] Result value: {result}", file=sys.stderr)
-            
             # If it's already a Coroutine, start it in a thread
             if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-                print(f"[ASYNC DEBUG] Starting coroutine in thread", file=sys.stderr)
                 
                 def run_coroutine():
-                    print(f"[ASYNC DEBUG] Thread started, about to prime generator", file=sys.stderr)
                     try:
                         # Prime the generator
                         val = next(result.generator)
-                        print(f"[ASYNC DEBUG] Generator primed, returned: {val}", file=sys.stderr)
                         # Execute until completion
                         try:
                             while True:
                                 val = next(result.generator)
-                                print(f"[ASYNC DEBUG] Generator yielded: {val}", file=sys.stderr)
                         except StopIteration as e:
                             # Coroutine completed successfully
-                            print(f"[ASYNC DEBUG] Coroutine completed", file=sys.stderr)
                             pass
                     except Exception as e:
                         # Print error to stderr for visibility

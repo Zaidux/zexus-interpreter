@@ -159,13 +159,10 @@ class StatementEvaluatorMixin:
     # === VARIABLE & CONTROL FLOW ===
     
     def eval_let_statement(self, node, env, stack_trace):
-        import sys
-        print(f"[LET DEBUG] Evaluating let statement: {node.name.value}, value type: {type(node.value).__name__}", file=sys.stderr, flush=True)
         debug_log("eval_let_statement", f"let {node.name.value}")
         
         # FIXED: Evaluate value FIRST to prevent recursion issues
         value = self.eval_node(node.value, env, stack_trace)
-        print(f"[LET DEBUG] Evaluated value for {node.name.value}: {type(value).__name__}", file=sys.stderr, flush=True)
         if is_error(value): 
             return value
         
@@ -1793,9 +1790,6 @@ class StatementEvaluatorMixin:
                 # Store the method by name
                 method_name = method.name.value if hasattr(method, 'name') else str(method)
                 methods[method_name] = method_action
-        else:
-            import sys
-            print(f"[ENTITY DEBUG] No methods for entity {node.name.value}", file=sys.stderr, flush=True)
         
         # Create entity with methods and parent reference
         # Now parent_ref points to the actual parent, and props only contains THIS entity's properties
@@ -2574,7 +2568,6 @@ class StatementEvaluatorMixin:
     
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
-        print(f"[DEBUG] Defining function {node.name.value} in env {id(env)}")
         action = Action(node.parameters, node.body, env)
         
         # Apply modifiers if present
