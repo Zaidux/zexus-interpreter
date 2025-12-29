@@ -1009,32 +1009,49 @@ class ContextStackParser:
             return None
         
         # CRITICAL FIX: only collect RHS tokens up to statement boundary
+        # Track nesting depth to avoid stopping on braces inside nested structures
         value_tokens = []
-        stop_types = {SEMICOLON, RBRACE}
+        stop_types = {SEMICOLON}  # RBRACE removed - handle with nesting instead
         statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
         j = assign_idx + 1
+        nesting_depth = 0
         while j < len(tokens):
             t = tokens[j]
-            if t.type in stop_types:
-                break
-            # Context-sensitive IF handling: IF followed by THEN is an expression, not a statement
-            if t.type == IF:
-                # Look ahead to check if this is if-then-else expression
-                is_if_expression = False
-                for k in range(j + 1, len(tokens)):
-                    if tokens[k].type == THEN:
-                        is_if_expression = True
-                        break
-                    elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
-                        # These indicate statement form, not expression
-                        break
-                if not is_if_expression:
-                    # This is a statement-form IF, stop here
+            
+            # Track nesting for brackets, braces, and parens
+            if t.type in {LBRACKET, LBRACE, LPAREN}:
+                nesting_depth += 1
+            elif t.type in {RBRACKET, RBRACE, RPAREN}:
+                nesting_depth -= 1
+                
+                # If we close more than we opened, we've hit outer scope closing brace
+                if nesting_depth < 0:
                     break
-                # Otherwise, it's an if-then-else expression, include it
-            elif t.type in statement_starters:
-                # Other statement starters always break
-                break
+            
+            # Only check for statement boundaries when not nested
+            if nesting_depth == 0:
+                if t.type in stop_types:
+                    break
+                    
+                # Context-sensitive IF handling: IF followed by THEN is an expression, not a statement
+                if t.type == IF:
+                    # Look ahead to check if this is if-then-else expression
+                    is_if_expression = False
+                    for k in range(j + 1, len(tokens)):
+                        if tokens[k].type == THEN:
+                            is_if_expression = True
+                            break
+                        elif tokens[k].type in {LBRACE, LPAREN, SEMICOLON}:
+                            # These indicate statement form, not expression
+                            break
+                    if not is_if_expression:
+                        # This is a statement-form IF, stop here
+                        break
+                    # Otherwise, it's an if-then-else expression, include it
+                elif t.type in statement_starters:
+                    # Other statement starters always break
+                    break
+            
             value_tokens.append(t)
             j += 1
 
@@ -1080,6 +1097,18 @@ class ContextStackParser:
 
         entity_name = tokens[1].literal if tokens[1].type == IDENT else "Unknown"
         parser_debug(f"  📝 Entity: {entity_name}")
+
+        # Check for inheritance: entity User extends BaseEntity { ... }
+        parent_name = None
+        idx = 2  # Start after entity name
+        if idx < len(tokens) and tokens[idx].type == IDENT and tokens[idx].literal == "extends":
+            idx += 1
+            if idx < len(tokens) and tokens[idx].type == IDENT:
+                parent_name = tokens[idx].literal
+                parser_debug(f"  🔗 Extends: {parent_name}")
+                idx += 1
+            else:
+                parser_debug("  ❌ Invalid extends: expected parent entity name")
 
         # Parse properties and methods between braces
         properties = []
@@ -1233,7 +1262,8 @@ class ContextStackParser:
         return EntityStatement(
             name=Identifier(entity_name),
             properties=properties,
-            methods=methods
+            methods=methods,
+            parent=Identifier(parent_name) if parent_name else None
         )
 
     def _parse_contract_statement_block(self, block_info, all_tokens):
@@ -3198,8 +3228,12 @@ class ContextStackParser:
                             nesting -= 1
 
                     # stop at top-level statement terminators or starters
-                    if nesting == 0 and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
-                        break
+                    # BUT: Don't stop at keywords that appear after a DOT (they're method/property names)
+                    if nesting == 0:
+                        # Check if this is a keyword after a dot (method/property access)
+                        is_after_dot = (len(run_tokens) > 0 and run_tokens[-1].type == DOT)
+                        if not is_after_dot and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
+                            break
 
                     run_tokens.append(t)
                     j += 1
@@ -4012,7 +4046,6 @@ class ContextStackParser:
 
     def _parse_list_literal(self, tokens):
         """Parse a list literal [a, b, c] from a token list"""
-        # print("  🔧 [List] Parsing list literal")
         if not tokens or tokens[0].type != LBRACKET:
             parser_debug("  ❌ [List] Not a list literal")
             return None
@@ -4026,7 +4059,8 @@ class ContextStackParser:
             if t.type in {LBRACKET, LPAREN, LBRACE}:
                 nesting += 1
                 cur.append(t)
-            elif t.type in {RBRACKET, RPAREN, RBRACE}:
+            elif t.type == RBRACKET:
+                # Only RBRACKET can close the list literal
                 if nesting > 0:
                     nesting -= 1
                     cur.append(t)
@@ -4036,6 +4070,11 @@ class ContextStackParser:
                         elem = self._parse_expression(cur)
                         elements.append(elem)
                     break
+            elif t.type in {RPAREN, RBRACE}:
+                # These just close nested expressions, not the list itself
+                if nesting > 0:
+                    nesting -= 1
+                cur.append(t)
             elif t.type == COMMA and nesting == 0:
                 if cur:
                     elem = self._parse_expression(cur)
@@ -5645,7 +5684,10 @@ class ContextStackParser:
             # expect INT then RBRACKET
             if i+1 < len(tokens) and tokens[i+1].type == INT:
                 try:
-                    capacity = int(tokens[i+1].literal)
+                    cap_value = int(tokens[i+1].literal)
+                    # Wrap in IntegerLiteral node for evaluator
+                    from ..zexus_ast import IntegerLiteral
+                    capacity = IntegerLiteral(cap_value)
                 except Exception:
                     capacity = None
                 i += 2

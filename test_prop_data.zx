@@ -1,8 +1,0 @@
-data User {
-    name: string,
-    email: string
-}
-
-let user = User("Alice", "alice@example.com")
-user.name = "Bob"
-print("After assignment: " + user.name)

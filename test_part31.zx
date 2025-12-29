@@ -1,0 +1,46 @@
+# Test Part 3.1 only
+print("=== PART 3: CONCURRENCY TESTS ===\n")
+
+# 3.1: Channel-based communication
+print("3.1: Channel communication...")
+channel<integer>[10] number_channel  # Buffered channel
+channel<string>[10] message_channel  # Buffered channel
+
+async action producer() {
+    let i = 1
+    while i <= 5 {
+        send(number_channel, i * 10)
+        sleep(0.01)  # Small delay
+        i = i + 1
+    }
+    close_channel(number_channel)
+    send(message_channel, "Producer done")
+    close_channel(message_channel)
+}
+
+async action consumer() {
+    sleep(0.1)  # Let producer start first
+    let total = 0
+    while true {
+        let num = receive(number_channel)
+        if num == null {
+            break
+        }
+        total = total + num
+        print("Consumer received: " + string(num))
+    }
+    print("Consumer total: " + string(total))
+    let msg = receive(message_channel)
+    print("Final message: " + string(msg))
+}
+
+# Run concurrently
+try {
+    async producer()
+    async consumer()
+    sleep(3.0)  # Wait for completion - threads need time to finish
+} catch (error) {
+    print("Concurrency error: " + string(error))
+}
+print("")
+print("Test complete!")

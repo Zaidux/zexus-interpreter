@@ -536,10 +536,14 @@ class EntityDefinition:
         return instance
 
     def get_all_properties(self):
-        """Get all properties including inherited ones"""
-        props = dict(self.properties)
+        """Get all properties including inherited ones, in correct order (parent first, then child)"""
+        props = {}
+        # First add parent properties
         if self.parent:
-            props.update(self.parent.get_all_properties())
+            parent_props = self.parent.get_all_properties()
+            props.update(parent_props)
+        # Then add/override with child properties
+        props.update(self.properties)
         return props
 
 

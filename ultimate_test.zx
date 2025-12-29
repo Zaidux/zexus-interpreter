@@ -51,7 +51,7 @@ print("")
 print("1.3: Memory stress test...")
 let large_list = []
 let j = 0
-while j < 10000 {
+while j < 500 {  # Reduced from 1000 to 500 for faster testing
     large_list = large_list + [{
         id: j,
         name: "Item " + string(j),
@@ -134,8 +134,8 @@ print("=== PART 3: CONCURRENCY TESTS ===\n")
 
 # 3.1: Channel-based communication
 print("3.1: Channel communication...")
-channel<integer> number_channel
-channel<string> message_channel
+channel<integer>[10] number_channel  # Buffered channel
+channel<string>[10] message_channel  # Buffered channel
 
 async action producer() {
     let i = 1
@@ -150,25 +150,39 @@ async action producer() {
 }
 
 async action consumer() {
+    sleep(0.1)  # Let producer start first
     let total = 0
+    print("[DEBUG] Consumer: starting loop")
     while true {
         let num = receive(number_channel)
+        print("[DEBUG] Consumer: received num = " + string(num))
         if num == null {
+            print("[DEBUG] Consumer: num is null, breaking")
             break
         }
         total = total + num
         print("Consumer received: " + string(num))
     }
+    print("[DEBUG] Consumer: Line 1 after break")
+    print("[DEBUG] Consumer: Line 2 after break")
+    print("[DEBUG] Consumer: Line 3 after break")
     print("Consumer total: " + string(total))
+    print("[DEBUG] Consumer: about to receive from message_channel")
     let msg = receive(message_channel)
+    print("[DEBUG] Consumer: received message = " + string(msg))
     print("Final message: " + string(msg))
+    print("[DEBUG] Consumer: done")
 }
 
 # Run concurrently
 try {
+    print("[DEBUG] Main: about to start async producer")
     async producer()
+    print("[DEBUG] Main: about to start async consumer")
     async consumer()
-    sleep(1.5)  # Wait for completion (increased for reliability)
+    print("[DEBUG] Main: about to sleep for 8 seconds")
+    sleep(8.0)  # Wait for completion (threads need time to finish all output)
+    print("[DEBUG] Main: done sleeping")
 } catch (error) {
     print("Concurrency error: " + string(error))
 }

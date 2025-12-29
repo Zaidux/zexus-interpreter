@@ -14,6 +14,13 @@ import time
 
 T = TypeVar('T')
 
+# Sentinel value to signal channel is closed
+class _ChannelClosedSentinel:
+    """Sentinel object to wake up receivers when channel is closed"""
+    pass
+
+_CHANNEL_CLOSED_SENTINEL = _ChannelClosedSentinel()
+
 
 class ChannelMode(Enum):
     """Channel communication mode"""
@@ -78,24 +85,28 @@ class Channel(Generic[T]):
         Raises:
             RuntimeError: If channel is closed
         """
+        # Check if closed (with lock)
         with self._lock:
             if self._closed:
                 raise RuntimeError(f"Cannot send on closed channel '{self.name}'")
+        
+        # Send without holding lock (queue.Queue is thread-safe)
+        try:
+            if self.capacity == 0:
+                # Unbuffered: block until receiver ready
+                self._queue.put(value, timeout=timeout)
+            else:
+                # Buffered: block if full
+                self._queue.put(value, timeout=timeout)
             
-            try:
-                if self.capacity == 0:
-                    # Unbuffered: block until receiver ready
-                    self._queue.put(value, timeout=timeout)
-                else:
-                    # Buffered: block if full
-                    self._queue.put(value, timeout=timeout)
-                
+            # Notify receiver (with lock)
+            with self._lock:
                 self._recv_ready.notify()
-                return True
-            except queue.Full:
-                raise RuntimeError(f"Channel '{self.name}' buffer full")
-            except queue.Empty:
-                raise RuntimeError(f"Timeout sending to channel '{self.name}'")
+            return True
+        except queue.Full:
+            raise RuntimeError(f"Channel '{self.name}' buffer full")
+        except queue.Empty:
+            raise RuntimeError(f"Timeout sending to channel '{self.name}'")
     
     def receive(self, timeout: Optional[float] = None) -> Optional[T]:
         """
@@ -110,23 +121,48 @@ class Channel(Generic[T]):
         Raises:
             RuntimeError: On communication error
         """
+        # Check if closed first (with lock)
         with self._lock:
-            try:
-                value = self._queue.get(timeout=timeout)
+            if self._closed and self._queue.empty():
+                return None
+        
+        # Receive without holding lock (queue.Queue is thread-safe)
+        try:
+            value = self._queue.get(timeout=timeout)
+            
+            # Check if this is the closed sentinel
+            if isinstance(value, _ChannelClosedSentinel):
+                return None
+            
+            # Notify sender (with lock)
+            with self._lock:
                 self._send_ready.notify()
-                return value
-            except queue.Empty:
+            return value
+        except queue.Empty:
+            # Check if closed (with lock)
+            with self._lock:
                 if self._closed:
                     return None
-                raise RuntimeError(f"Timeout receiving from channel '{self.name}'")
+            raise RuntimeError(f"Timeout receiving from channel '{self.name}'")
     
     def close(self):
         """Close channel - no more sends/receives allowed"""
         with self._lock:
             self._closed = True
             self._closed_event.set()
-            self._recv_ready.notify_all()
-            self._send_ready.notify_all()
+            # Put sentinel values to wake up any waiting receivers
+            # This ensures they immediately return None instead of timing out
+            try:
+                # For buffered channels, put one sentinel
+                if self.capacity > 0:
+                    self._queue.put_nowait(_CHANNEL_CLOSED_SENTINEL)
+                # For unbuffered channels, use notification
+                else:
+                    self._recv_ready.notify_all()
+                    self._send_ready.notify_all()
+            except queue.Full:
+                # Queue is full, receivers will check closed flag anyway
+                pass
     
     def __repr__(self) -> str:
         mode = f"buffered({self.capacity})" if self.capacity > 0 else "unbuffered"

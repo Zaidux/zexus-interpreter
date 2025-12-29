@@ -1,0 +1,60 @@
+# Test channel communication debug
+
+print("=== Channel Debug Test ===\n")
+
+channel<integer>[10] number_channel
+channel<string>[10] message_channel
+
+async action producer() {
+    print("Producer: Starting")
+    let i = 1
+    while i <= 3 {
+        print("Producer: Sending " + string(i * 10))
+        send(number_channel, i * 10)
+        i = i + 1
+    }
+    print("Producer: Closing number_channel")
+    close_channel(number_channel)
+    print("Producer: Sending done message")
+    send(message_channel, "Producer done")
+    print("Producer: Closing message_channel")
+    close_channel(message_channel)
+    print("Producer: Finished")
+}
+
+async action consumer() {
+    print("Consumer: Starting (sleeping 0.1s)")
+    sleep(0.1)
+    print("Consumer: Awake, starting to receive")
+    let total = 0
+    let count = 0
+    while true {
+        print("Consumer: Waiting for number...")
+        let num = receive(number_channel)
+        print("Consumer: Received " + string(num))
+        if num == null {
+            print("Consumer: Got null, breaking")
+            break
+        }
+        total = total + num
+        count = count + 1
+        print("Consumer: Count=" + string(count) + ", Total=" + string(total))
+    }
+    print("Consumer: Loop done, printing total")
+    print("Consumer total: " + string(total))
+    print("Consumer: Receiving message...")
+    let msg = receive(message_channel)
+    print("Consumer: Message received: " + string(msg))
+    print("Final message: " + string(msg))
+    print("Consumer: Finished")
+}
+
+print("Main: Starting async threads")
+async producer()
+async consumer()
+
+print("Main: Sleeping 5 seconds")
+sleep(5.0)
+print("Main: Done sleeping")
+
+print("\n=== Test Complete ===")

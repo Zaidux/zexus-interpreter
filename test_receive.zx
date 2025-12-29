@@ -1,0 +1,37 @@
+# Test receive timeout issue
+
+print("=== Receive Timeout Test ===\n")
+
+channel<integer>[10] test_channel
+
+async action sender() {
+    print("Sender: Starting")
+    sleep(0.2)
+    print("Sender: Sending 42")
+    send(test_channel, 42)
+    print("Sender: Sent")
+    sleep(0.1)
+    print("Sender: Closing channel")
+    close_channel(test_channel)
+    print("Sender: Done")
+}
+
+async action receiver() {
+    print("Receiver: Starting")
+    print("Receiver: Calling receive...")
+    let val = receive(test_channel)
+    print("Receiver: Received " + string(val))
+    print("Receiver: Calling receive again...")
+    let val2 = receive(test_channel)
+    print("Receiver: Received " + string(val2))
+    print("Receiver: Done")
+}
+
+async sender()
+async receiver()
+
+print("Main: Sleeping 2 seconds")
+sleep(2.0)
+print("Main: Done")
+
+print("\n=== Test Complete ===")

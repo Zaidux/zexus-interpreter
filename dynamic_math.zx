@@ -11,7 +11,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766873069
+# Generated at 1766943596
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -25,7 +25,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766873227
+# Generated at 1766945916
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -39,7 +39,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766873257
+# Generated at 1766947244
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -53,7 +53,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766873287
+# Generated at 1766947299
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -67,7 +67,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766875573
+# Generated at 1766947564
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -81,7 +81,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766875823
+# Generated at 1766947626
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -95,7 +95,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766876062
+# Generated at 1766947682
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -109,7 +109,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766876652
+# Generated at 1766947726
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -123,7 +123,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766876679
+# Generated at 1766948490
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -137,7 +137,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766876795
+# Generated at 1766950277
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -151,7 +151,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766876834
+# Generated at 1766950461
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -165,7 +165,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766877208
+# Generated at 1766951333
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -179,7 +179,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766877237
+# Generated at 1766951888
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -193,7 +193,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766877447
+# Generated at 1766953438
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -207,7 +207,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766877627
+# Generated at 1766953544
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -221,7 +221,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766878455
+# Generated at 1766953580
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -235,7 +235,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766878514
+# Generated at 1766954056
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -249,7 +249,7 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766879771
+# Generated at 1766975782
 module DynamicMath {
   export action add(a, b) { return a + b }
   export action multiply(a, b) { return a * b }
@@ -263,18 +263,4 @@ module DynamicMath {
     return result
   }
 }
-# Generated at 1766892179
-module DynamicMath {
-  export action add(a, b) { return a + b }
-  export action multiply(a, b) { return a * b }
-  export action power(a, b) {
-    let result = 1
-    let i = 0
-    while i < b {
-      result = result * a
-      i = i + 1
-    }
-    return result
-  }
-}
-# Generated at 1766892889
+# Generated at 1766978793

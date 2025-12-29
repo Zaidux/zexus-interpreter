@@ -761,7 +761,37 @@ class ExpressionEvaluatorMixin:
         import threading
         import sys
         
-        # Evaluate the expression to get the result
+        # For call expressions, we need to defer evaluation to the thread
+        # Otherwise evaluating here will execute the action in the main thread
+        if type(node.expression).__name__ == 'CallExpression':
+            def run_in_thread():
+                try:
+                    result = self.eval_node(node.expression, env, stack_trace)
+                    
+                    # If it's a Coroutine (from async action), execute it
+                    if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
+                        try:
+                            # Prime the generator
+                            next(result.generator)
+                            # Execute until completion
+                            while True:
+                                next(result.generator)
+                        except StopIteration:
+                            pass  # Coroutine completed
+                    
+                except StopIteration:
+                    pass  # Normal coroutine completion
+                except Exception as e:
+                    import sys
+                    print(f"[ASYNC ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
+                    import traceback
+                    traceback.print_exc(file=sys.stderr)
+            
+            thread = threading.Thread(target=run_in_thread, daemon=True)
+            thread.start()
+            return NULL
+        
+        # For other expressions, evaluate first then check if it's a Coroutine
         result = self.eval_node(node.expression, env, stack_trace)
         
         if is_error(result):
@@ -771,26 +801,33 @@ class ExpressionEvaluatorMixin:
         
         # If it's a Coroutine (from calling an async action), execute it in a thread
         if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-            # print(f"[ASYNC EXPR] Starting coroutine in thread", file=sys.stderr)
+            print(f"[DEBUG-ASYNC] Starting coroutine in thread", file=sys.stderr, flush=True)
             
             def run_coroutine():
-                # print(f"[ASYNC EXPR THREAD] Thread started", file=sys.stderr)
+                print(f"[DEBUG-ASYNC-THREAD] Thread started", file=sys.stderr, flush=True)
                 try:
                     # Prime the generator
                     val = next(result.generator)
+                    print(f"[DEBUG-ASYNC-THREAD] Generator primed, got: {val}", file=sys.stderr, flush=True)
                     # Execute until completion
                     try:
+                        step = 0
                         while True:
                             val = next(result.generator)
+                            step += 1
+                            print(f"[DEBUG-ASYNC-THREAD] Step {step}, got: {val}", file=sys.stderr, flush=True)
                     except StopIteration:
-                        pass # print(f"[ASYNC EXPR THREAD] Coroutine completed", file=sys.stderr)
+                        print(f"[DEBUG-ASYNC-THREAD] Coroutine completed normally after {step} steps", file=sys.stderr, flush=True)
                 except Exception as e:
-                    print(f"[ASYNC EXPR THREAD ERROR] {str(e)}", file=sys.stderr)
+                    print(f"[DEBUG-ASYNC-THREAD ERROR] {str(e)}", file=sys.stderr, flush=True)
                     import traceback
                     traceback.print_exc(file=sys.stderr)
+                finally:
+                    print(f"[DEBUG-ASYNC-THREAD] Thread finishing", file=sys.stderr, flush=True)
             
             thread = threading.Thread(target=run_coroutine, daemon=True)
             thread.start()
+            print(f"[DEBUG-ASYNC] Thread started, returning NULL", file=sys.stderr, flush=True)
             return NULL
         
         # For any other result (including NULL from regular actions),

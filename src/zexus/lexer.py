@@ -538,6 +538,9 @@ class Lexer:
             "persistent": PERSISTENT,   # NEW: Persistent keyword
             "storage": STORAGE,         # NEW: Storage keyword
             "require": REQUIRE,         # Already defined in zexus_token.py
+            # Logical operators as keywords (alternative to && and ||)
+            "and": AND,                 # Logical AND (alternative to &&)
+            "or": OR,                   # Logical OR (alternative to ||)
             # Performance optimization keywords
             "native": NATIVE,           # Performance: call C/C++ code
             "gc": GC,                   # Performance: control garbage collection

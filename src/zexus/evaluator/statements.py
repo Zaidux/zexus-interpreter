@@ -887,8 +887,8 @@ class StatementEvaluatorMixin:
             if isinstance(result, ReturnValue):
                 return result
             if isinstance(result, BreakException):
-                # Break out of loop, return NULL
-                return NULL
+                # Break out of loop, continue execution
+                break
             if isinstance(result, EvaluationError):
                 return result
         
@@ -909,8 +909,8 @@ class StatementEvaluatorMixin:
             if isinstance(result, ReturnValue):
                 return result
             if isinstance(result, BreakException):
-                # Break out of loop, return NULL
-                return NULL
+                # Break out of loop, continue execution
+                break
             if isinstance(result, EvaluationError):
                 return result
         
@@ -1687,6 +1687,43 @@ class StatementEvaluatorMixin:
         
         contract = SmartContract(node.name.value, storage, actions)
         contract.deploy()
+        
+        # Check if contract has a constructor and execute it
+        if 'constructor' in actions:
+            constructor = actions['constructor']
+            # Create contract environment with storage access
+            contract_env = Environment(outer=env)
+            
+            # Set up TX context
+            from ..object import Map, String, Integer
+            tx_context = Map({
+                String("caller"): String("system"),  # Default caller
+                String("timestamp"): Integer(int(__import__('time').time())),
+            })
+            contract_env.set("TX", tx_context)
+            
+            # Pre-populate environment with storage variables so assignments update storage
+            for storage_var in node.storage_vars:
+                var_name = storage_var.name.value
+                # Get initial value from storage (which was set during deploy)
+                initial_val = contract.storage.get(var_name)
+                if initial_val is not None:
+                    contract_env.set(var_name, initial_val)
+            
+            # Execute constructor body
+            result = self.eval_node(constructor.body, contract_env, stack_trace)
+            if is_error(result):
+                return result
+            
+            # After constructor runs, update contract storage with any modified variables
+            for storage_var in node.storage_vars:
+                var_name = storage_var.name.value
+                # Get the value from constructor environment
+                val = contract_env.get(var_name)
+                if val is not None:
+                    # Update persistent storage
+                    contract.storage.set(var_name, val)
+        
         env.set(node.name.value, contract)
         return NULL
     
@@ -1695,17 +1732,17 @@ class StatementEvaluatorMixin:
         methods = {}
         injected_deps = []  # Track which properties are injected dependencies
         
-        # Handle inheritance - get parent properties first
+        # Handle inheritance - get parent reference but DON'T merge properties yet
+        parent_entity = None
         if node.parent:
             parent_entity = env.get(node.parent.value)
-            if parent_entity and isinstance(parent_entity, EntityDefinition):
-                # Copy parent properties
-                props.update(parent_entity.properties)
-            elif not parent_entity:
+            if not parent_entity:
                 return EvaluationError(f"Parent entity '{node.parent.value}' not found")
-            else:
-                # Parent exists but is not an EntityDefinition
+            # Check if it's a SecurityEntityDef (the actual entity class we use)
+            from ..security import EntityDefinition as SecurityEntityDef
+            if not isinstance(parent_entity, SecurityEntityDef):
                 return EvaluationError(f"'{node.parent.value}' exists but is not an entity")
+            # Note: We no longer copy parent properties here - they'll be accessed via parent_ref
         
         for prop in node.properties:
             # Check if this is an injected dependency
@@ -1755,10 +1792,13 @@ class StatementEvaluatorMixin:
                 methods[method_name] = method_action
         
         # Create entity with methods and parent reference
-        parent_ref = parent_entity if (node.parent and isinstance(parent_entity, EntityDefinition)) else None
+        # Now parent_ref points to the actual parent, and props only contains THIS entity's properties
+        # Import SecurityEntityDef first for isinstance check
+        from ..security import EntityDefinition as SecurityEntityDef
+        
+        parent_ref = parent_entity if (node.parent and isinstance(parent_entity, SecurityEntityDef)) else None
         
         # Use the EntityDefinition from security.py which supports methods
-        from ..security import EntityDefinition as SecurityEntityDef
         entity = SecurityEntityDef(node.name.value, props, methods, parent_ref)
         
         # Store injected dependencies list for constructor use
@@ -2363,7 +2403,7 @@ class StatementEvaluatorMixin:
             output_parts.append(part)
         
         output = ' '.join(output_parts)
-        print(output)
+        print(output, flush=True)  # Flush immediately for async threads
         
         try:
             ctx = get_security_context()
@@ -4137,34 +4177,24 @@ class StatementEvaluatorMixin:
         
         This is for the statement form, not the builtin function.
         """
-        import sys
-        print(f"[SEND] Evaluating send statement", file=sys.stderr)
-        
         # Evaluate channel
-        channel = self.eval_node(node.channel, env, stack_trace)
+        channel = self.eval_node(node.channel_expr, env, stack_trace)
         if is_error(channel):
             return channel
         
-        print(f"[SEND] Channel: {channel}, type: {type(channel).__name__}", file=sys.stderr)
-        
         # Evaluate value
-        value = self.eval_node(node.value, env, stack_trace)
+        value = self.eval_node(node.value_expr, env, stack_trace)
         if is_error(value):
             return value
-        
-        print(f"[SEND] Value: {value}", file=sys.stderr)
         
         # Send to channel
         if not hasattr(channel, 'send'):
             return EvaluationError(f"send target is not a channel: {type(channel).__name__}")
         
         try:
-            print(f"[SEND] Calling channel.send()", file=sys.stderr)
             channel.send(value, timeout=5.0)
-            print(f"[SEND] Successfully sent value", file=sys.stderr)
             return NULL
         except Exception as e:
-            print(f"[SEND ERROR] {str(e)}", file=sys.stderr)
             return EvaluationError(f"send error: {str(e)}")
 
     def eval_receive_statement(self, node, env, stack_trace):
@@ -4172,27 +4202,19 @@ class StatementEvaluatorMixin:
         
         This is for the statement form, not the builtin function.
         """
-        import sys
-        print(f"[RECEIVE] Evaluating receive statement", file=sys.stderr)
-        
         # Evaluate channel
-        channel = self.eval_node(node.channel, env, stack_trace)
+        channel = self.eval_node(node.channel_expr, env, stack_trace)
         if is_error(channel):
             return channel
-        
-        print(f"[RECEIVE] Channel: {channel}, type: {type(channel).__name__}", file=sys.stderr)
         
         # Receive from channel
         if not hasattr(channel, 'receive'):
             return EvaluationError(f"receive target is not a channel: {type(channel).__name__}")
         
         try:
-            print(f"[RECEIVE] Calling channel.receive()", file=sys.stderr)
             value = channel.receive(timeout=5.0)
-            print(f"[RECEIVE] Received value: {value}", file=sys.stderr)
             return value if value is not None else NULL
         except Exception as e:
-            print(f"[RECEIVE ERROR] {str(e)}", file=sys.stderr)
             return EvaluationError(f"receive error: {str(e)}")
 
     def eval_atomic_statement(self, node, env, stack_trace):

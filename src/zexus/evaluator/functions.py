@@ -330,13 +330,21 @@ class FunctionEvaluatorMixin:
             debug_log("  Creating entity instance (with methods)")
             
             values = {}
-            # Map positional arguments to property names
-            prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
+            # Map positional arguments to property names, INCLUDING INHERITED PROPERTIES
+            # Use get_all_properties() to get the full property list in correct order
+            if hasattr(fn, 'get_all_properties'):
+                # Get all properties (parent + child) in correct order
+                all_props = fn.get_all_properties()
+                prop_names = list(all_props.keys())
+            else:
+                # Fallback for old-style properties
+                prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
             
             for i, arg in enumerate(args):
                 if i < len(prop_names):
                     values[prop_names[i]] = arg
             
+            debug_log(f"  Entity instance created with {len(values)} properties: {list(values.keys())}")
             return SecurityEntityInstance(fn, values)
         
         return EvaluationError(f"Not a function: {fn}")
