@@ -84,10 +84,28 @@ print("Mixed:", "string", 100, "test")  → Output: "Mixed: string 100 test"
 ✅ Inside actions: `action test(x) { print("x =", x) }`
 ✅ Inside functions: Works correctly
 ✅ Mixed types: Strings, numbers, variables, expressions
+✅ **Conditional print**: `print(condition, message)` - only prints when condition is truthy
+
+## Conditional Print Feature
+
+When `print()` is called with **exactly 2 arguments**, it's treated as a conditional print:
+- **First argument**: Condition (evaluated for truthiness)
+- **Second argument**: Message (only printed if condition is true)
+
+```zexus
+let debugMode = true
+print(debugMode, "Debug mode active")  # Prints: "Debug mode active"
+
+let verbose = false
+print(verbose, "Verbose output")  # Does NOT print
+```
+
+This enables dynamic output control without if statements.
 
 ## Impact
 - **Fixes**: Entity method parameter debugging (what appeared to be a parameter passing bug was actually print not displaying values)
 - **Improves**: Developer experience with multi-argument print statements
+- **Adds**: Conditional print capability for dynamic output control
 - **Maintains**: Backward compatibility with single-argument prints
 - **Performance**: Minimal impact - only evaluates expressions that are provided
 
@@ -96,3 +114,4 @@ This fix revealed that what initially appeared to be an "entity method parameter
 
 ## Status
 ✅ **COMPLETE** - All three print parsers updated, tested, and working correctly
+✅ **ENHANCED** - Conditional print support added (2-argument form)
