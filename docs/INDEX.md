@@ -9,6 +9,26 @@ Welcome to the Zexus Programming Language documentation! This index helps you na
 - **[Quick Start Tutorial](#quick-start)** - Your first Zexus program
 - **[CLI Reference](#cli-reference)** - Command-line interface guide
 
+## 🌐 Ecosystem & Roadmap
+
+- **[Ecosystem Strategy](ECOSYSTEM_STRATEGY.md)** - ⭐ Three-phase roadmap for building "anything" with Zexus
+  - **Phase 1**: Build WITH Zexus
+    - [HTTP Server](keywords/features/HTTP_SERVER.md) - Pure Zexus HTTP server implementation
+    - [Database Drivers](keywords/features/DATABASE_DRIVERS.md) - PostgreSQL, MySQL, MongoDB drivers
+    - [CLI Framework](keywords/features/CLI_FRAMEWORK.md) - Command-line tool framework
+    - [Testing Framework](keywords/features/TESTING_FRAMEWORK.md) - Native testing framework
+  - **Phase 2**: Integrate INTO Zexus
+    - [HTTP Keywords](keywords/HTTP_KEYWORDS.md) - Native HTTP server/client keywords
+    - [DATABASE Keywords](keywords/DATABASE_KEYWORDS.md) - Native database operations
+    - [AI/ML Keywords](keywords/AI_ML_KEYWORDS.md) - Machine learning primitives
+    - [GUI Keywords](keywords/GUI_KEYWORDS.md) - Enhanced GUI system
+  - **Phase 3**: Batteries Included
+    - [@zexus/web](packages/ZEXUS_WEB_PACKAGE.md) - Full-stack web framework
+    - [@zexus/db](packages/ZEXUS_DB_PACKAGE.md) - Database ORM and drivers
+    - [@zexus/ai](packages/ZEXUS_AI_PACKAGE.md) - Machine learning framework
+    - [@zexus/gui](packages/ZEXUS_GUI_PACKAGE.md) - Cross-platform GUI framework
+- **[Package Development](PACKAGE_DEVELOPMENT.md)** - Guide for creating Zexus packages
+
 ## 📚 Core Documentation
 
 ### Language Features
@@ -205,5 +225,5 @@ MIT License - see [LICENSE](../LICENSE) file for details.
 
 ---
 
-**Last Updated**: December 13, 2025  
+**Last Updated**: December 29, 2025  
 **Version**: 1.5.0

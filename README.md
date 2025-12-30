@@ -1912,6 +1912,7 @@ Source Code (.zx)
 
 ### Complete Documentation
 
+- **[Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md)** - 🌐 Three-phase roadmap for building "anything"
 - **[Feature Guide](docs/ADVANCED_FEATURES_IMPLEMENTATION.md)** - Complete feature reference
 - **[Developer Guide](src/README.md)** - Internal architecture and API
 - **[Documentation Index](docs/INDEX.md)** - All documentation organized
@@ -2269,6 +2270,28 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] CI/CD templates
 - [ ] Docker images
 - [ ] Production monitoring tools
+
+### Ecosystem Development 🌐
+See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
+
+**Phase 1: Build WITH Zexus** (Q1-Q2 2025)
+- [ ] HTTP Server implementation
+- [ ] PostgreSQL, MySQL, MongoDB drivers
+- [ ] CLI Framework
+- [ ] Testing Framework
+
+**Phase 2: Integrate INTO Zexus** (Q3-Q4 2025)
+- [ ] HTTP native keywords
+- [ ] DATABASE native keywords
+- [ ] AI/ML primitives
+- [ ] Enhanced GUI keywords
+
+**Phase 3: Batteries Included** (2026+)
+- [ ] @zexus/web - Full-stack web framework
+- [ ] @zexus/db - Database ORM and drivers
+- [ ] @zexus/ai - Machine learning framework
+- [ ] @zexus/gui - Cross-platform GUI framework
+- [ ] Additional official packages
 
 ### Future Enhancements 🚀
 - [ ] GPU acceleration for SIMD operations
