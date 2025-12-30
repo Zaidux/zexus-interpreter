@@ -3078,8 +3078,14 @@ class UltimateParser:
             if self.cur_token_is(RBRACE):
                 break
 
+            # Check for state variable declaration
+            if self.cur_token_is(STATE):
+                state_stmt = self.parse_state_statement()
+                if state_stmt:
+                    storage_vars.append(state_stmt)
+
             # Check for persistent storage declaration
-            if self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
+            elif self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
                 self.next_token()
                 if self.cur_token_is(IDENT) and self.cur_token.literal == "storage":
                     self.next_token()

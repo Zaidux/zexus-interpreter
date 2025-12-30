@@ -748,6 +748,14 @@ class Environment:
         if hasattr(self, 'notify_watchers'):
             self.notify_watchers(name, val)
         return val
+    
+    def _has_variable(self, name):
+        """Check if a variable name exists in this scope or any outer scope."""
+        if name in self.store:
+            return True
+        if self.outer and hasattr(self.outer, '_has_variable'):
+            return self.outer._has_variable(name)
+        return False
 
     def set_const(self, name, val):
         """Set a constant (immutable) variable"""

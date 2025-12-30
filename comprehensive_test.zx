@@ -1,0 +1,231 @@
+# Comprehensive Zexus Testing Suite
+# Testing various language features to find potential issues
+
+print("=" * 60)
+print("COMPREHENSIVE ZEXUS TESTING")
+print("=" * 60)
+
+# === TEST 1: Complex Expressions ===
+print("\n=== TEST 1: Complex Expressions ===")
+let a = 10 + 20 * 3 - 5
+print("Arithmetic precedence: " + string(a))  # Should be 65
+
+let b = (10 + 20) * (3 - 5)
+print("Parentheses grouping: " + string(b))  # Should be -60
+
+let c = 5 > 3 and 10 < 20
+print("Logical operators: " + string(c))  # Should be true
+
+# === TEST 2: String Operations ===
+print("\n=== TEST 2: String Operations ===")
+let str1 = "Hello"
+let str2 = "World"
+let greeting = str1 + " " + str2 + "!"
+print("String concatenation: " + greeting)
+
+let num_str = "Value: " + string(42) + ", More: " + string(3.14)
+print(num_str)
+
+# === TEST 3: Collections ===
+print("\n=== TEST 3: Collections ===")
+let list = [1, 2, 3, 4, 5]
+print("List: " + string(list))
+
+let map = {"name": "Alice", "age": 30, "city": "NYC"}
+print("Map keys: " + string(map))
+
+# === TEST 4: Functions ===
+print("\n=== TEST 4: Functions ===")
+function add(x, y) {
+    return x + y
+}
+
+let sum = add(10, 20)
+print("Function result: " + string(sum))
+
+function factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+let fact5 = factorial(5)
+print("Factorial(5): " + string(fact5))  # Should be 120
+
+# === TEST 5: Closures ===
+print("\n=== TEST 5: Closures ===")
+function makeCounter() {
+    let count = 0
+    return function() {
+        count = count + 1
+        return count
+    }
+}
+
+let counter = makeCounter()
+print("Counter 1st call: " + string(counter()))
+print("Counter 2nd call: " + string(counter()))
+print("Counter 3rd call: " + string(counter()))
+
+# === TEST 6: Higher-Order Functions ===
+print("\n=== TEST 6: Higher-Order Functions ===")
+function mapArray(arr, func) {
+    let result = []
+    let i = 0
+    while (i < len(arr)) {
+        result = push(result, func(arr[i]))
+        i = i + 1
+    }
+    return result
+}
+
+function double(x) {
+    return x * 2
+}
+
+let numbers = [1, 2, 3, 4, 5]
+let doubled = mapArray(numbers, double)
+print("Doubled numbers: " + string(doubled))
+
+# === TEST 7: Error Handling ===
+print("\n=== TEST 7: Error Handling ===")
+try {
+    let x = 10 / 2
+    print("Division successful: " + string(x))
+    throw "Intentional error"
+    print("This should not print")
+} catch (e) {
+    print("Caught error: " + string(e))
+}
+
+# === TEST 8: Entities ===
+print("\n=== TEST 8: Entities ===")
+entity Person {
+    data {
+        name: string
+        age: integer
+    }
+    
+    action greet() {
+        return "Hello, I'm " + this.name + " and I'm " + string(this.age) + " years old"
+    }
+    
+    action haveBirthday() {
+        this.age = this.age + 1
+        return "Happy birthday! Now " + string(this.age)
+    }
+}
+
+let person = Person(name="Bob", age=25)
+print(person.greet())
+print(person.haveBirthday())
+print(person.greet())
+
+# === TEST 9: Async/Concurrency ===
+print("\n=== TEST 9: Async/Concurrency ===")
+async function asyncTask(id, delay) {
+    print("Task " + string(id) + " starting...")
+    await sleep(delay)
+    print("Task " + string(id) + " completed")
+    return id * 10
+}
+
+let task1 = spawn asyncTask(1, 10)
+let task2 = spawn asyncTask(2, 5)
+
+let result1 = await task1
+let result2 = await task2
+print("Task results: " + string(result1) + ", " + string(result2))
+
+# === TEST 10: Pattern Matching ===
+print("\n=== TEST 10: Pattern Matching ===")
+function describeValue(val) {
+    match val {
+        0 => return "Zero"
+        1 => return "One"
+        2 => return "Two"
+        _ => return "Other: " + string(val)
+    }
+}
+
+print("Match 0: " + describeValue(0))
+print("Match 2: " + describeValue(2))
+print("Match 99: " + describeValue(99))
+
+# === TEST 11: Smart Contracts ===
+print("\n=== TEST 11: Smart Contracts ===")
+contract SimpleWallet {
+    state balance = 0
+    state owner
+    
+    action init(initialBalance) {
+        owner = "admin"
+        balance = initialBalance
+        print("Wallet initialized with balance: " + string(balance))
+    }
+    
+    action deposit(amount) {
+        balance = balance + amount
+        return "New balance: " + string(balance)
+    }
+    
+    action getBalance() {
+        return balance
+    }
+}
+
+let wallet = SimpleWallet()
+wallet.init(100)
+print(wallet.deposit(50))
+print("Current balance: " + string(wallet.getBalance()))
+
+# === TEST 12: Complex Nested Structures ===
+print("\n=== TEST 12: Complex Nested Structures ===")
+let complex = {
+    "user": {
+        "name": "Charlie",
+        "profile": {
+            "age": 35,
+            "hobbies": ["coding", "reading", "gaming"]
+        }
+    },
+    "stats": {
+        "posts": 42,
+        "followers": 1337
+    }
+}
+
+print("Complex structure created")
+print("User name: " + complex["user"]["name"])
+
+# === TEST 13: Loop Variants ===
+print("\n=== TEST 13: Loop Variants ===")
+let sum_while = 0
+let i = 1
+while (i <= 5) {
+    sum_while = sum_while + i
+    i = i + 1
+}
+print("While loop sum (1-5): " + string(sum_while))
+
+let sum_for = 0
+let j = 1
+while (j <= 5) {
+    sum_for = sum_for + j
+    j = j + 1
+}
+print("While loop sum (1-5): " + string(sum_for))
+
+# === TEST 14: Conditional Expressions ===
+print("\n=== TEST 14: Conditional Expressions ===")
+let age = 18
+let status = if age >= 18 then "adult" else "minor"
+print("Status: " + status)
+
+let max = if 10 > 5 then 10 else 5
+print("Max value: " + string(max))
+
+print("\n" + "=" * 60)
+print("ALL TESTS COMPLETED!")
+print("=" * 60)

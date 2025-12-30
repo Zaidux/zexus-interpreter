@@ -221,7 +221,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif isinstance(node, zexus_ast.FunctionStatement):
                 debug_log("  FunctionStatement node", f"function {node.name.value}")
-                return self.eval_function_statement(node, env, stack_trace)
+                print(f"[CORE] Evaluating FunctionStatement: {node.name.value}, modifiers: {getattr(node, 'modifiers', [])}", flush=True)
+                result = self.eval_function_statement(node, env, stack_trace)
+                print(f"[CORE] FunctionStatement result: {result}", flush=True)
+                return result
             
             elif isinstance(node, zexus_ast.NativeStatement):
                 debug_log("  NativeStatement node", f"native {node.function_name}")
@@ -510,14 +513,27 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     return obj
                 
                 # Safely extract property name - property can be Identifier, IntegerLiteral, or other expression
-                if hasattr(node.property, 'value'):
+                # IMPORTANT: For Identifier nodes in index expressions (arr[i]), we need to evaluate them first!
+                if isinstance(node.property, zexus_ast.Identifier):
+                    # This could be either a property name (obj.prop) or an index variable (arr[i])
+                    # We need to check if it's being used as an index (numeric) or property (string)
+                    # First try to evaluate it as an identifier (variable lookup)
+                    prop_result = self.eval_identifier(node.property, env)
+                    if not is_error(prop_result) and not isinstance(prop_result, type(NULL)):
+                        # Successfully found a variable, use its value as the property/index
+                        property_name = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
+                    else:
+                        # Not found as variable, treat as literal property name (for obj.prop syntax)
+                        property_name = node.property.value
+                elif isinstance(node.property, zexus_ast.IntegerLiteral):
+                    # Direct integer index like arr[0]
                     property_name = node.property.value
                 elif isinstance(node.property, zexus_ast.PropertyAccessExpression):
                     # Nested property access - evaluate it
                     prop_result = self.eval_node(node.property, env, stack_trace)
                     if is_error(prop_result):
                         return prop_result
-                    property_name = prop_result.inspect() if hasattr(prop_result, 'inspect') else str(prop_result)
+                    property_name = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
                 else:
                     # Evaluate the property expression to get the key
                     prop_result = self.eval_node(node.property, env, stack_trace)

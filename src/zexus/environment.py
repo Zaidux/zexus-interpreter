@@ -70,7 +70,7 @@ class Environment:
         """Check if a variable name exists in this scope or any outer scope."""
         if name in self.store:
             return True
-        if self.outer:
+        if self.outer and hasattr(self.outer, '_has_variable'):
             return self.outer._has_variable(name)
         return False
 

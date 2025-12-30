@@ -1,4 +1,6 @@
 # syntax_validator.py
+# Updated to match actual parser capabilities (parser.py, strategy_context.py, strategy_structural.py)
+# The parsers support flexible syntax: both with and without parentheses, both {} and : block styles
 import re
 
 class SyntaxValidator:
@@ -6,8 +8,14 @@ class SyntaxValidator:
         self.suggestions = []
         self.warnings = []
 
-    def validate_code(self, code, desired_style="universal"):
-        """Validate code and suggest improvements for the desired syntax style"""
+    def validate_code(self, code, desired_style="flexible"):
+        """Validate code and suggest improvements
+        
+        Styles:
+        - flexible: Accept both syntaxes (matches parser behavior)
+        - universal: Prefer braces {} and parentheses
+        - tolerable: More relaxed, warn only on actual errors
+        """
         self.suggestions = []
         self.warnings = []
 
@@ -25,73 +33,95 @@ class SyntaxValidator:
         }
 
     def _validate_line(self, line, line_num, style):
-        """Validate a single line against the desired style"""
+        """Validate a single line against the desired style
+        
+        Parser accepts BOTH styles - with/without parentheses, {}/: blocks
+        Validation should only flag actual syntax errors, not style preferences
+        """
         stripped_line = line.strip()
         if not stripped_line or stripped_line.startswith('#'):
             return
 
-        # Universal style validations
-        if style == "universal":
+        # Flexible validation (default - matches parser behavior)
+        if style == "flexible":
+            self._validate_flexible_syntax(stripped_line, line_num, line)
+        # Universal style validations (prefer specific style but accept both)
+        elif style == "universal":
             self._validate_universal_syntax(stripped_line, line_num, line)
         # Tolerable style validations  
         elif style == "tolerable":
             self._validate_tolerable_syntax(stripped_line, line_num, line)
 
-        # Common validations for both styles
+        # Common validations for all styles (actual errors only)
         self._validate_common_syntax(stripped_line, line_num, line)
 
-    def _validate_universal_syntax(self, stripped_line, line_num, original_line):
-        """Validate against universal syntax rules"""
-        # Check for colon blocks (should use braces)
-        if (any(stripped_line.startswith(keyword) for keyword in ['if', 'for each', 'while', 'action', 'try']) 
-            and stripped_line.endswith(':')):
-            self.suggestions.append({
+    def _validate_flexible_syntax(self, stripped_line, line_num, original_line):
+        """Validate for actual syntax errors only - accept both styles
+        
+        The parser supports:
+        - if (condition) { } AND if condition { } AND if condition:
+        - while (condition) { } AND while condition { } AND while condition:
+        - action name(params) { } AND action name params { }
+        - catch(error) { } AND catch (error) { }
+        - print(value) AND print (value) - both are valid
+        """
+        # Only flag actual errors that parser would reject
+        
+        # Check for space between function name and parenthesis (commonly flagged but actually valid)
+        # DON'T warn about "print (" - parser accepts this
+        
+        # Check for unmatched braces (actual error)
+        open_braces = stripped_line.count('{') - stripped_line.count('}')
+        open_parens = stripped_line.count('(') - stripped_line.count(')')
+        open_brackets = stripped_line.count('[') - stripped_line.count(']')
+        
+        if abs(open_braces) > 2 or abs(open_parens) > 2 or abs(open_brackets) > 2:
+            # Only warn if significantly unbalanced (might span multiple lines)
+            self.warnings.append({
                 'line': line_num,
-                'message': "Universal syntax requires braces {} instead of colon for blocks",
-                'fix': original_line.rstrip(':') + " {",
+                'message': "Potentially unmatched delimiters - check braces/parentheses/brackets",
                 'severity': 'warning'
             })
-
-        # Check debug statements
-        if stripped_line.startswith('debug ') and not stripped_line.startswith('debug('):
-            self.suggestions.append({
-                'line': line_num,
-                'message': "Use parentheses with debug statements: debug(expression)",
-                'fix': original_line.replace('debug ', 'debug(', 1) + ')',
-                'severity': 'error'
-            })
-
-        # Check lambda syntax
-        if 'lambda' in stripped_line and 'lambda ' in stripped_line and not 'lambda(' in stripped_line:
-            self.suggestions.append({
-                'line': line_num,
-                'message': "Use parentheses with lambda parameters: lambda(params) -> expression",
-                'fix': self._fix_lambda_syntax(original_line),
-                'severity': 'error'
-            })
-
-        # Check catch without parentheses or with double parentheses
-        if 'catch' in stripped_line:
-            # Case 1: catch without parentheses: catch error { }
-            # Check for catch followed by space, not followed by ( (with or without space before it)
-            if ('catch ' in stripped_line and 
-                not 'catch(' in stripped_line and 
-                not 'catch (' in stripped_line and 
-                '{' in stripped_line):
+        
+        # Check for obvious typos in keywords
+        common_typos = {
+            'fucntion': 'function',
+            'acton': 'action',
+            'retrun': 'return',
+            'esle': 'else',
+            'wile': 'while',
+            'forach': 'foreach',
+        }
+        for typo, correct in common_typos.items():
+            if typo in stripped_line:
                 self.suggestions.append({
                     'line': line_num,
-                    'message': "Use parentheses with catch: catch(error) { }",
-                    'fix': self._fix_catch_syntax(original_line),
+                    'message': f"Possible typo: '{typo}' should be '{correct}'",
+                    'fix': original_line.replace(typo, correct),
                     'severity': 'error'
                 })
-            # Case 2: catch with double parentheses: catch((error)) { }
-            elif 'catch((' in stripped_line and '))' in stripped_line:
-                self.suggestions.append({
-                    'line': line_num,
-                    'message': "Remove extra parentheses in catch: catch(error) { }",
-                    'fix': self._fix_double_parentheses_catch(original_line),
-                    'severity': 'error'
-                })
+
+    def _validate_universal_syntax(self, stripped_line, line_num, original_line):
+        """Validate and suggest universal syntax style (preference, not requirement)
+        
+        NOTE: Parser accepts BOTH styles, so these are style suggestions, not errors
+        """
+        # REMOVED: Colon block check - parser fully supports colon blocks
+        # The parser accepts both: if condition { } AND if condition:
+        # So we should NOT suggest changing : to {}
+        
+        # REMOVED: Parentheses suggestions for if/while
+        # Parser accepts: if (x) { }, if x { }, if x:
+        # All are valid, so don't suggest changes
+        
+        # Check for double parentheses in catch (actual syntax issue)
+        if 'catch' in stripped_line and 'catch((' in stripped_line and '))' in stripped_line:
+            self.suggestions.append({
+                'line': line_num,
+                'message': "Remove extra parentheses in catch: catch(error) { }",
+                'fix': self._fix_double_parentheses_catch(original_line),
+                'severity': 'error'
+            })
 
     def _validate_tolerable_syntax(self, stripped_line, line_num, original_line):
         """Validate against tolerable syntax rules"""
@@ -114,47 +144,50 @@ class SyntaxValidator:
             })
 
     def _validate_common_syntax(self, stripped_line, line_num, original_line):
-        """Common validations for both syntax styles"""
-        # Check for missing parentheses in function calls
-        if (any(stripped_line.startswith(keyword) for keyword in ['if', 'while']) 
-            and '(' not in stripped_line and not stripped_line.endswith(':')):
-            self.suggestions.append({
-                'line': line_num,
-                'message': "Consider using parentheses for clarity: if (condition)",
-                'fix': self._add_parentheses_to_condition(original_line),
-                'severity': 'suggestion'
-            })
-
-        # Check for assignment in conditions (common bug)
+        """Common validations for all syntax styles - only flag real errors"""
+        
+        # DON'T check for missing parentheses - parser accepts both styles
+        # The old check was:
+        #   if 'if' in line and '(' not in line: suggest parentheses
+        # This is WRONG - parser accepts: if condition { }
+        
+        # Check for assignment in conditions (common bug - actual error)
         if 'if' in stripped_line and ' = ' in stripped_line and ' == ' not in stripped_line:
-            self.warnings.append({
-                'line': line_num,
-                'message': "Possible assignment in condition - did you mean '=='?",
-                'severity': 'warning'
-            })
+            # Make sure it's not a string literal
+            if stripped_line.count('"') % 2 == 0 and stripped_line.count("'") % 2 == 0:
+                self.warnings.append({
+                    'line': line_num,
+                    'message': "Possible assignment in condition - did you mean '=='?",
+                    'severity': 'warning'
+                })
 
         # Check try-catch structure
         self._validate_try_catch_structure(stripped_line, line_num, original_line)
 
     def _validate_try_catch_structure(self, stripped_line, line_num, original_line):
-        """Validate try-catch block structure"""
-        # Check for try without catch
-        if stripped_line.startswith('try') and 'catch' not in stripped_line:
-            # Look ahead in context would be better, but for now we warn
-            self.warnings.append({
-                'line': line_num,
-                'message': "Try block should be followed by catch block",
-                'severity': 'warning'
-            })
-
-        # Check for malformed catch blocks
+        """Validate try-catch block structure
+        
+        Parser accepts multiple catch formats:
+        - catch(error) { }
+        - catch (error) { }  (space before paren is OK)
+        - catch error { }  (no parens in some contexts)
+        """
+        # Only check for catch without ANY error parameter
         if 'catch' in stripped_line:
-            # Check for catch without error parameter
-            if 'catch' in stripped_line and 'catch{' in stripped_line.replace(' ', ''):
+            # Check for catch immediately followed by { (no error variable at all)
+            if re.search(r'catch\s*\{', stripped_line):
                 self.suggestions.append({
                     'line': line_num,
-                    'message': "Catch should include error parameter: catch(error)",
-                    'fix': original_line.replace('catch{', 'catch(error){'),
+                    'message': "Catch block should include error parameter: catch(error) { }",
+                    'fix': original_line.replace('catch{', 'catch(error) {').replace('catch {', 'catch(error) {'),
+                    'severity': 'warning'
+                })
+            # Check for double parentheses (actual error)
+            elif 'catch((' in stripped_line and '))' in stripped_line:
+                self.suggestions.append({
+                    'line': line_num,
+                    'message': "Remove extra parentheses in catch: catch(error) { }",
+                    'fix': self._fix_double_parentheses_catch(original_line),
                     'severity': 'error'
                 })
 
@@ -218,8 +251,11 @@ class SyntaxValidator:
             return line.replace('while ', 'while (', 1) + ')'
         return line
 
-    def auto_fix(self, code, desired_style="universal"):
-        """Attempt to automatically fix syntax issues"""
+    def auto_fix(self, code, desired_style="flexible"):
+        """Attempt to automatically fix syntax issues
+        
+        Only fixes actual errors, not style preferences (when using flexible mode)
+        """
         validation = self.validate_code(code, desired_style)
 
         if validation['is_valid']:
@@ -232,6 +268,10 @@ class SyntaxValidator:
         # Group suggestions by line to avoid conflicts
         line_suggestions = {}
         for suggestion in validation['suggestions']:
+            # In flexible mode, only auto-fix errors, not suggestions/warnings
+            if desired_style == "flexible" and suggestion['severity'] not in ['error']:
+                continue
+                
             if suggestion['severity'] in ['error', 'warning']:
                 line_num = suggestion['line'] - 1
                 if line_num not in line_suggestions:
@@ -246,8 +286,9 @@ class SyntaxValidator:
                 
                 # Apply fixes in order
                 for suggestion in suggestions:
-                    fixed_line = suggestion['fix']
-                    applied_fixes += 1
+                    if 'fix' in suggestion:
+                        fixed_line = suggestion['fix']
+                        applied_fixes += 1
                 
                 fixed_lines[line_num] = fixed_line
 

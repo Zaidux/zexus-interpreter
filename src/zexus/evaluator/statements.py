@@ -1670,6 +1670,7 @@ class StatementEvaluatorMixin:
         return result if result is not None else NULL
     
     def eval_contract_statement(self, node, env, stack_trace):
+        # Prepare initial storage values
         storage = {}
         for sv in node.storage_vars:
             init = NULL
@@ -1685,8 +1686,13 @@ class StatementEvaluatorMixin:
             action_obj = Action(act.parameters, act.body, env)
             actions[act.name.value] = action_obj
         
-        contract = SmartContract(node.name.value, storage, actions)
+        # Pass the AST nodes as storage_vars, not the storage dict
+        contract = SmartContract(node.name.value, node.storage_vars, actions)
         contract.deploy()
+        
+        # Initialize storage with evaluated initial values
+        for var_name, init_val in storage.items():
+            contract.storage.set(var_name, init_val)
         
         # Check if contract has a constructor and execute it
         if 'constructor' in actions:
@@ -2568,16 +2574,20 @@ class StatementEvaluatorMixin:
     
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
+        print(f"[EVAL_FUNC] Starting eval_function_statement for: {node.name.value}", flush=True)
         action = Action(node.parameters, node.body, env)
+        print(f"[EVAL_FUNC] Created Action object", flush=True)
         
         # Apply modifiers if present
         modifiers = getattr(node, 'modifiers', [])
+        print(f"[EVAL_FUNC] Modifiers: {modifiers}", flush=True)
         if modifiers:
             # Set modifier flags on the action object
             if 'inline' in modifiers:
                 action.is_inlined = True
             if 'async' in modifiers:
                 action.is_async = True
+                print(f"[EVAL_FUNC] Set is_async=True", flush=True)
             if 'secure' in modifiers:
                 action.is_secure = True
             if 'pure' in modifiers:
@@ -2592,7 +2602,9 @@ class StatementEvaluatorMixin:
                 except Exception:
                     pass
         
+        print(f"[EVAL_FUNC] About to set in environment: {node.name.value}", flush=True)
         env.set(node.name.value, action)
+        print(f"[EVAL_FUNC] Successfully set in environment", flush=True)
         return NULL
     
     # === PERFORMANCE OPTIMIZATION STATEMENTS ===

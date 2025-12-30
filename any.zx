@@ -1,7 +1,16 @@
 # Hello blockchain in 10 lines
 contract HelloWorld {
+    action init() {
+        print("blockchain deployed")
+    }
+    
     action greet() -> string {
         return "Hello from Zexus blockchain!"
-        print ("blockchain deployed")
     }
 }
+
+# Instantiate and execute the contract
+let hello = HelloWorld()
+hello.init()
+let message = hello.greet()
+print(message)

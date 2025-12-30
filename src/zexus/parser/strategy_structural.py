@@ -693,6 +693,7 @@ class StructuralAnalyzer:
             
             while j < n:
                 tj = tokens[j]
+                
                 # Update nesting for parentheses/brackets/braces
                 if tj.type in {LPAREN, LBRACE, LBRACKET}:
                     nesting += 1
@@ -715,9 +716,16 @@ class StructuralAnalyzer:
                                 # Current token is on a new line and could start a new statement
                                 # Check if it's IDENT (could be method call, function call, or property access)
                                 if tj.type == IDENT:
-                                    # This is likely a new statement on a new line
-                                    # Don't add tj to run_tokens, break here
-                                    break
+                                    # CRITICAL FIX: Don't break if the previous token was ASSIGN
+                                    # This means the IDENT is the RHS value, not a new statement
+                                    prev_tok = run_tokens[-1] if run_tokens else None
+                                    if prev_tok and prev_tok.type == ASSIGN:
+                                        # This IDENT is the RHS of the assignment, not a new statement
+                                        pass  # Don't break, continue collecting
+                                    else:
+                                        # This is likely a new statement on a new line
+                                        # Don't add tj to run_tokens, break here
+                                        break
                     
                     # Check if current token (tj) starts a new statement
                     # CRITICAL FIX: IDENT followed by ASSIGN is an assignment statement

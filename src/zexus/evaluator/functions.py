@@ -64,6 +64,36 @@ class FunctionEvaluatorMixin:
             # Now call the specialized constructor with the actual arguments
             fn = specialized_constructor
         
+        # Check if arguments contain keyword arguments (AssignmentExpression nodes)
+        # This handles syntax like: Person(name="Bob", age=25)
+        from .. import zexus_ast
+        has_keyword_args = any(isinstance(arg, zexus_ast.AssignmentExpression) for arg in node.arguments)
+        
+        if has_keyword_args:
+            # Process keyword arguments - build a dict of name->value
+            kwargs = {}
+            for arg in node.arguments:
+                if isinstance(arg, zexus_ast.AssignmentExpression):
+                    # This is a keyword argument: name=value
+                    param_name = arg.name.value if hasattr(arg.name, 'value') else str(arg.name)
+                    param_value = self.eval_node(arg.value, env, stack_trace)
+                    if is_error(param_value):
+                        return param_value
+                    kwargs[param_name] = param_value
+                else:
+                    # Mixed positional and keyword args not supported yet
+                    return EvaluationError("Cannot mix positional and keyword arguments")
+            
+            # For entity constructors, pass kwargs as-is
+            from ..security import EntityDefinition as SecurityEntityDef
+            if isinstance(fn, SecurityEntityDef):
+                return fn.create_instance(kwargs)
+            
+            # For other functions, would need to map kwargs to positional args
+            # Not implemented yet
+            return EvaluationError("Keyword arguments only supported for entity constructors currently")
+        
+        # Regular positional arguments
         args = self.eval_expressions(node.arguments, env)
         if is_error(args): 
             return args
@@ -1312,6 +1342,72 @@ class FunctionEvaluatorMixin:
             
             return EvaluationError(f"sleep() argument must be a number, got {type(seconds).__name__}")
         
+        def _spawn(*a):
+            """Spawn an async task and return a coroutine that can be awaited: task = spawn async_func()
+            
+            Example:
+                async function asyncTask(id) {
+                    await sleep(1)
+                    return id * 10
+                }
+                let task1 = spawn asyncTask(1)
+                let result = await task1
+            """
+            import threading
+            import sys
+            
+            if len(a) != 1:
+                return EvaluationError("spawn() requires 1 argument: coroutine or async function call result")
+            
+            result = a[0]
+            
+            # If it's a Coroutine, we need to wrap it for async execution
+            from ..object import Coroutine
+            if isinstance(result, Coroutine):
+                # Create a wrapper coroutine that executes in background
+                # The original coroutine will be run in a thread
+                task_result = [None]  # Mutable container to store result
+                task_error = [None]
+                task_complete = [False]
+                
+                def run_coroutine():
+                    try:
+                        # Prime the generator
+                        next(result.generator)
+                        # Execute until completion
+                        try:
+                            while True:
+                                next(result.generator)
+                        except StopIteration as e:
+                            # Coroutine completed, store result
+                            task_result[0] = e.value if hasattr(e, 'value') else NULL
+                            task_complete[0] = True
+                    except Exception as e:
+                        # Store error
+                        task_error[0] = e
+                        task_complete[0] = True
+                        print(f"[SPAWN ERROR] Task execution failed: {str(e)}", file=sys.stderr)
+                        import traceback
+                        traceback.print_exc(file=sys.stderr)
+                
+                # Start execution in background thread
+                thread = threading.Thread(target=run_coroutine, daemon=False)
+                thread.start()
+                
+                # Create a new coroutine that waits for the result
+                def result_generator():
+                    yield None  # Make it a generator
+                    # Wait for completion
+                    thread.join(timeout=30)  # 30 second timeout
+                    if task_error[0]:
+                        raise task_error[0]
+                    return task_result[0] if task_result[0] is not None else NULL
+                
+                return Coroutine(result_generator(), result.fn if hasattr(result, 'fn') else None)
+            
+            # If not a coroutine, return error
+            return EvaluationError(f"spawn() argument must be a coroutine (async function call), got {type(result).__name__}")
+        
         def _wait_group(*a):
             """Create a wait group for synchronizing async operations: wg = wait_group()
             
@@ -1467,6 +1563,7 @@ class FunctionEvaluatorMixin:
             "close_channel": Builtin(_close_channel, "close_channel"),
             "async": Builtin(_async, "async"),
             "sleep": Builtin(_sleep, "sleep"),
+            "spawn": Builtin(_spawn, "spawn"),
             "wait_group": Builtin(_wait_group, "wait_group"),
             "wg_add": Builtin(_wg_add, "wg_add"),
             "wg_done": Builtin(_wg_done, "wg_done"),

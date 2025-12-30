@@ -1501,6 +1501,53 @@ class ContextStackParser:
                             i = current_idx
                             continue
 
+                # B2. Handle STATE keyword for state variables
+                elif token.type == STATE:
+                    # Move to identifier after "state"
+                    i += 1
+                    if i < brace_end and tokens[i].type == IDENT:
+                        prop_name = tokens[i].literal
+                        prop_type = "any"
+                        default_val = None
+                        current_idx = i + 1
+
+                        # Check for type annotation (optional)
+                        if current_idx < brace_end and tokens[current_idx].type == COLON:
+                            current_idx += 1
+                            if current_idx < brace_end and tokens[current_idx].type == IDENT:
+                                prop_type = tokens[current_idx].literal
+                                current_idx += 1
+
+                        # Check for default/initial value
+                        if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
+                            current_idx += 1
+                            if current_idx < brace_end:
+                                val_token = tokens[current_idx]
+                                if val_token.type == STRING:
+                                    default_val = StringLiteral(val_token.literal)
+                                elif val_token.type == INT:
+                                    default_val = IntegerLiteral(int(val_token.literal))
+                                elif val_token.type == FLOAT:
+                                    default_val = FloatLiteral(float(val_token.literal))
+                                elif val_token.type == TRUE:
+                                    default_val = BooleanLiteral(True)
+                                elif val_token.type == FALSE:
+                                    default_val = BooleanLiteral(False)
+                                elif val_token.type == IDENT:
+                                    default_val = Identifier(val_token.literal)
+                                current_idx += 1
+
+                        # Use AstNodeShim for compatibility with evaluator
+                        storage_vars.append(AstNodeShim(
+                            name=Identifier(prop_name),
+                            type=Identifier(prop_type),
+                            initial_value=default_val,
+                            default_value=default_val
+                        ))
+
+                        i = current_idx
+                        continue
+
                 # C. Handle State Variables (Properties)
                 elif token.type == IDENT:
                     prop_name = token.literal
@@ -1933,6 +1980,7 @@ class ContextStackParser:
                         # Only check for new statements if we're at least 2 positions past the =
                         # (This allows for at least one value token after =)
                         if equals_pos >= 0 and j > equals_pos + 1:
+                            prev_tok = tokens[j-1] if j > 0 else None
                             # NEW: Check if token is on a new line (line-based statement boundary)
                             prev_line = tokens[j-1].line if j > 0 else 0
                             curr_line = t.line
@@ -1953,10 +2001,17 @@ class ContextStackParser:
                                 next_tok = tokens[lookahead_idx]
                                 # Function call: ident(
                                 # BUT NOT if previous token is DOT (method call continuation)
+                                # OR if previous token is an operator (part of expression)
                                 prev_tok = tokens[j-1] if j > 0 else None
                                 is_method_call_continuation = prev_tok and prev_tok.type == DOT
+                                is_expression_continuation = prev_tok and prev_tok.type in {
+                                    PLUS, MINUS, STAR, SLASH, MOD,  # Arithmetic operators
+                                    EQ, NOT_EQ, LT, GT, LTE, GTE,    # Comparison operators
+                                    AND, OR,                          # Logical operators
+                                    COMMA,                            # List separator
+                                }
                                 
-                                if next_tok.type == LPAREN and not is_method_call_continuation:
+                                if next_tok.type == LPAREN and not is_method_call_continuation and not is_expression_continuation:
                                     is_new_statement = True
                                 # Simple assignment: ident =
                                 # BUT NOT if it's part of type annotation (before first =)
@@ -2010,7 +2065,8 @@ class ContextStackParser:
                 let_tokens = tokens[i:j]
                 parser_debug(f"    📝 Found let statement: {[t.literal for t in let_tokens]}")
 
-                if len(let_tokens) >= 4 and let_tokens[1].type == IDENT:
+                if len(let_tokens) >= 4 and let_tokens[1].type in {IDENT, INLINE, STRING, BUFFER, SIMD}:
+                    # Accept IDENT or keyword tokens that can be used as variable names
                     var_name = let_tokens[1].literal
                     # Attempt to parse assigned value if present
                     equals_idx = -1
@@ -3288,11 +3344,12 @@ class ContextStackParser:
                     # Before adding this token, check if it starts a NEW assignment statement
                     # Only check when we've completed a previous statement (e.g., after function call)
                     # Don't check if the last token was DOT (we're in the middle of property access)
+                    # Don't check if the last token was ASSIGN (we're in the RHS of an assignment)
                     if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT:
                         # Only detect new assignment if previous token suggests end of previous statement
                         # E.g., after RPAREN (end of function call) or after a complete value
                         prev_token = run_tokens[-1] if run_tokens else None
-                        if prev_token and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE}:
+                        if prev_token and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE, ASSIGN}:
                             # Check if this starts a new statement (assignment or function call)
                             k = j + 1
                             is_new_statement_start = False

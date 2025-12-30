@@ -599,6 +599,33 @@ class EntityInstance:
         """Convert to dictionary"""
         return self.data
     
+    def __str__(self):
+        """String representation of entity instance"""
+        entity_name = self.entity_def.name if hasattr(self.entity_def, 'name') else 'Entity'
+        # Format properties nicely
+        props = []
+        for key, value in self.data.items():
+            # Convert value to a readable string
+            if hasattr(value, 'value'):
+                # Object wrapper with value attribute (Integer, String, etc.)
+                props.append(f"{key}={value.value}")
+            elif hasattr(value, '__class__') and hasattr(value.__class__, '__name__'):
+                if value.__class__.__name__ in ['EntityInstance', 'SealedObject']:
+                    props.append(f"{key}=<{value.__class__.__name__}>")
+                else:
+                    try:
+                        props.append(f"{key}={value}")
+                    except:
+                        props.append(f"{key}=<object>")
+            else:
+                props.append(f"{key}={value}")
+        props_str = ", ".join(props)
+        return f"{entity_name}({props_str})"
+    
+    def __repr__(self):
+        """Python representation"""
+        return self.__str__()
+    
     def call_method(self, method_name, args):
         """Call a method on this entity instance"""
         if method_name not in self.entity_def.methods:
@@ -963,6 +990,84 @@ class SmartContract:
                     else:
                         # Set reasonable defaults for types if null
                         self.storage.set(var_name, Null)
+
+    def call_method(self, action_name, args):
+        """Call a contract action - similar to EntityInstance.call_method"""
+        if not self.is_deployed:
+            from zexus.object import EvaluationError
+            return EvaluationError(f"Contract {self.name} not deployed")
+
+        if action_name not in self.actions:
+            from zexus.object import EvaluationError
+            return EvaluationError(f"Action '{action_name}' not found in contract {self.name}")
+
+        # Get the action (Action object)
+        action = self.actions[action_name]
+        
+        # Create a new environment for the action execution
+        from zexus.environment import Environment
+        action_env = Environment(outer=action.env if hasattr(action, 'env') else None)
+        
+        # Bind 'this' to the current contract instance in the action environment
+        action_env.set('this', self)
+        
+        # Make contract storage accessible in the action environment
+        for var_node in self.storage_vars:
+            # Extract variable name from node (same logic as in deploy)
+            var_name = None
+            if hasattr(var_node, 'name'):
+                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+            elif isinstance(var_node, dict):
+                var_name = var_node.get("name")
+            elif isinstance(var_node, str):
+                var_name = var_node
+            
+            if var_name:
+                stored_value = self.storage.get(var_name)
+                if stored_value is not None:
+                    action_env.set(var_name, stored_value)
+        
+        # Bind action parameters to arguments
+        if hasattr(action, 'parameters'):
+            for i, param in enumerate(action.parameters):
+                if i < len(args):
+                    # Handle both Identifier objects and ParameterNode objects
+                    if hasattr(param, 'name'):
+                        # It's a ParameterNode with name and type
+                        param_name = param.name.value if hasattr(param.name, 'value') else str(param.name)
+                    else:
+                        # It's an Identifier
+                        param_name = param.value if hasattr(param, 'value') else str(param)
+                    
+                    action_env.set(param_name, args[i])
+                else:
+                    # If arg is missing, set to Null
+                    param_name = param.name.value if hasattr(param, 'name') else (param.value if hasattr(param, 'value') else str(param))
+                    from zexus.object import Null
+                    action_env.set(param_name, Null)
+        
+        # Execute the action body
+        from zexus.evaluator.core import Evaluator
+        evaluator = Evaluator()
+        result = evaluator.eval_node(action.body, action_env, stack_trace=[])
+        
+        # Save any modified state variables back to storage
+        for var_node in self.storage_vars:
+            # Extract variable name from node (same logic as above)
+            var_name = None
+            if hasattr(var_node, 'name'):
+                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+            elif isinstance(var_node, dict):
+                var_name = var_node.get("name")
+            elif isinstance(var_node, str):
+                var_name = var_node
+            
+            if var_name:
+                current_value = action_env.get(var_name)
+                if current_value is not None:
+                    self.storage.set(var_name, current_value)
+        
+        return result
 
     def execute_action(self, action_name, args, context, env=None):
         """Execute a contract action"""

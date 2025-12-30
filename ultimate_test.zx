@@ -342,7 +342,7 @@ entity FileLogger implements Logger {
     file_path: string
     
     action log(message: string, level: string) {
-        let entry = "[" + level + "] " + timestamp() + ": " + message
+        let entry = "[" + level + "] " + string(timestamp()) + ": " + message
         print("Logged: " + entry)
     }
 }
