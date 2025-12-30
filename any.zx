@@ -1,0 +1,7 @@
+# Hello blockchain in 10 lines
+contract HelloWorld {
+    action greet() -> string {
+        return "Hello from Zexus blockchain!"
+        print ("blockchain deployed")
+    }
+}
