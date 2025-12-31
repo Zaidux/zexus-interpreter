@@ -1,0 +1,73 @@
+// Quick Backend & Blockchain Demo
+print("=" * 60)
+print("🚀 ZEXUS BACKEND CAPABILITIES")
+print("=" * 60)
+
+// Blockchain
+data Block {
+    index: integer
+    data: string  
+    hash: string
+}
+
+let blockchain = []
+
+action add_block(data) {
+    let block = Block{
+        index: len(blockchain),
+        data: data,
+        hash: "hash_" + str(len(blockchain))
+    }
+    blockchain = blockchain + [block]
+    print("✅ Block added:", block.hash)
+}
+
+print("\n⛓️  Blockchain:")
+add_block("Genesis")
+add_block("Transaction: Alice -> Bob")
+add_block("Transaction: Bob -> Charlie")
+print("Chain length:", len(blockchain))
+
+// Smart Contract
+contract Wallet {
+    state balance = 0
+    
+    action init(amount) {
+        balance = amount
+        print("💰 Wallet initialized:", balance)
+    }
+    
+    action deposit(amount) {
+        balance = balance + amount
+        print("✅ Deposited:", amount, "New balance:", balance)
+    }
+    
+    action getBalance() {
+        return balance
+    }
+}
+
+print("\n📜 Smart Contract:")
+let wallet = Wallet()
+wallet.init(100)
+wallet.deposit(50)
+print("Final balance:", wallet.getBalance())
+
+// P2P Network Simulation
+print("\n👥 P2P Network:")
+let peers = ["192.168.1.100:8333", "192.168.1.101:8333", "192.168.1.102:8333"]
+print("Connected peers:", len(peers))
+for each peer in peers {
+    print("  -", peer)
+}
+
+print("\n" + "=" * 60)
+print("✅ Demo Complete!")
+print("=" * 60)
+print("\n💡 Zexus has:")
+print("  ✅ Blockchain data structures")
+print("  ✅ Smart contracts")
+print("  ✅ P2P networking capability")
+print("  ✅ socket_create_server() for backends")
+print("  ✅ Database drivers (SQLite/Postgres/MySQL)")
+print("  ✅ Async/concurrency support")
