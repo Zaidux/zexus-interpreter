@@ -581,27 +581,36 @@ class StructuralAnalyzer:
 
                     # Stop at new statement starters only if we're at nesting 0
                     # BUT: for LET/CONST, allow function expressions in the RHS
+                    # ALSO: for WHILE/FOR/IF, don't break until we've found the opening brace (control structures need their conditions)
                     if nesting == 0 and tj.type in statement_starters and not found_colon_block:
                         # Exception: allow chained method calls
                         prev = tokens[j-1] if j > 0 else None
                         if not (prev and prev.type == DOT):
-                            # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE as RHS (expressions)
-                            # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
-                            # Also allow IF when followed by THEN (if-then-else expression)
-                            allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
-                            allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
-                            allow_if_then_else = False
-                            if tj.type == IF:
-                                # Look ahead for THEN to detect if-then-else expression
-                                for k in range(j + 1, min(j + 20, n)):  # Look ahead up to 20 tokens
-                                    if tokens[k].type == THEN:
-                                        allow_if_then_else = True
-                                        break
-                                    elif tokens[k].type in {LBRACE, COLON}:
-                                        # Found statement form indicators
-                                        break
-                            if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
-                                break
+                            # CRITICAL FIX: For control flow statements (WHILE/FOR/IF), don't break on statement_starters
+                            # until we've found the opening brace. This allows variable names that happen to be keywords
+                            # (like "limit") to appear in the condition without being treated as new statements.
+                            is_control_flow = t.type in {WHILE, FOR, IF}
+                            if is_control_flow and not found_brace_block:
+                                # We're still parsing the condition - don't break yet
+                                pass
+                            else:
+                                # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE as RHS (expressions)
+                                # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
+                                # Also allow IF when followed by THEN (if-then-else expression)
+                                allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
+                                allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
+                                allow_if_then_else = False
+                                if tj.type == IF:
+                                    # Look ahead for THEN to detect if-then-else expression
+                                    for k in range(j + 1, min(j + 20, n)):  # Look ahead up to 20 tokens
+                                        if tokens[k].type == THEN:
+                                            allow_if_then_else = True
+                                            break
+                                        elif tokens[k].type in {LBRACE, COLON}:
+                                            # Found statement form indicators
+                                            break
+                                if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
+                                    break
                     
                     # CRITICAL FIX: Also break on modifier tokens at nesting 0 when followed by statement keywords
                     # This prevents previous statements from consuming modifiers like "async action foo()"
@@ -625,7 +634,9 @@ class StructuralAnalyzer:
                     # FIX: Also break at expression statements (IDENT followed by LPAREN)  when we're at nesting 0
                     # and not in an assignment context
                     # EXCEPTION: Don't break if we're parsing ACTION/FUNCTION (their names are followed by LPAREN for parameters)
-                    if nesting == 0 and not in_assignment and not found_colon_block and not found_brace_block and t.type not in {ACTION, FUNCTION}:
+                    # ALSO EXCEPTION: Don't break if we're parsing WHILE/FOR/IF and haven't found the brace yet (function calls in conditions)
+                    is_control_flow = t.type in {WHILE, FOR, IF}
+                    if nesting == 0 and not in_assignment and not found_colon_block and not found_brace_block and t.type not in {ACTION, FUNCTION} and not (is_control_flow and not found_brace_block):
                         if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
                             # This looks like a function call starting a new expression statement
                             # Only break if we've already collected some tokens (not the first token)

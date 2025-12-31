@@ -1,0 +1,139 @@
+#!/usr/bin/env zexus
+# MongoDB Database Test
+# Requires MongoDB server running on localhost:27017
+
+print("=== MongoDB Database Test ===\n")
+
+# Connect to MongoDB
+print("Connecting to MongoDB...")
+let db = mongo_connect("test_zexus")
+
+# Get methods
+let insert_one_fn = db["insert_one"]
+let insert_many_fn = db["insert_many"]
+let find_fn = db["find"]
+let find_one_fn = db["find_one"]
+let update_one_fn = db["update_one"]
+let update_many_fn = db["update_many"]
+let delete_one_fn = db["delete_one"]
+let delete_many_fn = db["delete_many"]
+let count_fn = db["count"]
+let close_fn = db["close"]
+
+print("✓ Connected successfully\n")
+
+# Clean up old data
+print("Cleaning up old data...")
+delete_many_fn("users", {})
+print("✓ Cleanup complete\n")
+
+# Insert one document
+print("Inserting single user...")
+let alice = {"name": "Alice", "email": "alice@example.com", "age": 30, "city": "NYC"}
+let alice_id = insert_one_fn("users", alice)
+print("✓ Inserted Alice (ID: " + alice_id + ")\n")
+
+# Insert many documents
+print("Inserting multiple users...")
+let users = [
+    {"name": "Bob", "email": "bob@example.com", "age": 25, "city": "LA"},
+    {"name": "Charlie", "email": "charlie@example.com", "age": 35, "city": "SF"},
+    {"name": "David", "email": "david@example.com", "age": 28, "city": "NYC"}
+]
+let ids = insert_many_fn("users", users)
+print("✓ Inserted " + string(len(ids)) + " users\n")
+
+# Count all documents
+print("Counting all users...")
+let total = count_fn("users")
+print("✓ Total users: " + string(total) + "\n")
+
+# Find all documents
+print("Finding all users...")
+let all_users = find_fn("users")
+print("Found " + string(len(all_users)) + " users:")
+if len(all_users) >= 1 {
+    let user = all_users[0]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]) + " from " + user["city"])
+}
+if len(all_users) >= 2 {
+    let user = all_users[1]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]) + " from " + user["city"])
+}
+if len(all_users) >= 3 {
+    let user = all_users[2]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]) + " from " + user["city"])
+}
+if len(all_users) >= 4 {
+    let user = all_users[3]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]) + " from " + user["city"])
+}
+print("")
+
+# Find with query
+print("Finding users in NYC...")
+let nyc_users = find_fn("users", {"city": "NYC"})
+print("✓ Found " + string(len(nyc_users)) + " users in NYC")
+print("")
+
+# Find one document
+print("Finding single user (Alice)...")
+let found_alice = find_one_fn("users", {"name": "Alice"})
+if found_alice != null {
+    print("✓ Found: " + found_alice["name"] + ", age " + string(found_alice["age"]))
+} else {
+    print("✗ User not found")
+}
+print("")
+
+# Update one document
+print("Updating Alice's age...")
+let query = {"name": "Alice"}
+let update = {"$set": {"age": 31}}
+let update_count = update_one_fn("users", query, update)
+print("✓ Updated " + string(update_count) + " document(s)")
+
+let updated_alice = find_one_fn("users", {"name": "Alice"})
+print("✓ Alice's new age: " + string(updated_alice["age"]) + "\n")
+
+# Update many documents
+print("Incrementing age for users over 30...")
+let age_query = {"age": {"$gte": 30}}
+let age_update = {"$inc": {"age": 1}}
+let age_count = update_many_fn("users", age_query, age_update)
+print("✓ Updated " + string(age_count) + " document(s)\n")
+
+# Count with query
+print("Counting users over 30...")
+let over_30 = count_fn("users", {"age": {"$gt": 30}})
+print("✓ Users over 30: " + string(over_30) + "\n")
+
+# Delete one document
+print("Deleting Bob...")
+let delete_count = delete_one_fn("users", {"name": "Bob"})
+print("✓ Deleted " + string(delete_count) + " document(s)")
+
+let bob_check = find_one_fn("users", {"name": "Bob"})
+if bob_check == null {
+    print("✓ Bob successfully deleted\n")
+} else {
+    print("✗ Delete failed\n")
+}
+
+# Delete many documents
+print("Deleting users under 30...")
+let delete_many_count = delete_many_fn("users", {"age": {"$lt": 30}})
+print("✓ Deleted " + string(delete_many_count) + " document(s)\n")
+
+# Final count
+print("Final count...")
+let final_total = count_fn("users")
+print("✓ Remaining users: " + string(final_total) + "\n")
+
+# Cleanup
+print("Cleaning up...")
+delete_many_fn("users", {})
+close_fn()
+print("✓ Database closed\n")
+
+print("=== All MongoDB Tests Passed! ===")

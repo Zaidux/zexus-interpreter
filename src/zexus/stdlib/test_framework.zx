@@ -1,0 +1,208 @@
+#!/usr/bin/env zexus
+# Zexus Testing Framework
+# Provides assertion functions and test utilities
+
+# Global test state - using individual variables instead of map
+let _total = 0
+let _passed = 0
+let _failed = 0
+let _current_suite = ""
+let _failures = []
+
+# Reset test statistics
+action reset_test_stats() {
+    _total = 0
+    _passed = 0
+    _failed = 0
+    _current_suite = ""
+    _failures = []
+}
+
+# Start a test suite
+action describe(suite_name) {
+    _current_suite = suite_name
+    print("\n" + suite_name)
+    print("=" + string_repeat("=", len(suite_name)))
+}
+
+# Helper to repeat string
+action string_repeat(str, count) {
+    let result = ""
+    let i = 0
+    while i < count {
+        result = result + str
+        i = i + 1
+    }
+    return result
+}
+
+# Individual test case
+action it(description, test_func) {
+    _total = _total + 1
+    
+    try {
+        test_func()
+        _passed = _passed + 1
+        print("  ✓ " + description)
+        return true
+    } catch (e) {
+        _failed = _failed + 1
+        let failure = {
+            "suite": _current_suite,
+            "test": description,
+            "error": string(e)
+        }
+        _failures = push(_failures, failure)
+        print("  ✗ " + description)
+        print("    Error: " + string(e))
+        return false
+    }
+}
+
+# Assertion: equality
+action assert_eq(actual, expected, message) {
+    if actual != expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected: " + string(expected)
+        error_msg = error_msg + "\n    Got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Assertion: not equal
+action assert_ne(actual, expected, message) {
+    if actual == expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected NOT to equal: " + string(expected)
+        error_msg = error_msg + "\n    But got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Assertion: true
+action assert_true(value, message) {
+    if !value {
+        throw "Assertion failed: " + message + " (expected true, got false)"
+    }
+}
+
+# Assertion: false
+action assert_false(value, message) {
+    if value {
+        throw "Assertion failed: " + message + " (expected false, got true)"
+    }
+}
+
+# Assertion: null
+action assert_null(value, message) {
+    if value != null {
+        throw "Assertion failed: " + message + " (expected null, got " + string(value) + ")"
+    }
+}
+
+# Assertion: not null
+action assert_not_null(value, message) {
+    if value == null {
+        throw "Assertion failed: " + message + " (expected non-null value)"
+    }
+}
+
+# Assertion: type check
+action assert_type(value, expected_type, message) {
+    let actual_type = type(value)
+    if actual_type != expected_type {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected type: " + expected_type
+        error_msg = error_msg + "\n    Got type: " + actual_type
+        throw error_msg
+    }
+}
+
+# Assertion: throws error
+action assert_throws(func, expected_error, message) {
+    let did_throw = false
+    let error_msg = ""
+    
+    try {
+        func()
+    } catch (e) {
+        did_throw = true
+        error_msg = string(e)
+    }
+    
+    if !did_throw {
+        throw "Assertion failed: " + message + " (expected function to throw)"
+    }
+}
+
+# Assertion: greater than
+action assert_gt(actual, expected, message) {
+    if actual <= expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected > " + string(expected)
+        error_msg = error_msg + "\n    Got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Assertion: greater than or equal
+action assert_gte(actual, expected, message) {
+    if actual < expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected >= " + string(expected)
+        error_msg = error_msg + "\n    Got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Assertion: less than
+action assert_lt(actual, expected, message) {
+    if actual >= expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected < " + string(expected)
+        error_msg = error_msg + "\n    Got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Assertion: less than or equal
+action assert_lte(actual, expected, message) {
+    if actual > expected {
+        let error_msg = "Assertion failed: " + message
+        error_msg = error_msg + "\n    Expected <= " + string(expected)
+        error_msg = error_msg + "\n    Got: " + string(actual)
+        throw error_msg
+    }
+}
+
+# Print test summary
+action print_test_summary() {
+    print("\n" + string_repeat("=", 50))
+    print("TEST SUMMARY")
+    print(string_repeat("=", 50))
+    print("Total tests: " + string(_total))
+    print("Passed: " + string(_passed) + " ✓")
+    print("Failed: " + string(_failed) + " ✗")
+    
+    if _failed > 0 {
+        print("\nFailed Tests:")
+        let i = 0
+        while i < len(_failures) {
+            let failure = _failures[i]
+            print("  " + string(i + 1) + ". " + failure["suite"] + " > " + failure["test"])
+            print("     " + failure["error"])
+            i = i + 1
+        }
+    }
+    
+    print(string_repeat("=", 50))
+    
+    if _failed == 0 {
+        print("🎉 ALL TESTS PASSED!")
+        return 0
+    } else {
+        print("❌ SOME TESTS FAILED")
+        return 1
+    }
+}
+

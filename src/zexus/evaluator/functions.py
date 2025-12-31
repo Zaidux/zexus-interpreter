@@ -677,7 +677,7 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("file_write_json() takes path string and data")
             return File.write_json(a[0], a[1])
         
-        def _append(*a): 
+        def _file_append(*a): 
             if len(a) != 2 or not all(isinstance(x, String) for x in a): 
                 return EvaluationError("file_append() takes exactly 2 string arguments")
             return File.append_text(a[0], a[1])
@@ -686,6 +686,927 @@ class FunctionEvaluatorMixin:
             if len(a) != 1 or not isinstance(a[0], String): 
                 return EvaluationError("file_list_dir() takes exactly 1 string argument")
             return File.list_directory(a[0])
+        
+        # Extended File System Operations
+        def _fs_is_file(*a):
+            if len(a) != 1 or not isinstance(a[0], String):
+                return EvaluationError("fs_is_file() takes exactly 1 string argument")
+            import os
+            return BooleanObj(os.path.isfile(a[0].value))
+        
+        def _fs_is_dir(*a):
+            if len(a) != 1 or not isinstance(a[0], String):
+                return EvaluationError("fs_is_dir() takes exactly 1 string argument")
+            import os
+            return BooleanObj(os.path.isdir(a[0].value))
+        
+        def _fs_mkdir(*a):
+            if len(a) < 1 or not isinstance(a[0], String):
+                return EvaluationError("fs_mkdir() takes path string and optional parents boolean")
+            from pathlib import Path
+            parents = True  # Default to creating parent directories
+            if len(a) >= 2 and isinstance(a[1], BooleanObj):
+                parents = a[1].value
+            try:
+                Path(a[0].value).mkdir(parents=parents, exist_ok=True)
+                return BooleanObj(True)
+            except Exception as e:
+                return EvaluationError(f"fs_mkdir() error: {str(e)}")
+        
+        def _fs_remove(*a):
+            if len(a) != 1 or not isinstance(a[0], String):
+                return EvaluationError("fs_remove() takes exactly 1 string argument")
+            import os
+            try:
+                os.remove(a[0].value)
+                return BooleanObj(True)
+            except Exception as e:
+                return EvaluationError(f"fs_remove() error: {str(e)}")
+        
+        def _fs_rmdir(*a):
+            if len(a) < 1 or not isinstance(a[0], String):
+                return EvaluationError("fs_rmdir() takes path string and optional recursive boolean")
+            import os
+            import shutil
+            recursive = False
+            if len(a) >= 2 and isinstance(a[1], BooleanObj):
+                recursive = a[1].value
+            try:
+                if recursive:
+                    shutil.rmtree(a[0].value)
+                else:
+                    os.rmdir(a[0].value)
+                return BooleanObj(True)
+            except Exception as e:
+                return EvaluationError(f"fs_rmdir() error: {str(e)}")
+        
+        def _fs_rename(*a):
+            if len(a) != 2 or not all(isinstance(x, String) for x in a):
+                return EvaluationError("fs_rename() takes exactly 2 string arguments: old_path, new_path")
+            import os
+            try:
+                os.rename(a[0].value, a[1].value)
+                return BooleanObj(True)
+            except Exception as e:
+                return EvaluationError(f"fs_rename() error: {str(e)}")
+        
+        def _fs_copy(*a):
+            if len(a) != 2 or not all(isinstance(x, String) for x in a):
+                return EvaluationError("fs_copy() takes exactly 2 string arguments: src, dst")
+            import shutil
+            import os
+            try:
+                src = a[0].value
+                dst = a[1].value
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                elif os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    return EvaluationError(f"fs_copy() source does not exist: {src}")
+                return BooleanObj(True)
+            except Exception as e:
+                return EvaluationError(f"fs_copy() error: {str(e)}")
+        
+        # Socket/TCP Primitives
+        def _socket_create_server(*a):
+            """Create TCP server: socket_create_server(host, port, handler, backlog?)"""
+            if len(a) < 3:
+                return EvaluationError("socket_create_server() requires at least 3 arguments: host, port, handler")
+            
+            if not isinstance(a[0], String):
+                return EvaluationError("socket_create_server() host must be a string")
+            if not isinstance(a[1], Integer):
+                return EvaluationError("socket_create_server() port must be an integer")
+            if not isinstance(a[2], Action):
+                return EvaluationError("socket_create_server() handler must be an action")
+            
+            host = a[0].value
+            port = a[1].value
+            handler = a[2]
+            backlog = 5
+            
+            if len(a) >= 4 and isinstance(a[3], Integer):
+                backlog = a[3].value
+            
+            try:
+                from ..stdlib.sockets import SocketModule
+                
+                # Wrap the Zexus handler
+                def python_handler(conn):
+                    # Create Zexus builtin wrappers for connection methods
+                    def _conn_send(*args):
+                        if len(args) != 1:
+                            return EvaluationError("send() takes 1 argument")
+                        data = args[0].value if isinstance(args[0], String) else str(args[0])
+                        try:
+                            conn.send_string(data)
+                            return NULL
+                        except Exception as e:
+                            return EvaluationError(f"send() error: {str(e)}")
+                    
+                    def _conn_receive(*args):
+                        size = 4096
+                        if len(args) >= 1 and isinstance(args[0], Integer):
+                            size = args[0].value
+                        try:
+                            data = conn.receive_string(size)
+                            return String(data)
+                        except Exception as e:
+                            return EvaluationError(f"receive() error: {str(e)}")
+                    
+                    def _conn_close(*args):
+                        try:
+                            conn.close()
+                            return NULL
+                        except Exception as e:
+                            return EvaluationError(f"close() error: {str(e)}")
+                    
+                    # Convert Python connection to Zexus Map
+                    conn_obj = Map({
+                        String("send"): Builtin(_conn_send, "send"),
+                        String("receive"): Builtin(_conn_receive, "receive"),
+                        String("close"): Builtin(_conn_close, "close"),
+                        String("host"): String(conn.host),
+                        String("port"): Integer(conn.port)
+                    })
+                    
+                    # Call Zexus handler
+                    self.apply_function(handler, [conn_obj])
+                
+                server = SocketModule.create_server(host, port, python_handler, backlog)
+                server.start()
+                
+                # Create builtins for server methods
+                def _server_stop(*args):
+                    try:
+                        server.stop()
+                        return NULL
+                    except Exception as e:
+                        return EvaluationError(f"stop() error: {str(e)}")
+                
+                def _server_is_running(*args):
+                    return BooleanObj(server.is_running())
+                
+                # Return server object as Map
+                return Map({
+                    String("stop"): Builtin(_server_stop, "stop"),
+                    String("is_running"): Builtin(_server_is_running, "is_running"),
+                    String("host"): String(server.host),
+                    String("port"): Integer(server.port)
+                })
+            except Exception as e:
+                return EvaluationError(f"socket_create_server() error: {str(e)}")
+        
+        def _socket_create_connection(*a):
+            """Create TCP client: socket_create_connection(host, port, timeout?)"""
+            if len(a) < 2:
+                return EvaluationError("socket_create_connection() requires at least 2 arguments: host, port")
+            
+            if not isinstance(a[0], String):
+                return EvaluationError("socket_create_connection() host must be a string")
+            if not isinstance(a[1], Integer):
+                return EvaluationError("socket_create_connection() port must be an integer")
+            
+            host = a[0].value
+            port = a[1].value
+            timeout = 5.0
+            
+            if len(a) >= 3 and isinstance(a[2], (Integer, Float)):
+                timeout = float(a[2].value)
+            
+            try:
+                from ..stdlib.sockets import SocketModule
+                conn = SocketModule.create_connection(host, port, timeout)
+                
+                # Create Zexus builtin wrappers for connection methods
+                def _conn_send(*args):
+                    if len(args) != 1:
+                        return EvaluationError("send() takes 1 argument")
+                    data = args[0].value if isinstance(args[0], String) else str(args[0])
+                    try:
+                        conn.send_string(data)
+                        return NULL
+                    except Exception as e:
+                        return EvaluationError(f"send() error: {str(e)}")
+                
+                def _conn_receive(*args):
+                    size = 4096
+                    if len(args) >= 1 and isinstance(args[0], Integer):
+                        size = args[0].value
+                    try:
+                        data = conn.receive_string(size)
+                        return String(data)
+                    except Exception as e:
+                        return EvaluationError(f"receive() error: {str(e)}")
+                
+                def _conn_close(*args):
+                    try:
+                        conn.close()
+                        return NULL
+                    except Exception as e:
+                        return EvaluationError(f"close() error: {str(e)}")
+                
+                def _conn_is_connected(*args):
+                    return BooleanObj(conn.is_connected())
+                
+                # Return connection object as Map with Builtin functions
+                return Map({
+                    String("send"): Builtin(_conn_send, "send"),
+                    String("receive"): Builtin(_conn_receive, "receive"),
+                    String("close"): Builtin(_conn_close, "close"),
+                    String("is_connected"): Builtin(_conn_is_connected, "is_connected"),
+                    String("host"): String(conn.host),
+                    String("port"): Integer(conn.port)
+                })
+            except Exception as e:
+                return EvaluationError(f"socket_create_connection() error: {str(e)}")
+        
+        # HTTP Server
+        def _http_server(*a):
+            """Create HTTP server: http_server(port, host?)"""
+            if len(a) < 1:
+                return EvaluationError("http_server() requires at least 1 argument: port")
+            
+            if not isinstance(a[0], Integer):
+                return EvaluationError("http_server() port must be an integer")
+            
+            port = a[0].value
+            host = "0.0.0.0"
+            
+            if len(a) >= 2 and isinstance(a[1], String):
+                host = a[1].value
+            
+            try:
+                from ..stdlib.http_server import HTTPServer
+                server = HTTPServer(host, port)
+                
+                # Create builtins for server methods
+                def _server_get(*args):
+                    if len(args) != 2 or not isinstance(args[0], String) or not isinstance(args[1], Action):
+                        return EvaluationError("get() takes 2 arguments: path, handler")
+                    
+                    path = args[0].value
+                    handler = args[1]
+                    
+                    # Wrap Zexus handler for Python
+                    def python_handler(req, res):
+                        # Convert request to Zexus Map
+                        req_map = Map({
+                            String("method"): String(req.method),
+                            String("path"): String(req.path),
+                            String("headers"): _python_to_zexus(req.headers),
+                            String("body"): String(req.body),
+                            String("query"): _python_to_zexus(req.query)
+                        })
+                        
+                        # Create response builtins
+                        def _res_status(*a):
+                            if len(a) != 1 or not isinstance(a[0], Integer):
+                                return EvaluationError("status() takes 1 integer argument")
+                            res.set_status(a[0].value)
+                            return NULL
+                        
+                        def _res_send(*a):
+                            if len(a) != 1:
+                                return EvaluationError("send() takes 1 argument")
+                            data = a[0].value if isinstance(a[0], String) else str(a[0])
+                            res.send(data)
+                            return NULL
+                        
+                        def _res_json(*a):
+                            if len(a) != 1:
+                                return EvaluationError("json() takes 1 argument")
+                            data = _zexus_to_python(a[0])
+                            res.json(data)
+                            return NULL
+                        
+                        res_map = Map({
+                            String("status"): Builtin(_res_status, "status"),
+                            String("send"): Builtin(_res_send, "send"),
+                            String("json"): Builtin(_res_json, "json")
+                        })
+                        
+                        # Call Zexus handler
+                        self.apply_function(handler, [req_map, res_map])
+                    
+                    server.get(path, python_handler)
+                    return NULL
+                
+                def _server_post(*args):
+                    if len(args) != 2 or not isinstance(args[0], String) or not isinstance(args[1], Action):
+                        return EvaluationError("post() takes 2 arguments: path, handler")
+                    path = args[0].value
+                    handler = args[1]
+                    
+                    def python_handler(req, res):
+                        req_map = Map({
+                            String("method"): String(req.method),
+                            String("path"): String(req.path),
+                            String("headers"): _python_to_zexus(req.headers),
+                            String("body"): String(req.body),
+                            String("query"): _python_to_zexus(req.query)
+                        })
+                        
+                        def _res_status(*a):
+                            if len(a) == 1 and isinstance(a[0], Integer):
+                                res.set_status(a[0].value)
+                            return NULL
+                        
+                        def _res_send(*a):
+                            if len(a) == 1:
+                                data = a[0].value if isinstance(a[0], String) else str(a[0])
+                                res.send(data)
+                            return NULL
+                        
+                        def _res_json(*a):
+                            if len(a) == 1:
+                                data = _zexus_to_python(a[0])
+                                res.json(data)
+                            return NULL
+                        
+                        res_map = Map({
+                            String("status"): Builtin(_res_status, "status"),
+                            String("send"): Builtin(_res_send, "send"),
+                            String("json"): Builtin(_res_json, "json")
+                        })
+                        
+                        self.apply_function(handler, [req_map, res_map])
+                    
+                    server.post(path, python_handler)
+                    return NULL
+                
+                def _server_listen(*args):
+                    try:
+                        # Start server in background thread
+                        import threading
+                        thread = threading.Thread(target=server.listen, daemon=True)
+                        thread.start()
+                        return NULL
+                    except Exception as e:
+                        return EvaluationError(f"listen() error: {str(e)}")
+                
+                def _server_stop(*args):
+                    try:
+                        server.stop()
+                        return NULL
+                    except Exception as e:
+                        return EvaluationError(f"stop() error: {str(e)}")
+                
+                # Return server object as Map
+                return Map({
+                    String("get"): Builtin(_server_get, "get"),
+                    String("post"): Builtin(_server_post, "post"),
+                    String("listen"): Builtin(_server_listen, "listen"),
+                    String("stop"): Builtin(_server_stop, "stop"),
+                    String("host"): String(host),
+                    String("port"): Integer(port)
+                })
+            except Exception as e:
+                return EvaluationError(f"http_server() error: {str(e)}")
+        
+        # Database - SQLite
+        def _sqlite_connect(*a):
+            """Connect to SQLite database: sqlite_connect(database_path)"""
+            if len(a) != 1 or not isinstance(a[0], String):
+                return EvaluationError("sqlite_connect() takes 1 string argument: database path")
+            
+            try:
+                from ..stdlib.db_sqlite import SQLiteConnection
+                db = SQLiteConnection(a[0].value)
+                
+                if not db.connect():
+                    return EvaluationError("Failed to connect to SQLite database")
+                
+                # Store db in a list to keep it alive (prevent garbage collection)
+                db_ref = [db]
+                
+                # Create database methods as Zexus builtins
+                def _db_execute(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("execute() takes query string and optional params")
+                    
+                    query = args[0].value
+                    params = None
+                    
+                    if len(args) >= 2:
+                        # Convert Zexus List to Python tuple for params
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    
+                    result = db_ref[0].execute(query, params)
+                    return BooleanObj(result)
+                
+                def _db_query(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query() takes query string and optional params")
+                    
+                    query = args[0].value
+                    params = None
+                    
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    
+                    results = db_ref[0].query(query, params)
+                    # Convert Python list of dicts to Zexus List of Maps
+                    return _python_to_zexus(results)
+                
+                def _db_query_one(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query_one() takes query string and optional params")
+                    
+                    query = args[0].value
+                    params = None
+                    
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    
+                    result = db_ref[0].query_one(query, params)
+                    return _python_to_zexus(result) if result else NULL
+                
+                def _db_last_insert_id(*args):
+                    return Integer(db_ref[0].last_insert_id())
+                
+                def _db_affected_rows(*args):
+                    return Integer(db_ref[0].affected_rows())
+                
+                def _db_begin(*args):
+                    return BooleanObj(db_ref[0].begin_transaction())
+                
+                def _db_commit(*args):
+                    return BooleanObj(db_ref[0].commit())
+                
+                def _db_rollback(*args):
+                    return BooleanObj(db_ref[0].rollback())
+                
+                def _db_close(*args):
+                    return BooleanObj(db_ref[0].close())
+                
+                # Return database connection as Map
+                return Map({
+                    String("execute"): Builtin(_db_execute, "execute"),
+                    String("query"): Builtin(_db_query, "query"),
+                    String("query_one"): Builtin(_db_query_one, "query_one"),
+                    String("last_insert_id"): Builtin(_db_last_insert_id, "last_insert_id"),
+                    String("affected_rows"): Builtin(_db_affected_rows, "affected_rows"),
+                    String("begin"): Builtin(_db_begin, "begin"),
+                    String("commit"): Builtin(_db_commit, "commit"),
+                    String("rollback"): Builtin(_db_rollback, "rollback"),
+                    String("close"): Builtin(_db_close, "close"),
+                    String("database"): String(a[0].value)
+                })
+            
+            except Exception as e:
+                return EvaluationError(f"sqlite_connect() error: {str(e)}")
+        
+        # Database - PostgreSQL
+        def _postgres_connect(*a):
+            """Connect to PostgreSQL: postgres_connect(host, port, database, user, password)"""
+            if len(a) < 1:
+                return EvaluationError("postgres_connect() requires at least database name")
+            
+            # Parse parameters
+            host = "localhost"
+            port = 5432
+            database = a[0].value if isinstance(a[0], String) else "postgres"
+            user = "postgres"
+            password = ""
+            
+            if len(a) >= 2 and isinstance(a[1], String):
+                user = a[1].value
+            if len(a) >= 3 and isinstance(a[2], String):
+                password = a[2].value
+            if len(a) >= 4 and isinstance(a[3], String):
+                host = a[3].value
+            if len(a) >= 5 and isinstance(a[4], Integer):
+                port = a[4].value
+            
+            try:
+                from ..stdlib.db_postgres import PostgreSQLConnection
+                db = PostgreSQLConnection(host, port, database, user, password)
+                
+                if not db.connect():
+                    return EvaluationError("Failed to connect to PostgreSQL database")
+                
+                db_ref = [db]
+                
+                # Same methods as SQLite
+                def _db_execute(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("execute() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    result = db_ref[0].execute(query, params)
+                    return BooleanObj(result)
+                
+                def _db_query(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    results = db_ref[0].query(query, params)
+                    return _python_to_zexus(results)
+                
+                def _db_query_one(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query_one() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    result = db_ref[0].query_one(query, params)
+                    return _python_to_zexus(result) if result else NULL
+                
+                def _db_last_insert_id(*args):
+                    return Integer(db_ref[0].last_insert_id())
+                
+                def _db_affected_rows(*args):
+                    return Integer(db_ref[0].affected_rows())
+                
+                def _db_begin(*args):
+                    return BooleanObj(db_ref[0].begin_transaction())
+                
+                def _db_commit(*args):
+                    return BooleanObj(db_ref[0].commit())
+                
+                def _db_rollback(*args):
+                    return BooleanObj(db_ref[0].rollback())
+                
+                def _db_close(*args):
+                    return BooleanObj(db_ref[0].close())
+                
+                return Map({
+                    String("execute"): Builtin(_db_execute, "execute"),
+                    String("query"): Builtin(_db_query, "query"),
+                    String("query_one"): Builtin(_db_query_one, "query_one"),
+                    String("last_insert_id"): Builtin(_db_last_insert_id, "last_insert_id"),
+                    String("affected_rows"): Builtin(_db_affected_rows, "affected_rows"),
+                    String("begin"): Builtin(_db_begin, "begin"),
+                    String("commit"): Builtin(_db_commit, "commit"),
+                    String("rollback"): Builtin(_db_rollback, "rollback"),
+                    String("close"): Builtin(_db_close, "close"),
+                    String("database"): String(database),
+                    String("type"): String("postgresql")
+                })
+            
+            except Exception as e:
+                return EvaluationError(f"postgres_connect() error: {str(e)}")
+        
+        # Database - MySQL
+        def _mysql_connect(*a):
+            """Connect to MySQL: mysql_connect(database, user, password, host?, port?)"""
+            if len(a) < 1:
+                return EvaluationError("mysql_connect() requires at least database name")
+            
+            host = "localhost"
+            port = 3306
+            database = a[0].value if isinstance(a[0], String) else "mysql"
+            user = "root"
+            password = ""
+            
+            if len(a) >= 2 and isinstance(a[1], String):
+                user = a[1].value
+            if len(a) >= 3 and isinstance(a[2], String):
+                password = a[2].value
+            if len(a) >= 4 and isinstance(a[3], String):
+                host = a[3].value
+            if len(a) >= 5 and isinstance(a[4], Integer):
+                port = a[4].value
+            
+            try:
+                from ..stdlib.db_mysql import MySQLConnection
+                db = MySQLConnection(host, port, database, user, password)
+                
+                if not db.connect():
+                    return EvaluationError("Failed to connect to MySQL database")
+                
+                db_ref = [db]
+                
+                # Same interface as SQLite/PostgreSQL
+                def _db_execute(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("execute() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    result = db_ref[0].execute(query, params)
+                    return BooleanObj(result)
+                
+                def _db_query(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    results = db_ref[0].query(query, params)
+                    return _python_to_zexus(results)
+                
+                def _db_query_one(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("query_one() takes query string and optional params")
+                    query = args[0].value
+                    params = None
+                    if len(args) >= 2:
+                        if isinstance(args[1], List):
+                            params = tuple(_zexus_to_python(args[1]))
+                        else:
+                            params = (_zexus_to_python(args[1]),)
+                    result = db_ref[0].query_one(query, params)
+                    return _python_to_zexus(result) if result else NULL
+                
+                def _db_last_insert_id(*args):
+                    return Integer(db_ref[0].last_insert_id())
+                
+                def _db_affected_rows(*args):
+                    return Integer(db_ref[0].affected_rows())
+                
+                def _db_begin(*args):
+                    return BooleanObj(db_ref[0].begin_transaction())
+                
+                def _db_commit(*args):
+                    return BooleanObj(db_ref[0].commit())
+                
+                def _db_rollback(*args):
+                    return BooleanObj(db_ref[0].rollback())
+                
+                def _db_close(*args):
+                    return BooleanObj(db_ref[0].close())
+                
+                return Map({
+                    String("execute"): Builtin(_db_execute, "execute"),
+                    String("query"): Builtin(_db_query, "query"),
+                    String("query_one"): Builtin(_db_query_one, "query_one"),
+                    String("last_insert_id"): Builtin(_db_last_insert_id, "last_insert_id"),
+                    String("affected_rows"): Builtin(_db_affected_rows, "affected_rows"),
+                    String("begin"): Builtin(_db_begin, "begin"),
+                    String("commit"): Builtin(_db_commit, "commit"),
+                    String("rollback"): Builtin(_db_rollback, "rollback"),
+                    String("close"): Builtin(_db_close, "close"),
+                    String("database"): String(database),
+                    String("type"): String("mysql")
+                })
+            
+            except Exception as e:
+                return EvaluationError(f"mysql_connect() error: {str(e)}")
+        
+        # Database - MongoDB
+        def _mongo_connect(*a):
+            """Connect to MongoDB: mongo_connect(database, host?, port?, username?, password?)"""
+            if len(a) < 1:
+                return EvaluationError("mongo_connect() requires at least database name")
+            
+            database = a[0].value if isinstance(a[0], String) else "test"
+            host = "localhost"
+            port = 27017
+            username = None
+            password = None
+            
+            if len(a) >= 2 and isinstance(a[1], String):
+                host = a[1].value
+            if len(a) >= 3 and isinstance(a[2], Integer):
+                port = a[2].value
+            if len(a) >= 4 and isinstance(a[3], String):
+                username = a[3].value
+            if len(a) >= 5 and isinstance(a[4], String):
+                password = a[4].value
+            
+            try:
+                from ..stdlib.db_mongo import MongoDBConnection
+                db = MongoDBConnection(host, port, database, username, password)
+                
+                if not db.connect():
+                    return EvaluationError("Failed to connect to MongoDB database")
+                
+                db_ref = [db]
+                
+                # MongoDB-specific operations
+                def _db_insert_one(*args):
+                    if len(args) < 2 or not isinstance(args[0], String) or not isinstance(args[1], Map):
+                        return EvaluationError("insert_one() takes collection name and document")
+                    collection = args[0].value
+                    document = _zexus_to_python(args[1])
+                    result = db_ref[0].insert_one(collection, document)
+                    return String(result) if result else NULL
+                
+                def _db_insert_many(*args):
+                    if len(args) < 2 or not isinstance(args[0], String) or not isinstance(args[1], List):
+                        return EvaluationError("insert_many() takes collection name and list of documents")
+                    collection = args[0].value
+                    documents = _zexus_to_python(args[1])
+                    result = db_ref[0].insert_many(collection, documents)
+                    return _python_to_zexus(result) if result else NULL
+                
+                def _db_find(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("find() takes collection name and optional query")
+                    collection = args[0].value
+                    query = None
+                    if len(args) >= 2 and isinstance(args[1], Map):
+                        query = _zexus_to_python(args[1])
+                    results = db_ref[0].find(collection, query)
+                    return _python_to_zexus(results)
+                
+                def _db_find_one(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("find_one() takes collection name and optional query")
+                    collection = args[0].value
+                    query = None
+                    if len(args) >= 2 and isinstance(args[1], Map):
+                        query = _zexus_to_python(args[1])
+                    result = db_ref[0].find_one(collection, query)
+                    return _python_to_zexus(result) if result else NULL
+                
+                def _db_update_one(*args):
+                    if len(args) < 3 or not isinstance(args[0], String) or not isinstance(args[1], Map) or not isinstance(args[2], Map):
+                        return EvaluationError("update_one() takes collection, query, and update")
+                    collection = args[0].value
+                    query = _zexus_to_python(args[1])
+                    update = _zexus_to_python(args[2])
+                    result = db_ref[0].update_one(collection, query, update)
+                    return Integer(result)
+                
+                def _db_update_many(*args):
+                    if len(args) < 3 or not isinstance(args[0], String) or not isinstance(args[1], Map) or not isinstance(args[2], Map):
+                        return EvaluationError("update_many() takes collection, query, and update")
+                    collection = args[0].value
+                    query = _zexus_to_python(args[1])
+                    update = _zexus_to_python(args[2])
+                    result = db_ref[0].update_many(collection, query, update)
+                    return Integer(result)
+                
+                def _db_delete_one(*args):
+                    if len(args) < 2 or not isinstance(args[0], String) or not isinstance(args[1], Map):
+                        return EvaluationError("delete_one() takes collection and query")
+                    collection = args[0].value
+                    query = _zexus_to_python(args[1])
+                    result = db_ref[0].delete_one(collection, query)
+                    return Integer(result)
+                
+                def _db_delete_many(*args):
+                    if len(args) < 2 or not isinstance(args[0], String) or not isinstance(args[1], Map):
+                        return EvaluationError("delete_many() takes collection and query")
+                    collection = args[0].value
+                    query = _zexus_to_python(args[1])
+                    result = db_ref[0].delete_many(collection, query)
+                    return Integer(result)
+                
+                def _db_count(*args):
+                    if len(args) < 1 or not isinstance(args[0], String):
+                        return EvaluationError("count() takes collection name and optional query")
+                    collection = args[0].value
+                    query = None
+                    if len(args) >= 2 and isinstance(args[1], Map):
+                        query = _zexus_to_python(args[1])
+                    result = db_ref[0].count(collection, query)
+                    return Integer(result)
+                
+                def _db_close(*args):
+                    return BooleanObj(db_ref[0].close())
+                
+                return Map({
+                    String("insert_one"): Builtin(_db_insert_one, "insert_one"),
+                    String("insert_many"): Builtin(_db_insert_many, "insert_many"),
+                    String("find"): Builtin(_db_find, "find"),
+                    String("find_one"): Builtin(_db_find_one, "find_one"),
+                    String("update_one"): Builtin(_db_update_one, "update_one"),
+                    String("update_many"): Builtin(_db_update_many, "update_many"),
+                    String("delete_one"): Builtin(_db_delete_one, "delete_one"),
+                    String("delete_many"): Builtin(_db_delete_many, "delete_many"),
+                    String("count"): Builtin(_db_count, "count"),
+                    String("close"): Builtin(_db_close, "close"),
+                    String("database"): String(database),
+                    String("type"): String("mongodb")
+                })
+            
+            except Exception as e:
+                return EvaluationError(f"mongo_connect() error: {str(e)}")
+        
+        # HTTP Client
+        def _http_get(*a):
+            """HTTP GET request: http_get(url, headers?, timeout?)"""
+            if len(a) < 1:
+                return EvaluationError("http_get() requires at least 1 argument: url")
+            
+            url = a[0].value if isinstance(a[0], String) else str(a[0])
+            headers = None
+            timeout = 30
+            
+            # Parse optional headers (Map)
+            if len(a) >= 2 and isinstance(a[1], Map):
+                headers = _zexus_to_python(a[1])
+            
+            # Parse optional timeout (Integer)
+            if len(a) >= 3 and isinstance(a[2], Integer):
+                timeout = a[2].value
+            
+            try:
+                from ..stdlib.http import HttpModule
+                result = HttpModule.get(url, headers, timeout)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"HTTP GET error: {str(e)}")
+        
+        def _http_post(*a):
+            """HTTP POST request: http_post(url, data, headers?, timeout?)"""
+            if len(a) < 2:
+                return EvaluationError("http_post() requires at least 2 arguments: url, data")
+            
+            url = a[0].value if isinstance(a[0], String) else str(a[0])
+            data = _zexus_to_python(a[1])
+            headers = None
+            timeout = 30
+            
+            # Parse optional headers (Map)
+            if len(a) >= 3 and isinstance(a[2], Map):
+                headers = _zexus_to_python(a[2])
+            
+            # Parse optional timeout (Integer)
+            if len(a) >= 4 and isinstance(a[3], Integer):
+                timeout = a[3].value
+            
+            try:
+                from ..stdlib.http import HttpModule
+                # Determine if data should be sent as JSON
+                json_mode = isinstance(a[1], (Map, List))
+                result = HttpModule.post(url, data, headers, json=json_mode, timeout=timeout)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"HTTP POST error: {str(e)}")
+        
+        def _http_put(*a):
+            """HTTP PUT request: http_put(url, data, headers?, timeout?)"""
+            if len(a) < 2:
+                return EvaluationError("http_put() requires at least 2 arguments: url, data")
+            
+            url = a[0].value if isinstance(a[0], String) else str(a[0])
+            data = _zexus_to_python(a[1])
+            headers = None
+            timeout = 30
+            
+            if len(a) >= 3 and isinstance(a[2], Map):
+                headers = _zexus_to_python(a[2])
+            
+            if len(a) >= 4 and isinstance(a[3], Integer):
+                timeout = a[3].value
+            
+            try:
+                from ..stdlib.http import HttpModule
+                json_mode = isinstance(a[1], (Map, List))
+                result = HttpModule.put(url, data, headers, json=json_mode, timeout=timeout)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"HTTP PUT error: {str(e)}")
+        
+        def _http_delete(*a):
+            """HTTP DELETE request: http_delete(url, headers?, timeout?)"""
+            if len(a) < 1:
+                return EvaluationError("http_delete() requires at least 1 argument: url")
+            
+            url = a[0].value if isinstance(a[0], String) else str(a[0])
+            headers = None
+            timeout = 30
+            
+            if len(a) >= 2 and isinstance(a[1], Map):
+                headers = _zexus_to_python(a[1])
+            
+            if len(a) >= 3 and isinstance(a[2], Integer):
+                timeout = a[2].value
+            
+            try:
+                from ..stdlib.http import HttpModule
+                result = HttpModule.delete(url, headers, timeout)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"HTTP DELETE error: {str(e)}")
         
         # Debug
         def _debug(*a):
@@ -1188,8 +2109,26 @@ class FunctionEvaluatorMixin:
             "file_exists": Builtin(_exists, "file_exists"),
             "file_read_json": Builtin(_read_json, "file_read_json"),
             "file_write_json": Builtin(_write_json, "file_write_json"),
-            "file_append": Builtin(_append, "file_append"),
+            "file_append": Builtin(_file_append, "file_append"),
             "file_list_dir": Builtin(_list_dir, "file_list_dir"),
+            "fs_is_file": Builtin(_fs_is_file, "fs_is_file"),
+            "fs_is_dir": Builtin(_fs_is_dir, "fs_is_dir"),
+            "fs_mkdir": Builtin(_fs_mkdir, "fs_mkdir"),
+            "fs_remove": Builtin(_fs_remove, "fs_remove"),
+            "fs_rmdir": Builtin(_fs_rmdir, "fs_rmdir"),
+            "fs_rename": Builtin(_fs_rename, "fs_rename"),
+            "fs_copy": Builtin(_fs_copy, "fs_copy"),
+            "socket_create_server": Builtin(_socket_create_server, "socket_create_server"),
+            "socket_create_connection": Builtin(_socket_create_connection, "socket_create_connection"),
+            "http_server": Builtin(_http_server, "http_server"),
+            "sqlite_connect": Builtin(_sqlite_connect, "sqlite_connect"),
+            "postgres_connect": Builtin(_postgres_connect, "postgres_connect"),
+            "mysql_connect": Builtin(_mysql_connect, "mysql_connect"),
+            "mongo_connect": Builtin(_mongo_connect, "mongo_connect"),
+            "http_get": Builtin(_http_get, "http_get"),
+            "http_post": Builtin(_http_post, "http_post"),
+            "http_put": Builtin(_http_put, "http_put"),
+            "http_delete": Builtin(_http_delete, "http_delete"),
             "read_file": Builtin(_read_file, "read_file"),
             "eval_file": Builtin(_eval_file, "eval_file"),
             "debug": Builtin(_debug, "debug"),

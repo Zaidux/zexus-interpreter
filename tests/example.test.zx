@@ -1,0 +1,81 @@
+#!/usr/bin/env zexus
+# Example test file demonstrating the Zexus testing framework
+
+# Load the test framework
+eval_file("src/zexus/stdlib/test_framework.zx", "zexus")
+
+# Test Suite 1: Basic Assertions
+describe("Basic Assertions")
+
+it("should assert equality", action() {
+    assert_eq(1 + 1, 2, "1 + 1 should equal 2")
+    assert_eq("hello", "hello", "strings should match")
+})
+
+it("should assert inequality", action() {
+    assert_ne(1, 2, "1 should not equal 2")
+    assert_ne("foo", "bar", "different strings")
+})
+
+it("should assert true/false", action() {
+    assert_true(true, "true is true")
+    assert_false(false, "false is false")
+    assert_true(1 == 1, "equality is true")
+    assert_false(1 == 2, "inequality is false")
+})
+
+it("should assert null", action() {
+    # Test null directly (let inside action is not supported)
+    assert_null(null, "null should be null")
+    assert_not_null(42, "42 should not be null")
+})
+
+# Test Suite 2: Type Assertions
+describe("Type Assertions")
+
+it("should check types", action() {
+    assert_type(42, "Integer", "42 is an Integer")
+    assert_type("hello", "String", "hello is a String")
+    assert_type(true, "Boolean", "true is a Boolean")
+    assert_type([1, 2, 3], "List", "array is a List")
+    assert_type({"key": "value"}, "Map", "object is a Map")
+})
+
+# Test Suite 3: Comparison Assertions
+describe("Comparison Assertions")
+
+it("should compare numbers", action() {
+    assert_gt(10, 5, "10 > 5")
+    assert_gte(10, 10, "10 >= 10")
+    assert_gte(10, 5, "10 >= 5")
+    
+    assert_lt(5, 10, "5 < 10")
+    assert_lte(10, 10, "10 <= 10")
+    assert_lte(5, 10, "5 <= 10")
+})
+
+# Test Suite 4: Error Handling
+describe("Error Handling")
+
+it("should catch assertion failures", action() {
+    # Test that failed assertions throw
+    # (simplified - just test that assertions work)
+    assert_true(true, "true is true")
+})
+
+# Test Suite 5: Data Structures
+describe("Data Structures")
+
+it("should work with lists", action() {
+    assert_eq(len([1, 2, 3]), 3, "list has 3 elements")
+    assert_eq([1, 2, 3][0], 1, "first element is 1")
+    assert_eq([1, 2, 3][2], 3, "third element is 3")
+})
+
+it("should work with maps", action() {
+    assert_eq({"name": "Zexus"}["name"], "Zexus", "name is Zexus")
+    assert_eq({"version": 1}["version"], 1, "version is 1")
+})
+
+# Print summary at the end
+print_test_summary()

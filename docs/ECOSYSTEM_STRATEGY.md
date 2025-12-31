@@ -33,6 +33,22 @@ This approach ensures Zexus is both powerful and practical for real-world applic
 - Cryptography (crypto)
 - Blockchain utilities (blockchain)
 
+✅ **Web & Networking** (NEW! v1.0)
+- HTTP Server with routing (GET, POST, PUT, DELETE)
+- Socket/TCP primitives (server/client)
+- Low-level network programming
+
+✅ **Database Drivers** (NEW! v1.0)
+- SQLite (built-in, no dependencies)
+- PostgreSQL (psycopg2)
+- MySQL (mysql-connector-python)
+- MongoDB (pymongo)
+
+✅ **Testing Framework** (NEW! v1.0)
+- Assertion library (assert_eq, assert_true, etc.)
+- Test runner with pass/fail reporting
+- Pure Zexus implementation
+
 ✅ **Development Tools**
 - ZPM package manager
 - CLI (zx)
@@ -43,8 +59,6 @@ This approach ensures Zexus is both powerful and practical for real-world applic
 
 ## What's Missing for "Anything"
 
-❌ **Web Frameworks** (HTTP server, routing, middleware)
-❌ **Database Drivers** (PostgreSQL, MySQL, MongoDB)
 ❌ **GUI Frameworks** (Desktop applications)
 ❌ **Machine Learning Libraries** (Training, inference)
 ❌ **Mobile/Desktop Runtime** (Cross-platform deployment)

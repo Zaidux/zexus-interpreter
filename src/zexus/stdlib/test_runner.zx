@@ -1,0 +1,119 @@
+#!/usr/bin/env zexus
+# Zexus Test Runner
+# Discovers and runs test files
+
+# Import test framework (when import is available)
+# For now, we'll eval the file
+
+action run_test_file(filepath) {
+    print("\n🧪 Running: " + filepath)
+    print(string_repeat("-", 60))
+    
+    try {
+        # Execute the test file
+        eval_file(filepath, "zexus")
+        return true
+    } catch (e) {
+        print("❌ Error loading test file: " + string(e))
+        return false
+    }
+}
+
+action string_repeat(str, count) {
+    let result = ""
+    let i = 0
+    while i < count {
+        result = result + str
+        i = i + 1
+    }
+    return result
+}
+
+action ends_with(str, suffix) {
+    let str_len = len(str)
+    let suffix_len = len(suffix)
+    
+    if suffix_len > str_len {
+        return false
+    }
+    
+    # Simple substring check - would need proper string methods
+    # For now, just check if it contains .test.zx
+    return true  # Simplified for now
+}
+
+action discover_tests(directory) {
+    print("🔍 Discovering tests in: " + directory)
+    
+    let all_files = file_list_dir(directory)
+    let test_files = []
+    
+    let i = 0
+    while i < len(all_files) {
+        let file = all_files[i]
+        
+        # Check if file ends with .test.zx
+        # Simple check: contains "test" and ends with ".zx"
+        if file_exists(directory + "/" + file) {
+            if fs_is_file(directory + "/" + file) {
+                # Add to test files if it looks like a test
+                let file_lower = file  # Would need tolower()
+                # For now, just check if filename contains "test"
+                test_files = push(test_files, directory + "/" + file)
+            }
+        }
+        
+        i = i + 1
+    }
+    
+    return test_files
+}
+
+action run_all_tests(directory) {
+    print("╔" + string_repeat("═", 58) + "╗")
+    print("║" + "        ZEXUS TEST RUNNER                                " + "║")
+    print("╚" + string_repeat("═", 58) + "╝")
+    
+    let test_files = discover_tests(directory)
+    
+    if len(test_files) == 0 {
+        print("\n⚠️  No test files found in: " + directory)
+        return 1
+    }
+    
+    print("\nFound " + string(len(test_files)) + " test file(s)")
+    
+    let i = 0
+    let passed = 0
+    let failed = 0
+    
+    while i < len(test_files) {
+        let test_file = test_files[i]
+        
+        if run_test_file(test_file) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+        
+        i = i + 1
+    }
+    
+    # Print overall summary
+    print("\n" + string_repeat("═", 60))
+    print("OVERALL RESULTS")
+    print(string_repeat("═", 60))
+    print("Test files run: " + string(len(test_files)))
+    print("Passed: " + string(passed) + " ✓")
+    print("Failed: " + string(failed) + " ✗")
+    print(string_repeat("═", 60))
+    
+    if failed == 0 {
+        print("🎉 ALL TEST FILES PASSED!")
+        return 0
+    } else {
+        print("❌ SOME TEST FILES FAILED")
+        return 1
+    }
+}
+

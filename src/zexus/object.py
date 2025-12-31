@@ -456,21 +456,16 @@ class File(Object):
             if isinstance(content, EvaluationError):
                 return content
             data = json.loads(content.value)
-            # Convert to Zexus Map
-            pairs = {}
-            for key, value in data.items():
-                pairs[key] = File._python_to_zexus(value)
-            return Map(pairs)
+            # Convert Python data to Zexus objects
+            return File._python_to_zexus(data)
         except Exception as e:
             return EvaluationError(f"JSON read error: {str(e)}")
 
     @staticmethod
     def write_json(path, data):
         try:
-            if isinstance(data, Map):
-                python_data = File._zexus_to_python(data)
-            else:
-                python_data = data
+            # Always convert Zexus objects to Python objects
+            python_data = File._zexus_to_python(data)
             json_str = json.dumps(python_data, indent=2)
             return File.write_text(path, String(json_str))
         except Exception as e:
@@ -611,7 +606,12 @@ class File(Object):
     @staticmethod
     def _zexus_to_python(value):
         if isinstance(value, Map):
-            return {k: File._zexus_to_python(v) for k, v in value.pairs.items()}
+            # Handle both String keys and regular string keys
+            result = {}
+            for k, v in value.pairs.items():
+                key = k.value if isinstance(k, String) else str(k)
+                result[key] = File._zexus_to_python(v)
+            return result
         elif isinstance(value, List):
             return [File._zexus_to_python(item) for item in value.elements]
         elif isinstance(value, String):
@@ -622,8 +622,14 @@ class File(Object):
             return value.value
         elif isinstance(value, Boolean):
             return value.value
-        elif value == Null():
+        elif value == Null() or value is None:
             return None
+        elif isinstance(value, dict):
+            # Handle plain Python dicts (fallback)
+            return {str(k): File._zexus_to_python(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            # Handle plain Python lists (fallback)
+            return [File._zexus_to_python(item) for item in value]
         else:
             return str(value)
 
@@ -869,7 +875,7 @@ TRUE = Boolean(True)
 FALSE = Boolean(False)
 
 # File object for RAII pattern (using statement)
-class File(Object):
+class FileHandle(Object):
     """File object that supports cleanup via close() method"""
     def __init__(self, path, mode='r'):
         self.path = path

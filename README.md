@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.5.0-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.6.2-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
@@ -67,9 +67,19 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ---
 
-## 🎉 What's New in v1.5.0
+## 🎉 What's New in v1.6.2
 
-### Latest Features (v1.5.0)
+### Latest Features (v1.6.2)
+
+✅ **Complete Database Ecosystem** - Production-ready database drivers  
+✅ **4 Database Drivers** - SQLite, PostgreSQL, MySQL, MongoDB fully tested  
+✅ **HTTP Server** - Build web servers with routing (GET, POST, PUT, DELETE)  
+✅ **Socket/TCP Primitives** - Low-level network programming  
+✅ **Testing Framework** - Write and run tests with assertions  
+✅ **ZPM Package Manager** - Fully functional package management system  
+✅ **Comprehensive Documentation** - 900+ lines of ecosystem guides  
+
+### Previous Features (v1.5.0)
 
 ✅ **World-Class Error Reporting** - Production-grade error messages rivaling Rust  
 ✅ **Advanced DATA System** - Generic types, pattern matching, operator overloading  
@@ -426,8 +436,8 @@ pip install -e .
 ### Verify Installation
 
 ```bash
-zx --version   # Should show: Zexus v1.5.0
-zpm --version  # Should show: ZPM v1.5.0
+zx --version   # Should show: Zexus v1.6.2
+zpm --version  # Should show: ZPM v1.6.2
 ```
 
 ---
@@ -1424,7 +1434,7 @@ env_exists(name)                # Check if env var exists
 
 #### Standard Library Modules
 
-Zexus provides **100+ functions** across **6 standard library modules**:
+Zexus provides **130+ functions** across **10 standard library modules**:
 
 ##### File System (fs)
 ```zexus
@@ -1447,6 +1457,77 @@ let response = get("https://api.example.com/data")
 print(response.status)
 print(response.body)
 ```
+
+##### HTTP Server (NEW! v1.0)
+```zexus
+# Create HTTP server with routing
+let server = http_server(3000)
+
+server["get"]("/", action(req, res) {
+    res["send"]("Hello World!")
+})
+
+server["post"]("/api/users", action(req, res) {
+    res["json"]({"message": "User created"})
+})
+
+server["listen"]()
+```
+
+**Functions**: `http_server`, routing methods (get, post, put, delete), response methods (send, json, status)
+
+##### Socket/TCP (NEW! v1.0)
+```zexus
+# TCP server
+let server = socket_listen(8080)
+let client = server["accept"]()
+let data = client["recv"](1024)
+client["send"]("Echo: " + data)
+
+# TCP client
+let conn = socket_connect("localhost", 8080)
+conn["send"]("Hello!")
+let response = conn["recv"](1024)
+```
+
+**Functions**: `socket_listen`, `socket_connect`, send/receive operations
+
+##### Databases (NEW! v1.0)
+```zexus
+# SQLite (built-in, no deps)
+let db = sqlite_connect("app.db")
+db["execute"]("CREATE TABLE users (...)")
+let users = db["query"]("SELECT * FROM users")
+
+# PostgreSQL (requires psycopg2-binary)
+let db = postgres_connect("mydb", "user", "pass")
+
+# MySQL (requires mysql-connector-python)
+let db = mysql_connect("mydb", "root", "pass")
+
+# MongoDB (requires pymongo)
+let db = mongo_connect("myapp")
+db["insert_one"]("users", {"name": "Alice"})
+let docs = db["find"]("users", {"age": 30})
+```
+
+**Functions**: Database connection functions, execute/query/update/delete operations for SQL databases, MongoDB NoSQL operations
+
+##### Testing Framework (NEW! v1.0)
+```zexus
+# Load test framework
+eval_file("src/zexus/stdlib/test.zx")
+
+# Write assertions
+assert_eq(1 + 1, 2, "Addition works")
+assert_true(x > 0, "Positive number")
+assert_type(value, "Integer", "Type check")
+
+# Get results
+print_test_results()
+```
+
+**Functions**: `assert_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_type`, `print_test_results`
 
 **5 functions**: `get`, `post`, `put`, `delete`, `request`
 

@@ -37,12 +37,20 @@ Complete documentation for the Zexus programming language.
 
 ### Standard Library
 - [Standard Library Overview](stdlib/README.md) - All stdlib modules
+- [Ecosystem Guide](ECOSYSTEM_GUIDE.md) - **NEW!** Complete guide to HTTP, Databases, Testing
+- [Quick Reference](QUICK_REFERENCE.md) - **NEW!** Cheat sheet for common tasks
 - [fs Module](stdlib/FS_MODULE.md) - File system operations (coming soon)
 - [http Module](stdlib/HTTP_MODULE.md) - HTTP client (coming soon)
 - [json Module](stdlib/JSON_MODULE.md) - JSON parsing/serialization (coming soon)
 - [datetime Module](stdlib/DATETIME_MODULE.md) - Date/time operations (coming soon)
 - [crypto Module](stdlib/CRYPTO_MODULE.md) - Cryptographic functions
 - [blockchain Module](stdlib/BLOCKCHAIN_MODULE.md) - Blockchain utilities
+
+### Ecosystem Features (NEW in v1.0!)
+- [HTTP Server](ECOSYSTEM_GUIDE.md#http-server) - Build web servers with routing
+- [Databases](ECOSYSTEM_GUIDE.md#database-drivers) - SQLite, PostgreSQL, MySQL, MongoDB
+- [Socket/TCP](ECOSYSTEM_GUIDE.md#sockettcp-primitives) - Low-level network programming
+- [Testing Framework](ECOSYSTEM_GUIDE.md#testing-framework) - Write and run tests
 
 ## 🔑 Language Features by Category
 

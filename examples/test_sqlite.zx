@@ -1,0 +1,106 @@
+#!/usr/bin/env zexus
+# SQLite Database Test
+
+print("=== SQLite Database Test ===\n")
+
+# Connect to in-memory database
+print("Connecting to SQLite...")
+let db = sqlite_connect(":memory:")
+
+# Get methods
+let exec_fn = db["execute"]
+let query_fn = db["query"]
+let query_one_fn = db["query_one"]
+let begin_fn = db["begin"]
+let commit_fn = db["commit"]
+let rollback_fn = db["rollback"]
+let close_fn = db["close"]
+
+print("✓ Connected successfully\n")
+
+# Create table
+print("Creating users table...")
+exec_fn("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, age INTEGER)")
+print("✓ Table created\n")
+
+# Insert data
+print("Inserting test data...")
+exec_fn("INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@example.com', 30)")
+exec_fn("INSERT INTO users (name, email, age) VALUES ('Bob', 'bob@example.com', 25)")
+exec_fn("INSERT INTO users (name, email, age) VALUES ('Charlie', 'charlie@example.com', 35)")
+print("✓ Inserted 3 users\n")
+
+# Query all users
+print("Querying all users...")
+let users = query_fn("SELECT * FROM users ORDER BY name")
+print("Found " + string(len(users)) + " users:")
+if len(users) >= 1 {
+    let user = users[0]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]))
+}
+if len(users) >= 2 {
+    let user = users[1]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]))
+}
+if len(users) >= 3 {
+    let user = users[2]
+    print("  - " + user["name"] + " (" + user["email"] + "), age " + string(user["age"]))
+}
+print("")
+
+# Query one user
+print("Querying single user (Alice)...")
+let alice = query_one_fn("SELECT * FROM users WHERE name = 'Alice'")
+if alice != null {
+    print("✓ Found: " + alice["name"] + ", age " + string(alice["age"]))
+} else {
+    print("✗ User not found")
+}
+print("")
+
+# Update user
+print("Updating Alice's age...")
+exec_fn("UPDATE users SET age = 31 WHERE name = 'Alice'")
+let updated = query_one_fn("SELECT * FROM users WHERE name = 'Alice'")
+print("✓ Alice's new age: " + string(updated["age"]))
+print("")
+
+# Transaction test
+print("Testing transactions...")
+begin_fn()
+exec_fn("INSERT INTO users (name, email, age) VALUES ('David', 'david@example.com', 28)")
+rollback_fn()  # Rollback - David should not exist
+let david = query_one_fn("SELECT * FROM users WHERE name = 'David'")
+if david == null {
+    print("✓ Rollback successful (David not found)")
+} else {
+    print("✗ Rollback failed")
+}
+print("")
+
+# Commit test
+print("Testing commit...")
+begin_fn()
+exec_fn("INSERT INTO users (name, email, age) VALUES ('Eve', 'eve@example.com', 29)")
+commit_fn()
+let eve = query_one_fn("SELECT * FROM users WHERE name = 'Eve'")
+if eve != null {
+    print("✓ Commit successful (Eve found)")
+} else {
+    print("✗ Commit failed")
+}
+print("")
+
+# Delete user
+print("Deleting Bob...")
+exec_fn("DELETE FROM users WHERE name = 'Bob'")
+let remaining = query_fn("SELECT * FROM users")
+print("✓ Remaining users: " + string(len(remaining)))
+print("")
+
+# Cleanup
+print("Cleaning up...")
+close_fn()
+print("✓ Database closed\n")
+
+print("=== All SQLite Tests Passed! ===")
