@@ -3234,9 +3234,10 @@ class ContextStackParser:
                 # Parse REQUIRE statement: require(condition, message) or require condition { tolerance_block }
                 j = i + 1
                 
-                # Collect tokens until semicolon OR until after tolerance block closes
+                # Collect tokens until semicolon OR until after tolerance block closes OR after closing paren
                 require_tokens = [token]
                 brace_nest = 0
+                paren_nest = 0
                 while j < len(tokens):
                     tj = tokens[j]
                     
@@ -3246,11 +3247,21 @@ class ContextStackParser:
                     elif tj.type == RBRACE:
                         brace_nest -= 1
                     
+                    # Track paren nesting for require(condition, message) form
+                    if tj.type == LPAREN:
+                        paren_nest += 1
+                    elif tj.type == RPAREN:
+                        paren_nest -= 1
+                    
                     require_tokens.append(tj)
                     j += 1
                     
                     # Stop at semicolon when not inside braces
                     if tj.type == SEMICOLON and brace_nest == 0:
+                        break
+                    
+                    # Stop after closing paren of require(...) form (when paren_nest returns to 0)
+                    if tj.type == RPAREN and paren_nest == 0 and brace_nest == 0:
                         break
                     
                     # Stop after tolerance block closes (if there was one)
@@ -6155,8 +6166,22 @@ class ContextStackParser:
         
         # Check for parenthesized form: require(condition, message)
         if start_idx < len(tokens) and tokens[start_idx].type == LPAREN:
-            # Extract tokens between LPAREN and RPAREN
-            inner = tokens[start_idx+1:-1] if len(tokens) > start_idx+1 and tokens[-1].type == RPAREN else tokens[start_idx+1:]
+            # Find matching RPAREN
+            paren_depth = 1
+            end_idx = start_idx + 1
+            while end_idx < len(tokens) and paren_depth > 0:
+                if tokens[end_idx].type == LPAREN:
+                    paren_depth += 1
+                elif tokens[end_idx].type == RPAREN:
+                    paren_depth -= 1
+                end_idx += 1
+            
+            if paren_depth != 0:
+                parser_debug("  ❌ Unmatched parentheses in require")
+                return None
+            
+            # Extract tokens between LPAREN and matching RPAREN
+            inner = tokens[start_idx+1:end_idx-1]
             
             # Split by comma to get condition and optional message
             args = self._parse_argument_list(inner)

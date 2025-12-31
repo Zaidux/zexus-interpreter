@@ -1,0 +1,462 @@
+// Security Fix #3: Contract require() Function Test Suite
+// Tests validation of smart contract assertions using require()
+// This fixes CWE-754 (Improper Check for Unusual or Exceptional Conditions)
+
+print("=== Contract require() Function Tests ===\n")
+
+let passed = 0
+let failed = 0
+
+// ===== TEST 1: Basic require() - Valid Condition =====
+try {
+    let balance = 100
+    let amount = 50
+    require(balance >= amount, "Insufficient balance")
+    print("✓ TEST 1 PASSED: Basic require with valid condition")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 1 FAILED: Should not throw on valid condition")
+    failed = failed + 1
+}
+
+// ===== TEST 2: Basic require() - Invalid Condition =====
+try {
+    let balance = 30
+    let amount = 50
+    require(balance >= amount, "Insufficient balance")
+    print("✗ TEST 2 FAILED: Should have thrown error")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 2 PASSED: Correctly threw error on invalid condition")
+    passed = passed + 1
+}
+
+// ===== TEST 3: require() Without Message =====
+try {
+    require(false)
+    print("✗ TEST 3 FAILED: Should have thrown error")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 3 PASSED: Correctly threw error without custom message")
+    passed = passed + 1
+}
+
+// ===== TEST 4: require() With True Condition (no message) =====
+try {
+    require(true)
+    print("✓ TEST 4 PASSED: Passed with true condition, no message")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 4 FAILED: Should not throw on true")
+    failed = failed + 1
+}
+
+// ===== TEST 5: Transfer Validation =====
+action transfer(from, to, amount) {
+    let balances = {
+        "alice": 1000,
+        "bob": 500
+    }
+    
+    require(amount > 0, "Amount must be positive")
+    require(balances[from] >= amount, "Insufficient balance")
+    
+    balances[from] = balances[from] - amount
+    balances[to] = balances[to] + amount
+    return balances
+}
+
+try {
+    let result = transfer("alice", "bob", 200)
+    print("✓ TEST 5 PASSED: Valid transfer succeeded")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 5 FAILED: Valid transfer should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 6: Transfer with Insufficient Balance =====
+try {
+    let result = transfer("bob", "alice", 600)
+    print("✗ TEST 6 FAILED: Should reject insufficient balance")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 6 PASSED: Correctly rejected insufficient balance")
+    passed = passed + 1
+}
+
+// ===== TEST 7: Transfer with Zero Amount =====
+try {
+    let result = transfer("alice", "bob", 0)
+    print("✗ TEST 7 FAILED: Should reject zero amount")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 7 PASSED: Correctly rejected zero amount")
+    passed = passed + 1
+}
+
+// ===== TEST 8: Transfer with Negative Amount =====
+try {
+    let result = transfer("alice", "bob", -50)
+    print("✗ TEST 8 FAILED: Should reject negative amount")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 8 PASSED: Correctly rejected negative amount")
+    passed = passed + 1
+}
+
+// ===== TEST 9: Owner-Only Action =====
+action withdraw(caller, amount) {
+    let owner = "0xOwner"
+    let balance = 10000
+    
+    require(caller == owner, "Not authorized")
+    require(amount > 0, "Amount must be positive")
+    require(balance >= amount, "Insufficient contract balance")
+    
+    balance = balance - amount
+    return balance
+}
+
+try {
+    let result = withdraw("0xOwner", 5000)
+    print("✓ TEST 9 PASSED: Owner withdrawal succeeded")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 9 FAILED: Owner withdrawal should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 10: Unauthorized Withdrawal =====
+try {
+    let result = withdraw("0xAttacker", 5000)
+    print("✗ TEST 10 FAILED: Should reject unauthorized caller")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 10 PASSED: Correctly rejected unauthorized caller")
+    passed = passed + 1
+}
+
+// ===== TEST 11: Multiple require() Statements =====
+action complexValidation(value1, value2, authorized) {
+    require(value1 > 0, "Value1 must be positive")
+    require(value2 > 0, "Value2 must be positive")
+    require(value1 < 100, "Value1 too large")
+    require(value2 < 100, "Value2 too large")
+    require(authorized, "Not authorized")
+    
+    return value1 + value2
+}
+
+try {
+    let result = complexValidation(50, 30, true)
+    print("✓ TEST 11 PASSED: All validations passed")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 11 FAILED: Valid inputs should pass")
+    failed = failed + 1
+}
+
+// ===== TEST 12: Multiple require() - First Fails =====
+try {
+    let result = complexValidation(-5, 30, true)
+    print("✗ TEST 12 FAILED: Should fail on first check")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 12 PASSED: Correctly failed on first check")
+    passed = passed + 1
+}
+
+// ===== TEST 13: Multiple require() - Middle Fails =====
+try {
+    let result = complexValidation(50, 150, true)
+    print("✗ TEST 13 FAILED: Should fail on middle check")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 13 PASSED: Correctly failed on middle check")
+    passed = passed + 1
+}
+
+// ===== TEST 14: Multiple require() - Last Fails =====
+try {
+    let result = complexValidation(50, 30, false)
+    print("✗ TEST 14 FAILED: Should fail on last check")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 14 PASSED: Correctly failed on last check")
+    passed = passed + 1
+}
+
+// ===== TEST 15: Integer Underflow Prevention =====
+action safeSubtract(a, b) {
+    require(a >= b, "Underflow prevented")
+    return a - b
+}
+
+try {
+    let result = safeSubtract(100, 50)
+    print("✓ TEST 15 PASSED: Valid subtraction")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 15 FAILED: Valid subtraction should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 16: Integer Underflow Detection =====
+try {
+    let result = safeSubtract(50, 100)
+    print("✗ TEST 16 FAILED: Should prevent underflow")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 16 PASSED: Underflow correctly prevented")
+    passed = passed + 1
+}
+
+// ===== TEST 17: Array Bounds Checking =====
+action safeArrayAccess(arr, index) {
+    require(index >= 0, "Index cannot be negative")
+    require(index < len(arr), "Index out of bounds")
+    return arr[index]
+}
+
+try {
+    let data = [10, 20, 30, 40, 50]
+    let value = safeArrayAccess(data, 2)
+    print("✓ TEST 17 PASSED: Valid array access")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 17 FAILED: Valid array access should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 18: Array Bounds - Negative Index =====
+try {
+    let data = [10, 20, 30, 40, 50]
+    let value = safeArrayAccess(data, -1)
+    print("✗ TEST 18 FAILED: Should reject negative index")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 18 PASSED: Correctly rejected negative index")
+    passed = passed + 1
+}
+
+// ===== TEST 19: Array Bounds - Too Large =====
+try {
+    let data = [10, 20, 30, 40, 50]
+    let value = safeArrayAccess(data, 10)
+    print("✗ TEST 19 FAILED: Should reject out of bounds")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 19 PASSED: Correctly rejected out of bounds")
+    passed = passed + 1
+}
+
+// ===== TEST 20: Null/Empty String Validation =====
+action validateInput(name, email) {
+    require(len(name) > 0, "Name cannot be empty")
+    require(len(email) > 0, "Email cannot be empty")
+    return "Validation passed"
+}
+
+try {
+    let result = validateInput("Alice", "alice@example.com")
+    print("✓ TEST 20 PASSED: Valid inputs accepted")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 20 FAILED: Valid inputs should pass")
+    failed = failed + 1
+}
+
+// ===== TEST 21: Empty String Rejection =====
+try {
+    let result = validateInput("", "alice@example.com")
+    print("✗ TEST 21 FAILED: Should reject empty name")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 21 PASSED: Correctly rejected empty name")
+    passed = passed + 1
+}
+
+// ===== TEST 22: Time-Based Validation =====
+action checkDeadline(currentTime, deadline) {
+    require(currentTime <= deadline, "Deadline has passed")
+    return "Action allowed"
+}
+
+try {
+    let result = checkDeadline(100, 200)
+    print("✓ TEST 22 PASSED: Before deadline")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 22 FAILED: Should allow before deadline")
+    failed = failed + 1
+}
+
+// ===== TEST 23: Deadline Exceeded =====
+try {
+    let result = checkDeadline(300, 200)
+    print("✗ TEST 23 FAILED: Should reject after deadline")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 23 PASSED: Correctly rejected after deadline")
+    passed = passed + 1
+}
+
+// ===== TEST 24: Percentage Validation =====
+action setFee(feePercent) {
+    require(feePercent >= 0, "Fee cannot be negative")
+    require(feePercent <= 100, "Fee cannot exceed 100%")
+    return feePercent
+}
+
+try {
+    let result = setFee(5)
+    print("✓ TEST 24 PASSED: Valid fee percentage")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 24 FAILED: Valid fee should be accepted")
+    failed = failed + 1
+}
+
+// ===== TEST 25: Fee Too High =====
+try {
+    let result = setFee(150)
+    print("✗ TEST 25 FAILED: Should reject fee > 100%")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 25 PASSED: Correctly rejected excessive fee")
+    passed = passed + 1
+}
+
+// ===== TEST 26: Fee Negative =====
+try {
+    let result = setFee(-10)
+    print("✗ TEST 26 FAILED: Should reject negative fee")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 26 PASSED: Correctly rejected negative fee")
+    passed = passed + 1
+}
+
+// ===== TEST 27: Complex Business Logic =====
+action processOrder(quantity, price, userBalance, inStock) {
+    require(quantity > 0, "Quantity must be positive")
+    require(price > 0, "Price must be positive")
+    
+    let totalCost = quantity * price
+    
+    require(userBalance >= totalCost, "Insufficient funds")
+    require(inStock >= quantity, "Insufficient stock")
+    
+    return totalCost
+}
+
+try {
+    let cost = processOrder(5, 10, 100, 50)
+    print("✓ TEST 27 PASSED: Valid order processed")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 27 FAILED: Valid order should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 28: Order - Insufficient Funds =====
+try {
+    let cost = processOrder(20, 10, 100, 50)
+    print("✗ TEST 28 FAILED: Should reject insufficient funds")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 28 PASSED: Correctly rejected insufficient funds")
+    passed = passed + 1
+}
+
+// ===== TEST 29: Order - Insufficient Stock =====
+try {
+    let cost = processOrder(60, 1, 100, 50)
+    print("✗ TEST 29 FAILED: Should reject insufficient stock")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 29 PASSED: Correctly rejected insufficient stock")
+    passed = passed + 1
+}
+
+// ===== TEST 30: Nested require() in Multiple Functions =====
+action validateUser(userId) {
+    require(userId > 0, "Invalid user ID")
+    return userId
+}
+
+action validateAmount(amount) {
+    require(amount > 0, "Amount must be positive")
+    require(amount <= 1000000, "Amount too large")
+    return amount
+}
+
+action processPayment(userId, amount) {
+    let validUser = validateUser(userId)
+    let validAmount = validateAmount(amount)
+    
+    require(validUser == userId, "User validation failed")
+    require(validAmount == amount, "Amount validation failed")
+    
+    return "Payment processed"
+}
+
+try {
+    let result = processPayment(123, 500)
+    print("✓ TEST 30 PASSED: Nested validations passed")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 30 FAILED: Nested validations should succeed")
+    failed = failed + 1
+}
+
+// ===== TEST 31: Nested require() - Inner Fails =====
+try {
+    let result = processPayment(-5, 500)
+    print("✗ TEST 31 FAILED: Should fail on inner validation")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 31 PASSED: Correctly failed on inner validation")
+    passed = passed + 1
+}
+
+// ===== TEST 32: Boolean Expression Validation =====
+action checkPermissions(isAdmin, isOwner, isActive) {
+    require(isAdmin or isOwner, "Requires admin or owner privileges")
+    require(isActive, "Account must be active")
+    return "Access granted"
+}
+
+try {
+    let result = checkPermissions(true, false, true)
+    print("✓ TEST 32 PASSED: Boolean logic validation passed")
+    passed = passed + 1
+} catch error {
+    print("✗ TEST 32 FAILED: Boolean validation should pass")
+    failed = failed + 1
+}
+
+// ===== TEST 33: Boolean Expression - Both False =====
+try {
+    let result = checkPermissions(false, false, true)
+    print("✗ TEST 33 FAILED: Should reject when both false")
+    failed = failed + 1
+} catch error {
+    print("✓ TEST 33 PASSED: Correctly rejected when both false")
+    passed = passed + 1
+}
+
+// ===== Summary =====
+print("\n=== Test Summary ===")
+print("Total Tests: " + string(passed + failed))
+print("Passed: " + string(passed))
+print("Failed: " + string(failed))
+
+if failed == 0 {
+    print("\n✓ ALL TESTS PASSED - Contract require() function is working correctly!")
+    print("Security Fix #3 Status: ✅ COMPLETE")
+} else {
+    print("\n✗ SOME TESTS FAILED - require() function needs fixes")
+    print("Security Fix #3 Status: ⚠️  INCOMPLETE")
+}

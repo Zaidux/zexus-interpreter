@@ -1,0 +1,354 @@
+# ============================================================================
+# PATH TRAVERSAL PROTECTION - COMPREHENSIVE TEST SUITE
+# ============================================================================
+# Tests the fix for CVE-2025-PATH-TRAVERSAL
+# Verifies path validation prevents directory traversal attacks
+# ============================================================================
+
+print "╔════════════════════════════════════════════════════════════════╗";
+print "║     PATH TRAVERSAL PROTECTION TEST SUITE - FIX VALIDATION     ║";
+print "╚════════════════════════════════════════════════════════════════╝";
+print "";
+
+import fs;
+
+test_results = [];
+total_tests = 0;
+passed_tests = 0;
+failed_tests = 0;
+
+action record_test(name: string, passed: boolean, details: string) {
+    total_tests = total_tests + 1;
+    if passed {
+        passed_tests = passed_tests + 1;
+        print "  ✅ PASS: " + name;
+    } else {
+        failed_tests = failed_tests + 1;
+        print "  ❌ FAIL: " + name;
+    }
+    if details != "" {
+        print "     " + details;
+    }
+}
+
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 1: Basic Path Traversal Attempts";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 1.1: Simple parent directory traversal
+print "Test 1.1: Simple ../ traversal";
+try {
+    content = fs.read_file("../../../etc/passwd");
+    record_test("Block ../../../etc/passwd", false, "Should have blocked traversal");
+} catch error {
+    record_test("Block ../../../etc/passwd", true, "Correctly blocked: " + error);
+}
+
+# Test 1.2: Windows-style traversal
+print "";
+print "Test 1.2: Windows-style traversal";
+try {
+    content = fs.read_file("..\\..\\..\\windows\\system32\\config\\sam");
+    record_test("Block Windows traversal", false, "Should have blocked traversal");
+} catch error {
+    record_test("Block Windows traversal", true, "Correctly blocked");
+}
+
+# Test 1.3: Encoded traversal (URL encoding)
+print "";
+print "Test 1.3: URL-encoded traversal";
+try {
+    content = fs.read_file("..%2F..%2F..%2Fetc%2Fpasswd");
+    record_test("Block URL-encoded traversal", false, "Should have blocked");
+} catch error {
+    record_test("Block URL-encoded traversal", true, "Correctly blocked");
+}
+
+# Test 1.4: Double encoding
+print "";
+print "Test 1.4: Double-encoded traversal";
+try {
+    content = fs.read_file("....//....//etc/passwd");
+    record_test("Block double-encoded traversal", false, "Should have blocked");
+} catch error {
+    record_test("Block double-encoded traversal", true, "Correctly blocked");
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 2: Absolute Path Exploits";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 2.1: Absolute Linux path
+print "Test 2.1: Absolute Linux path to sensitive file";
+try {
+    content = fs.read_file("/etc/shadow");
+    record_test("Block /etc/shadow", false, "Should have blocked absolute path");
+} catch error {
+    record_test("Block /etc/shadow", true, "Correctly blocked absolute path");
+}
+
+# Test 2.2: Absolute Windows path
+print "";
+print "Test 2.2: Absolute Windows path";
+try {
+    content = fs.read_file("C:\\Windows\\System32\\config\\SAM");
+    record_test("Block C:\\Windows\\System32", false, "Should have blocked");
+} catch error {
+    record_test("Block C:\\Windows\\System32", true, "Correctly blocked");
+}
+
+# Test 2.3: Root directory access
+print "";
+print "Test 2.3: Root directory listing";
+try {
+    files = fs.list_dir("/");
+    record_test("Block root listing", false, "Should have blocked root access");
+} catch error {
+    record_test("Block root listing", true, "Correctly blocked root access");
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 3: Mixed Traversal Patterns";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 3.1: Mix of forward and back slashes
+print "Test 3.1: Mixed slash types";
+try {
+    content = fs.read_file("../../../etc\\passwd");
+    record_test("Block mixed slashes", false, "Should have blocked");
+} catch error {
+    record_test("Block mixed slashes", true, "Correctly blocked");
+}
+
+# Test 3.2: Null byte injection
+print "";
+print "Test 3.2: Null byte injection attempt";
+try {
+    # In some systems, null bytes can truncate paths
+    content = fs.read_file("safe.txt\0../../../etc/passwd");
+    record_test("Block null byte injection", false, "Should have blocked");
+} catch error {
+    record_test("Block null byte injection", true, "Correctly blocked or safe");
+}
+
+# Test 3.3: Symlink traversal (if supported)
+print "";
+print "Test 3.3: Symlink-based traversal";
+try {
+    # This would require creating a symlink first, simplified test
+    content = fs.read_file("../../../../../../proc/self/environ");
+    record_test("Block symlink traversal", false, "Should have blocked");
+} catch error {
+    record_test("Block symlink traversal", true, "Correctly blocked");
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 4: Valid File Operations (Should Work)";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 4.1: Write and read local file
+print "Test 4.1: Write and read legitimate file";
+try {
+    test_content = "This is a security test file";
+    fs.write_file("test_secure.txt", test_content);
+    read_content = fs.read_file("test_secure.txt");
+    
+    if read_content == test_content {
+        record_test("Write/Read local file", true, "Successfully wrote and read");
+    } else {
+        record_test("Write/Read local file", false, "Content mismatch");
+    }
+} catch error {
+    record_test("Write/Read local file", false, "Error: " + error);
+}
+
+# Test 4.2: Subdirectory access (within allowed path)
+print "";
+print "Test 4.2: Create and access subdirectory";
+try {
+    fs.mkdir("test_subdir");
+    fs.write_file("test_subdir/file.txt", "Subdirectory test");
+    content = fs.read_file("test_subdir/file.txt");
+    
+    if content == "Subdirectory test" {
+        record_test("Subdirectory access", true, "Subdirectory operations work");
+    } else {
+        record_test("Subdirectory access", false, "Content mismatch");
+    }
+} catch error {
+    record_test("Subdirectory access", false, "Error: " + error);
+}
+
+# Test 4.3: File exists check
+print "";
+print "Test 4.3: File existence checks";
+try {
+    exists = fs.exists("test_secure.txt");
+    not_exists = fs.exists("../../../etc/passwd");
+    
+    if exists && !not_exists {
+        record_test("File existence checks", true, "Correctly reports existence");
+    } else {
+        record_test("File existence checks", false, "Incorrect existence check");
+    }
+} catch error {
+    record_test("File existence checks", false, "Error: " + error);
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 5: Write Operation Protection";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 5.1: Prevent writing to system files
+print "Test 5.1: Block write to /etc/passwd";
+try {
+    fs.write_file("/etc/passwd", "malicious content");
+    record_test("Block /etc/passwd write", false, "Should have blocked write");
+} catch error {
+    record_test("Block /etc/passwd write", true, "Correctly blocked write");
+}
+
+# Test 5.2: Prevent traversal in write
+print "";
+print "Test 5.2: Block traversal in write path";
+try {
+    fs.write_file("../../../tmp/malicious.txt", "bad content");
+    record_test("Block traversal write", false, "Should have blocked");
+} catch error {
+    record_test("Block traversal write", true, "Correctly blocked");
+}
+
+# Test 5.3: Prevent directory deletion outside allowed
+print "";
+print "Test 5.3: Block unauthorized directory removal";
+try {
+    fs.remove("../../../tmp/important");
+    record_test("Block unauthorized remove", false, "Should have blocked");
+} catch error {
+    record_test("Block unauthorized remove", true, "Correctly blocked");
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 6: Edge Cases";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 6.1: Empty string path
+print "Test 6.1: Empty path handling";
+try {
+    content = fs.read_file("");
+    record_test("Empty path handling", false, "Should have rejected empty path");
+} catch error {
+    record_test("Empty path handling", true, "Correctly rejected empty path");
+}
+
+# Test 6.2: Very long path with traversal
+print "";
+print "Test 6.2: Long path with traversal";
+try {
+    long_path = "../" + "../" + "../" + "../" + "../" + "../" + "../" + "../etc/passwd";
+    content = fs.read_file(long_path);
+    record_test("Long traversal path", false, "Should have blocked");
+} catch error {
+    record_test("Long traversal path", true, "Correctly blocked long traversal");
+}
+
+# Test 6.3: Current directory references
+print "";
+print "Test 6.3: Current directory (./file.txt)";
+try {
+    fs.write_file("./test_current.txt", "current dir test");
+    content = fs.read_file("./test_current.txt");
+    
+    if content == "current dir test" {
+        record_test("Current directory reference", true, "Correctly handles ./");
+    } else {
+        record_test("Current directory reference", false, "Failed to handle ./");
+    }
+} catch error {
+    record_test("Current directory reference", false, "Error: " + error);
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "TEST CATEGORY 7: Real-World Attack Scenarios";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Test 7.1: Reading SSH keys
+print "Test 7.1: Attempt to read SSH private keys";
+try {
+    content = fs.read_file("../../../../../../root/.ssh/id_rsa");
+    record_test("Block SSH key access", false, "Should have blocked SSH key access");
+} catch error {
+    record_test("Block SSH key access", true, "Protected SSH keys");
+}
+
+# Test 7.2: Reading environment variables
+print "";
+print "Test 7.2: Attempt to read /proc/self/environ";
+try {
+    content = fs.read_file("../../../proc/self/environ");
+    record_test("Block /proc access", false, "Should have blocked /proc");
+} catch error {
+    record_test("Block /proc access", true, "Protected /proc");
+}
+
+# Test 7.3: Database file access
+print "";
+print "Test 7.3: Attempt to access database files";
+try {
+    content = fs.read_file("../../../var/lib/mysql/mysql/user.MYD");
+    record_test("Block database file access", false, "Should have blocked DB access");
+} catch error {
+    record_test("Block database file access", true, "Protected database files");
+}
+
+print "";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "CLEANUP";
+print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+print "";
+
+# Clean up test files
+try {
+    fs.remove("test_secure.txt");
+    fs.remove("test_subdir/file.txt");
+    fs.remove("test_current.txt");
+    print "✓ Cleaned up test files";
+} catch error {
+    print "⚠ Warning: Could not clean all test files";
+}
+
+print "";
+print "╔════════════════════════════════════════════════════════════════╗";
+print "║                        TEST SUMMARY                            ║";
+print "╚════════════════════════════════════════════════════════════════╝";
+print "";
+print "Total Tests:  " + total_tests;
+print "Passed:       " + passed_tests + " ✅";
+print "Failed:       " + failed_tests + " ❌";
+print "";
+
+if failed_tests == 0 {
+    print "╔════════════════════════════════════════════════════════════════╗";
+    print "║  ✅ ALL TESTS PASSED - PATH TRAVERSAL FIX VERIFIED ✅         ║";
+    print "╚════════════════════════════════════════════════════════════════╝";
+} else {
+    print "╔════════════════════════════════════════════════════════════════╗";
+    print "║  ❌ SOME TESTS FAILED - REVIEW REQUIRED ❌                    ║";
+    print "╚════════════════════════════════════════════════════════════════╝";
+}
+
+print "";
+print "═══════════════════════════════════════════════════════════════";

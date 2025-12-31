@@ -4,75 +4,172 @@ import os
 import shutil
 import glob as glob_module
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+
+class PathTraversalError(Exception):
+    """Raised when path traversal attack is detected."""
+    pass
 
 
 class FileSystemModule:
-    """Provides file system operations."""
+    """Provides file system operations with path traversal protection."""
+    
+    # Allowed base directories for file operations
+    # If None, uses current working directory
+    _allowed_base_dirs: Optional[List[str]] = None
+    _strict_mode: bool = True  # Enable path validation by default
+    
+    @classmethod
+    def configure_security(cls, allowed_dirs: Optional[List[str]] = None, strict: bool = True):
+        """
+        Configure file system security settings.
+        
+        Args:
+            allowed_dirs: List of allowed base directories. None = use CWD only.
+            strict: Enable strict path validation
+        """
+        cls._allowed_base_dirs = allowed_dirs
+        cls._strict_mode = strict
+    
+    @classmethod
+    def _validate_path(cls, path: str, operation: str = "access") -> str:
+        """
+        Validate path to prevent traversal attacks.
+        
+        Args:
+            path: User-provided path
+            operation: Type of operation (for error messages)
+            
+        Returns:
+            Validated absolute path
+            
+        Raises:
+            PathTraversalError: If path traversal detected
+        """
+        if not cls._strict_mode:
+            return path
+        
+        # Convert to absolute path
+        abs_path = Path(path).resolve()
+        
+        # Check for common traversal patterns
+        path_str = str(path)
+        if '..' in path_str:
+            # Allow .. only if it doesn't escape allowed directories
+            pass  # Will be checked below
+        
+        # Determine allowed base directories
+        if cls._allowed_base_dirs is None:
+            # Default: only allow access within CWD
+            allowed_bases = [Path.cwd().resolve()]
+        else:
+            allowed_bases = [Path(d).resolve() for d in cls._allowed_base_dirs]
+        
+        # Check if resolved path is within allowed directories
+        is_allowed = False
+        for base in allowed_bases:
+            try:
+                abs_path.relative_to(base)
+                is_allowed = True
+                break
+            except ValueError:
+                continue
+        
+        if not is_allowed:
+            raise PathTraversalError(
+                f"Path traversal detected: '{path}' resolves to '{abs_path}' "
+                f"which is outside allowed directories. "
+                f"Allowed: {[str(b) for b in allowed_bases]}"
+            )
+        
+        return str(abs_path)
 
     @staticmethod
     def read_file(path: str, encoding: str = 'utf-8') -> str:
         """Read entire file as text."""
-        with open(path, 'r', encoding=encoding) as f:
+        validated_path = FileSystemModule._validate_path(path, "read")
+        with open(validated_path, 'r', encoding=encoding) as f:
             return f.read()
 
     @staticmethod
     def write_file(path: str, content: str, encoding: str = 'utf-8') -> None:
         """Write text to file."""
+        validated_path = FileSystemModule._validate_path(path, "write")
         # Create parent directory if it doesn't exist
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w', encoding=encoding) as f:
+        Path(validated_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(validated_path, 'w', encoding=encoding) as f:
             f.write(content)
 
     @staticmethod
     def append_file(path: str, content: str, encoding: str = 'utf-8') -> None:
         """Append text to file."""
+        validated_path = FileSystemModule._validate_path(path, "append")
         # Create parent directory if it doesn't exist (for consistency with write_file)
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'a', encoding=encoding) as f:
+        Path(validated_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(validated_path, 'a', encoding=encoding) as f:
             f.write(content)
 
     @staticmethod
     def read_binary(path: str) -> bytes:
         """Read file as binary."""
-        with open(path, 'rb') as f:
+        validated_path = FileSystemModule._validate_path(path, "read_binary")
+        with open(validated_path, 'rb') as f:
             return f.read()
 
     @staticmethod
     def write_binary(path: str, data: bytes) -> None:
         """Write binary data to file."""
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'wb') as f:
+        validated_path = FileSystemModule._validate_path(path, "write_binary")
+        Path(validated_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(validated_path, 'wb') as f:
             f.write(data)
 
     @staticmethod
     def exists(path: str) -> bool:
         """Check if file or directory exists."""
-        return os.path.exists(path)
+        try:
+            validated_path = FileSystemModule._validate_path(path, "exists")
+            return os.path.exists(validated_path)
+        except PathTraversalError:
+            return False  # Return False for invalid paths instead of error
 
     @staticmethod
     def is_file(path: str) -> bool:
         """Check if path is a file."""
-        return os.path.isfile(path)
+        try:
+            validated_path = FileSystemModule._validate_path(path, "is_file")
+            return os.path.isfile(validated_path)
+        except PathTraversalError:
+            return False
 
     @staticmethod
     def is_dir(path: str) -> bool:
         """Check if path is a directory."""
-        return os.path.isdir(path)
+        try:
+            validated_path = FileSystemModule._validate_path(path, "is_dir")
+            return os.path.isdir(validated_path)
+        except PathTraversalError:
+            return False
 
     @staticmethod
     def mkdir(path: str, parents: bool = True) -> None:
-        """Create directory."""
-        Path(path).mkdir(parents=parents, exist_ok=True)
+        validated_path = FileSystemModule._validate_path(path, "remove")
+        os.remove(validated_path)
 
     @staticmethod
-    def rmdir(path: str, recursive: bool = False) -> None:
-        """Remove directory."""
-        if recursive:
-            shutil.rmtree(path)
-        else:
-            os.rmdir(path)
+    def rename(old_path: str, new_path: str) -> None:
+        """Rename/move file or directory."""
+        validated_old = FileSystemModule._validate_path(old_path, "rename_source")
+        validated_new = FileSystemModule._validate_path(new_path, "rename_dest")
+        os.rename(validated_old, validated_new)
 
+    @staticmethod
+    def copy_file(src: str, dst: str) -> None:
+        """Copy file."""
+        validated_src = FileSystemModule._validate_path(src, "copy_source")
+        validated_dst = FileSystemModule._validate_path(dst, "copy_dest")
+        shutil.copy2(validated_src, validated_
     @staticmethod
     def remove(path: str) -> None:
         """Remove file."""
@@ -91,7 +188,8 @@ class FileSystemModule:
     @staticmethod
     def copy_dir(src: str, dst: str) -> None:
         """Copy directory recursively."""
-        shutil.copytree(src, dst)
+        validated_path = FileSystemModule._validate_path(path, "list_dir")
+        return os.listdir(validated_c, dst)
 
     @staticmethod
     def list_dir(path: str = '.') -> List[str]:

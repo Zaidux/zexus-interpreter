@@ -128,15 +128,35 @@ def disable_memory_tracking():
 # PERSISTENT STORAGE BACKEND
 # ===============================================
 
+class StorageLimitError(Exception):
+    """Raised when persistent storage limits are exceeded"""
+    pass
+
+
 class PersistentStorage:
-    """Persistent storage for variables using SQLite"""
+    """Persistent storage for variables using SQLite with size limits"""
     
-    def __init__(self, scope_id: str, storage_dir: str = PERSISTENCE_DIR):
+    # Default limits (configurable)
+    DEFAULT_MAX_ITEMS = 10000  # Maximum number of stored variables
+    DEFAULT_MAX_SIZE_MB = 100  # Maximum storage size in MB
+    
+    def __init__(self, scope_id: str, storage_dir: str = PERSISTENCE_DIR,
+                 max_items: int = None, max_size_mb: int = None):
         self.scope_id = scope_id
         self.db_path = os.path.join(storage_dir, f"{scope_id}.sqlite")
         self.conn = None
         self.lock = Lock()
+        
+        # Storage limits
+        self.max_items = max_items if max_items is not None else self.DEFAULT_MAX_ITEMS
+        self.max_size_bytes = (max_size_mb if max_size_mb is not None else self.DEFAULT_MAX_SIZE_MB) * 1024 * 1024
+        
+        # Usage tracking
+        self.current_item_count = 0
+        self.current_size_bytes = 0
+        
         self._init_db()
+        self._update_usage_stats()
     
     def _init_db(self):
         """Initialize SQLite database"""
@@ -147,6 +167,7 @@ class PersistentStorage:
                 name TEXT PRIMARY KEY,
                 type TEXT NOT NULL,
                 value TEXT NOT NULL,
+                size_bytes INTEGER DEFAULT 0,
                 is_const INTEGER DEFAULT 0,
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL
@@ -157,24 +178,96 @@ class PersistentStorage:
         ''')
         self.conn.commit()
     
+    def _update_usage_stats(self):
+        """Update current usage statistics"""
+        with self.lock:
+            cursor = self.conn.cursor()
+            
+            # Count items
+            cursor.execute('SELECT COUNT(*) FROM variables')
+            self.current_item_count = cursor.fetchone()[0]
+            
+            # Calculate total size
+            cursor.execute('SELECT SUM(size_bytes) FROM variables')
+            result = cursor.fetchone()[0]
+            self.current_size_bytes = result if result else 0
+    
+    def _calculate_size(self, serialized: Dict[str, str]) -> int:
+        """Calculate size of serialized data in bytes"""
+        # Approximate size: length of type + value strings
+        size = len(serialized['type']) + len(serialized['value'])
+        return size
+    
+    def _check_limits(self, name: str, new_size: int) -> None:
+        """Check if adding/updating a variable would exceed limits"""
+        # Get current size of existing variable if it exists
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT size_bytes FROM variables WHERE name = ?', (name,))
+        row = cursor.fetchone()
+        existing_size = row[0] if row else 0
+        is_update = row is not None
+        
+        # Calculate new totals
+        new_item_count = self.current_item_count if is_update else self.current_item_count + 1
+        new_total_size = self.current_size_bytes - existing_size + new_size
+        
+        # Check item limit
+        if new_item_count > self.max_items:
+            raise StorageLimitError(
+                f"Persistent storage item limit exceeded: {new_item_count} > {self.max_items}. "
+                f"Cannot store variable '{name}'. "
+                f"Consider increasing max_items or cleaning up old variables."
+            )
+        
+        # Check size limit
+        if new_total_size > self.max_size_bytes:
+            size_mb = new_total_size / (1024 * 1024)
+            limit_mb = self.max_size_bytes / (1024 * 1024)
+            raise StorageLimitError(
+                f"Persistent storage size limit exceeded: {size_mb:.2f}MB > {limit_mb:.2f}MB. "
+                f"Cannot store variable '{name}' ({new_size} bytes). "
+                f"Consider increasing max_size_mb or cleaning up old data."
+            )
+    
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Get current storage usage statistics"""
+        return {
+            'item_count': self.current_item_count,
+            'max_items': self.max_items,
+            'items_remaining': self.max_items - self.current_item_count,
+            'size_bytes': self.current_size_bytes,
+            'size_mb': self.current_size_bytes / (1024 * 1024),
+            'max_size_mb': self.max_size_bytes / (1024 * 1024),
+            'size_remaining_mb': (self.max_size_bytes - self.current_size_bytes) / (1024 * 1024),
+            'usage_percent': (self.current_size_bytes / self.max_size_bytes * 100) if self.max_size_bytes > 0 else 0
+        }
+    
     def set(self, name: str, value: Object, is_const: bool = False):
-        """Persist a variable"""
+        """Persist a variable with size limit checks"""
         with self.lock:
             serialized = self._serialize(value)
+            size_bytes = self._calculate_size(serialized)
+            
+            # Check limits before storing
+            self._check_limits(name, size_bytes)
+            
             cursor = self.conn.cursor()
             
             import time
             timestamp = time.time()
             
             cursor.execute('''
-                INSERT OR REPLACE INTO variables (name, type, value, is_const, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 
+                INSERT OR REPLACE INTO variables (name, type, value, size_bytes, is_const, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 
                     COALESCE((SELECT created_at FROM variables WHERE name = ?), ?),
                     ?)
-            ''', (name, serialized['type'], serialized['value'], 1 if is_const else 0, 
+            ''', (name, serialized['type'], serialized['value'], size_bytes, 1 if is_const else 0, 
                   name, timestamp, timestamp))
             
             self.conn.commit()
+            
+            # Update usage stats
+            self._update_usage_stats()
     
     def get(self, name: str) -> Optional[Object]:
         """Retrieve a persisted variable"""
@@ -186,6 +279,9 @@ class PersistentStorage:
             if row is None:
                 return None
             
+            
+            # Update usage stats
+            self._update_usage_stats()
             return self._deserialize({'type': row[0], 'value': row[1]})
     
     def delete(self, name: str):
@@ -213,6 +309,9 @@ class PersistentStorage:
     def clear(self):
         """Clear all persisted variables"""
         with self.lock:
+            
+            # Update usage stats
+            self._update_usage_stats()
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM variables')
             self.conn.commit()

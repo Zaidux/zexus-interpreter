@@ -511,7 +511,8 @@ class UltimateParser:
             elif self.cur_token_is(STATE):
                 print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
                 node = self.parse_state_statement()
-            # REQUIRE is now handled by ContextStackParser for enhanced syntax support
+            elif self.cur_token_is(REQUIRE):
+                node = self.parse_require_statement()
             elif self.cur_token_is(REVERT):
                 print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
                 node = self.parse_revert_statement()
@@ -3698,6 +3699,7 @@ class UltimateParser:
         
         Asserts condition, reverts transaction if false.
         """
+        print(f"[DEBUG PARSER] parse_require_statement called", flush=True)
         token = self.cur_token
         
         if not self.expect_peek(LPAREN):
@@ -3721,6 +3723,7 @@ class UltimateParser:
         if self.peek_token_is(SEMICOLON):
             self.next_token()
         
+        print(f"[DEBUG PARSER] Creating RequireStatement with condition={condition}, message={message}", flush=True)
         return RequireStatement(condition=condition, message=message)
     
     def parse_revert_statement(self):

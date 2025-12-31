@@ -647,9 +647,10 @@ class StructuralAnalyzer:
                     stmt_tokens.append(tj)
                     j += 1
                     
-                    # MODIFIED: For RETURN, CONTINUE, and PRINT, stop after closing parens at nesting 0
-                    # PRINT can have multiple comma-separated arguments inside the parens
-                    if t.type in {RETURN, CONTINUE, PRINT} and nesting == 0 and tj.type == RPAREN:
+                    # MODIFIED: For RETURN, CONTINUE, PRINT, and REQUIRE, stop after closing parens at nesting 0
+                    # These can have multiple comma-separated arguments inside the parens
+                    # NOTE: 't' is the statement starter token (first token), 'tj' is the just-collected token
+                    if t.type in {RETURN, CONTINUE, PRINT, REQUIRE} and nesting == 0 and tj.type == RPAREN:
                         break
                     
                     # If we just closed a brace block and are back at nesting 0, stop
