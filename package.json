@@ -1,0 +1,66 @@
+{
+  "name": "zexus",
+  "version": "1.6.2",
+  "description": "A modern, security-first programming language with blockchain support",
+  "main": "index.js",
+  "bin": {
+    "zexus": "./bin/zexus",
+    "zx": "./bin/zx",
+    "zpm": "./bin/zpm",
+    "zx-run": "./bin/zx-run",
+    "zx-dev": "./bin/zx-dev",
+    "zx-deploy": "./bin/zx-deploy",
+    "zpics": "./bin/zpics"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublishOnly": "npm run build",
+    "build": "echo \"Build step - ensure Python package is ready\"",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zaidux/zexus-interpreter.git"
+  },
+  "keywords": [
+    "programming-language",
+    "interpreter",
+    "compiler",
+    "blockchain",
+    "smart-contracts",
+    "security",
+    "policy-as-code",
+    "zexus",
+    "vm",
+    "language-server"
+  ],
+  "author": "Zaidux <zaiduabubakar777@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Zaidux/zexus-interpreter/issues"
+  },
+  "homepage": "https://github.com/Zaidux/zexus-interpreter#readme",
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "zexus.json",
+    "shared_config.json",
+    "README.md",
+    "LICENSE",
+    "scripts/postinstall.js"
+  ],
+  "dependencies": {},
+  "peerDependencies": {
+    "python3": ">=3.8"
+  },
+  "devDependencies": {}
+}
