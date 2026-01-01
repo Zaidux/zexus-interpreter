@@ -1,0 +1,22 @@
+# Call Depth Limit Test
+# Tests that excessive recursion is prevented
+
+print "=========================================="
+print "CALL DEPTH LIMIT TEST"
+print "=========================================="
+print ""
+
+print "Testing excessive recursion (should hit call depth limit)..."
+print "Attempting to recurse 200 levels (limit is 100)"
+print ""
+
+action infinite_recursion(n) {
+    if (n <= 0) {
+        return 0
+    }
+    return infinite_recursion(n - 1) + 1
+}
+
+# This should fail with call depth limit error
+let result = infinite_recursion(200)
+print "❌ ERROR: Should have hit call depth limit!"

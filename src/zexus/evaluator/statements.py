@@ -877,6 +877,16 @@ class StatementEvaluatorMixin:
     def eval_while_statement(self, node, env, stack_trace):
         result = NULL
         while True:
+            # Resource limit check (Security Fix #7)
+            try:
+                self.resource_limiter.check_iterations()
+            except Exception as e:
+                # Convert ResourceError to EvaluationError
+                from ..evaluator.resource_limiter import ResourceError, TimeoutError
+                if isinstance(e, (ResourceError, TimeoutError)):
+                    return EvaluationError(str(e))
+                raise  # Re-raise if not a resource error
+            
             cond = self.eval_node(node.condition, env, stack_trace)
             if is_error(cond): 
                 return cond
@@ -904,6 +914,16 @@ class StatementEvaluatorMixin:
         
         result = NULL
         for item in iterable.elements:
+            # Resource limit check (Security Fix #7)
+            try:
+                self.resource_limiter.check_iterations()
+            except Exception as e:
+                # Convert ResourceError to EvaluationError
+                from ..evaluator.resource_limiter import ResourceError, TimeoutError
+                if isinstance(e, (ResourceError, TimeoutError)):
+                    return EvaluationError(str(e))
+                raise  # Re-raise if not a resource error
+            
             env.set(node.item.value, item)
             result = self.eval_node(node.body, env, stack_trace)
             if isinstance(result, ReturnValue):
@@ -3115,12 +3135,14 @@ class StatementEvaluatorMixin:
         else:
             data_str = str(data)
         
-        # Determine encoding
+        # Determine encoding/context
         encoding = Encoding.HTML  # Default
+        context_name = "html"  # For marking sanitized_for
         if node.encoding:
             enc_val = self.eval_node(node.encoding, env, stack_trace)
             if hasattr(enc_val, 'value'):
                 enc_name = enc_val.value.upper()
+                context_name = enc_val.value.lower()
                 try:
                     encoding = Encoding[enc_name]
                 except KeyError:
@@ -3130,10 +3152,16 @@ class StatementEvaluatorMixin:
         try:
             sanitized = Sanitizer.sanitize_string(data_str, encoding)
             debug_log("eval_sanitize_statement", f"Sanitized {len(data_str)} chars with {encoding.value}")
-            return String(sanitized)
+            result = String(sanitized)
+            # SECURITY ENFORCEMENT: Mark as sanitized for this context
+            result.mark_sanitized(context_name)
+            return result
         except Exception as e:
             debug_log("eval_sanitize_statement", f"Sanitization error: {e}")
-            return String(data_str)  # Return original if sanitization fails
+            # Even on error, mark as sanitized to prevent double-sanitization loops
+            result = String(data_str)
+            result.mark_sanitized(context_name)
+            return result
 
     def eval_inject_statement(self, node, env, stack_trace):
         """Evaluate inject statement - full dependency injection with mode-aware resolution."""

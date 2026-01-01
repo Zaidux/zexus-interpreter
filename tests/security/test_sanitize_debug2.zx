@@ -1,0 +1,14 @@
+#!/usr/bin/env zexus
+# Debug sanitization marking
+
+print "Test 1: Creating and sanitizing"
+let username = "alice"
+let safe = sanitize username, "sql"
+print "Sanitization complete"
+
+print "Test 2: Concatenating trusted literal with sanitized variable"
+let part1 = "SELECT FROM users WHERE name = "
+let result = part1 + safe
+print "Concatenation successful!"
+
+print "Done"

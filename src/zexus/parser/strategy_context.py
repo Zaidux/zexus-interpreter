@@ -4608,7 +4608,7 @@ class ContextStackParser:
         
         Returns a SanitizeStatement which can be evaluated as an expression.
         """
-        print("  🔧 [Sanitize Expression] Parsing sanitize expression")
+        # print("  🔧 [Sanitize Expression] Parsing sanitize expression")
         if not tokens or tokens[0].type != SANITIZE:
             return None
         

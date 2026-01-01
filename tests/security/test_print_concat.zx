@@ -1,0 +1,4 @@
+#!/usr/bin/env zexus
+let x = "test";
+print x;
+print "Literal: " + x;

@@ -87,7 +87,7 @@ if PYGLS_AVAILABLE:
         """Zexus Language Server implementation."""
 
         def __init__(self):
-            super().__init__('zexus-language-server', 'v1.6.2')
+            super().__init__('zexus-language-server', 'v1.6.3')
             self.completion_provider = CompletionProvider()
             self.symbol_provider = SymbolProvider()
             self.hover_provider = HoverProvider()

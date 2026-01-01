@@ -1,0 +1,55 @@
+#!/usr/bin/env zexus
+# Comprehensive test suite for mandatory security enforcement
+
+print "=== Security Enforcement Test Suite ==="
+
+# Test 1: Trusted literals are allowed in any context
+print "\nTest 1: Literals are trusted"
+let sql_literal = "SELECT * FROM users"
+let html_literal = "<div>Hello</div>"
+print "✓ Literals work without sanitization"
+
+# Test 2: Sanitized strings work in appropriate contexts
+print "\nTest 2: Sanitized strings in appropriate contexts"
+let user_input = "alice"
+let safe_sql = sanitize user_input, "sql"
+let query = "SELECT * FROM users WHERE name = '" + safe_sql + "'"
+print "✓ SQL sanitization works"
+
+let user_html = "<script>alert('xss')</script>"
+let safe_html = sanitize user_html, "html"
+let page = "<div>" + safe_html + "</div>"
+print "✓ HTML sanitization works"
+
+# Test 3: URL sanitization
+print "\nTest 3: URL sanitization"
+let user_url = "javascript:alert('xss')"
+let safe_url = sanitize user_url, "url"
+let link = "<a href='" + safe_url + "'>Click</a>"
+print "✓ URL sanitization works"
+
+# Test 4: Shell sanitization
+print "\nTest 4: Shell sanitization"
+let user_cmd = "file.txt; rm -rf /"
+let safe_cmd = sanitize user_cmd, "shell"
+let command = "cat " + safe_cmd
+print "✓ Shell sanitization works"
+
+# Test 5: Multiple concatenations preserve sanitization
+print "\nTest 5: Multiple concatenations"
+let username = "bob"
+let safe_user = sanitize username, "sql"
+let complex_query = "SELECT * FROM users WHERE name = '" + safe_user + "' AND active = 1"
+print "✓ Multiple concatenations work"
+
+# Test 6: Both operands sanitized for same context
+print "\nTest 6: Both operands sanitized"
+let first_name = "Alice"
+let last_name = "Smith"
+let safe_first = sanitize first_name, "sql"
+let safe_last = sanitize last_name, "sql"
+let full_query = "SELECT * FROM users WHERE first = '" + safe_first + "' AND last = '" + safe_last + "'"
+print "✓ Both sanitized operands work"
+
+print "\n✅ All security enforcement tests passed!"
+print "Security is working as expected - literals trusted, sanitized strings allowed in context"

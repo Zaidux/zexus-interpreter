@@ -1,0 +1,13 @@
+#!/usr/bin/env zexus
+# Test that sanitization context is enforced
+
+print "=== Testing Context Mismatch Detection ==="
+
+print "\nAttempting to use HTML-sanitized data in SQL context..."
+print "This SHOULD fail because contexts don't match:"
+
+let user_data = "test"
+let safe_html = sanitize user_data, "html"
+let query = "SELECT * FROM users WHERE name = '" + safe_html + "'"
+
+print "❌ This should not execute!"

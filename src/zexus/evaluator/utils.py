@@ -89,20 +89,26 @@ def _zexus_to_python(value):
     else:
         return str(value)
 
-def _python_to_zexus(value):
-    """Convert Python native types to Zexus objects"""
+def _python_to_zexus(value, mark_untrusted=False):
+    """Convert Python native types to Zexus objects
+    
+    Args:
+        value: Python value to convert
+        mark_untrusted: If True, mark strings as untrusted (external data)
+    """
     from ..object import Map, List, String, Integer, Float, Boolean as BooleanObj
     
     if isinstance(value, dict):
         pairs = {}
         for k, v in value.items():
-            pairs[k] = _python_to_zexus(v)
+            pairs[k] = _python_to_zexus(v, mark_untrusted)
         return Map(pairs)
     elif isinstance(value, list):
-        zexus_list = List([_python_to_zexus(item) for item in value])
+        zexus_list = List([_python_to_zexus(item, mark_untrusted) for item in value])
         return zexus_list
     elif isinstance(value, str):
-        return String(value)
+        # Mark strings as untrusted if from external source (HTTP, DB, etc.)
+        return String(value, is_trusted=not mark_untrusted)
     elif isinstance(value, int):
         return Integer(value)
     elif isinstance(value, float):
@@ -112,7 +118,7 @@ def _python_to_zexus(value):
     elif value is None:
         return NULL
     else:
-        return String(str(value))
+        return String(str(value), is_trusted=not mark_untrusted)
 
 def _to_str(obj):
     """Helper to convert Zexus object to string"""

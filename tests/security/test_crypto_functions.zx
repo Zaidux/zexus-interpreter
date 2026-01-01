@@ -1,0 +1,223 @@
+#!/usr/bin/env zexus
+# SECURITY FIX #5: Cryptographic Functions Test Suite
+# Tests hash_password, verify_password, crypto_random, constant_time_compare
+
+print "╔══════════════════════════════════════════════════════════════╗"
+print "║  SECURITY FIX #5: CRYPTOGRAPHIC FUNCTIONS                   ║"
+print "║  Testing: Password Hashing & Secure Random Generation      ║"
+print "╚══════════════════════════════════════════════════════════════╝"
+print ""
+
+# ============================================================================
+# TEST 1: Password Hashing (bcrypt)
+# ============================================================================
+print "━━━ Test 1: Secure Password Hashing ━━━"
+
+let password = "MySecurePassword123!"
+print "Original password: " + password
+
+print "\nHashing password with bcrypt..."
+let hashed = hash_password(password)
+print "✓ Password hashed successfully"
+print "Hash: " + hashed
+print "Hash length: " + string(len(hashed))
+
+# Verify hashed password doesn't contain original
+if hashed != password {
+    print "✓ Hash is different from plain text password"
+} else {
+    print "❌ ERROR: Hash matches plain text!"
+}
+
+print ""
+
+# ============================================================================
+# TEST 2: Password Verification
+# ============================================================================
+print "━━━ Test 2: Password Verification ━━━"
+
+print "Verifying correct password..."
+let is_valid = verify_password(password, hashed)
+if is_valid {
+    print "✓ Correct password verified successfully"
+} else {
+    print "❌ ERROR: Correct password not verified!"
+}
+
+print "\nVerifying incorrect password..."
+let wrong_password = "WrongPassword123"
+let is_invalid = verify_password(wrong_password, hashed)
+if is_invalid {
+    print "❌ ERROR: Wrong password was accepted!"
+} else {
+    print "✓ Wrong password correctly rejected"
+}
+
+print ""
+
+# ============================================================================
+# TEST 3: Hash Uniqueness (Salt)
+# ============================================================================
+print "━━━ Test 3: Hash Uniqueness (Salt Verification) ━━━"
+
+let hash1 = hash_password(password)
+let hash2 = hash_password(password)
+
+print "Hash 1: " + hash1
+print "Hash 2: " + hash2
+
+if hash1 != hash2 {
+    print "✓ Different salts used - hashes are unique"
+} else {
+    print "❌ WARNING: Same hash for same password (salt may not be random)"
+}
+
+# Both should still verify
+let verify1 = verify_password(password, hash1)
+let verify2 = verify_password(password, hash2)
+
+if verify1 and verify2 {
+    print "✓ Both unique hashes verify correctly"
+} else {
+    print "❌ ERROR: Hash verification failed!"
+}
+
+print ""
+
+# ============================================================================
+# TEST 4: Cryptographically Secure Random
+# ============================================================================
+print "━━━ Test 4: Cryptographically Secure Random Generation ━━━"
+
+print "Generating secure random tokens..."
+
+let token1 = crypto_random()
+print "Token 1 (32 bytes): " + token1
+print "Length: " + string(len(token1)) + " chars (64 hex chars expected)"
+
+let token2 = crypto_random(16)
+print "\nToken 2 (16 bytes): " + token2
+print "Length: " + string(len(token2)) + " chars (32 hex chars expected)"
+
+if token1 != token2 {
+    print "\n✓ Tokens are unique (unpredictable)"
+} else {
+    print "\n❌ ERROR: Tokens are identical!"
+}
+
+# Generate multiple tokens to verify randomness
+let token3 = crypto_random()
+let token4 = crypto_random()
+
+if token1 != token3 and token1 != token4 and token3 != token4 {
+    print "✓ Multiple tokens all unique (good entropy)"
+} else {
+    print "❌ WARNING: Token collision detected"
+}
+
+print ""
+
+# ============================================================================
+# TEST 5: Constant-Time Comparison (Timing Attack Protection)
+# ============================================================================
+print "━━━ Test 5: Constant-Time String Comparison ━━━"
+
+let secret1 = "SuperSecretToken12345"
+let secret2 = "SuperSecretToken12345"
+let secret3 = "WrongToken"
+
+print "Testing constant-time comparison..."
+
+let match = constant_time_compare(secret1, secret2)
+if match {
+    print "✓ Identical secrets match"
+} else {
+    print "❌ ERROR: Identical strings not equal!"
+}
+
+let no_match = constant_time_compare(secret1, secret3)
+if no_match {
+    print "❌ ERROR: Different strings matched!"
+} else {
+    print "✓ Different secrets don't match"
+}
+
+print "\n✓ Constant-time comparison protects against timing attacks"
+
+print ""
+
+# ============================================================================
+# TEST 6: Real-World Authentication Workflow
+# ============================================================================
+print "━━━ Test 6: Real-World Authentication Workflow ━━━"
+
+print "Simulating user registration and login..."
+
+# Registration
+let user_password = "UserPassword2024!"
+print "\n1. User Registration:"
+print "   Password: " + user_password
+
+let stored_hash = hash_password(user_password)
+print "   ✓ Password hashed and stored"
+print "   Hash: " + stored_hash
+
+# Login - Correct password
+print "\n2. User Login (Correct Password):"
+let login_attempt = "UserPassword2024!"
+let auth_success = verify_password(login_attempt, stored_hash)
+
+if auth_success {
+    print "   ✓ Authentication successful"
+    
+    # Generate session token
+    let session_token = crypto_random(32)
+    print "   ✓ Session token generated: " + session_token
+} else {
+    print "   ❌ Authentication failed!"
+}
+
+# Login - Wrong password
+print "\n3. User Login (Wrong Password):"
+let wrong_attempt = "WrongPassword!"
+let auth_fail = verify_password(wrong_attempt, stored_hash)
+
+if auth_fail {
+    print "   ❌ ERROR: Wrong password accepted!"
+} else {
+    print "   ✓ Wrong password rejected"
+}
+
+print ""
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+print "╔══════════════════════════════════════════════════════════════╗"
+print "║                    IMPLEMENTATION SUMMARY                    ║"
+print "╚══════════════════════════════════════════════════════════════╝"
+print ""
+print "✅ hash_password() - bcrypt with automatic salting"
+print "   • Industry-standard password hashing"
+print "   • Unique salt for each hash"
+print "   • Computationally expensive (resistant to brute force)"
+print ""
+print "✅ verify_password() - Constant-time verification"
+print "   • Secure password comparison"
+print "   • Timing-attack resistant"
+print "   • Works with bcrypt hashes"
+print ""
+print "✅ crypto_random() - Cryptographically secure RNG"
+print "   • Uses secrets module (CSPRNG)"
+print "   • Suitable for tokens, session IDs, API keys"
+print "   • Configurable length"
+print ""
+print "✅ constant_time_compare() - Timing-attack protection"
+print "   • Prevents timing-based attacks"
+print "   • Safe for comparing secrets, tokens, hashes"
+print "   • Uses secrets.compare_digest()"
+print ""
+print "╔══════════════════════════════════════════════════════════════╗"
+print "║  SECURITY FIX #5: COMPLETE ✅                                ║"
+print "║  Zexus now has enterprise-grade cryptographic functions!    ║"
+print "╚══════════════════════════════════════════════════════════════╝"

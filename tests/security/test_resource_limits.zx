@@ -1,0 +1,105 @@
+# Resource Limits Test Suite
+# Security Fix #7: Resource Limits
+# Tests loop iteration limits, call depth limits, and resource exhaustion prevention
+
+print "=========================================="
+print "RESOURCE LIMITS TEST SUITE"
+print "=========================================="
+print ""
+
+# Test 1: Normal loops within limits
+print "Test 1: Normal loops within limits"
+let count = 0
+let i = 0
+while (i < 100) {
+    count = count + 1
+    i = i + 1
+}
+print "✓ Normal while loop completed (100 iterations)"
+
+let sum = 0
+foreach item in [1, 2, 3, 4, 5] {
+    sum = sum + item
+}
+print "✓ Normal foreach loop completed (5 iterations)"
+print ""
+
+# Test 2: Large but safe loop (under 1M limit)
+print "Test 2: Large loop (10,000 iterations)"
+let big_count = 0
+let j = 0
+while (j < 10000) {
+    big_count = big_count + 1
+    j = j + 1
+}
+print "✓ Large loop completed successfully"
+print ""
+
+# Test 3: Normal recursion within limits
+print "Test 3: Normal recursion within limits"
+action factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+let fact5 = factorial(5)
+print "✓ factorial(5) calculated successfully"
+
+let fact10 = factorial(10)
+print "✓ factorial(10) calculated successfully"
+print ""
+
+# Test 4: Nested function calls within limits
+print "Test 4: Nested function calls"
+action level3() {
+    return 42
+}
+
+action level2() {
+    return level3() + 1
+}
+
+action level1() {
+    return level2() + 1
+}
+
+let result = level1()
+print "✓ Nested calls (3 levels) succeeded"
+print ""
+
+# Test 5: Deep recursion (50 levels - within 100 limit)
+print "Test 5: Deep recursion (50 levels)"
+action deep_sum(n) {
+    if (n <= 0) {
+        return 0
+    }
+    return n + deep_sum(n - 1)
+}
+
+let sum50 = deep_sum(50)
+print "✓ deep_sum(50) calculated successfully"
+print ""
+
+# Test 6: Iteration limit violation (should fail)
+print "Test 6: Iteration limit violation (2M iterations)"
+print "Expected: Resource limit error"
+print ""
+
+action test_iteration_limit() {
+    let k = 0
+    let counter = 0
+    # Try to exceed 1,000,000 iterations
+    while (k < 2000000) {
+        counter = counter + 1
+        k = k + 1
+    }
+    return counter
+}
+
+# This should fail with resource limit error
+let limit_test = test_iteration_limit()
+print "❌ ERROR: Should have hit iteration limit!"
+print ""
+

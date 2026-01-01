@@ -1,0 +1,11 @@
+#!/usr/bin/env zexus
+# Test variable assignment
+
+let data = "test";
+print data;
+print "Value: " + data;
+
+let safe = sanitize data, "sql";  
+print safe;
+
+print "Done";

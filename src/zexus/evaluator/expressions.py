@@ -108,19 +108,38 @@ class ExpressionEvaluatorMixin:
         left_val = left.value
         right_val = right.value
         
-        if operator == "+": 
-            return Integer(left_val + right_val)
-        elif operator == "-": 
-            return Integer(left_val - right_val)
-        elif operator == "*": 
-            return Integer(left_val * right_val)
+        # SECURITY FIX #6: Integer overflow protection
+        # Python integers have arbitrary precision, but we enforce safe ranges
+        # to prevent resource exhaustion and match real-world integer behavior
+        MAX_SAFE_INT = 2**63 - 1  # 64-bit signed integer max
+        MIN_SAFE_INT = -(2**63)   # 64-bit signed integer min
+        
+        def check_overflow(result, operation):
+            """Check if integer operation resulted in overflow"""
+            if result > MAX_SAFE_INT or result < MIN_SAFE_INT:
+                return EvaluationError(
+                    f"Integer overflow in {operation}",
+                    suggestion=f"Result {result} exceeds safe integer range [{MIN_SAFE_INT}, {MAX_SAFE_INT}]. Use require() to validate inputs or break calculation into smaller parts."
+                )
+            return Integer(result)
+        
+        if operator == "+":
+            result = left_val + right_val
+            return check_overflow(result, "addition")
+        elif operator == "-":
+            result = left_val - right_val
+            return check_overflow(result, "subtraction")
+        elif operator == "*":
+            result = left_val * right_val
+            return check_overflow(result, "multiplication")
         elif operator == "/":
             if right_val == 0: 
                 return EvaluationError(
                     "Division by zero",
                     suggestion="Check your divisor value. Consider adding a condition: if (divisor != 0) { ... }"
                 )
-            return Integer(left_val // right_val)
+            result = left_val // right_val
+            return check_overflow(result, "division")
         elif operator == "%":
             if right_val == 0: 
                 return EvaluationError(
@@ -173,8 +192,29 @@ class ExpressionEvaluatorMixin:
         return EvaluationError(f"Unknown float operator: {operator}")
     
     def eval_string_infix(self, operator, left, right):
-        if operator == "+": 
-            return String(left.value + right.value)
+        if operator == "+":
+            # SECURITY ENFORCEMENT: Check sanitization before concatenation
+            from ..security_enforcement import check_string_concatenation
+            check_string_concatenation(left, right)
+            
+            # Propagate sanitization status to result
+            result = String(left.value + right.value)
+            
+            # Result is trusted only if both inputs are trusted
+            result.is_trusted = left.is_trusted and right.is_trusted
+            
+            # Propagate sanitization context intelligently:
+            # - If both have same sanitization, inherit it
+            # - If one is trusted (literal) and other is sanitized, inherit the sanitization
+            # - Otherwise, no sanitization (both must be sanitized or one trusted + one sanitized)
+            if left.sanitized_for == right.sanitized_for and left.sanitized_for is not None:
+                result.sanitized_for = left.sanitized_for
+            elif left.is_trusted and right.sanitized_for is not None:
+                result.sanitized_for = right.sanitized_for
+            elif right.is_trusted and left.sanitized_for is not None:
+                result.sanitized_for = left.sanitized_for
+            
+            return result
         elif operator == "==": 
             return TRUE if left.value == right.value else FALSE
         elif operator == "!=": 
@@ -277,46 +317,67 @@ class ExpressionEvaluatorMixin:
             else:
                 return EvaluationError(f"Unsupported operation: {left.type()} {operator} DATETIME")
         
-        # Mixed String Concatenation
+        # SECURITY FIX #8: Type Safety - No Implicit Coercion
+        # Addition operator: String+String OR Number+Number only
         elif operator == "+":
-            if isinstance(left, String):
-                right_str = right.inspect() if not isinstance(right, String) else right.value
-                return String(left.value + str(right_str))
-            elif isinstance(right, String):
-                left_str = left.inspect() if not isinstance(left, String) else left.value
-                return String(str(left_str) + right.value)
-            # Mixed Numeric
+            # String concatenation requires both operands to be strings
+            if isinstance(left, String) or isinstance(right, String):
+                # If either is a string, both must be strings
+                if not (isinstance(left, String) and isinstance(right, String)):
+                    left_type = "STRING" if isinstance(left, String) else type(left).__name__.upper()
+                    right_type = "STRING" if isinstance(right, String) else type(right).__name__.upper()
+                    
+                    return EvaluationError(
+                        f"Type mismatch: cannot add {left_type} and {right_type}\n"
+                        f"Use explicit conversion: string(value) to convert to string before concatenation\n"
+                        f"Example: string({left.value if hasattr(left, 'value') else left}) + string({right.value if hasattr(right, 'value') else right})"
+                    )
+            
+            # Numeric addition: Integer + Integer OR Float + Float OR Integer + Float
             elif isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):
-                l_val = float(left.value)
-                r_val = float(right.value)
-                return Float(l_val + r_val)
+                # Mixed Integer/Float operations return Float
+                if isinstance(left, Float) or isinstance(right, Float):
+                    result = float(left.value) + float(right.value)
+                    return Float(result)
+                # Both integers handled by eval_integer_infix
+                else:
+                    return EvaluationError("Internal error: Integer + Integer should be handled by eval_integer_infix")
+            
+            # Invalid type combination
+            else:
+                left_type = type(left).__name__.replace("Obj", "").upper()
+                right_type = type(right).__name__.replace("Obj", "").upper()
+                return EvaluationError(
+                    f"Type error: cannot add {left_type} and {right_type}\n"
+                    f"Addition requires matching types: STRING + STRING or NUMBER + NUMBER"
+                )
         
-        # Mixed arithmetic operations (String coerced to number for *, -, /, %)
+        # SECURITY FIX #8: Strict Type Checking for Arithmetic
+        # All arithmetic operations require numeric types (Integer or Float)
         elif operator in ("*", "-", "/", "%"):
-            # Try to coerce strings to numbers for arithmetic
-            l_val = None
-            r_val = None
+            # Get type names for error messages
+            left_type = type(left).__name__.replace("Obj", "").upper()
+            right_type = type(right).__name__.replace("Obj", "").upper()
             
-            # Get left value
-            if isinstance(left, (Integer, Float)):
+            # Only allow arithmetic between numbers (Integer or Float)
+            if not isinstance(left, (Integer, Float)):
+                return EvaluationError(
+                    f"Type error: {operator} requires numeric operands, got {left_type}\n"
+                    f"Use explicit conversion: int(value) or float(value)"
+                )
+            
+            if not isinstance(right, (Integer, Float)):
+                return EvaluationError(
+                    f"Type error: {operator} requires numeric operands, got {right_type}\n"
+                    f"Use explicit conversion: int(value) or float(value)"
+                )
+            
+            # Both are numbers - perform operation
+            # Mixed Integer/Float operations return Float
+            if isinstance(left, Float) or isinstance(right, Float):
                 l_val = float(left.value)
-            elif isinstance(left, String):
-                try:
-                    l_val = float(left.value)
-                except ValueError:
-                    pass
-            
-            # Get right value
-            if isinstance(right, (Integer, Float)):
                 r_val = float(right.value)
-            elif isinstance(right, String):
-                try:
-                    r_val = float(right.value)
-                except ValueError:
-                    pass
-            
-            # Perform operation if both values could be coerced
-            if l_val is not None and r_val is not None:
+                
                 try:
                     if operator == "*":
                         result = l_val * r_val
@@ -332,13 +393,16 @@ class ExpressionEvaluatorMixin:
                         result = l_val % r_val
                     
                     # Return Integer if result is whole number, Float otherwise
-                    if result == int(result):
+                    if result == int(result) and operator != "/":  # Division always returns float
                         return Integer(int(result))
                     return Float(result)
                 except Exception as e:
                     return EvaluationError(f"Arithmetic error: {str(e)}")
+            else:
+                # Both integers - integer arithmetic (already handled by eval_integer_infix)
+                return EvaluationError(f"Internal error: Integer {operator} Integer should be handled by eval_integer_infix")
         
-        # Comparison with mixed numeric types
+        # Comparison with mixed numeric types (Integer/Float comparison allowed)
         elif operator in ("<", ">", "<=", ">="):
             if isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):
                 l_val = float(left.value)
@@ -348,19 +412,14 @@ class ExpressionEvaluatorMixin:
                 elif operator == "<=": return TRUE if l_val <= r_val else FALSE
                 elif operator == ">=": return TRUE if l_val >= r_val else FALSE
             
-            # Mixed String/Number comparison (Coerce to float)
-            elif (isinstance(left, (Integer, Float)) and isinstance(right, String)) or \
-                 (isinstance(left, String) and isinstance(right, (Integer, Float))):
-                try:
-                    l_val = float(left.value)
-                    r_val = float(right.value)
-                    if operator == "<": return TRUE if l_val < r_val else FALSE
-                    elif operator == ">": return TRUE if l_val > r_val else FALSE
-                    elif operator == "<=": return TRUE if l_val <= r_val else FALSE
-                    elif operator == ">=": return TRUE if l_val >= r_val else FALSE
-                except ValueError:
-                    # If conversion fails, return FALSE (NaN comparison behavior)
-                    return FALSE
+            # SECURITY FIX #8: No implicit coercion for comparisons
+            else:
+                left_type = type(left).__name__.replace("Obj", "").upper()
+                right_type = type(right).__name__.replace("Obj", "").upper()
+                return EvaluationError(
+                    f"Type error: cannot compare {left_type} {operator} {right_type}\n"
+                    f"Use explicit conversion if needed: int(value) or float(value)"
+                )
 
         return EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
     

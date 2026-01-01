@@ -31,7 +31,12 @@ class Null(Object):
     def type(self): return "NULL"
 
 class String(Object):
-    def __init__(self, value): self.value = value
+    def __init__(self, value, sanitized_for=None, is_trusted=False):
+        self.value = value
+        # Track sanitization status for security enforcement
+        self.sanitized_for = sanitized_for  # None, 'sql', 'html', 'url', 'shell', etc.
+        self.is_trusted = is_trusted  # True for literals, False for external input
+        
     def inspect(self): return self.value
     def type(self): return "STRING"
     def __str__(self): return self.value
@@ -43,6 +48,19 @@ class String(Object):
     def __hash__(self):
         """Enable String objects to be used as dict keys"""
         return hash(self.value)
+    
+    def mark_sanitized(self, context):
+        """Mark this string as sanitized for a specific context"""
+        self.sanitized_for = context
+        return self
+    
+    def is_safe_for(self, context):
+        """Check if string is safe to use in given context"""
+        # Trusted strings (literals) are always safe
+        if self.is_trusted:
+            return True
+        # Check if sanitized for this specific context
+        return self.sanitized_for == context
 
 class List(Object):
     def __init__(self, elements): self.elements = elements
@@ -425,7 +443,8 @@ class File(Object):
             if isinstance(path, String):
                 path = path.value
             with open(path, 'r', encoding='utf-8') as f:
-                return String(f.read())
+                # Files are external data sources - return untrusted strings
+                return String(f.read(), is_trusted=False)
         except Exception as e:
             return EvaluationError(f"File read error: {str(e)}")
 

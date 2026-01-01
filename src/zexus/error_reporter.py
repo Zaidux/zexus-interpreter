@@ -3,11 +3,21 @@ Zexus Error Reporting System
 
 Provides clear, beginner-friendly error messages that distinguish between
 user code errors and interpreter bugs.
+
+Security Fix #10: Debug info sanitization to prevent sensitive data leakage.
 """
 
 import sys
 from typing import Optional, List, Dict, Any
 from enum import Enum
+
+
+# Import debug sanitizer for Security Fix #10
+try:
+    from .debug_sanitizer import get_sanitizer
+    _SANITIZER_AVAILABLE = True
+except ImportError:
+    _SANITIZER_AVAILABLE = False
 
 
 class ErrorCategory(Enum):
@@ -106,12 +116,22 @@ class ZexusError(Exception):
             parts.append("")
         
         # Error message
-        parts.append(f"  {self.message}")
+        message = self.message
+        # Security Fix #10: Sanitize error messages
+        if _SANITIZER_AVAILABLE:
+            sanitizer = get_sanitizer()
+            message = sanitizer.sanitize_message(message)
+        
+        parts.append(f"  {message}")
         
         # Suggestion
         if self.suggestion:
+            suggestion = self.suggestion
+            # Sanitize suggestions too
+            if _SANITIZER_AVAILABLE:
+                suggestion = get_sanitizer().sanitize_message(suggestion)
             parts.append("")
-            parts.append(f"  {YELLOW}💡 Suggestion:{RESET} {self.suggestion}")
+            parts.append(f"  {YELLOW}💡 Suggestion:{RESET} {suggestion}")
         
         # Internal error note
         if self.category == ErrorCategory.INTERPRETER:

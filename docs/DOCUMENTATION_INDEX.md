@@ -69,7 +69,18 @@ Complete documentation for the Zexus programming language.
 - [Modules](keywords/MODULE_SYSTEM.md) - use, import, export
 
 ### Security & Policy
-- [Security Features](SECURITY_FEATURES.md) - Overview of security
+- [Security Fixes Summary](SECURITY_FIXES_SUMMARY.md) - **NEW!** Complete security remediation overview
+- [Security Features](SECURITY_FEATURES.md) - Overview of security capabilities
+- [Contract Access Control](CONTRACT_ACCESS_CONTROL.md) - **NEW!** RBAC system guide
+- [Input Sanitization](MANDATORY_SANITIZATION.md) - **NEW!** Injection attack prevention
+- [Debug Sanitization](DEBUG_SANITIZATION.md) - **NEW!** Credential leak protection
+- [Cryptographic Functions](CRYPTO_FUNCTIONS.md) - **NEW!** Password hashing & CSPRNG
+- [Type Safety](TYPE_SAFETY.md) - **NEW!** Strict type checking guide
+- [Resource Limits](RESOURCE_LIMITS.md) - **NEW!** DoS attack prevention
+- [Integer Overflow Protection](INTEGER_OVERFLOW_PROTECTION.md) - **NEW!** Arithmetic safety
+- [Path Traversal Prevention](PATH_TRAVERSAL_PREVENTION.md) - **NEW!** File system security
+- [Persistent Storage Limits](PERSISTENCE_LIMITS.md) - **NEW!** Storage quota management
+- [Contract require() Function](CONTRACT_REQUIRE.md) - **NEW!** Precondition validation
 - [PROTECT](keywords/COMMAND_protect.md) - Policy-as-code
 - [VERIFY](keywords/COMMAND_verify.md) - Runtime verification
 - [RESTRICT](keywords/COMMAND_restrict.md) - Input validation
@@ -126,9 +137,12 @@ Complete documentation for the Zexus programming language.
 - [Strategy Recovery](../src/zexus/strategy_recovery.py) - Error recovery
 
 ### Security
+- [Security Fixes Summary](SECURITY_FIXES_SUMMARY.md) - **NEW!** Complete remediation overview
 - [Security Features](SECURITY_FEATURES.md) - Security overview
 - [Capability System](../src/zexus/capability_system.py) - Capabilities
 - [Policy Engine](../src/zexus/policy_engine.py) - Policy enforcement
+- [Access Control System](../src/zexus/access_control_system/) - **NEW!** RBAC implementation
+- [Debug Sanitizer](../src/zexus/debug_sanitizer.py) - **NEW!** Credential protection
 
 ## 📦 Package Management
 
@@ -192,4 +206,4 @@ Complete documentation for the Zexus programming language.
 
 ---
 
-Last updated: 2025-12-25
+Last updated: 2026-01-02 (Security patches v1.6.2)

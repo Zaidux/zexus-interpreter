@@ -4,7 +4,7 @@ Zexus Programming Language
 A declarative, intent-based programming language for modern applications.
 """
 
-__version__ = "1.6.2"
+__version__ = "1.6.3"
 __author__ = "Ziver Labs"
 __email__ = "ziverofficial567@gmail.com"
 

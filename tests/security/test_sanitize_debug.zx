@@ -1,0 +1,10 @@
+#!/usr/bin/env zexus
+# Debug test for sanitization
+
+print "Test 1: Variable assignment"
+let data = "test"
+print data
+debug data
+
+print "Done"
+

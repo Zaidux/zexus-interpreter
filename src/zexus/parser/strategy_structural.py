@@ -609,7 +609,14 @@ class StructuralAnalyzer:
                                         elif tokens[k].type in {LBRACE, COLON}:
                                             # Found statement form indicators
                                             break
-                                if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else)):
+                                
+                                # FIX #4: After seeing SANITIZE in assignment, also check if previous token was SANITIZE
+                                # This allows collecting the sanitize expression arguments
+                                prev_was_sanitize = False
+                                if j > 0 and tokens[j - 1].type == SANITIZE:
+                                    prev_was_sanitize = True
+                                
+                                if not (in_assignment and (allow_in_assignment or allow_debug_call or allow_if_then_else or prev_was_sanitize)):
                                     break
                     
                     # CRITICAL FIX: Also break on modifier tokens at nesting 0 when followed by statement keywords

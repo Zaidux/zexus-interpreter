@@ -82,6 +82,7 @@ class UltimateParser:
             TRY: self.parse_try_catch_statement,
             EXTERNAL: self.parse_external_declaration,
             ASYNC: self.parse_async_expression,  # Support async <expression>
+            SANITIZE: self.parse_sanitize_expression,  # FIX #4: Support sanitize as expression
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -3299,6 +3300,40 @@ class UltimateParser:
         schema_expr = self.parse_expression(LOWEST)
         
         return ValidateStatement(data=data_expr, schema=schema_expr)
+
+    def parse_sanitize_expression(self):
+        """Parse sanitize as expression - can be used in assignments
+        
+        Supports both:
+          let safe = sanitize data, "sql"
+          let safe = sanitize data as sql
+        """
+        token = self.cur_token
+        self.next_token()
+        
+        # Parse data expression
+        data_expr = self.parse_expression(LOWEST)
+        if data_expr is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression to sanitize")
+            return None
+        
+        # Expect comma or 'as'
+        encoding = None
+        if self.cur_token_is(COMMA):
+            self.next_token()
+            # Parse encoding as expression (can be string literal or identifier)
+            encoding = self.parse_expression(LOWEST)
+        elif self.cur_token_is(IDENT) and self.cur_token.literal == 'as':
+            self.next_token()
+            if self.cur_token_is(IDENT):
+                # Convert identifier to string literal
+                encoding = StringLiteral(value=self.cur_token.literal)
+                self.next_token()
+            elif self.cur_token_is(STRING):
+                encoding = self.parse_string_literal()
+        
+        result = SanitizeStatement(data=data_expr, rules=None, encoding=encoding)
+        return result
 
     def parse_sanitize_statement(self):
         """Parse sanitize statement - sanitize data"""

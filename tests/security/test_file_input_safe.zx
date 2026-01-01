@@ -1,0 +1,23 @@
+#!/usr/bin/env zexus
+# Test correct usage of external file data with sanitization
+
+print "=== Testing Proper File Input Sanitization ==="
+
+print "\n1. Reading data from external file..."
+let file_data = file_read_text("test_external_data.txt")
+print "   Data loaded: (untrusted)"
+
+print "\n2. Sanitizing the file data for SQL..."
+let safe_data = sanitize file_data, "sql"
+print "   Data sanitized for SQL context"
+
+print "\n3. Building SQL query with sanitized data..."
+let query = "SELECT * FROM users WHERE name = '" + safe_data + "'"
+print "   Query built successfully!"
+
+print "\n4. Query created:"
+print "   " + query
+
+print "\n✅ File data properly sanitized and used safely!"
+print "   External sources are automatically untrusted"
+print "   Sanitization is mandatory before use in sensitive contexts"

@@ -1,0 +1,22 @@
+#!/usr/bin/env zexus
+# Simple test to verify sanitization works
+
+print "=== Sanitization Test ===" 
+
+# Test 1: Basic sanitization
+let user_input = "test123"
+let safe_html = sanitize user_input, "html"
+print "Sanitized HTML works"
+
+# Test 2: SQL sanitization  
+let malicious = "admin"
+let safe_sql = sanitize malicious, "sql"
+print "Sanitized SQL works"
+
+# Test 3: Using sanitized in SQL (this should work)
+let username = "alice"
+let safe_user = sanitize username, "sql"
+let query = "SELECT * FROM users WHERE name = '" + safe_user + "'"
+print "Query created successfully"
+
+print "✓ All sanitization tests passed!"

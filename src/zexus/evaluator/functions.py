@@ -196,187 +196,208 @@ class FunctionEvaluatorMixin:
     def apply_function(self, fn, args, env=None):
         debug_log("apply_function", f"Calling {fn}")
         
-        # Phase 2 & 3: Trigger plugin hooks and check capabilities
-        if hasattr(self, 'integration_context'):
-            if isinstance(fn, (Action, LambdaFunction)):
-                func_name = fn.name if hasattr(fn, 'name') else str(fn)
-                # Trigger before-call hook
-                self.integration_context.plugins.before_action_call(func_name, {})
-                
-                # Check required capabilities
-                try:
-                    self.integration_context.capabilities.require_capability("core.language")
-                except PermissionError:
-                    return EvaluationError(f"Permission denied: insufficient capabilities for {func_name}")
-        
+        # Resource limit: Track call depth (Security Fix #7)
+        func_name = None
         if isinstance(fn, (Action, LambdaFunction)):
-            debug_log("  Calling user-defined function")
-            
-            # Check if this is an async action
-            is_async = getattr(fn, 'is_async', False)
-            
-            if is_async:
-                # Create a coroutine that lazily executes the async action
-                from ..object import Coroutine
-                import sys
-                
-                # print(f"[ASYNC CREATE] Creating coroutine for async action, fn.env has keys: {list(fn.env.store.keys()) if hasattr(fn.env, 'store') else 'N/A'}", file=sys.stderr)
-                
-                def async_generator():
-                    """Generator that executes the async action body"""
-                    new_env = Environment(outer=fn.env)
-                    
-                    # Bind parameters
-                    for i, param in enumerate(fn.parameters):
-                        if i < len(args):
-                            param_name = param.value if hasattr(param, 'value') else str(param)
-                            new_env.set(param_name, args[i])
-                    
-                    # Yield control first (makes it a true generator)
-                    yield None
-                    
-                    try:
-                        # Evaluate the function body
-                        res = self.eval_node(fn.body, new_env)
-                        
-                        # Unwrap ReturnValue if needed
-                        if isinstance(res, ReturnValue):
-                            result = res.value
-                        else:
-                            result = res
-                        
-                        # Execute deferred cleanup
-                        if hasattr(self, '_execute_deferred_cleanup'):
-                            self._execute_deferred_cleanup(new_env, [])
-                        
-                        # Return the result (will be caught by StopIteration)
-                        return result
-                    except Exception as e:
-                        # Re-raise exception to be caught by coroutine
-                        raise e
-                
-                # Create and return coroutine
-                gen = async_generator()
-                coroutine = Coroutine(gen, fn)
-                return coroutine
-            
-            # Synchronous function execution
-            new_env = Environment(outer=fn.env)
-            
-            param_names = []
-            for i, param in enumerate(fn.parameters):
-                if i < len(args):
-                    # Handle both Identifier objects and strings
-                    param_name = param.value if hasattr(param, 'value') else str(param)
-                    param_names.append(param_name)
-                    new_env.set(param_name, args[i])
-                    # Lightweight debug: show what is being bound
-                    try:
-                        debug_log("    Set parameter", f"{param_name} = {type(args[i]).__name__}")
-                    except Exception:
-                        pass
-
+            func_name = fn.name if hasattr(fn, 'name') else str(fn)
             try:
-                if param_names:
-                    debug_log("  Function parameters bound", f"{param_names}")
-            except Exception:
-                pass
-            
-            try:
-                res = self.eval_node(fn.body, new_env)
-                res = _resolve_awaitable(res)
-                
-                # Unwrap ReturnValue if needed
-                if isinstance(res, ReturnValue):
-                    result = res.value
-                else:
-                    result = res
-                
-                return result
-            finally:
-                # CRITICAL: Execute deferred cleanup when function exits
-                # This happens in finally block to ensure cleanup runs even on errors
-                if hasattr(self, '_execute_deferred_cleanup'):
-                    self._execute_deferred_cleanup(new_env, [])
-                
-                # Phase 2: Trigger after-call hook
-                if hasattr(self, 'integration_context'):
-                    func_name = fn.name if hasattr(fn, 'name') else str(fn)
-                    self.integration_context.plugins.after_action_call(func_name, result)
-        
-        elif isinstance(fn, Builtin):
-            debug_log("  Calling builtin function", f"{fn.name}")
-            # Sandbox enforcement: if current env is sandboxed, consult policy
-            try:
-                in_sandbox = False
-                policy_name = None
-                if env is not None:
-                    try:
-                        in_sandbox = bool(env.get('__in_sandbox__'))
-                        policy_name = env.get('__sandbox_policy__')
-                    except Exception:
-                        in_sandbox = False
-
-                if in_sandbox:
-                    from ..security import get_security_context
-                    ctx = get_security_context()
-                    policy = ctx.get_sandbox_policy(policy_name or 'default')
-                    allowed = None if policy is None else policy.get('allowed_builtins')
-                    # If allowed set exists and builtin not in it -> block
-                    if allowed is not None and fn.name not in allowed:
-                        return EvaluationError(f"Builtin '{fn.name}' not allowed inside sandbox policy '{policy_name or 'default'}'")
-            except Exception:
-                # If enforcement fails unexpectedly, proceed to call but log nothing
-                pass
-
-            try:
-                res = fn.fn(*args)
-                return _resolve_awaitable(res)
+                self.resource_limiter.enter_call(func_name)
             except Exception as e:
-                return EvaluationError(f"Builtin error: {str(e)}")
+                # Convert ResourceError to EvaluationError
+                from .resource_limiter import ResourceError, TimeoutError
+                if isinstance(e, (ResourceError, TimeoutError)):
+                    return EvaluationError(str(e))
+                raise  # Re-raise if not a resource error
         
-        elif isinstance(fn, EntityDefinition):
-            debug_log("  Creating entity instance (old format)")
-            # Entity constructor: Person("Alice", 30)
-            # Create instance with positional arguments mapped to properties
-            from ..object import EntityInstance, String, Integer
+        try:
+            # Phase 2 & 3: Trigger plugin hooks and check capabilities
+            if hasattr(self, 'integration_context'):
+                if isinstance(fn, (Action, LambdaFunction)):
+                    # Trigger before-call hook
+                    self.integration_context.plugins.before_action_call(func_name, {})
+                    
+                    # Check required capabilities
+                    try:
+                        self.integration_context.capabilities.require_capability("core.language")
+                    except PermissionError:
+                        return EvaluationError(f"Permission denied: insufficient capabilities for {func_name}")
             
-            values = {}
-            # Map positional arguments to property names
-            if isinstance(fn.properties, dict):
-                prop_names = list(fn.properties.keys())
-            else:
-                prop_names = [prop['name'] for prop in fn.properties]
+            if isinstance(fn, (Action, LambdaFunction)):
+                debug_log("  Calling user-defined function")
+                
+                # Check if this is an async action
+                is_async = getattr(fn, 'is_async', False)
+                
+                if is_async:
+                    # Create a coroutine that lazily executes the async action
+                    from ..object import Coroutine
+                    import sys
+                    
+                    # print(f"[ASYNC CREATE] Creating coroutine for async action, fn.env has keys: {list(fn.env.store.keys()) if hasattr(fn.env, 'store') else 'N/A'}", file=sys.stderr)
+                    
+                    def async_generator():
+                        """Generator that executes the async action body"""
+                        new_env = Environment(outer=fn.env)
+                        
+                        # Bind parameters
+                        for i, param in enumerate(fn.parameters):
+                            if i < len(args):
+                                param_name = param.value if hasattr(param, 'value') else str(param)
+                                new_env.set(param_name, args[i])
+                        
+                        # Yield control first (makes it a true generator)
+                        yield None
+                        
+                        try:
+                            # Evaluate the function body
+                            res = self.eval_node(fn.body, new_env)
+                            
+                            # Unwrap ReturnValue if needed
+                            if isinstance(res, ReturnValue):
+                                result = res.value
+                            else:
+                                result = res
+                            
+                            # Execute deferred cleanup
+                            if hasattr(self, '_execute_deferred_cleanup'):
+                                self._execute_deferred_cleanup(new_env, [])
+                            
+                            # Return the result (will be caught by StopIteration)
+                            return result
+                        except Exception as e:
+                            # Re-raise exception to be caught by coroutine
+                            raise e
+                    
+                    # Create and return coroutine
+                    gen = async_generator()
+                    coroutine = Coroutine(gen, fn)
+                    return coroutine
+                
+                # Synchronous function execution
+                new_env = Environment(outer=fn.env)
+                
+                param_names = []
+                for i, param in enumerate(fn.parameters):
+                    if i < len(args):
+                        # Handle both Identifier objects and strings
+                        param_name = param.value if hasattr(param, 'value') else str(param)
+                        param_names.append(param_name)
+                        new_env.set(param_name, args[i])
+                        # Lightweight debug: show what is being bound
+                        try:
+                            debug_log("    Set parameter", f"{param_name} = {type(args[i]).__name__}")
+                        except Exception:
+                            pass
+
+                try:
+                    if param_names:
+                        debug_log("  Function parameters bound", f"{param_names}")
+                except Exception:
+                    pass
+                
+                try:
+                    res = self.eval_node(fn.body, new_env)
+                    res = _resolve_awaitable(res)
+                    
+                    # Unwrap ReturnValue if needed
+                    if isinstance(res, ReturnValue):
+                        result = res.value
+                    else:
+                        result = res
+                    
+                    return result
+                except Exception as e:
+                    # Store result for after-call hook
+                    result = EvaluationError(str(e))
+                    raise
+                finally:
+                    # CRITICAL: Execute deferred cleanup when function exits
+                    # This happens in finally block to ensure cleanup runs even on errors
+                    if hasattr(self, '_execute_deferred_cleanup'):
+                        self._execute_deferred_cleanup(new_env, [])
+                    
+                    # Phase 2: Trigger after-call hook
+                    if hasattr(self, 'integration_context'):
+                        func_name = fn.name if hasattr(fn, 'name') else str(fn)
+                        self.integration_context.plugins.after_action_call(func_name, result)
             
-            for i, arg in enumerate(args):
-                if i < len(prop_names):
-                    values[prop_names[i]] = arg
+            elif isinstance(fn, Builtin):
+                debug_log("  Calling builtin function", f"{fn.name}")
+                # Sandbox enforcement: if current env is sandboxed, consult policy
+                try:
+                    in_sandbox = False
+                    policy_name = None
+                    if env is not None:
+                        try:
+                            in_sandbox = bool(env.get('__in_sandbox__'))
+                            policy_name = env.get('__sandbox_policy__')
+                        except Exception:
+                            in_sandbox = False
+
+                    if in_sandbox:
+                        from ..security import get_security_context
+                        ctx = get_security_context()
+                        policy = ctx.get_sandbox_policy(policy_name or 'default')
+                        allowed = None if policy is None else policy.get('allowed_builtins')
+                        # If allowed set exists and builtin not in it -> block
+                        if allowed is not None and fn.name not in allowed:
+                            return EvaluationError(f"Builtin '{fn.name}' not allowed inside sandbox policy '{policy_name or 'default'}'")
+                except Exception:
+                    # If enforcement fails unexpectedly, proceed to call but log nothing
+                    pass
+
+                try:
+                    res = fn.fn(*args)
+                    return _resolve_awaitable(res)
+                except Exception as e:
+                    return EvaluationError(f"Builtin error: {str(e)}")
             
-            return EntityInstance(fn, values)
-        
-        # Handle SecurityEntityDefinition (from security.py with methods support)
-        from ..security import EntityDefinition as SecurityEntityDef, EntityInstance as SecurityEntityInstance
-        if isinstance(fn, SecurityEntityDef):
-            debug_log("  Creating entity instance (with methods)")
+            elif isinstance(fn, EntityDefinition):
+                debug_log("  Creating entity instance (old format)")
+                # Entity constructor: Person("Alice", 30)
+                # Create instance with positional arguments mapped to properties
+                from ..object import EntityInstance, String, Integer
+                
+                values = {}
+                # Map positional arguments to property names
+                if isinstance(fn.properties, dict):
+                    prop_names = list(fn.properties.keys())
+                else:
+                    prop_names = [prop['name'] for prop in fn.properties]
+                
+                for i, arg in enumerate(args):
+                    if i < len(prop_names):
+                        values[prop_names[i]] = arg
+                
+                return EntityInstance(fn, values)
             
-            values = {}
-            # Map positional arguments to property names, INCLUDING INHERITED PROPERTIES
-            # Use get_all_properties() to get the full property list in correct order
-            if hasattr(fn, 'get_all_properties'):
-                # Get all properties (parent + child) in correct order
-                all_props = fn.get_all_properties()
-                prop_names = list(all_props.keys())
-            else:
-                # Fallback for old-style properties
-                prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
-            
-            for i, arg in enumerate(args):
-                if i < len(prop_names):
-                    values[prop_names[i]] = arg
-            
-            debug_log(f"  Entity instance created with {len(values)} properties: {list(values.keys())}")
-            # Use create_instance to handle dependency injection
-            return fn.create_instance(values)
+            # Handle SecurityEntityDefinition (from security.py with methods support)
+            from ..security import EntityDefinition as SecurityEntityDef, EntityInstance as SecurityEntityInstance
+            if isinstance(fn, SecurityEntityDef):
+                debug_log("  Creating entity instance (with methods)")
+                
+                values = {}
+                # Map positional arguments to property names, INCLUDING INHERITED PROPERTIES
+                # Use get_all_properties() to get the full property list in correct order
+                if hasattr(fn, 'get_all_properties'):
+                    # Get all properties (parent + child) in correct order
+                    all_props = fn.get_all_properties()
+                    prop_names = list(all_props.keys())
+                else:
+                    # Fallback for old-style properties
+                    prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
+                
+                for i, arg in enumerate(args):
+                    if i < len(prop_names):
+                        values[prop_names[i]] = arg
+                
+                debug_log(f"  Entity instance created with {len(values)} properties: {list(values.keys())}")
+                # Use create_instance to handle dependency injection
+                return fn.create_instance(values)
+        finally:
+            # Resource limit: Exit call depth tracking (Security Fix #7)
+            if isinstance(fn, (Action, LambdaFunction)):
+                self.resource_limiter.exit_call()
         
         return EvaluationError(f"Not a function: {fn}")
     
@@ -650,6 +671,112 @@ class FunctionEvaluatorMixin:
             if len(a) != 1: 
                 return EvaluationError("sqrt() takes exactly 1 argument")
             return Math.sqrt(a[0])
+        
+        # User Input (SECURITY: Returns untrusted strings)
+        def _input(*a):
+            """Read user input from stdin - automatically marked as untrusted"""
+            prompt = ""
+            if len(a) == 1:
+                if isinstance(a[0], String):
+                    prompt = a[0].value
+                else:
+                    prompt = str(a[0].inspect() if hasattr(a[0], 'inspect') else a[0])
+            elif len(a) > 1:
+                return EvaluationError("input() takes 0 or 1 argument (optional prompt)")
+            
+            try:
+                user_input = input(prompt)
+                # SECURITY: User input is ALWAYS untrusted - external data source
+                return String(user_input, is_trusted=False)
+            except Exception as e:
+                return EvaluationError(f"input() error: {str(e)}")
+        
+        # Cryptographic Functions (SECURITY FIX #5)
+        def _hash_password(*a):
+            """
+            Hash password using bcrypt (secure, industry-standard)
+            Usage: hash_password(password) -> hashed_string
+            """
+            if len(a) != 1:
+                return EvaluationError("hash_password() takes exactly 1 argument")
+            
+            password = a[0].value if isinstance(a[0], String) else str(a[0])
+            
+            try:
+                import bcrypt
+                # Generate salt and hash password
+                salt = bcrypt.gensalt()
+                hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+                # Return as trusted string (hash, not user input)
+                return String(hashed.decode('utf-8'), is_trusted=True)
+            except ImportError:
+                return EvaluationError("hash_password() requires bcrypt library. Install: pip install bcrypt")
+            except Exception as e:
+                return EvaluationError(f"hash_password() error: {str(e)}")
+        
+        def _verify_password(*a):
+            """
+            Verify password against bcrypt hash (constant-time comparison)
+            Usage: verify_password(password, hash) -> boolean
+            """
+            if len(a) != 2:
+                return EvaluationError("verify_password() takes exactly 2 arguments: password, hash")
+            
+            password = a[0].value if isinstance(a[0], String) else str(a[0])
+            password_hash = a[1].value if isinstance(a[1], String) else str(a[1])
+            
+            try:
+                import bcrypt
+                # Constant-time comparison via bcrypt
+                result = bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+                return BooleanObj(result)
+            except ImportError:
+                return EvaluationError("verify_password() requires bcrypt library. Install: pip install bcrypt")
+            except Exception as e:
+                return EvaluationError(f"verify_password() error: {str(e)}")
+        
+        def _crypto_random(*a):
+            """
+            Generate cryptographically secure random string
+            Usage: crypto_random(length?) -> hex_string (default 32 bytes = 64 hex chars)
+            """
+            length = 32  # Default: 32 bytes
+            if len(a) >= 1:
+                if isinstance(a[0], Integer):
+                    length = a[0].value
+                else:
+                    return EvaluationError("crypto_random() length must be an integer")
+            
+            if len(a) > 1:
+                return EvaluationError("crypto_random() takes 0 or 1 argument (optional length)")
+            
+            try:
+                import secrets
+                # Generate cryptographically secure random hex string
+                random_hex = secrets.token_hex(length)
+                # Return as trusted string (generated, not user input)
+                return String(random_hex, is_trusted=True)
+            except Exception as e:
+                return EvaluationError(f"crypto_random() error: {str(e)}")
+        
+        def _constant_time_compare(*a):
+            """
+            Constant-time string comparison (timing-attack resistant)
+            Usage: constant_time_compare(a, b) -> boolean
+            """
+            if len(a) != 2:
+                return EvaluationError("constant_time_compare() takes exactly 2 arguments")
+            
+            str_a = a[0].value if isinstance(a[0], String) else str(a[0])
+            str_b = a[1].value if isinstance(a[1], String) else str(a[1])
+            
+            try:
+                import secrets
+                # Use secrets.compare_digest for constant-time comparison
+                result = secrets.compare_digest(str_a, str_b)
+                return BooleanObj(result)
+            except Exception as e:
+                return EvaluationError(f"constant_time_compare() error: {str(e)}")
         
         # File I/O
         def _read_text(*a): 
@@ -1531,7 +1658,8 @@ class FunctionEvaluatorMixin:
             try:
                 from ..stdlib.http import HttpModule
                 result = HttpModule.get(url, headers, timeout)
-                return _python_to_zexus(result)
+                # HTTP responses are external data - mark as untrusted
+                return _python_to_zexus(result, mark_untrusted=True)
             except Exception as e:
                 return EvaluationError(f"HTTP GET error: {str(e)}")
         
@@ -1558,7 +1686,8 @@ class FunctionEvaluatorMixin:
                 # Determine if data should be sent as JSON
                 json_mode = isinstance(a[1], (Map, List))
                 result = HttpModule.post(url, data, headers, json=json_mode, timeout=timeout)
-                return _python_to_zexus(result)
+                # HTTP responses are external data - mark as untrusted
+                return _python_to_zexus(result, mark_untrusted=True)
             except Exception as e:
                 return EvaluationError(f"HTTP POST error: {str(e)}")
         
@@ -1582,7 +1711,8 @@ class FunctionEvaluatorMixin:
                 from ..stdlib.http import HttpModule
                 json_mode = isinstance(a[1], (Map, List))
                 result = HttpModule.put(url, data, headers, json=json_mode, timeout=timeout)
-                return _python_to_zexus(result)
+                # HTTP responses are external data - mark as untrusted
+                return _python_to_zexus(result, mark_untrusted=True)
             except Exception as e:
                 return EvaluationError(f"HTTP PUT error: {str(e)}")
         
@@ -1604,7 +1734,8 @@ class FunctionEvaluatorMixin:
             try:
                 from ..stdlib.http import HttpModule
                 result = HttpModule.delete(url, headers, timeout)
-                return _python_to_zexus(result)
+                # HTTP responses are external data - mark as untrusted
+                return _python_to_zexus(result, mark_untrusted=True)
             except Exception as e:
                 return EvaluationError(f"HTTP DELETE error: {str(e)}")
         
@@ -2158,6 +2289,11 @@ class FunctionEvaluatorMixin:
             "sqrt": Builtin(_sqrt, "sqrt"),
             "require": Builtin(_require, "require"),
             "require": Builtin(_require, "require"),
+            "input": Builtin(_input, "input"),
+            "hash_password": Builtin(_hash_password, "hash_password"),
+            "verify_password": Builtin(_verify_password, "verify_password"),
+            "crypto_random": Builtin(_crypto_random, "crypto_random"),
+            "constant_time_compare": Builtin(_constant_time_compare, "constant_time_compare"),
             "file": Builtin(_file, "file"),
             "file_read_text": Builtin(_read_text, "file_read_text"),
             "file_write_text": Builtin(_write_text, "file_write_text"),
@@ -2197,6 +2333,7 @@ class FunctionEvaluatorMixin:
             "random": Builtin(_random, "random"),
             "persist_set": Builtin(_persist_set, "persist_set"),
             "persist_get": Builtin(_persist_get, "persist_get"),
+            "input": Builtin(_input, "input"),
             "len": Builtin(_len, "len"),
             "type": Builtin(_type, "type"),
             "first": Builtin(_first, "first"),
@@ -2208,6 +2345,9 @@ class FunctionEvaluatorMixin:
             "map": Builtin(_map, "map"),
             "filter": Builtin(_filter, "filter"),
         })
+        
+        # Register access control builtins
+        self._register_access_control_builtins()
         
         # Register concurrency builtins
         self._register_concurrency_builtins()
@@ -2565,6 +2705,227 @@ class FunctionEvaluatorMixin:
             "barrier": Builtin(_barrier, "barrier"),
             "barrier_wait": Builtin(_barrier_wait, "barrier_wait"),
             "barrier_reset": Builtin(_barrier_reset, "barrier_reset"),
+        })
+    
+    def _register_access_control_builtins(self):
+        """Register access control functions for contracts"""
+        from ..access_control_system import get_access_control
+        from ..blockchain.transaction import get_current_tx
+        
+        def _set_owner(*a):
+            """Set owner of current contract: set_owner(contract_id, owner_address)"""
+            if len(a) != 2:
+                return EvaluationError("set_owner() requires 2 arguments: contract_id, owner_address")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            owner = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            
+            ac = get_access_control()
+            ac.set_owner(contract_id, owner)
+            return NULL
+        
+        def _get_owner(*a):
+            """Get owner of contract: get_owner(contract_id)"""
+            if len(a) != 1:
+                return EvaluationError("get_owner() requires 1 argument: contract_id")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            
+            ac = get_access_control()
+            owner = ac.get_owner(contract_id)
+            return String(owner) if owner else NULL
+        
+        def _is_owner(*a):
+            """Check if address is owner: is_owner(contract_id, address)"""
+            if len(a) != 2:
+                return EvaluationError("is_owner() requires 2 arguments: contract_id, address")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            
+            ac = get_access_control()
+            return TRUE if ac.is_owner(contract_id, address) else FALSE
+        
+        def _grant_role(*a):
+            """Grant role to address: grant_role(contract_id, address, role)"""
+            if len(a) != 3:
+                return EvaluationError("grant_role() requires 3 arguments: contract_id, address, role")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            role = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            ac.grant_role(contract_id, address, role)
+            return NULL
+        
+        def _revoke_role(*a):
+            """Revoke role from address: revoke_role(contract_id, address, role)"""
+            if len(a) != 3:
+                return EvaluationError("revoke_role() requires 3 arguments: contract_id, address, role")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            role = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            ac.revoke_role(contract_id, address, role)
+            return NULL
+        
+        def _has_role(*a):
+            """Check if address has role: has_role(contract_id, address, role)"""
+            if len(a) != 3:
+                return EvaluationError("has_role() requires 3 arguments: contract_id, address, role")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            role = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            return TRUE if ac.has_role(contract_id, address, role) else FALSE
+        
+        def _get_roles(*a):
+            """Get all roles for address: get_roles(contract_id, address)"""
+            if len(a) != 2:
+                return EvaluationError("get_roles() requires 2 arguments: contract_id, address")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            
+            ac = get_access_control()
+            roles = ac.get_roles(contract_id, address)
+            return List([String(role) for role in roles])
+        
+        def _grant_permission(*a):
+            """Grant permission to address: grant_permission(contract_id, address, permission)"""
+            if len(a) != 3:
+                return EvaluationError("grant_permission() requires 3 arguments: contract_id, address, permission")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            permission = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            ac.grant_permission(contract_id, address, permission)
+            return NULL
+        
+        def _revoke_permission(*a):
+            """Revoke permission from address: revoke_permission(contract_id, address, permission)"""
+            if len(a) != 3:
+                return EvaluationError("revoke_permission() requires 3 arguments: contract_id, address, permission")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            permission = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            ac.revoke_permission(contract_id, address, permission)
+            return NULL
+        
+        def _has_permission(*a):
+            """Check if address has permission: has_permission(contract_id, address, permission)"""
+            if len(a) != 3:
+                return EvaluationError("has_permission() requires 3 arguments: contract_id, address, permission")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            address = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            permission = a[2].value if hasattr(a[2], 'value') else str(a[2])
+            
+            ac = get_access_control()
+            return TRUE if ac.has_permission(contract_id, address, permission) else FALSE
+        
+        def _require_owner(*a):
+            """Require caller is owner: require_owner(contract_id, message?)"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("require_owner() requires 1 or 2 arguments: contract_id, [message]")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            message = a[1].value if len(a) > 1 and hasattr(a[1], 'value') else None
+            
+            # Get current transaction caller
+            tx = get_current_tx()
+            if not tx:
+                return EvaluationError("require_owner() requires transaction context (TX.caller)")
+            
+            caller = tx.caller
+            
+            ac = get_access_control()
+            try:
+                if message:
+                    ac.require_owner(contract_id, caller, message)
+                else:
+                    ac.require_owner(contract_id, caller)
+                return NULL
+            except Exception as e:
+                return EvaluationError(str(e))
+        
+        def _require_role(*a):
+            """Require caller has role: require_role(contract_id, role, message?)"""
+            if len(a) < 2 or len(a) > 3:
+                return EvaluationError("require_role() requires 2 or 3 arguments: contract_id, role, [message]")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            role = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            message = a[2].value if len(a) > 2 and hasattr(a[2], 'value') else None
+            
+            # Get current transaction caller
+            tx = get_current_tx()
+            if not tx:
+                return EvaluationError("require_role() requires transaction context (TX.caller)")
+            
+            caller = tx.caller
+            
+            ac = get_access_control()
+            try:
+                if message:
+                    ac.require_role(contract_id, caller, role, message)
+                else:
+                    ac.require_role(contract_id, caller, role)
+                return NULL
+            except Exception as e:
+                return EvaluationError(str(e))
+        
+        def _require_permission(*a):
+            """Require caller has permission: require_permission(contract_id, permission, message?)"""
+            if len(a) < 2 or len(a) > 3:
+                return EvaluationError("require_permission() requires 2 or 3 arguments: contract_id, permission, [message]")
+            
+            contract_id = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            permission = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            message = a[2].value if len(a) > 2 and hasattr(a[2], 'value') else None
+            
+            # Get current transaction caller
+            tx = get_current_tx()
+            if not tx:
+                return EvaluationError("require_permission() requires transaction context (TX.caller)")
+            
+            caller = tx.caller
+            
+            ac = get_access_control()
+            try:
+                if message:
+                    ac.require_permission(contract_id, caller, permission, message)
+                else:
+                    ac.require_permission(contract_id, caller, permission)
+                return NULL
+            except Exception as e:
+                return EvaluationError(str(e))
+        
+        # Register access control builtins
+        self.builtins.update({
+            "set_owner": Builtin(_set_owner, "set_owner"),
+            "get_owner": Builtin(_get_owner, "get_owner"),
+            "is_owner": Builtin(_is_owner, "is_owner"),
+            "grant_role": Builtin(_grant_role, "grant_role"),
+            "revoke_role": Builtin(_revoke_role, "revoke_role"),
+            "has_role": Builtin(_has_role, "has_role"),
+            "get_roles": Builtin(_get_roles, "get_roles"),
+            "grant_permission": Builtin(_grant_permission, "grant_permission"),
+            "revoke_permission": Builtin(_revoke_permission, "revoke_permission"),
+            "has_permission": Builtin(_has_permission, "has_permission"),
+            "require_owner": Builtin(_require_owner, "require_owner"),
+            "require_role": Builtin(_require_role, "require_role"),
+            "require_permission": Builtin(_require_permission, "require_permission"),
         })
     
     def _register_blockchain_builtins(self):

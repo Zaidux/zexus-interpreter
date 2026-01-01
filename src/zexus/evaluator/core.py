@@ -8,6 +8,7 @@ from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
 from .functions import FunctionEvaluatorMixin
 from .integration import EvaluationContext, get_integration
+from .resource_limiter import ResourceLimiter, ResourceError, TimeoutError
 
 # Import VM and bytecode compiler
 try:
@@ -22,7 +23,7 @@ except ImportError as e:
     print(f"⚠️  VM not available in evaluator: {e}")
 
 class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvaluatorMixin):
-    def __init__(self, trusted: bool = False, use_vm: bool = True):
+    def __init__(self, trusted: bool = False, use_vm: bool = True, resource_limiter=None):
         # Initialize mixins (FunctionEvaluatorMixin sets up builtins)
         FunctionEvaluatorMixin.__init__(self)
         
@@ -34,6 +35,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             self.integration_context.setup_for_trusted_code()
         else:
             self.integration_context.setup_for_untrusted_code()
+        
+        # Resource limiting (Security Fix #7)
+        self.resource_limiter = resource_limiter or ResourceLimiter()
         
         # VM integration
         self.use_vm = use_vm and VM_AVAILABLE
@@ -409,7 +413,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 value = value.replace('\\\\', '\\')
                 value = value.replace('\\"', '"')
                 value = value.replace("\\'", "'")
-                return String(value)
+                # String literals are trusted (not from external input)
+                return String(value, is_trusted=True)
             
             elif isinstance(node, zexus_ast.Boolean):
                 debug_log("  Boolean node", f"value: {node.value}")

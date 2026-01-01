@@ -1,0 +1,10 @@
+#!/usr/bin/env zexus
+# Debug string variables
+
+let x = "hello";
+print x;
+
+let y = x + " world";
+print y;
+
+print "Done";

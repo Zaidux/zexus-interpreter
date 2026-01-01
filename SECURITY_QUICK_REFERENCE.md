@@ -22,18 +22,37 @@ action transfer(from, to, amount) {
 }
 ```
 
-### ✅ Sanitize All External Input
+### ✅ Sanitize All External Input (MANDATORY - Automatically Enforced)
+
+**Security enforcement is built into Zexus and cannot be disabled.**
 
 ```zexus
-# ❌ VULNERABLE
+# ❌ BLOCKED AUTOMATICALLY - Security error at runtime
 user_input = get_input();
 query = "SELECT * FROM users WHERE name = '" + user_input + "'";
+# 🔒 ERROR: Unsanitized input used in SQL context
 
-# ✅ SECURE
+# ✅ SECURE - Sanitize before use
 user_input = get_input();
-sanitize user_input as sql;
-query = "SELECT * FROM users WHERE name = '" + user_input + "'";
+let safe_input = sanitize user_input, "sql"
+query = "SELECT * FROM users WHERE name = '" + safe_input + "'";
+
+# ✅ ALSO SECURE - Literal SQL templates are trusted
+let literal_query = "SELECT * FROM users WHERE id = 1"
 ```
+
+**How it works:**
+- Zexus automatically detects SQL, HTML, URL, and shell patterns
+- Requires sanitization for ANY non-literal strings in sensitive contexts
+- String literals (hardcoded in code) are trusted
+- Sanitized strings are tracked and context-verified
+- Context mismatch is detected: HTML-sanitized data cannot be used in SQL
+
+**Supported contexts:**
+- `"sql"` - SQL injection protection
+- `"html"` - XSS protection  
+- `"url"` - URL injection protection
+- `"shell"` - Command injection protection
 
 ### ✅ Use Capabilities for Access Control
 

@@ -1,0 +1,15 @@
+#!/usr/bin/env zexus
+# Test that external data from files is blocked when unsanitized
+
+print "=== Testing File Input Enforcement ==="
+
+print "\nReading potentially malicious data from file..."
+let file_data = file_read_text("test_external_data.txt")
+print "File contents loaded (untrusted)"
+
+print "\nAttempting to use unsanitized file data in SQL..."
+print "This SHOULD fail with security error:"
+
+let query = "SELECT * FROM users WHERE name = '" + file_data + "'"
+
+print "❌ This line should not be reached!"
