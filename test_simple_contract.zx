@@ -1,6 +1,0 @@
-contract SimpleTest {
-    state x = 10
-}
-
-let c = SimpleTest()
-print("Contract created")

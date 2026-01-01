@@ -221,7 +221,7 @@ class StatementEvaluatorMixin:
             return value
         
         # Set as const in environment
-        env.set_const(node.name.value, value)
+        env.set(node.name.value, value)
         return NULL
     
     def eval_data_statement(self, node, env, stack_trace):
@@ -337,6 +337,14 @@ class StatementEvaluatorMixin:
             instance.pairs[String("__immutable__")] = Boolean(is_immutable)
             instance.pairs[String("__verified__")] = Boolean(is_verified)
             
+            # Check if single argument is a Map (from MapLiteral syntax like Block{index: 42})
+            # If so, extract field values from the map instead of treating it as positional args
+            kwargs = None
+            if len(args) == 1 and isinstance(args[0], Map):
+                # Extract keyword arguments from the Map
+                kwargs = args[0].pairs
+                debug_log("dataclass_constructor", f"Extracted {len(kwargs)} kwargs from Map")
+            
             # Process each field with validation (parent fields first, then child fields)
             arg_index = 0
             for field in all_fields:
@@ -348,8 +356,20 @@ class StatementEvaluatorMixin:
                 
                 field_value = NULL
                 
-                # Get value from arguments or default
-                if arg_index < len(args):
+                # Get value from keyword args (map syntax) or positional args
+                if kwargs is not None:
+                    # Try to get value from keyword arguments (map)
+                    field_value = kwargs.get(field_name, NULL)
+                    if field_value == NULL:
+                        # Try with String key
+                        field_value = kwargs.get(String(field_name), NULL)
+                    if field_value == NULL and field.default_value is not None:
+                        # Use default if not provided
+                        field_value = evaluator_self.eval_node(field.default_value, parent_env, stack_trace)
+                        if is_error(field_value):
+                            return field_value
+                elif arg_index < len(args):
+                    # Positional argument
                     field_value = args[arg_index]
                     arg_index += 1
                 elif field.default_value is not None:
@@ -702,10 +722,10 @@ class StatementEvaluatorMixin:
             "default": Builtin(default_static)
         }
         
-        # Register constructor in environment as const
+        # Register constructor in environment
         # For specialized generics (e.g., Box<number>), don't fail if already registered
         try:
-            env.set_const(type_name, constructor)
+            env.set(type_name, constructor)
         except ValueError as e:
             # If it's a specialized generic that's already registered, just return the existing one
             if '<' in type_name and '>' in type_name:

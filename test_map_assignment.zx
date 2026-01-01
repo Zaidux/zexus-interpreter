@@ -1,7 +1,0 @@
-let test = {}
-print("Initial test: " + string(test))
-print("Type: " + type(test))
-
-test["key"] = "value"
-print("After assignment: " + string(test))
-print("Value at key: " + test["key"])

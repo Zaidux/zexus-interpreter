@@ -1,8 +1,0 @@
-contract TestStorage {
-    state my_number = 42
-    state my_map = {}
-}
-
-print("Creating contract...")
-let c = TestStorage()
-print("Contract created successfully")

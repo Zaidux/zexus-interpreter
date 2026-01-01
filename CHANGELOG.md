@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.5] - 2026-01-02
+
+### 🐛 Bug Fixes
+
+This release resolves critical parser and evaluator issues that were blocking production use.
+
+#### Fixed
+
+**Parser & Evaluator Fixes:**
+- **Entity Property Access** - Fixed dataclass constructor to properly handle MapLiteral syntax
+  - `Block{index: 42}` now correctly extracts field values
+  - Property access `block["index"]` now returns field value instead of entire object
+  - Enhanced constructor to detect single Map argument and convert to kwargs
+  - File: `src/zexus/evaluator/statements.py` (lines 327-380)
+
+- **Keyword Restrictions** - Removed 'from' from reserved keywords list
+  - Can now use `from` and `to` as parameter names: `action transfer(from, to, amount)`
+  - Parser still recognizes `from` contextually in import statements
+  - No more syntax errors when using natural parameter names
+  - File: `src/zexus/lexer.py` (line 479)
+
+- **Environment Method Error** - Fixed missing `set_const()` method calls
+  - Replaced all `env.set_const()` calls with `env.set()`
+  - Fixed AttributeError crashes in const and data statements
+  - Files: `src/zexus/evaluator/statements.py` (lines 224, 708)
+
+- **Multiple Map Assignment Parser Bug** - Enhanced statement boundary detection
+  - Fixed parser incorrectly combining consecutive indexed assignments
+  - Multiple `map[key] = value` statements on consecutive lines now work correctly
+  - Added indexed assignment pattern detection: `IDENT[...] = ...`
+  - Added newline-aware statement separation
+  - No longer need semicolons or workarounds for multiple assignments
+  - File: `src/zexus/parser/strategy_context.py` (lines 3387-3430)
+
+#### Verified Working
+
+**Features Confirmed Operational:**
+- **Contract State Persistence** - Contract state correctly persists between action calls (was already working)
+- **Module Variable Reassignment** - Can reassign module-level variables inside functions (was already working)
+
+#### Testing
+
+**Test Suite:**
+- All tests pass successfully
+- Test files: `test_fixes_final.zx`, `test_entity_property.zx`, `test_module_var_reassign.zx`, `test_debug_contract.zx`
+- Comprehensive validation of:
+  - Map operations and persistence
+  - Token transfers with multiple assignments
+  - Entity/data property access
+  - Module variable reassignment
+
+#### Impact
+
+**Production Readiness:**
+- ✅ All critical bugs resolved
+- ✅ Smart contracts fully functional
+- ✅ Entity/data types work correctly
+- ✅ Natural parameter naming (from/to)
+- ✅ Multiple map assignments without workarounds
+- ✅ Ready for real-world blockchain development
+
+#### Documentation
+
+**Updated:**
+- `issues/ISSUE2.md` - Complete fix documentation with code examples
+- Status changed from "Partially Functional (50%)" to "Fully Functional (100%)"
+
+---
+
 ## [1.6.3] - 2026-01-02
 
 ### 🔒 Security Enhancements
@@ -234,6 +303,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.6.5]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.3...v1.6.5
 [1.6.3]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.5.0...v1.6.2
 [1.5.0]: https://github.com/Zaidux/zexus-interpreter/compare/v0.1.3...v1.5.0

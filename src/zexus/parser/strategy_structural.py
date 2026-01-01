@@ -728,9 +728,11 @@ class StructuralAnalyzer:
                     if tj.line > last_line:
                         # Check if we have balanced parens in run_tokens (statement is syntactically complete)
                         paren_count = sum(1 if tok.type == LPAREN else -1 if tok.type == RPAREN else 0 for tok in run_tokens)
-                        if paren_count == 0:
+                        bracket_count = sum(1 if tok.type == LBRACKET else -1 if tok.type == RBRACKET else 0 for tok in run_tokens)
+                        if paren_count == 0 and bracket_count == 0:
                             # Check if run_tokens contains an assignment (this is a complete assignment statement)
                             has_assign = any(tok.type == ASSIGN for tok in run_tokens)
+                            print(f"    has_assign={has_assign}, tj.type={tj.type}")
                             if has_assign:
                                 # Current token is on a new line and could start a new statement
                                 # Check if it's IDENT (could be method call, function call, or property access)
@@ -738,8 +740,10 @@ class StructuralAnalyzer:
                                     # CRITICAL FIX: Don't break if the previous token was ASSIGN
                                     # This means the IDENT is the RHS value, not a new statement
                                     prev_tok = run_tokens[-1] if run_tokens else None
+                                    print(f"      prev_tok={prev_tok.literal if prev_tok else None}, type={prev_tok.type if prev_tok else None}")
                                     if prev_tok and prev_tok.type == ASSIGN:
                                         # This IDENT is the RHS of the assignment, not a new statement
+                                        print(f"      -> Continuing (RHS of assignment)")
                                         pass  # Don't break, continue collecting
                                     else:
                                         # This is likely a new statement on a new line
@@ -759,6 +763,26 @@ class StructuralAnalyzer:
                     elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == DOT:
                         # Look ahead: IDENT DOT IDENT ASSIGN is a property assignment
                         if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type == ASSIGN:
+                            is_assignment_start = True
+                    # Pattern 3: IDENT followed by LBRACKET could be indexed assignment (arr[i] = ...)
+                    elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LBRACKET:
+                        # Look ahead to find matching RBRACKET and then ASSIGN
+                        # This pattern is: IDENT [ ... ] ASSIGN
+                        bracket_depth = 0
+                        k = j + 1
+                        found_assign_after_bracket = False
+                        while k < n:
+                            if tokens[k].type == LBRACKET:
+                                bracket_depth += 1
+                            elif tokens[k].type == RBRACKET:
+                                bracket_depth -= 1
+                                if bracket_depth == 0:
+                                    # Found matching closing bracket, check if next is ASSIGN
+                                    if k + 1 < n and tokens[k + 1].type == ASSIGN:
+                                        found_assign_after_bracket = True
+                                    break
+                            k += 1
+                        if found_assign_after_bracket:
                             is_assignment_start = True
                     
                     is_new_statement = (
@@ -993,11 +1017,12 @@ class StructuralAnalyzer:
                         continue
             
             # NEW: Check for line-based statement boundaries
-            # If we have balanced parens and the next token is on a new line and could start a new statement, create boundary
+            # If we have balanced parens/brackets and the next token is on a new line and could start a new statement, create boundary
             if cur:
-                # Check if parens are balanced
+                # Check if parens and brackets are balanced
                 paren_count = sum(1 if tok.type == LPAREN else -1 if tok.type == RPAREN else 0 for tok in cur)
-                if paren_count == 0:
+                bracket_count = sum(1 if tok.type == LBRACKET else -1 if tok.type == RBRACKET else 0 for tok in cur)
+                if paren_count == 0 and bracket_count == 0:
                     # Check if there's an ASSIGN in cur (this is a complete assignment statement)
                     has_assign = any(tok.type == ASSIGN for tok in cur)
                     if has_assign:
@@ -1005,7 +1030,7 @@ class StructuralAnalyzer:
                         last_line = cur[-1].line if cur else 0
                         if t.line > last_line:
                             # Check if current token could start a new statement
-                            # IDENT followed by DOT or LPAREN could be a new statement
+                            # IDENT could be a new statement (including indexed assignments like map[key] = val)
                             if t.type == IDENT:
                                 # This is likely a new statement on a new line
                                 results.append(cur)

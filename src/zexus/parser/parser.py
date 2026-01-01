@@ -2666,6 +2666,43 @@ class UltimateParser:
                not self.peek_token_is(RBRACKET) and 
                precedence <= self.peek_precedence()):
 
+            # CRITICAL FIX: Stop if next token is on a new line and could start a new statement
+            # This prevents expressions from spanning multiple logical lines
+            if self.cur_token.line < self.peek_token.line:
+                # Next token is on a new line - check if it could start a new statement
+                next_could_be_statement = (
+                    self.peek_token.type == IDENT or
+                    self.peek_token.type == LET or
+                    self.peek_token.type == CONST or
+                    self.peek_token.type == RETURN or
+                    self.peek_token.type == IF or
+                    self.peek_token.type == WHILE or
+                    self.peek_token.type == FOR
+                )
+                if next_could_be_statement:
+                    # Additional check: is the next token followed by [ or = ?
+                    # This would indicate it's an assignment/index expression starting
+                    if self.peek_token.type == IDENT:
+                        # Save current state to peek ahead
+                        saved_cur = self.cur_token
+                        saved_peek = self.peek_token
+                        saved_pos = self.cur_pos
+                        
+                        # Peek ahead one more token
+                        self.next_token()  # Now peek_token is what we want to check
+                        next_next = self.peek_token
+                        
+                        # Restore state
+                        self.cur_token = saved_cur
+                        self.peek_token = saved_peek
+                        self.cur_pos = saved_pos
+                        
+                        # If next token after IDENT is LBRACKET or ASSIGN, it's likely a new statement
+                        if next_next.type in (LBRACKET, ASSIGN, LPAREN):
+                            break
+                    else:
+                        break
+
             if self.peek_token.type not in self.infix_parse_fns:
                 return left_exp
 

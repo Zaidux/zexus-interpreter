@@ -473,7 +473,7 @@ class Lexer:
             "break": BREAK,      # NEW: Break loop keyword
             "throw": THROW,      # NEW: Throw error keyword
             "external": EXTERNAL, # NEW: External keyword
-            "from": FROM,        # NEW: From keyword
+            # "from": FROM,        # NOT a keyword - only recognized contextually in import statements
             "screen": SCREEN,         # NEW: renderer keyword
             "component": COMPONENT,   # NEW: renderer keyword
             "theme": THEME,           # NEW: renderer keyword

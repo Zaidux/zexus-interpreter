@@ -3392,6 +3392,11 @@ class ContextStackParser:
                         # E.g., after RPAREN (end of function call) or after a complete value
                         prev_token = run_tokens[-1] if run_tokens else None
                         if prev_token and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE, ASSIGN}:
+                            # CRITICAL: Also check for newline - new line + IDENT often indicates new statement
+                            last_line = prev_token.line if hasattr(prev_token, 'line') else 0
+                            current_line = t.line if hasattr(t, 'line') else 0
+                            is_new_line = current_line > last_line
+                            
                             # Check if this starts a new statement (assignment or function call)
                             k = j + 1
                             is_new_statement_start = False
@@ -3404,6 +3409,22 @@ class ContextStackParser:
                                 # Assignment: ident = or ident.prop =
                                 elif next_tok.type == ASSIGN:
                                     is_new_statement_start = True
+                                # CRITICAL FIX: Indexed assignment: ident[...]  =
+                                elif next_tok.type == LBRACKET:
+                                    # Scan for matching RBRACKET followed by ASSIGN
+                                    bracket_depth = 1
+                                    scan_idx = k + 1
+                                    while scan_idx < len(tokens) and scan_idx < k + 20:
+                                        if tokens[scan_idx].type == LBRACKET:
+                                            bracket_depth += 1
+                                        elif tokens[scan_idx].type == RBRACKET:
+                                            bracket_depth -= 1
+                                            if bracket_depth == 0:
+                                                # Found matching closing bracket, check for ASSIGN
+                                                if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
+                                                    is_new_statement_start = True
+                                                break
+                                        scan_idx += 1
                                 elif next_tok.type == DOT:
                                     # Property assignment: scan for ASSIGN
                                     while k < len(tokens) and k < j + 10:
@@ -3419,7 +3440,9 @@ class ContextStackParser:
                                         else:
                                             break
                             
-                            if is_new_statement_start:
+                            # Break if this is a new statement AND on a new line
+                            # (or if we're sure it's a new statement regardless of line)
+                            if is_new_statement_start and (is_new_line or prev_token.type == RPAREN):
                                 break
                     
                     # update nesting for parentheses/brackets/braces

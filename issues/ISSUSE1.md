@@ -1,7 +1,7 @@
 # Zexus Blockchain Testing - Issues Report
 
 **Date**: January 1, 2026  
-**Zexus Version**: 1.6.4  
+**Zexus Version**: 1.6.5  
 **Project**: Ziver Chain Blockchain  
 **Tester**: GitHub Copilot AI Assistant  
 **Status**: IN PROGRESS - 3/6 Issues Fixed
@@ -413,4 +413,4 @@ This allows `balances[from_addr]` to correctly evaluate `from_addr` variable ins
 **Report Updated**: January 1, 2026  
 **Fixes Applied**: January 1, 2026  
 **Status**: ✅ ALL ISSUES RESOLVED  
-**Zexus Version**: 1.6.4
+**Zexus Version**: 1.6.5
