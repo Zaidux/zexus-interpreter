@@ -1533,9 +1533,40 @@ class ContextStackParser:
                                     default_val = BooleanLiteral(True)
                                 elif val_token.type == FALSE:
                                     default_val = BooleanLiteral(False)
+                                elif val_token.type == LBRACE:
+                                    # Map literal: {}
+                                    # Find matching RBRACE
+                                    map_start = current_idx
+                                    depth = 1
+                                    current_idx += 1
+                                    while current_idx < brace_end and depth > 0:
+                                        if tokens[current_idx].type == LBRACE:
+                                            depth += 1
+                                        elif tokens[current_idx].type == RBRACE:
+                                            depth -= 1
+                                        current_idx += 1
+                                    # Parse the map literal
+                                    map_tokens = tokens[map_start:current_idx]
+                                    default_val = self._parse_map_literal(map_tokens)
+                                elif val_token.type == LBRACKET:
+                                    # List literal: []
+                                    # Find matching RBRACKET
+                                    list_start = current_idx
+                                    depth = 1
+                                    current_idx += 1
+                                    while current_idx < brace_end and depth > 0:
+                                        if tokens[current_idx].type == LBRACKET:
+                                            depth += 1
+                                        elif tokens[current_idx].type == RBRACKET:
+                                            depth -= 1
+                                        current_idx += 1
+                                    # Parse the list literal
+                                    list_tokens = tokens[list_start:current_idx]
+                                    default_val = self._parse_list_literal(list_tokens)
                                 elif val_token.type == IDENT:
                                     default_val = Identifier(val_token.literal)
-                                current_idx += 1
+                                    current_idx += 1
+                                # Note: current_idx already advanced for LBRACE and LBRACKET cases
 
                         # Use AstNodeShim for compatibility with evaluator
                         storage_vars.append(AstNodeShim(
@@ -3932,6 +3963,24 @@ class ContextStackParser:
                     if i < n and tokens[i].type == RPAREN:
                         i += 1  # Skip RPAREN
                     return CallExpression(Identifier(name), args, type_args=type_args)
+                
+                # Check for constructor call with map literal: Entity{field: value, ...}
+                elif i < n and tokens[i].type == LBRACE:
+                    # Parse the map literal as the single argument
+                    start = i
+                    depth = 1
+                    i += 1  # Skip LBRACE
+                    # Find matching RBRACE
+                    while i < n and depth > 0:
+                        if tokens[i].type == LBRACE:
+                            depth += 1
+                        elif tokens[i].type == RBRACE:
+                            depth -= 1
+                        i += 1
+                    # Parse the map literal tokens (including braces)
+                    map_literal = self._parse_map_literal(tokens[start:i])
+                    return CallExpression(Identifier(name), [map_literal], type_args=type_args)
+                
                 else:
                     return Identifier(name)
 
@@ -3997,7 +4046,8 @@ class ContextStackParser:
                     # Property access: expr.name
                     current_expr = PropertyAccessExpression(
                         object=current_expr,
-                        property=Identifier(name_token.literal)
+                        property=Identifier(name_token.literal),
+                        computed=False
                     )
                 continue
 
@@ -4052,7 +4102,8 @@ class ContextStackParser:
                 prop_expr = self._parse_expression(inner_tokens) if inner_tokens else Identifier('')
                 current_expr = PropertyAccessExpression(
                     object=current_expr,
-                    property=prop_expr
+                    property=prop_expr,
+                    computed=True
                 )
                 continue
 

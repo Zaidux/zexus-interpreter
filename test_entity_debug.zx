@@ -1,0 +1,18 @@
+entity Block {
+    index: integer
+    data: string
+}
+
+action create_block() -> Block {
+    let b = Block{
+        index: 42,
+        data: "test"
+    }
+    print("Inside action - b.index: " + string(b.index))
+    print("Inside action - b.data: " + b.data)
+    return b
+}
+
+let my_block = create_block()
+print("Outside action - my_block.index: " + string(my_block.index))
+print("Outside action - my_block.data: " + my_block.data)

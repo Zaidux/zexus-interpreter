@@ -1,0 +1,41 @@
+#!/usr/bin/env zx
+# Debug version: Test map persistence with detailed logging
+
+print("=== Testing Map Persistence (Debug) ===")
+
+let balances = {}
+balances["alice"] = 1000000
+
+print("Initial Alice balance: " + string(balances["alice"]))
+
+action transfer(from_addr, to_addr, amount) {
+    print("\n  [INSIDE transfer()] from=" + from_addr + ", to=" + to_addr + ", amount=" + string(amount))
+    
+    # Check current balance
+    let from_balance = balances[from_addr]
+    print("  [INSIDE] Current balances[" + from_addr + "] = " + string(from_balance))
+    
+    # Deduct from sender
+    balances[from_addr] = from_balance - amount
+    print("  [INSIDE] After assignment balances[" + from_addr + "] = " + string(balances[from_addr]))
+    
+    # Add to recipient
+    let recipient_balance = 0
+    if balances[to_addr] != null {
+        recipient_balance = balances[to_addr]
+    }
+    balances[to_addr] = recipient_balance + amount
+    print("  [INSIDE] After assignment balances[" + to_addr + "] = " + string(balances[to_addr]))
+    
+    return true
+}
+
+print("\n--- Before transfer ---")
+print("balances['alice'] = " + string(balances["alice"]))
+
+print("\n--- Calling transfer('alice', 'bob', 50000) ---")
+transfer("alice", "bob", 50000)
+
+print("\n--- After transfer ---")
+print("balances['alice'] = " + string(balances["alice"]))
+print("balances['bob'] = " + string(balances["bob"]))

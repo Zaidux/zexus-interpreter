@@ -23,7 +23,7 @@ class PackageManager:
         self.installer = PackageInstaller(self.zpm_dir)
         self.publisher = PackagePublisher(self.registry)
         
-    def init(self, name: str = None, version: str = "1.6.3") -> Dict:
+    def init(self, name: str = None, version: str = "1.6.4") -> Dict:
         """Initialize a new Zexus project with package.json"""
         if self.config_file.exists():
             print(f"⚠️  {self.config_file} already exists")

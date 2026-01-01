@@ -1,0 +1,19 @@
+contract DebugStorageContract {
+    state test_value = 42
+    state test_map = {}
+    state test_list = [1, 2, 3]
+    
+    action debug() {
+        print("test_value type: " + type(test_value))
+        print("test_value: " + string(test_value))
+        
+        print("test_map type: " + type(test_map))
+        print("test_map: " + string(test_map))
+        
+        print("test_list type: " + type(test_list))
+        print("test_list: " + string(test_list))
+    }
+}
+
+let c = DebugStorageContract()
+c.debug()

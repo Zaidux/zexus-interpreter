@@ -757,15 +757,23 @@ class StatementEvaluatorMixin:
             if is_error(obj):
                 return obj
 
-            # Safely extract property key
-            if hasattr(node.name.property, 'value'):
-                prop_key = node.name.property.value
-            else:
-                # Evaluate property expression
+            # Determine property key based on whether it's computed (obj[expr]) or literal (obj.prop)
+            if hasattr(node.name, 'computed') and node.name.computed:
+                # Computed property (obj[expr]) - evaluate the expression
                 prop_result = self.eval_node(node.name.property, env, stack_trace)
                 if is_error(prop_result):
                     return prop_result
                 prop_key = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
+            else:
+                # Literal property (obj.prop) - use the identifier name directly
+                if hasattr(node.name.property, 'value'):
+                    prop_key = node.name.property.value
+                else:
+                    # Fallback: evaluate it
+                    prop_result = self.eval_node(node.name.property, env, stack_trace)
+                    if is_error(prop_result):
+                        return prop_result
+                    prop_key = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
 
             # Evaluate value first
             value = self.eval_node(node.value, env, stack_trace)
@@ -1708,11 +1716,10 @@ class StatementEvaluatorMixin:
         
         # Pass the AST nodes as storage_vars, not the storage dict
         contract = SmartContract(node.name.value, node.storage_vars, actions)
-        contract.deploy()
+        # Deploy with evaluated storage values to avoid storing AST nodes
+        contract.deploy(evaluated_storage_values=storage)
         
-        # Initialize storage with evaluated initial values
-        for var_name, init_val in storage.items():
-            contract.storage.set(var_name, init_val)
+        # Storage values are now set during deploy(), no need to set again
         
         # Check if contract has a constructor and execute it
         if 'constructor' in actions:

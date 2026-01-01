@@ -1,0 +1,30 @@
+let balances = {"alice": 1000000}
+
+action transfer(from_addr, to_addr, amount) {
+    balances[from_addr] = balances[from_addr] - amount
+    
+    let recipient_balance = 0
+    if balances[to_addr] != null {
+        recipient_balance = balances[to_addr]
+    }
+    balances[to_addr] = recipient_balance + amount
+    
+    print("  Transferred: " + string(amount) + " tokens")
+    return true
+}
+
+action get_balance(addr) {
+    if balances[addr] != null {
+        return balances[addr]
+    }
+    return 0
+}
+
+print("Initial balance (Alice): " + string(balances["alice"]))
+
+transfer("alice", "bob", 50000)
+transfer("alice", "charlie", 25000)
+
+print("Alice balance: " + string(get_balance("alice")))
+print("Bob balance: " + string(get_balance("bob")))
+print("Charlie balance: " + string(get_balance("charlie")))

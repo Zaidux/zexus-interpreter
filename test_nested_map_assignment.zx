@@ -1,0 +1,34 @@
+contract Consensus {
+    state validators = {}
+    
+    action register_validator(address, stake) {
+        print("Registering validator: " + address)
+        validators[address] = {
+            "stake": stake,
+            "active": true,
+            "blocks_validated": 0
+        }
+        print("✓ Validator registered")
+        return true
+    }
+    
+    action get_validator(address) {
+        if validators[address] != null {
+            let validator = validators[address]
+            print("Validator " + address + ":")
+            print("  Stake: " + string(validator["stake"]))
+            print("  Active: " + string(validator["active"]))
+            return validator
+        }
+        return null
+    }
+}
+
+let consensus = Consensus{}
+
+print("Test: Register validator")
+consensus.register_validator("alice", 5000)
+
+print("")
+print("Test: Retrieve validator")
+consensus.get_validator("alice")

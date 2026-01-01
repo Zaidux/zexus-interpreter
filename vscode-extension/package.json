@@ -2,7 +2,7 @@
   "name": "zexus-vscode",
   "displayName": "Zexus Language Support",
   "description": "Full-featured VS Code extension for Zexus with IntelliSense, debugging, and more",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "publisher": "Zaidux",
   "repository": {
     "type": "git",

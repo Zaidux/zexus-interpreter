@@ -1,0 +1,7 @@
+let validators = {}
+validators["v1"] = 1000
+validators["v2"] = 2000
+validators["v3"] = 3000
+
+print("Validators: " + string(validators))
+print("Count: " + string(len(validators)))

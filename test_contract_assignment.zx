@@ -1,0 +1,18 @@
+contract DebugContract {
+    state test_map = {}
+    
+    action show_state() {
+        print("Type of test_map: " + type(test_map))
+        print("test_map value: " + string(test_map))
+    }
+    
+    action try_assign() {
+        print("Before assignment")
+        test_map["key"] = "value"
+        print("After assignment")
+    }
+}
+
+let c = DebugContract()
+c.show_state()
+c.try_assign()

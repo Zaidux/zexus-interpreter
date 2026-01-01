@@ -27,6 +27,7 @@ precedences = {
     SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
     LPAREN: CALL,
     LBRACKET: CALL,
+    LBRACE: CALL,  # Entity{...} constructor syntax
     DOT: CALL,
 }
 
@@ -103,6 +104,7 @@ class UltimateParser:
             ASSIGN: self.parse_assignment_expression,
             LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
             LPAREN: self.parse_call_expression,
+            LBRACE: self.parse_constructor_call_expression,  # Entity{field: value} syntax
             LBRACKET: self.parse_index_expression,
             DOT: self.parse_method_call_expression,
         }
@@ -1506,7 +1508,7 @@ class UltimateParser:
             arguments = self.parse_expression_list(RPAREN)
             return MethodCallExpression(object=left, method=method, arguments=arguments)
         else:
-            return PropertyAccessExpression(object=left, property=method)
+            return PropertyAccessExpression(object=left, property=method, computed=False)
 
     def parse_export_statement(self):
         token = self.cur_token
@@ -1709,7 +1711,7 @@ class UltimateParser:
             return None
 
         field_name = Identifier(self.cur_token.literal)
-        target = PropertyAccessExpression(obj_name, field_name)
+        target = PropertyAccessExpression(obj_name, field_name, computed=False)
 
         # Expect assignment
         if not self.expect_peek(ASSIGN):
@@ -2728,6 +2730,18 @@ class UltimateParser:
         exp.arguments = self.parse_expression_list(RPAREN)
         return exp
 
+    def parse_constructor_call_expression(self, function):
+        """Parse constructor call with map literal syntax: Entity{field: value, ...}
+        
+        This converts Entity{a: 1, b: 2} into Entity({a: 1, b: 2})
+        """
+        # Current token is LBRACE, parse it as a map literal
+        map_literal = self.parse_map_literal()
+        
+        # Create a call expression with the map as the single argument
+        exp = CallExpression(function=function, arguments=[map_literal])
+        return exp
+
     def parse_prefix_expression(self):
         expression = PrefixExpression(operator=self.cur_token.literal, right=None)
         self.next_token()
@@ -2800,7 +2814,7 @@ class UltimateParser:
         # Expect closing bracket
         if not self.expect_peek(RBRACKET):
             return None
-        return PropertyAccessExpression(object=left, property=index_expr)
+        return PropertyAccessExpression(object=left, property=index_expr, computed=True)
 
     def _lookahead_token_after_matching_paren(self):
         """Character-level lookahead: detect if the matching ')' is followed by '=>' (arrow).

@@ -734,8 +734,10 @@ class StorageBackend:
 class InMemoryBackend(StorageBackend):
     def __init__(self):
         self.data = {}
-    def set(self, key, value): self.data[key] = value
-    def get(self, key): return self.data.get(key)
+    def set(self, key, value):
+        self.data[key] = value
+    def get(self, key):
+        return self.data.get(key)
     def delete(self, key): 
         if key in self.data: del self.data[key]
 
@@ -954,8 +956,24 @@ class SmartContract:
         
         print(f"   🔗 Contract Address: {new_address}")
 
-        # Deploy the instance (initialize storage)
-        instance.deploy()
+        # Copy initial storage values from the template contract
+        # This ensures instances get the evaluated initial values
+        initial_storage = {}
+        for var_node in self.storage_vars:
+            var_name = None
+            if hasattr(var_node, 'name'):
+                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+            elif isinstance(var_node, dict):
+                var_name = var_node.get("name")
+            
+            if var_name:
+                # Get the initial value from the template contract's storage
+                value = self.storage.get(var_name)
+                if value is not None:
+                    initial_storage[var_name] = value
+        
+        # Deploy the instance with the copied initial values
+        instance.deploy(evaluated_storage_values=initial_storage)
         instance.parent_contract = self
         
         print(f"   Available actions: {list(self.actions.keys())}")
@@ -964,32 +982,32 @@ class SmartContract:
     def __call__(self, *args):
         return self.instantiate(args)
 
-    def deploy(self):
-        """Deploy the contract and initialize persistent storage"""
+    def deploy(self, evaluated_storage_values=None):
+        """Deploy the contract and initialize persistent storage
+        
+        Args:
+            evaluated_storage_values: Optional dict of evaluated initial values
+        """
         # Checks if we should reset storage or strictly load existing
         # For simplicity in this VM, subsequent runs act like "loading" if DB exists
         self.is_deployed = True
         
-        # Initialize storage only if key doesn't exist (preserve persistence)
-        for var_node in self.storage_vars:
-            var_name = None
-            default_value = None
-
-            if hasattr(var_node, 'initial_value'):
-                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
-                default_value = var_node.initial_value
-            elif isinstance(var_node, dict) and "initial_value" in var_node:
-                var_name = var_node.get("name")
-                default_value = var_node["initial_value"]
-
-            if var_name:
-                # ONLY set if not already in DB (Persistence Logic)
+        # If evaluated values are provided, use them (from evaluator)
+        if evaluated_storage_values:
+            for var_name, value in evaluated_storage_values.items():
                 if self.storage.get(var_name) is None:
-                    if default_value is not None:
-                        self.storage.set(var_name, default_value)
-                    else:
-                        # Set reasonable defaults for types if null
-                        self.storage.set(var_name, Null)
+                    self.storage.set(var_name, value)
+        else:
+            # Fallback: Initialize storage with NULL for declared variables
+            for var_node in self.storage_vars:
+                var_name = None
+                if hasattr(var_node, 'name'):
+                    var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+                elif isinstance(var_node, dict):
+                    var_name = var_node.get("name")
+                
+                if var_name and self.storage.get(var_name) is None:
+                    self.storage.set(var_name, Null)
 
     def call_method(self, action_name, args):
         """Call a contract action - similar to EntityInstance.call_method"""

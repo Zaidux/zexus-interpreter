@@ -592,12 +592,13 @@ class LiteralPattern:
         return f"LiteralPattern({self.value})"
 
 class PropertyAccessExpression(Expression):
-    def __init__(self, object, property):
+    def __init__(self, object, property, computed=False):
         self.object = object
         self.property = property
+        self.computed = computed  # True for obj[expr], False for obj.prop
 
     def __repr__(self):
-        return f"PropertyAccessExpression(object={self.object}, property={self.property})"
+        return f"PropertyAccessExpression(object={self.object}, property={self.property}, computed={self.computed})"
 
 class AssignmentExpression(Expression):
     def __init__(self, name, value):

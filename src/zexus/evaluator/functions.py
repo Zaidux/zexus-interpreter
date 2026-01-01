@@ -354,42 +354,67 @@ class FunctionEvaluatorMixin:
             
             elif isinstance(fn, EntityDefinition):
                 debug_log("  Creating entity instance (old format)")
-                # Entity constructor: Person("Alice", 30)
+                # Entity constructor: Person("Alice", 30) or Person{name: "Alice", age: 30}
                 # Create instance with positional arguments mapped to properties
                 from ..object import EntityInstance, String, Integer
                 
                 values = {}
-                # Map positional arguments to property names
-                if isinstance(fn.properties, dict):
-                    prop_names = list(fn.properties.keys())
-                else:
-                    prop_names = [prop['name'] for prop in fn.properties]
                 
-                for i, arg in enumerate(args):
-                    if i < len(prop_names):
-                        values[prop_names[i]] = arg
+                # Special case: If single argument is a Map, use it as field values
+                # This handles Entity{field: value} syntax which becomes Entity(Map{...})
+                if len(args) == 1 and isinstance(args[0], Map):
+                    debug_log("  Single Map argument detected - using as field values")
+                    map_arg = args[0]
+                    # Extract key-value pairs from the Map
+                    for key, value in map_arg.pairs.items():
+                        # Convert key to string if it's a String object
+                        key_str = key.value if isinstance(key, String) else str(key)
+                        values[key_str] = value
+                else:
+                    # Map positional arguments to property names
+                    if isinstance(fn.properties, dict):
+                        prop_names = list(fn.properties.keys())
+                    else:
+                        prop_names = [prop['name'] for prop in fn.properties]
+                    
+                    for i, arg in enumerate(args):
+                        if i < len(prop_names):
+                            values[prop_names[i]] = arg
                 
                 return EntityInstance(fn, values)
             
             # Handle SecurityEntityDefinition (from security.py with methods support)
             from ..security import EntityDefinition as SecurityEntityDef, EntityInstance as SecurityEntityInstance
+            from ..object import String
             if isinstance(fn, SecurityEntityDef):
                 debug_log("  Creating entity instance (with methods)")
                 
                 values = {}
-                # Map positional arguments to property names, INCLUDING INHERITED PROPERTIES
-                # Use get_all_properties() to get the full property list in correct order
-                if hasattr(fn, 'get_all_properties'):
-                    # Get all properties (parent + child) in correct order
-                    all_props = fn.get_all_properties()
-                    prop_names = list(all_props.keys())
-                else:
-                    # Fallback for old-style properties
-                    prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
                 
-                for i, arg in enumerate(args):
-                    if i < len(prop_names):
-                        values[prop_names[i]] = arg
+                # Special case: If single argument is a Map, use it as field values
+                # This handles Entity{field: value} syntax which becomes Entity(Map{...})
+                if len(args) == 1 and isinstance(args[0], Map):
+                    debug_log("  Single Map argument detected - using as field values")
+                    map_arg = args[0]
+                    # Extract key-value pairs from the Map
+                    for key, value in map_arg.pairs.items():
+                        # Convert key to string if it's a String object
+                        key_str = key.value if isinstance(key, String) else str(key)
+                        values[key_str] = value
+                else:
+                    # Map positional arguments to property names, INCLUDING INHERITED PROPERTIES
+                    # Use get_all_properties() to get the full property list in correct order
+                    if hasattr(fn, 'get_all_properties'):
+                        # Get all properties (parent + child) in correct order
+                        all_props = fn.get_all_properties()
+                        prop_names = list(all_props.keys())
+                    else:
+                        # Fallback for old-style properties
+                        prop_names = list(fn.properties.keys()) if isinstance(fn.properties, dict) else [prop['name'] for prop in fn.properties]
+                    
+                    for i, arg in enumerate(args):
+                        if i < len(prop_names):
+                            values[prop_names[i]] = arg
                 
                 debug_log(f"  Entity instance created with {len(values)} properties: {list(values.keys())}")
                 # Use create_instance to handle dependency injection
@@ -1977,6 +2002,8 @@ class FunctionEvaluatorMixin:
                 return Integer(len(arg.value))
             if isinstance(arg, List): 
                 return Integer(len(arg.elements))
+            if isinstance(arg, Map):
+                return Integer(len(arg.pairs))
             # Handle Python list (shouldn't happen, but defensive)
             if isinstance(arg, list):
                 return Integer(len(arg))
