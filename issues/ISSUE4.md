@@ -22,7 +22,7 @@
 
 **Status:** ❌ BROKEN  
 **Severity:** Medium  
-**Test File:** [test_core_imports_real.zx](test_core_imports_real.zx)
+**Test File:** [zexus-interpreter/test_core_imports_real.zx](zexus-interpreter/test_core_imports_real.zx)
 
 ### What Doesn't Work:
 
