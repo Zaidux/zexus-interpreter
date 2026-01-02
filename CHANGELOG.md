@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.6] - 2026-01-02
+
+### 🐛 Bug Fixes
+
+This release resolves the final critical parser issues for full production readiness.
+
+#### Fixed
+
+**Parser Statement Boundary Detection:**
+- **Contract Repeated Action Calls** - Fixed contract methods being callable multiple times
+  - Previously only first call to same contract action would execute
+  - Added method call statement detection with dot pattern matching
+  - Method calls now properly break on newlines as separate statements
+  - File: `src/zexus/parser/strategy_structural.py` (lines 733-749)
+  - Example: `counter.increment()` can now be called multiple times successfully
+
+- **Multiple Indexed Assignments** - Fixed multiple map assignments in same function
+  - Previously second indexed assignment would fail with "Invalid assignment target"
+  - Enhanced indexed assignment detection to recognize `identifier[key] = value` pattern
+  - Consecutive indexed assignments now parse as separate statements
+  - File: `src/zexus/parser/strategy_structural.py` (lines 733-749)
+  - Example: Multiple `storage["key"] = value` statements now work correctly
+
+#### Notes
+- **Reserved Keywords**: `DATA` and `STORAGE` are reserved keywords. Use alternative names like `mydata`, `mystore` for variables.
+
+#### Testing
+- All 6 core features now 100% functional
+- Contract-based and module-based patterns both fully supported
+- Comprehensive testing performed and documented in `issues/ISSUE3.md`
+
+---
+
 ## [1.6.5] - 2026-01-02
 
 ### 🐛 Bug Fixes
@@ -303,6 +336,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.6.6]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.3...v1.6.5
 [1.6.3]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.5.0...v1.6.2

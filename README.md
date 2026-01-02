@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.6.5-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.6.6-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)

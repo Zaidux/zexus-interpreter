@@ -732,8 +732,27 @@ class StructuralAnalyzer:
                         if paren_count == 0 and bracket_count == 0:
                             # Check if run_tokens contains an assignment (this is a complete assignment statement)
                             has_assign = any(tok.type == ASSIGN for tok in run_tokens)
-                            print(f"    has_assign={has_assign}, tj.type={tj.type}")
-                            if has_assign:
+                            
+                            # CRITICAL FIX: Also check if this is a method call OR indexed assignment statement
+                            # Method call: IDENT DOT IDENT LPAREN
+                            # Indexed assignment: IDENT LBRACKET ... RBRACKET ASSIGN
+                            is_method_call_stmt = False
+                            is_indexed_assign_stmt = False
+                            
+                            if len(run_tokens) >= 4:
+                                # Check for method call pattern: IDENT DOT IDENT LPAREN ... RPAREN
+                                has_dot = any(tok.type == DOT for tok in run_tokens)
+                                if has_dot and run_tokens[0].type == IDENT:
+                                    is_method_call_stmt = True
+                                
+                                # Check for indexed assignment pattern: IDENT LBRACKET ... RBRACKET ASSIGN ...
+                                # Look for IDENT followed by LBRACKET
+                                for idx, tok in enumerate(run_tokens[:-1]):
+                                    if tok.type == IDENT and run_tokens[idx + 1].type == LBRACKET:
+                                        is_indexed_assign_stmt = True
+                                        break
+                            
+                            if has_assign or is_method_call_stmt or is_indexed_assign_stmt:
                                 # Current token is on a new line and could start a new statement
                                 # Check if it's IDENT (could be method call, function call, or property access)
                                 if tj.type == IDENT:
@@ -826,6 +845,7 @@ class StructuralAnalyzer:
             
             filtered_run_tokens = [tk for tk in run_tokens if not _is_empty_token(tk)]
             if filtered_run_tokens:  # Only create block if we have meaningful tokens
+                print(f"[DEBUG STRUCTURAL] Creating block from tokens: {[f'{t.type}:{t.literal}' for t in filtered_run_tokens[:10]]}")
                 self.blocks[block_id] = {
                     'id': block_id,
                     'type': 'statement',
