@@ -1,0 +1,107 @@
+# Test Object Reconstruction - Non-Contract Version
+print("🔍 Testing Object Reconstruction (Module-level)")
+print("=" * 70)
+
+# =============================================================================
+# Test 1: Simple Module-Level Map
+# =============================================================================
+print("\n✅ Test 1: Module-level map reconstruction")
+
+let validators = {}
+
+# Initial setup
+validators["val_001"] = {
+    "stake": 10000,
+    "performance": 1.0,
+    "rewards": 0
+}
+
+print("  Initial: stake=" + string(validators["val_001"]["stake"]) + ", rewards=" + string(validators["val_001"]["rewards"]))
+
+# Try reconstruction
+let old_val = validators["val_001"]
+validators["val_001"] = {
+    "stake": old_val["stake"],
+    "performance": old_val["performance"] + 0.1,
+    "rewards": old_val["rewards"] + 100
+}
+
+print("  After reconstruction: stake=" + string(validators["val_001"]["stake"]) + ", rewards=" + string(validators["val_001"]["rewards"]))
+
+if validators["val_001"]["rewards"] == 100 {
+    print("  ✅ Module-level reconstruction WORKS!")
+} else {
+    print("  ❌ Module-level reconstruction FAILED - rewards=" + string(validators["val_001"]["rewards"]))
+}
+
+# =============================================================================
+# Test 2: Multiple Updates in Sequence
+# =============================================================================
+print("\n✅ Test 2: Multiple sequential reconstructions")
+
+let data = {}
+data["item"] = {"count": 0, "value": 0}
+
+# Update 1
+let temp1 = data["item"]
+data["item"] = {"count": temp1["count"] + 1, "value": temp1["value"] + 100}
+
+# Update 2  
+let temp2 = data["item"]
+data["item"] = {"count": temp2["count"] + 1, "value": temp2["value"] + 200}
+
+# Update 3
+let temp3 = data["item"]
+data["item"] = {"count": temp3["count"] + 1, "value": temp3["value"] + 300}
+
+print("  Count: " + string(data["item"]["count"]) + ", Value: " + string(data["item"]["value"]))
+
+if data["item"]["count"] == 3 and data["item"]["value"] == 600 {
+    print("  ✅ Sequential reconstructions WORK!")
+} else {
+    print("  ❌ Sequential reconstructions FAILED")
+}
+
+# =============================================================================
+# Test 3: Helper Function Pattern
+# =============================================================================
+print("\n✅ Test 3: Using helper functions")
+
+let registry = {}
+
+action register_item(key, initial_value) {
+    registry[key] = {"value": initial_value, "count": 0}
+}
+
+action increment_item(key, amount) {
+    let current = registry[key]
+    registry[key] = {
+        "value": current["value"] + amount,
+        "count": current["count"] + 1
+    }
+}
+
+register_item("test", 1000)
+increment_item("test", 500)
+increment_item("test", 250)
+
+print("  Value: " + string(registry["test"]["value"]) + ", Count: " + string(registry["test"]["count"]))
+
+if registry["test"]["value"] == 1750 and registry["test"]["count"] == 2 {
+    print("  ✅ Helper function pattern WORKS!")
+} else {
+    print("  ❌ Helper function pattern FAILED")
+}
+
+# =============================================================================
+# Summary
+# =============================================================================
+print("\n" + "=" * 70)
+print("📊 Results Summary")
+print("=" * 70)
+print("\n✅ Working at module level:")
+print("  - Get object from map")
+print("  - Create NEW object with updated fields")
+print("  - Assign back to map")
+print("\n⏳ Next: Test if this works inside CONTRACT actions...")
+print("=" * 70)
