@@ -1,0 +1,115 @@
+# Test Inline Object Reconstruction
+print("🔍 Testing INLINE Object Reconstruction (No temp variables)")
+print("=" * 70)
+
+# =============================================================================
+# Test 1: Inline Reconstruction (Access Multiple Times)
+# =============================================================================
+print("\n✅ Test 1: Inline - access map multiple times in same statement")
+
+let validators = {}
+
+validators["val_001"] = {"stake": 10000, "rewards": 0}
+
+print("  Initial rewards: " + string(validators["val_001"]["rewards"]))
+
+# Inline reconstruction - access the map key multiple times
+validators["val_001"] = {
+    "stake": validators["val_001"]["stake"],
+    "rewards": validators["val_001"]["rewards"] + 100
+}
+
+print("  After update: " + string(validators["val_001"]["rewards"]))
+
+if validators["val_001"]["rewards"] == 100 {
+    print("  ✅ Inline reconstruction WORKS!")
+} else {
+    print("  ❌ Inline reconstruction FAILED - got " + string(validators["val_001"]["rewards"]))
+}
+
+# =============================================================================
+# Test 2: Multiple Inline Updates
+# =============================================================================
+print("\n✅ Test 2: Multiple inline updates")
+
+let data = {}
+data["item"] = {"count": 0, "total": 0}
+
+# Update 1
+data["item"] = {
+    "count": data["item"]["count"] + 1,
+    "total": data["item"]["total"] + 100
+}
+
+# Update 2
+data["item"] = {
+    "count": data["item"]["count"] + 1,
+    "total": data["item"]["total"] + 200
+}
+
+# Update 3
+data["item"] = {
+    "count": data["item"]["count"] + 1,
+    "total": data["item"]["total"] + 300
+}
+
+print("  Count: " + string(data["item"]["count"]) + ", Total: " + string(data["item"]["total"]))
+
+if data["item"]["count"] == 3 and data["item"]["total"] == 600 {
+    print("  ✅ Multiple inline updates WORK!")
+} else {
+    print("  ❌ Failed - count=" + string(data["item"]["count"]) + ", total=" + string(data["item"]["total"]))
+}
+
+# =============================================================================
+# Test 3: Contract with Inline Pattern
+# =============================================================================
+print("\n✅ Test 3: Contract using inline reconstruction")
+
+contract SimpleRegistry {
+    state items = {}
+
+    action add_item(key, value) {
+        items[key] = {"value": value, "count": 0}
+    }
+
+    action increment(key, amount) {
+        items[key] = {
+            "value": items[key]["value"] + amount,
+            "count": items[key]["count"] + 1
+        }
+    }
+
+    action get_item(key) {
+        return items[key]
+    }
+}
+
+let reg = SimpleRegistry()
+reg.add_item("test", 1000)
+reg.increment("test", 500)
+reg.increment("test", 250)
+
+let result = reg.get_item("test")
+
+print("  Final value: " + string(result["value"]) + ", count: " + string(result["count"]))
+
+if result["value"] == 1750 and result["count"] == 2 {
+    print("  ✅ Contract inline pattern WORKS!")
+} else {
+    print("  ❌ Failed - value=" + string(result["value"]) + ", count=" + string(result["count"]))
+}
+
+# =============================================================================
+# Summary
+# =============================================================================
+print("\n" + "=" * 70)
+print("🎯 CRITICAL FINDING:")
+print("=" * 70)
+print("\n❌ Temp variable pattern FAILS:")
+print("  let old = map[key]")
+print("  map[key] = {field: old['field'] + 1}  // old not found!")
+print("\n✅ Inline pattern MAY WORK:")
+print("  map[key] = {field: map[key]['field'] + 1}")
+print("\n📝 Testing if inline pattern works...")
+print("=" * 70)
