@@ -68,7 +68,7 @@ use "./src/core/consensus.zx"
 
 ### Test Evidence:
 
-From [test_core_imports_real.zx](test_core_imports_real.zx) lines 9-20:
+From [../test_core_imports_real.zx](../test_core_imports_real.zx) lines 9-20:
 
 ```zexus
 try {
@@ -80,7 +80,7 @@ try {
 // Result: ❌ 'Block' is not exported from ./src/core/block.zx
 ```
 
-From [test_direct_load.zx](test_direct_load.zx):
+From [../test_direct_load.zx](../test_direct_load.zx):
 
 ```zexus
 use "./src/core/block.zx"
@@ -97,10 +97,10 @@ print("✅ block.zx loaded successfully!")
 **Status:** ❌ CRITICAL  
 **Severity:** HIGH - Breaks production code  
 **Test Files:** 
-- [test_comprehensive_patterns.zx](test_comprehensive_patterns.zx)
-- [test_definitive.zx](test_definitive.zx)
-- [test_inline_reconstruction.zx](test_inline_reconstruction.zx)
-- [test_reconstruction_module.zx](test_reconstruction_module.zx)
+- [../test_comprehensive_patterns.zx](../test_comprehensive_patterns.zx)
+- [../test_definitive.zx](../test_definitive.zx)
+- [../test_inline_reconstruction.zx](../test_inline_reconstruction.zx)
+- [../test_reconstruction_module.zx](../test_reconstruction_module.zx)
 
 ---
 
