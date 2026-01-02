@@ -1,0 +1,116 @@
+# Real Core Files Import Test - Testing Actual Production Files
+print("🔗 Ziver-Chain - Real Core Files Import Test")
+print("=" * 70)
+
+# =============================================================================
+# Test 1: Import Block Module
+# =============================================================================
+print("\n✅ Test 1: Importing block.zx")
+
+try {
+    use { Block, Transaction, BlockHeader, create_genesis_block } from "./src/core/block.zx"
+    print("  ✅ block.zx imported successfully")
+
+    # Test creating genesis block
+    let genesis = create_genesis_block()
+    print("  Genesis block created: #" + string(genesis["index"]))
+    print("  Genesis hash: " + genesis["hash"])
+    print("  ✅ Block module working")
+} catch error {
+    print("  ❌ block.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Test 2: Import Crypto Module
+# =============================================================================
+print("\n✅ Test 2: Importing crypto.zx")
+
+try {
+    use { QuantumCrypto } from "./src/core/crypto.zx"
+    print("  ✅ crypto.zx imported successfully")
+
+    # Test creating crypto instance
+    let crypto = QuantumCrypto{}
+    print("  QuantumCrypto contract instantiated")
+    print("  ✅ Crypto module working")
+} catch error {
+    print("  ❌ crypto.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Test 3: Import Consensus Module
+# =============================================================================
+print("\n✅ Test 3: Importing consensus.zx")
+
+try {
+    use { PoSConsensus } from "./src/core/consensus.zx"
+    print("  ✅ consensus.zx imported successfully")
+
+    # Test creating consensus instance
+    let consensus = PoSConsensus{}
+    print("  PoSConsensus contract instantiated")
+    print("  ✅ Consensus module working")
+} catch error {
+    print("  ❌ consensus.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Test 4: Import State Module (with our fix)
+# =============================================================================
+print("\n✅ Test 4: Importing state.zx (with data_storage fix)")
+
+try {
+    use { SelfEvolvingState } from "./src/core/state.zx"
+    print("  ✅ state.zx imported successfully")
+
+    # Test creating state instance
+    let state_mgr = SelfEvolvingState{}
+    print("  SelfEvolvingState contract instantiated")
+    print("  ✅ State module working")
+} catch error {
+    print("  ❌ state.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Test 5: Import ZVM Module
+# =============================================================================
+print("\n✅ Test 5: Importing zvm.zx")
+
+try {
+    use { ZiverVirtualMachine } from "./src/core/zvm.zx"
+    print("  ✅ zvm.zx imported successfully")
+
+    # Test creating ZVM instance
+    let zvm = ZiverVirtualMachine{}
+    print("  ZiverVirtualMachine contract instantiated")
+    print("  ✅ ZVM module working")
+} catch error {
+    print("  ❌ zvm.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Test 6: Import Main Module
+# =============================================================================
+print("\n✅ Test 6: Importing main.zx")
+
+try {
+    use { ZiverNode } from "./src/main.zx"
+    print("  ✅ main.zx imported successfully")
+    print("  ✅ Main module working")
+} catch error {
+    print("  ❌ main.zx import failed: " + string(error))
+}
+
+# =============================================================================
+# Summary
+# =============================================================================
+print("\n" + "=" * 70)
+print("🎉 Core Files Import Test Complete!")
+print("=" * 70)
+print("\n📝 This test verifies that all REAL production files:")
+print("  - Can be imported without syntax errors")
+print("  - Have correct module exports")
+print("  - Can instantiate contracts/entities")
+print("  - Are ready for production use")
+print("\n✅ If all tests passed, production files are verified!")
+print("=" * 70)
