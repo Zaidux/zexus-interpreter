@@ -3448,6 +3448,33 @@ class ContextStackParser:
                 i = j
                 continue
 
+            # Standalone block statement: { ... }
+            elif token.type == LBRACE:
+                j = i + 1
+                nesting = 1
+                block_tokens = []
+                
+                while j < len(tokens) and nesting > 0:
+                    t = tokens[j]
+                    if t.type == LBRACE:
+                        nesting += 1
+                    elif t.type == RBRACE:
+                        nesting -= 1
+                        if nesting == 0:
+                            break
+                    block_tokens.append(t)
+                    j += 1
+                
+                # Parse the block contents
+                if block_tokens:
+                    block_stmts = self._parse_block_statements(block_tokens)
+                    block_stmt = BlockStatement()
+                    block_stmt.statements = block_stmts
+                    statements.append(block_stmt)
+                
+                i = j + 1  # Skip past closing brace
+                continue
+
             # Fallback: attempt to parse as expression
             else:
                 j = i

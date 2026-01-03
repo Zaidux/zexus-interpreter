@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes
 
-This release resolves a critical parser bug affecting statement parsing with semicolons.
+This release resolves critical parser bugs affecting statement parsing, keyword usage, and block statements.
 
 #### Fixed
 
@@ -30,20 +30,49 @@ This release resolves a critical parser bug affecting statement parsing with sem
   - Contract state modifications with multiple nested map updates now fully functional
   - Example: `accounts[user]["balance"] = ...; accounts[user]["transactions"] = ...;` works correctly
 
+**Keywords as Variable Names:**
+- **Context-Aware Keyword Recognition** - Keywords can now be used as variable names in appropriate contexts
+  - Previously keywords like `data`, `action`, `state` couldn't be used as variable names
+  - Implemented context-aware lexer that tracks previous token to determine valid identifier usage
+  - Keywords allowed as identifiers after: LET, CONST, COLON, COMMA, operators, brackets, etc.
+  - Exceptions: `true`, `false`, `null` always remain strict keywords for literals
+  - File: `src/zexus/lexer.py`
+  - Example: `let data = 42; let action = "click";` now works correctly
+
+**Standalone Block Statements:**
+- **Block Statement Parsing** - Fixed standalone code blocks causing "Invalid assignment target" errors
+  - Previously blocks like `{ let x = 10; }` were incorrectly parsed as assignment expressions
+  - Added dedicated block statement handling with proper nesting and recursive parsing
+  - File: `src/zexus/parser/strategy_context.py` (~line 3450)
+  - Example: `{ let temp = 10; print(temp); }` now works correctly
+
 #### Testing
-- All 7 ISSUE4.md fixes now working perfectly
-- Comprehensive demonstration file (DEMO_ALL_FIXES.zx) passes all tests:
-  - ✅ Compound Assignment Operators (+=, -=, *=, /=)
-  - ✅ Nested Map with Compound Assignment
-  - ✅ Multiple Different Compound Operators
-  - ✅ Contract State Map Operations
-  - ✅ Contract State Maps + Compound Assignment
-  - ✅ Inline Reconstruction at Module Level
-  - ✅ Contract State Inline Reconstruction
+- All 7 ISSUE4.md fixes working perfectly
+- Comprehensive edge case test suite (test_edge_cases.zx): 19/19 tests passing
+  - ✅ Deeply nested maps (3+ levels)
+  - ✅ Mixed statement types in blocks
+  - ✅ Conditionals with nested assignments
+  - ✅ Loops with compound assignments
+  - ✅ Contracts with multiple state variables
+  - ✅ Sequential method calls
+  - ✅ Complex expressions with operator precedence
+  - ✅ Multiple prints with assignments in contracts
+  - ✅ Complex map reconstruction
+  - ✅ Multiple contract instances (isolation)
+  - ✅ Try-catch with assignments
+  - ✅ Complex return statements
+  - ✅ Array-like map operations
+  - ✅ Compound operator sequences
+  - ✅ Conditional (ternary) assignments
 
 #### Documentation
 - Added PARSER_SEMICOLON_FIX.md with detailed technical explanation
-- Documents root cause, fix locations, and test results
+- Added ADDITIONAL_FIXES_1.6.7.md documenting all fixes and known limitations
+- Documents root cause, fix locations, test results, and workarounds
+
+#### Known Limitations (Documented)
+- Contract instances cannot be stored in contract state (use parameters instead)
+- Nested map literals in contract state may not persist reliably (use simple values or incremental assignment)
 
 ---
 

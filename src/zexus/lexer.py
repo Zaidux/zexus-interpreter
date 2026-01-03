@@ -16,6 +16,8 @@ class Lexer:
         # immediately followed by '=>', this flag will be set for the token
         # produced for that '('. Parser can check and consume accordingly.
         self._next_paren_has_lambda = False
+        # Track last token type to enable context-aware keyword handling
+        self.last_token_type = None
         
         # Register source with error reporter
         self.error_reporter = get_error_reporter()
@@ -308,6 +310,7 @@ class Lexer:
                 tok = Token(token_type, literal)
                 tok.line = current_line
                 tok.column = current_column
+                self.last_token_type = tok.type
                 return tok
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
@@ -317,6 +320,7 @@ class Lexer:
                     tok = Token(INT, num_literal)
                 tok.line = current_line
                 tok.column = current_column
+                self.last_token_type = tok.type
                 return tok
             else:
                 if self.ch in ['\n', '\r']:
@@ -328,6 +332,7 @@ class Lexer:
                     tok = Token(IDENT, literal)
                     tok.line = current_line
                     tok.column = current_column
+                    self.last_token_type = tok.type
                     return tok
                 # Unknown character - report helpful error
                 char_desc = f"'{self.ch}'" if self.ch.isprintable() else f"'\\x{ord(self.ch):02x}'"
@@ -342,6 +347,8 @@ class Lexer:
                 raise error
 
         self.read_char()
+        # Track the token type for context-aware keyword handling
+        self.last_token_type = tok.type
         return tok
 
     def read_embedded_char(self):
@@ -441,6 +448,44 @@ class Lexer:
         return number_str
 
     def lookup_ident(self, ident):
+        # Special case: Always treat true, false, and null as keywords
+        if ident in ['true', 'false', 'null']:
+            keywords = {
+                "true": TRUE,
+                "false": FALSE,
+                "null": NULL,
+            }
+            return keywords[ident]
+        
+        # Context-aware keyword recognition: allow keywords as identifiers in certain contexts
+        # These contexts are where variable names are expected:
+        # - After LET, CONST (variable declarations)
+        # - After DOT (property/method names)
+        # - After LPAREN, COMMA (function parameters)
+        # - After LBRACKET (map keys when used as identifiers)
+        # - After ASSIGN (right-hand side values)
+        # - After operators (PLUS, MINUS, etc.)
+        contexts_allowing_keywords = {
+            LET, CONST, DOT, LPAREN, COMMA, LBRACKET, COLON,
+            ASSIGN, PLUS, MINUS, STAR, SLASH, MOD,
+            EQ, NOT_EQ, LT, GT, LTE, GTE,
+            AND, OR, BANG,
+            RETURN, PRINT, RPAREN, RBRACKET
+        }
+        
+        if self.last_token_type in contexts_allowing_keywords:
+            # In these contexts, treat everything as an identifier
+            return IDENT
+        
+        # Special case: ACTION and FUNCTION keywords should only be recognized
+        # when they actually start a definition, not when used as variable names
+        # So we check if the context suggests this is truly a keyword usage
+        if ident in ['action', 'function']:
+            # These should only be keywords at the start of a statement or after certain tokens
+            # For now, if we're not sure, treat as identifier
+            if self.last_token_type not in {None, SEMICOLON, LBRACE, RBRACE}:
+                return IDENT
+        
         # keyword lookup mapping (string -> token constant)
         keywords = {
             "let": LET,
