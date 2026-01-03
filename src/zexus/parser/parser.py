@@ -1478,8 +1478,10 @@ class UltimateParser:
         return parameters
 
     def parse_assignment_expression(self, left):
-        if not isinstance(left, Identifier):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers allowed")
+        # Allow assignment to both identifiers and property access expressions
+        # This enables patterns like: data[key] = value or obj.prop = value
+        if not isinstance(left, (Identifier, PropertyAccessExpression)):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot assign to {type(left).__name__}, only identifiers and properties allowed")
             return None
 
         expression = AssignmentExpression(name=left, value=None)

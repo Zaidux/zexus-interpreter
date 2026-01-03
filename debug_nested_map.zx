@@ -1,0 +1,41 @@
+// Test case for nested map literal persistence in contract state
+contract Store {
+    state data = {};
+    
+    action set_nested(key) {
+        print("=== SET_NESTED START ===");
+        print("Before assignment: data = " + string(data));
+        data[key] = {"count": 0, "status": "active"};
+        print("After assignment: data = " + string(data));
+        print("Accessing data[key]: " + string(data[key]));
+        print("=== SET_NESTED END ===");
+        return data[key];
+    }
+    
+    action get_nested(key) {
+        print("=== GET_NESTED START ===");
+        print("data = " + string(data));
+        print("data[key] = " + string(data[key]));
+        print("=== GET_NESTED END ===");
+        return data[key];
+    }
+}
+
+print("Creating contract...");
+let store = Store();
+
+print("\n--- Calling set_nested ---");
+let result1 = store.set_nested("test");
+print("Returned from set_nested: " + string(result1));
+if (result1) {
+    print("result1['count'] = " + string(result1["count"]));
+    print("result1['status'] = " + string(result1["status"]));
+}
+
+print("\n--- Calling get_nested ---");
+let result2 = store.get_nested("test");
+print("Returned from get_nested: " + string(result2));
+if (result2) {
+    print("result2['count'] = " + string(result2["count"]));
+    print("result2['status'] = " + string(result2["status"]));
+}

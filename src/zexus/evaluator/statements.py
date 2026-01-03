@@ -769,7 +769,7 @@ class StatementEvaluatorMixin:
     def eval_assignment_expression(self, node, env, stack_trace):
         # Support assigning to identifiers or property access targets
         from ..object import EvaluationError, NULL
-
+        
         # If target is a property access expression
         if isinstance(node.name, PropertyAccessExpression):
             # Evaluate object and property
@@ -794,7 +794,7 @@ class StatementEvaluatorMixin:
                     if is_error(prop_result):
                         return prop_result
                     prop_key = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
-
+            
             # Evaluate value first
             value = self.eval_node(node.value, env, stack_trace)
             if is_error(value):

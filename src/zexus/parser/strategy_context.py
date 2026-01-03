@@ -2191,8 +2191,10 @@ class ContextStackParser:
 
             # DATA statement heuristic (dataclass definition)
             # But not if DATA is used as an identifier (data = ...)
-            elif token.type == DATA and not (i + 1 < len(tokens) and tokens[i + 1].type == ASSIGN):
+            elif token.type == DATA and i + 1 < len(tokens) and tokens[i + 1].type not in [ASSIGN, LBRACKET, DOT, LPAREN]:
                 # This is a dataclass definition: data TypeName {...}
+                # NOT an assignment like: data = value or data[key] = value or data.prop = value
+                # NOT a method call like: data()
                 j = i + 1
                 brace_nesting = 0
                 # Find the complete data block
