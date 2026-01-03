@@ -1,0 +1,202 @@
+// Zexus 1.6.7 Fix Verification Tests
+// Testing all 4 major fixes from ADDITIONAL_FIXES.md
+continue;
+
+PRINT("=== ZEXUS 1.6.7 FIX VERIFICATION ===\n")
+
+// ============================================================================
+// FIX #1: Nested Map Literal Assignment in Contract State (CRITICAL)
+// ============================================================================
+print("TEST 1: Contract State - Nested Map Literal Assignment")
+contract TestNestedMaps {
+    data validators = {}
+
+    action add_validator(addr, stake) {
+        // This was returning NULL in 1.6.7 due to DATA keyword parser bug
+        validators[addr] = {
+            "stake": stake,
+            "active": true,
+            "votes": 0
+        }
+        print("  ✓ Added validator: " + addr)
+        return validators[addr]
+    }
+
+    action update_stake(addr, new_stake) {
+        // Update nested property
+        validators[addr]["stake"] = new_stake
+        print("  ✓ Updated stake for: " + addr)
+        return validators[addr]["stake"]
+    }
+
+    action get_validator(addr) {
+        return validators[addr]
+    }
+}
+
+test1 = TestNestedMaps()
+result1 = test1.add_validator("0xABC", 1000)
+print("  Result: " + result1)
+if result1 == null {
+    print("  ❌ FAILED: Nested map literal returned NULL!")
+} else {
+    print("  ✅ PASSED: Nested map literal persisted")
+
+    // Verify it's actually stored
+    stored = test1.get_validator("0xABC")
+    if stored != null {
+        print("  ✅ PASSED: Value retrievable from state")
+        print("    Stake: " + stored["stake"])
+        print("    Active: " + stored["active"])
+
+        // Test update
+        new_stake = test1.update_stake("0xABC", 2000)
+        if new_stake == 2000 {
+            print("  ✅ PASSED: Nested property update works")
+        } else {
+            print("  ❌ FAILED: Nested property update failed")
+        }
+    } else {
+        print("  ❌ FAILED: Value not retrievable from state")
+    }
+}
+
+print("")
+
+// ============================================================================
+// FIX #2: Keywords as Variable Names
+// ============================================================================
+print("TEST 2: Keywords as Variable Names")
+contract TestKeywords {
+    action test_keywords() {
+        // These were reserved keywords, now should work as variable names
+        data = "test data"
+        action = "test action"
+        contract = "test contract"
+        block = 123
+
+        print("  ✓ data variable: " + data)
+        print("  ✓ action variable: " + action)
+        print("  ✓ contract variable: " + contract)
+        print("  ✓ block variable: " + block)
+
+        return true
+    }
+}
+
+test2 = TestKeywords()
+if test2.test_keywords() {
+    print("  ✅ PASSED: Keywords work as variable names")
+} else {
+    print("  ❌ FAILED: Keywords as variables failed")
+}
+
+print("")
+
+// ============================================================================
+// FIX #3: Standalone Block Statements
+// ============================================================================
+print("TEST 3: Standalone Block Statements")
+x = 10
+result3 = null
+
+{
+    y = x + 5
+    result3 = y * 2
+    print("  ✓ Standalone block executed")
+}
+
+if result3 == 30 {
+    print("  ✅ PASSED: Standalone blocks work")
+} else {
+    print("  ❌ FAILED: Standalone block result = " + result3)
+}
+
+print("")
+
+// ============================================================================
+// FIX #4: Contract-to-Contract References
+// ============================================================================
+print("TEST 4: Contract-to-Contract References")
+contract ContractA {
+    data value = 100
+
+    action get_value() {
+        return value
+    }
+
+    action set_value(v) {
+        value = v
+    }
+}
+
+contract ContractB {
+    action test_reference(other_contract) {
+        // Access another contract's data and methods
+        val = other_contract.get_value()
+        print("  ✓ Read from ContractA: " + val)
+
+        other_contract.set_value(200)
+        new_val = other_contract.get_value()
+        print("  ✓ Modified ContractA, new value: " + new_val)
+
+        return new_val == 200
+    }
+}
+
+contractA = ContractA()
+contractB = ContractB()
+
+if contractB.test_reference(contractA) {
+    print("  ✅ PASSED: Contract-to-contract references work")
+} else {
+    print("  ❌ FAILED: Contract references failed")
+}
+
+print("")
+
+// ============================================================================
+// REGRESSION TEST: Patterns from consensus.zx
+// ============================================================================
+print("TEST 5: Consensus.zx Pattern Simulation")
+contract ConsensusSimulation {
+    data validators = {}
+
+    action add_validator_full(address, stake, public_key) {
+        // This is the exact pattern from consensus.zx line 269
+        validators[address] = {
+            "stake": stake,
+            "public_key": public_key,
+            "is_active": true,
+            "last_block": 0,
+            "missed_blocks": 0
+        }
+        return validators[address] != null
+    }
+
+    action slash_validator(address, amount) {
+        // Pattern from consensus.zx line 412
+        if address in validators {
+            current_stake = validators[address]["stake"]
+            validators[address]["stake"] = current_stake - amount
+            validators[address]["missed_blocks"] = validators[address]["missed_blocks"] + 1
+            return true
+        }
+        return false
+    }
+}
+
+consensus = ConsensusSimulation()
+if consensus.add_validator_full("0xVAL1", 5000, "pk123") {
+    print("  ✅ PASSED: add_validator pattern works")
+
+    if consensus.slash_validator("0xVAL1", 500) {
+        print("  ✅ PASSED: slash_validator pattern works")
+    } else {
+        print("  ❌ FAILED: slash_validator pattern failed")
+    }
+} else {
+    print("  ❌ FAILED: add_validator pattern failed")
+}
+
+print("\n=== VERIFICATION COMPLETE ===")
