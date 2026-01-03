@@ -159,6 +159,89 @@ class Modifier(Object):
     def type(self): return "MODIFIER"
 
 
+class ContractReference(Object):
+    """Reference to a deployed contract instance by address
+    
+    Used for storing contract references in contract state. Instead of storing
+    the contract instance directly (which can't be serialized), we store a
+    reference that can be resolved via the contract registry.
+    """
+    def __init__(self, address, contract_name=None):
+        self.address = address
+        self.contract_name = contract_name  # Optional, for display purposes
+        
+    def inspect(self):
+        if self.contract_name:
+            return f"<ContractRef: {self.contract_name}@{self.address}>"
+        return f"<ContractRef: {self.address}>"
+    
+    def type(self):
+        return "CONTRACT_REFERENCE"
+    
+    def resolve(self, registry=None):
+        """Resolve this reference to the actual contract instance
+        
+        Args:
+            registry: Contract registry to look up the contract (if not provided, uses global)
+            
+        Returns:
+            SmartContract instance or None if not found
+        """
+        if registry is None:
+            # Use global contract registry
+            from . import security
+            registry = security.get_contract_registry()
+        
+        return registry.get(self.address)
+    
+    def call_method(self, method_name, args):
+        """Transparently delegate method calls to the resolved contract
+        
+        Args:
+            method_name: Name of the action to call
+            args: List of arguments to pass to the action
+            
+        Returns:
+            Result of the action execution
+        """
+        # Resolve the contract
+        contract = self.resolve()
+        
+        if contract is None:
+            from . import object as obj_module
+            return obj_module.EvaluationError(f"Contract at address {self.address} not found in registry")
+        
+        # Delegate to the contract's call_method
+        return contract.call_method(method_name, args)
+    
+    def get_attr(self, attr_name):
+        """Transparently delegate attribute access to the resolved contract
+        
+        Args:
+            attr_name: Name of the attribute to access
+            
+        Returns:
+            The attribute value from the contract
+        """
+        # Resolve the contract
+        contract = self.resolve()
+        
+        if contract is None:
+            from . import object as obj_module
+            return obj_module.EvaluationError(f"Contract at address {self.address} not found in registry")
+        
+        # Allow direct access to the contract's attributes
+        if hasattr(contract, attr_name):
+            attr_value = getattr(contract, attr_name)
+            # Wrap special types if needed
+            if isinstance(attr_value, str):
+                return String(attr_value)
+            return attr_value
+        
+        from . import object as obj_module
+        return obj_module.EvaluationError(f"Contract has no attribute '{attr_name}'")
+
+
 class Builtin(Object):
     def __init__(self, fn, name=""):
         self.fn = fn

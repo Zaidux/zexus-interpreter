@@ -852,6 +852,19 @@ class ContractStorage:
 
     def _serialize(self, obj):
         """Convert Zexus Object -> JSON String"""
+        # Check for SmartContract instance first
+        if isinstance(obj, SmartContract):
+            # Store contract reference instead of the contract itself
+            return json.dumps({"type": "contract_ref", "val": {"address": obj.address, "name": obj.name}})
+        
+        # Import ContractReference to handle it
+        try:
+            from .object import ContractReference
+            if isinstance(obj, ContractReference):
+                return json.dumps({"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}})
+        except ImportError:
+            pass
+        
         if isinstance(obj, String):
             return json.dumps({"type": "string", "val": obj.value})
         elif isinstance(obj, Integer):
@@ -877,6 +890,22 @@ class ContractStorage:
     def _serialize_val_recursive(self, obj):
         """Helper for nested structures (returns dict, not json string)"""
         # This mirrors _serialize but returns the inner dict structure directly
+        
+        # Check for SmartContract instance first
+        if isinstance(obj, SmartContract):
+            # Store contract reference instead of the contract itself
+            from .object import ContractReference
+            ref = ContractReference(obj.address, obj.name)
+            return {"type": "contract_ref", "val": {"address": obj.address, "name": obj.name}}
+        
+        # Import ContractReference here to avoid circular import
+        try:
+            from .object import ContractReference
+            if isinstance(obj, ContractReference):
+                return {"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}}
+        except ImportError:
+            pass
+        
         if isinstance(obj, String): return {"type": "string", "val": obj.value}
         elif isinstance(obj, Integer): return {"type": "integer", "val": obj.value}
         elif isinstance(obj, BooleanObj): return {"type": "boolean", "val": obj.value}
@@ -906,6 +935,12 @@ class ContractStorage:
         elif dtype == "float": return Float(val)
         elif dtype == "boolean": return BooleanObj(val)
         elif dtype == "null": return Null
+        elif dtype == "contract_ref":
+            # Reconstruct contract reference
+            from .object import ContractReference
+            address = val.get("address")
+            name = val.get("name")
+            return ContractReference(address, name)
         elif dtype == "list":
             # Reconstruct list
             elements = [self._deserialize_recursive(item) for item in val]
@@ -915,6 +950,51 @@ class ContractStorage:
             pairs = {k: self._deserialize_recursive(v) for k, v in val.items()}
             return Map(pairs)
         return String(str(val)) # Fallback
+
+
+# Global contract registry
+# Maps contract address (string) -> SmartContract instance
+_CONTRACT_REGISTRY = {}
+
+
+def get_contract_registry():
+    """Get the global contract registry
+    
+    Returns:
+        dict: Mapping of contract address -> SmartContract instance
+    """
+    return _CONTRACT_REGISTRY
+
+
+def register_contract(contract):
+    """Register a contract instance in the global registry
+    
+    Args:
+        contract: SmartContract instance to register
+    """
+    _CONTRACT_REGISTRY[contract.address] = contract
+
+
+def unregister_contract(address):
+    """Remove a contract from the global registry
+    
+    Args:
+        address: Contract address to remove
+    """
+    if address in _CONTRACT_REGISTRY:
+        del _CONTRACT_REGISTRY[address]
+
+
+def lookup_contract(address):
+    """Look up a contract by address
+    
+    Args:
+        address: Contract address to look up
+        
+    Returns:
+        SmartContract instance or None if not found
+    """
+    return _CONTRACT_REGISTRY.get(address)
 
 
 class SmartContract:
@@ -937,6 +1017,9 @@ class SmartContract:
         contract_id = f"{self.name}_{self.address}"
         self.storage = ContractStorage(contract_id, db_type=db_pref)
         self.is_deployed = False
+        
+        # Register this contract in the global registry
+        register_contract(self)
 
     def instantiate(self, args=None):
         """Create a new instance of this contract when called like ZiverWallet()."""
@@ -1105,6 +1188,29 @@ class SmartContract:
     def get_balance(self, account=None):
         val = self.storage.get(f"balance_{account}") if account else self.storage.get("balance")
         return val or Integer(0)
+    
+    def get(self, property_name):
+        """Get a state variable or attribute from the contract
+        
+        This enables property access like contract.state_var from Zexus code.
+        """
+        # First check if it's a state variable
+        value = self.storage.get(property_name)
+        if value is not None:
+            return value
+        
+        # Check if it's a direct attribute (like address, name, etc.)
+        if hasattr(self, property_name):
+            attr = getattr(self, property_name)
+            # Wrap primitive Python types
+            if isinstance(attr, str):
+                from ..object import String
+                return String(attr)
+            return attr
+        
+        # Return NULL if not found
+        from ..object import NULL
+        return NULL
 
 
 # ===============================================

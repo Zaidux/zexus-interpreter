@@ -624,6 +624,22 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                                 return EvaluationError('Access denied: admin required')
                     return val
 
+                # Check for objects with get_attr method (e.g., ContractReference)
+                if hasattr(obj, 'get_attr') and callable(obj.get_attr):
+                    val = obj.get_attr(property_name)
+                    if is_error(val):
+                        return val
+                    if restriction:
+                        rule = restriction.get('restriction')
+                        if rule == 'redact':
+                            from ..object import String
+                            return String('***REDACTED***')
+                        if rule == 'admin-only':
+                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
+                            if not is_admin:
+                                return EvaluationError('Access denied: admin required')
+                    return val
+
                 if hasattr(obj, 'get') and callable(obj.get):
                     val = obj.get(property_name)
                     if restriction:

@@ -1566,9 +1566,9 @@ class ContextStackParser:
                                 elif val_token.type == FLOAT:
                                     default_val = FloatLiteral(float(val_token.literal))
                                 elif val_token.type == TRUE:
-                                    default_val = BooleanLiteral(True)
+                                    default_val = Boolean(True)
                                 elif val_token.type == FALSE:
-                                    default_val = BooleanLiteral(False)
+                                    default_val = Boolean(False)
                                 elif val_token.type == LBRACE:
                                     # Map literal: {}
                                     # Find matching RBRACE
