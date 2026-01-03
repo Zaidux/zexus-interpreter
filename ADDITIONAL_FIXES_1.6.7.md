@@ -95,25 +95,82 @@ let action = "click";      // Previously failed
 
 ---
 
-## Known Limitations Documented
+### 3. Parser Optimization - Closing Brace Handling ✅
+**Problem:** Closing braces `}` and semicolons `;` after certain constructs (like map literals) were being incorrectly parsed as separate StringLiteral statements, creating spurious entries in the statement list.
 
-### 1. Contract Instances in Contract State ⚠️
-**Limitation:** Contract instances cannot be stored as state variables in other contracts.
-
-**Reason:** Contract state is serialized to JSON for persistence. Contract instances aren't JSON-serializable and become strings when deserialized.
-
-**Example (Won't Work):**
+**Example:**
 ```zexus
-contract Controller {
-    state storage_ref = null;  // Can't store contract instance
+let config = {"key": "value"};  // The '}' and ';' were parsed as extra statements
+```
+
+**Root Cause:** The fallback expression parsing in `_parse_block_statements()` wasn't skipping separator tokens (RBRACE, SEMICOLON) at the top level, treating them as potential expressions.
+
+**Fix:** Enhanced fallback parsing in `strategy_context.py` (lines 3488-3595):
+- Skip standalone SEMICOLON and RBRACE tokens before attempting to parse
+- Break on RBRACE and skip it like SEMICOLON in the fallback loop
+- Filter out separator tokens (`';'`, `'}'`, `'{'`) from parsed expressions
+
+**Impact:**
+- Parser no longer creates spurious statements for separators
+- Cleaner AST generation
+- Better handling of complex nested structures
+- All 19 edge case tests still passing
+
+---
+
+### 4. Contract-to-Contract References ✅
+**Feature:** Contracts can now store references to other contract instances that persist across state changes.
+
+**Implementation:** 
+- Added `ContractReference` class for serializable contract references
+- Implemented global `CONTRACT_REGISTRY` (address → SmartContract mapping)
+- Transparent method delegation via `call_method()`
+- Transparent attribute access via `get_attr()`
+- Full serialization/deserialization support
+
+**Example:**
+```zexus
+contract Storage {
+    state data: map<str, str> = {};
     
-    action init(storage) {
-        storage_ref = storage;  // Gets serialized to string
+    action set(key: str, value: str) {
+        data[key] = value;
+    }
+    
+    action get(key: str) -> str {
+        return data.get(key, "");
+    }
+}
+
+contract Controller {
+    state storage_ref: any = null;
+    
+    action init(storage_contract: any) {
+        storage_ref = storage_contract;  // Stores as ContractReference
+    }
+    
+    action store_data(key: str, value: str) {
+        storage_ref.set(key, value);  // Method call through reference
+    }
+    
+    action get_storage_address() -> str {
+        return storage_ref.address;  // Attribute access through reference
     }
 }
 ```
 
-**Workaround:** Pass contract instances as action parameters instead of storing them.
+**Features:**
+- ✅ Method calls: `contract_ref.action_name(args)`
+- ✅ Attribute access: `contract_ref.address`, `contract_ref.name`
+- ✅ Persistence: References survive serialization/deserialization
+- ✅ Transparency: Works exactly like direct contract access
+
+**Impact:**
+- Contracts can now build complex multi-contract systems
+- References are fully transparent to Zexus code
+- Enables contract factories, registries, and dependency injection patterns
+
+**Documentation:** See `docs/CONTRACT_REFERENCES.md` for comprehensive guide.
 
 ---
 
@@ -124,6 +181,11 @@ contract Controller {
 **Total Tests:** 19
 **Passed:** 19 ✅
 **Failed:** 0
+
+### Contract Reference Test Suite
+**File:** `test_contract_refs.zx`
+**Tests:** Contract-to-contract references with method calls and attribute access
+**Status:** ✅ Passing
 
 **Test Coverage:**
 1. ✅ Deeply nested maps (3+ levels)
@@ -155,10 +217,27 @@ contract Controller {
 
 - `src/zexus/parser/strategy_context.py`
   - Added standalone block statement handling (~line 3450)
-  - Already had semicolon fixes from previous version
+  - Enhanced fallback parsing to skip RBRACE/SEMICOLON (lines 3488-3595)
+  - Added separator token filtering
+
+- `src/zexus/object.py`
+  - Added `ContractReference` class (lines 162-245)
+  - Transparent method and attribute delegation
+
+- `src/zexus/security.py`
+  - Added `CONTRACT_REGISTRY` global dictionary
+  - Enhanced `SmartContract.__init__` with auto-registration
+  - Added `SmartContract.get()` for property access (lines 1193-1218)
+  - ContractReference serialization support (lines 856-902)
+  - ContractReference deserialization support (lines 904-975)
+
+- `src/zexus/evaluator/core.py`
+  - Added `get_attr` delegation support (lines 643-658)
+  - Enables transparent property access on ContractReference
 
 ### Test Files
 - Created `test_edge_cases.zx` - Comprehensive test suite (19 tests)
+- Created `test_contract_refs.zx` - Contract reference system test (passing ✅)
 - Created `debug_nested_map.zx` - Test for nested map literal persistence (passing ✅)
 - Removed temporary parser test files
 
@@ -173,7 +252,10 @@ contract Controller {
 1. Nested map literals work correctly in all contexts, including contract state
 2. Keywords can now be used as variable names in most contexts
 3. Standalone code blocks work correctly
-4. More complex control flow patterns supported
+4. Parser optimization: Closing braces and semicolons handled correctly
+5. Contract-to-contract references with full transparency
+6. Contracts can store references to other contracts that persist across state changes
+7. More complex control flow patterns supported
 
 ### Migration
 No migration needed - existing code continues to work unchanged. Code that previously failed due to the DATA keyword parser bug will now work correctly.
@@ -183,17 +265,20 @@ No migration needed - existing code continues to work unchanged. Code that previ
 ## What's Next
 
 ### Potential Future Improvements
-1. **Contract-to-Contract References:** Implement a reference system that allows contracts to store references to other contract instances (would require changes to serialization system)
+1. **Enhanced Error Messages:** Continue improving error messages for edge cases
 
-2. **Enhanced Error Messages:** Add specific error messages for known limitations (e.g., "Contract instances cannot be stored in contract state")
+2. **Parser Performance:** Further optimize the advanced parser for better performance with very large files
 
-3. **Parser Optimization:** Continue refining the advanced parser for better performance and edge case handling
+3. **Strong Typing for Contract References:** Add dedicated contract type annotations instead of using `any`
+
+4. **Cross-Chain Contract References:** Extend contract references to work across different blockchain instances
 
 ### Fixed Limitations
 - ✅ Nested map literal persistence (was a limitation, now fixed in 1.6.7)
 - ✅ Keywords as variable names (was a limitation, now fixed in 1.6.7)
 - ✅ Standalone block statements (was a limitation, now fixed in 1.6.7)
+- ✅ Parser optimization for separators (closing braces/semicolons - fixed in 1.6.7)
+- ✅ Contract-to-contract references (was a limitation, now fully implemented in 1.6.7)
 
 ### Remaining Limitations
-The current limitations are edge cases that can be worked around with alternative patterns:
-- Storing contract references in state (can pass as parameters)
+All major limitations addressed in 1.6.7! Current implementation is stable and production-ready.
