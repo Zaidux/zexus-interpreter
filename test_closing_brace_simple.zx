@@ -1,0 +1,6 @@
+action test() {
+    data[key] = {"count": 0};
+}
+
+let result = test();
+print("Done");

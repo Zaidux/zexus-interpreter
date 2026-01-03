@@ -3479,6 +3479,11 @@ class ContextStackParser:
 
             # Fallback: attempt to parse as expression
             else:
+                # Skip lone semicolons or braces (artifacts from statement termination)
+                if tokens[i].type in [SEMICOLON, RBRACE, LBRACE]:
+                    i += 1
+                    continue
+                
                 j = i
                 run_tokens = []
                 nesting = 0
@@ -3561,9 +3566,9 @@ class ContextStackParser:
                         # Check if this is a keyword after a dot (method/property access)
                         is_after_dot = (len(run_tokens) > 0 and run_tokens[-1].type == DOT)
                         if not is_after_dot and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
-                            # CRITICAL FIX: Skip the semicolon so it doesn't get parsed as a statement
-                            if t.type == SEMICOLON:
-                                j += 1  # Advance past the semicolon
+                            # CRITICAL FIX: Skip the semicolon/rbrace so it doesn't get parsed as a statement
+                            if t.type in [SEMICOLON, RBRACE]:
+                                j += 1  # Advance past the terminator
                             break
 
                     run_tokens.append(t)
@@ -3585,7 +3590,11 @@ class ContextStackParser:
                         # Parse as regular expression
                         expr = self._parse_expression(run_tokens)
                         if expr:
-                            statements.append(ExpressionStatement(expr))
+                            # Skip empty string literals (like lone semicolons)
+                            if isinstance(expr, StringLiteral) and expr.value in [';', '}', '{']:
+                                pass  # Skip these artifacts
+                            else:
+                                statements.append(ExpressionStatement(expr))
                 # Advance to the token after the run (or by one to avoid infinite loop)
                 if j == i:
                     i += 1
