@@ -81,6 +81,8 @@ class ContextStackParser:
             'entity_statement': self._parse_entity_statement_block,
             'USE': self._parse_use_statement_block,
             'use_statement': self._parse_use_statement_block,  # Fix: add lowercase version
+            'EXPORT': self._parse_export_statement_block,
+            EXPORT: self._parse_export_statement_block,  # Handle EXPORT token type from structural analyzer
             # Added contract handling
             'contract_statement': self._parse_contract_statement_block,
             # NEW: Security statement handlers
@@ -330,6 +332,7 @@ class ContextStackParser:
             if nesting == 0:
                 # Stop at explicit terminators
                 if t.type == SEMICOLON:
+                    j += 1  # Skip the semicolon
                     break
                 # Check for statement starters that should break
                 # Context-sensitive: IF followed by THEN is an expression, not a statement
@@ -422,6 +425,7 @@ class ContextStackParser:
             j = 3
             while j < len(tokens):
                 if tokens[j].type == SEMICOLON:
+                    j += 1  # Skip the semicolon
                     break
                 filename_tokens.append(tokens[j])
                 j += 1
@@ -469,6 +473,7 @@ class ContextStackParser:
             if nesting == 0:
                 # Stop at explicit terminators
                 if t.type == SEMICOLON:
+                    j += 1  # Skip the semicolon
                     break
                 # Allow method chains but stop at other statement starters
                 if t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
@@ -1069,9 +1074,16 @@ class ContextStackParser:
 
         # Find the ASSIGN operator
         assign_idx = None
+        compound_operator = None  # Track if this is +=, -=, *=, /=, %=
+        
         for i, tok in enumerate(tokens):
             if tok.type == ASSIGN:
                 assign_idx = i
+                # Check for compound assignment: operator immediately before =
+                if i > 0 and tokens[i-1].type in {PLUS, MINUS, STAR, SLASH, MOD}:
+                    compound_operator = tokens[i-1].literal
+                    parser_debug(f"  🔍 Detected compound operator: {compound_operator}= at position {i-1}")
+                    assign_idx = i  # Keep assign_idx at the = position
                 break
         
         if assign_idx is None or assign_idx == 0:
@@ -1079,7 +1091,11 @@ class ContextStackParser:
             return None
 
         # Parse the left-hand side (could be identifier or property access)
-        lhs_tokens = tokens[:assign_idx]
+        # For compound operators (+=), exclude the operator token from LHS
+        if compound_operator:
+            lhs_tokens = tokens[:assign_idx-1]  # Exclude the operator before =
+        else:
+            lhs_tokens = tokens[:assign_idx]
         
         # Check if this is a property access (e.g., obj.property or obj["key"])
         target_expr = None
@@ -1151,6 +1167,23 @@ class ContextStackParser:
         if value_expression is None:
             parser_debug("  ❌ Could not parse assignment value")
             return None
+
+        # Transform compound assignment (+=, -=, etc.) into regular assignment
+        # x += 5 becomes x = x + 5
+        if compound_operator:
+            parser_debug(f"  ✨ Transforming compound assignment: {compound_operator}=")
+            # Create a binary expression: target_expr + value_expression
+            # IMPORTANT: We need to create a COPY of target_expr for the left side
+            # because we're using target_expr as both the assignment target AND in the expression
+            from ..zexus_ast import InfixExpression
+            import copy
+            target_expr_copy = copy.deepcopy(target_expr)
+            value_expression = InfixExpression(
+                left=target_expr_copy,  # Use a copy to avoid reference issues
+                operator=compound_operator,
+                right=value_expression
+            )
+            parser_debug(f"  → Transformed to: target = (target {compound_operator} value)")
 
         return AssignmentExpression(
             name=target_expr,
@@ -1505,7 +1538,10 @@ class ContextStackParser:
                 elif token.type == STATE:
                     # Move to identifier after "state"
                     i += 1
-                    if i < brace_end and tokens[i].type == IDENT:
+                    
+                    # State variable name can be an identifier OR a keyword being used as an identifier
+                    # (e.g., "state data = {}" where "data" is a keyword but used as a variable name)
+                    if i < brace_end and (tokens[i].type == IDENT or hasattr(tokens[i], 'literal')):
                         prop_name = tokens[i].literal
                         prop_type = "any"
                         default_val = None
@@ -1728,6 +1764,30 @@ class ContextStackParser:
             is_named_import=False
         )
 
+    def _parse_export_statement_block(self, block_info, all_tokens):
+        """Parse export statement: export { name1, name2, ... }"""
+        tokens = block_info['tokens']
+        parser_debug(f"    📝 Found export statement: {[t.literal for t in tokens]}")
+
+        names = []
+        i = 0
+        while i < len(tokens):
+            token = tokens[i]
+            
+            # Skip export keyword and braces
+            if token.type in [EXPORT, LBRACE, RBRACE, COMMA]:
+                i += 1
+                continue
+                
+            # Collect identifier names
+            if token.type == IDENT:
+                names.append(Identifier(token.literal))
+            
+            i += 1
+
+        parser_debug(f"    📝 Export names: {[n.value for n in names]}")
+        return ExportStatement(names=names)
+
     def _parse_statement_block_context(self, block_info, all_tokens):
         """Parse standalone statement blocks - use direct parsers where available"""
         subtype = block_info.get('subtype', 'unknown')
@@ -1754,6 +1814,8 @@ class ContextStackParser:
             return self._parse_use_statement_block(block_info, all_tokens)
         elif subtype == 'use_statement': # Fix subtype mismatch
             return self._parse_use_statement_block(block_info, all_tokens)
+        elif subtype == 'EXPORT' or subtype == EXPORT:
+            return self._parse_export_statement_block(block_info, all_tokens)
         elif subtype in {IF, FOR, WHILE, RETURN, CONTINUE, DEFER, ENUM, SANDBOX}:
             # Use the existing logic in _parse_block_statements which handles these keywords
             # print(f"🎯 [Context] Calling _parse_block_statements for subtype={subtype}")
@@ -1900,6 +1962,7 @@ class ContextStackParser:
                             j += 1  # Include the closing paren
                             break
                     elif nesting == 0 and t.type in [SEMICOLON]:
+                        j += 1  # Skip the semicolon
                         break
                     # Stop at statement keywords when not nested
                     elif nesting == 0 and t.type in statement_starters and j > i + 1:
@@ -1909,6 +1972,10 @@ class ContextStackParser:
                 print_tokens = tokens[i:j]
                 if zexus_config.enable_debug_logs:
                     parser_debug(f"    📝 Found print statement: {[t.literal for t in print_tokens]}")
+
+                # Skip trailing semicolon if present
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
 
                 if len(print_tokens) > 1:
                     # Parse the expression tokens (skip PRINT keyword)
@@ -1990,6 +2057,7 @@ class ContextStackParser:
                     
                     # Stop at semicolon (at nesting 0 and paren_nesting 0)
                     if nesting == 0 and paren_nesting == 0 and t.type == SEMICOLON:
+                        j += 1  # Skip the semicolon
                         break
                     
                     # CRITICAL: Detect start of new IDENT-based statements
@@ -2122,7 +2190,9 @@ class ContextStackParser:
                 i = j
 
             # DATA statement heuristic (dataclass definition)
-            elif token.type == DATA:
+            # But not if DATA is used as an identifier (data = ...)
+            elif token.type == DATA and not (i + 1 < len(tokens) and tokens[i + 1].type == ASSIGN):
+                # This is a dataclass definition: data TypeName {...}
                 j = i + 1
                 brace_nesting = 0
                 # Find the complete data block
@@ -2934,10 +3004,12 @@ class ContextStackParser:
                     # Only check termination conditions at nesting level 0
                     if nesting == 0:
                         if t.type == SEMICOLON:
+                            j += 1  # Skip the semicolon
                             break
                         # Don't break on statement starters that are inside braces
                         # Only break if it's truly a new statement (e.g., not FUNCTION inside return expr)
-                        if t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN}:
+                        # ALSO: Don't break on the FIRST token (the return value itself), even if it's a keyword
+                        if len(value_tokens) > 0 and t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN}:
                             break
                     
                     value_tokens.append(t)
@@ -3289,6 +3361,7 @@ class ContextStackParser:
                     
                     # Stop at semicolon when not inside braces
                     if tj.type == SEMICOLON and brace_nest == 0:
+                        j += 1  # Skip the semicolon
                         break
                     
                     # Stop after closing paren of require(...) form (when paren_nest returns to 0)
@@ -3454,10 +3527,14 @@ class ContextStackParser:
 
                     # stop at top-level statement terminators or starters
                     # BUT: Don't stop at keywords that appear after a DOT (they're method/property names)
-                    if nesting == 0:
+                    # ALSO: Don't stop on the FIRST token (when run_tokens is empty), because that's what we're parsing!
+                    if nesting == 0 and len(run_tokens) > 0:
                         # Check if this is a keyword after a dot (method/property access)
                         is_after_dot = (len(run_tokens) > 0 and run_tokens[-1].type == DOT)
                         if not is_after_dot and (t.type in [SEMICOLON, LBRACE, RBRACE] or t.type in statement_starters):
+                            # CRITICAL FIX: Skip the semicolon so it doesn't get parsed as a statement
+                            if t.type == SEMICOLON:
+                                j += 1  # Advance past the semicolon
                             break
 
                     run_tokens.append(t)
@@ -4241,7 +4318,14 @@ class ContextStackParser:
         elif token.type == NULL:
             return NullLiteral()
         else:
-            return StringLiteral(token.literal)
+            # Keywords that can be used as identifiers (variable names):
+            # DATA, ENTITY, VERIFY, PROTECT, etc. - treat them as identifiers when used in expression context
+            # But not punctuation or operators
+            if hasattr(token, 'literal') and token.literal and token.literal[0].isalpha():
+                # This is likely a keyword being used as a variable name
+                return Identifier(token.literal)
+            # Otherwise, default to StringLiteral for backward compatibility
+            return StringLiteral(token.literal if hasattr(token, 'literal') else "")
 
     def _parse_compound_expression(self, tokens):
         """Parse compound expressions with multiple tokens (best-effort)"""

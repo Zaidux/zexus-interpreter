@@ -1,0 +1,267 @@
+// ========================================
+// COMPREHENSIVE DEMO: All ISSUE4.md Fixes
+// January 2, 2026
+// ========================================
+
+print("╔══════════════════════════════════════════════════════╗")
+print("║      ZEXUS 1.6.7 - ALL FIXES DEMONSTRATION           ║")
+print("╚══════════════════════════════════════════════════════╝\n")
+
+let passed = 0
+let total = 0
+
+// ========================================
+// FIX #1: Compound Assignment (+= etc)
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #1: Compound Assignment Operators (+=, -=, *=, /=)")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1
+
+let score = 100;
+print("Initial score: " + string(score));
+score += 50;
+print("After += 50: " + string(score) + " (expected: 150)");
+score += 100;  
+print("After += 100: " + string(score) + " (expected: 250)");
+
+if score == 250 {
+    print("✅ PASS - Simple compound assignment works!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Expected 250, got " + string(score) + "\n")
+}
+
+// ========================================
+// FIX #2: Nested Map Compound Assignment  
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #2: Nested Map with Compound Assignment")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1;
+
+let player = {};
+player["stats"] = {"kills": 0, "deaths": 0, "score": 0};
+
+print("Initial stats: kills=0, deaths=0, score=0");
+player["stats"]["kills"] += 5;
+player["stats"]["score"] += 100;
+print("After updates: kills=" + string(player["stats"]["kills"]) + ", score=" + string(player["stats"]["score"]))
+
+if player["stats"]["kills"] == 5 && player["stats"]["score"] == 100 {
+    print("✅ PASS - Nested map compound assignment works!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Values incorrect\n")
+}
+
+// ========================================
+// FIX #3: Multiple Compound Operators
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #3: Multiple Different Compound Operators")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1;
+
+let calc_data = {};
+calc_data["values"] = {"add": 10, "mult": 2, "sub": 100};
+
+calc_data["values"]["add"] += 15;      // 10 + 15 = 25
+calc_data["values"]["mult"] *= 5;      // 2 * 5 = 10
+calc_data["values"]["sub"] -= 30;      // 100 - 30 = 70
+
+print("Results: add=" + string(calc_data["values"]["add"]) + ", mult=" + string(calc_data["values"]["mult"]) + ", sub=" + string(calc_data["values"]["sub"]))
+
+if calc_data["values"]["add"] == 25 && calc_data["values"]["mult"] == 10 && calc_data["values"]["sub"] == 70 {
+    print("✅ PASS - All compound operators work!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Operators broken\n")
+}
+
+// ========================================
+// FIX #4: Contract State Maps
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #4: Contract State Map Operations")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1
+
+contract Bank {
+    state accounts = {};
+    
+    action open_account(user, initial_balance) {
+        print("[DEBUG] Opening account for " + user);
+        accounts[user] = {"balance": initial_balance, "transactions": 0};
+        print("[DEBUG] Account created");
+    }
+    
+    action deposit(user, amount) {
+        print("[DEBUG] Depositing " + string(amount) + " for " + user);
+        accounts[user]["balance"] = accounts[user]["balance"] + amount;
+        print("[DEBUG] Balance updated");
+        accounts[user]["transactions"] = accounts[user]["transactions"] + 1;
+        print("[DEBUG] Transactions updated");
+    }
+    
+    action get_account(user) {
+        print("[DEBUG] Getting account for " + user);
+        return accounts[user];
+    }
+}
+
+print("[DEBUG] Creating Bank instance");
+let bank = Bank();
+print("[DEBUG] Calling open_account");
+bank.open_account("alice", 1000);
+print("[DEBUG] Calling deposit 1");
+bank.deposit("alice", 500);
+print("[DEBUG] Calling deposit 2");
+bank.deposit("alice", 300);
+
+let account = bank.get_account("alice");
+print("Alice's account: balance=" + string(account["balance"]) + ", transactions=" + string(account["transactions"]));
+
+if account["balance"] == 1800 && account["transactions"] == 2 {
+    print("✅ PASS - Contract state maps work!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Expected balance=1800, txns=2\n")
+}
+
+// ========================================
+// FIX #5: Contract + Compound Assignment
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #5: Contract State Maps + Compound Assignment")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1
+
+contract Leaderboard {
+    state scores = {};
+    
+    action register(player) {
+        scores[player] = {"points": 0, "wins": 0};
+    }
+    
+    action add_win(player, points) {
+        scores[player]["points"] += points;
+        scores[player]["wins"] += 1;
+    }
+    
+    action get_score(player) {
+        return scores[player];
+    }
+}
+
+let board = Leaderboard()
+board.register("bob")
+board.add_win("bob", 100)
+board.add_win("bob", 150)
+board.add_win("bob", 200)
+
+let bob_score = board.get_score("bob")
+print("Bob's stats: points=" + string(bob_score["points"]) + ", wins=" + string(bob_score["wins"]))
+
+if bob_score["points"] == 450 && bob_score["wins"] == 3 {
+    print("✅ PASS - Contract compound assignment works!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Expected points=450, wins=3\n")
+}
+
+// ========================================
+// FIX #6: Inline Reconstruction (Module)
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #6: Inline Reconstruction at Module Level")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1;
+
+let inventory = {};
+inventory["sword"] = {"damage": 10, "durability": 100, "level": 1};
+
+print("Initial: damage=10, durability=100, level=1");
+
+// Inline reconstruction pattern
+inventory["sword"] = {
+    "damage": inventory["sword"]["damage"] + 5,
+    "durability": inventory["sword"]["durability"] - 10,
+    "level": inventory["sword"]["level"] + 1
+};
+
+print("After upgrade: damage=" + string(inventory["sword"]["damage"]) + ", durability=" + string(inventory["sword"]["durability"]) + ", level=" + string(inventory["sword"]["level"]))
+
+if inventory["sword"]["damage"] == 15 && inventory["sword"]["durability"] == 90 && inventory["sword"]["level"] == 2 {
+    print("✅ PASS - Inline reconstruction works!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Inline reconstruction broken\n")
+}
+
+// ========================================
+// FIX #7: Contract Inline Reconstruction
+// ========================================
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print("FIX #7: Contract State Inline Reconstruction")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+total = total + 1
+
+contract GameState {
+    state characters = {};
+    
+    action create(name, health) {
+        characters[name] = {
+            "health": health,
+            "mana": 100,
+            "level": 1
+        };
+    }
+    
+    action level_up(name) {
+        characters[name] = {
+            "health": characters[name]["health"] + 20,
+            "mana": characters[name]["mana"] + 10,
+            "level": characters[name]["level"] + 1
+        };
+    }
+    
+    action get_character(name) {
+        return characters[name];
+    }
+}
+
+let game = GameState()
+game.create("hero", 100)
+game.level_up("hero")
+game.level_up("hero")
+
+let hero = game.get_character("hero")
+print("Hero stats: health=" + string(hero["health"]) + ", mana=" + string(hero["mana"]) + ", level=" + string(hero["level"]))
+
+if hero["health"] == 140 && hero["mana"] == 120 && hero["level"] == 3 {
+    print("✅ PASS - Contract inline reconstruction works!\n")
+    passed += 1
+} else {
+    print("❌ FAIL - Expected health=140, mana=120, level=3\n")
+}
+
+// ========================================
+// FINAL SUMMARY
+// ========================================
+print("╔══════════════════════════════════════════════════════╗")
+print("║                  FINAL RESULTS                        ║")
+print("╚══════════════════════════════════════════════════════╝")
+print("")
+print("  Tests Passed: " + string(passed) + "/" + string(total))
+print("")
+
+if passed == total {
+    print("  🎉 ALL FIXES WORKING PERFECTLY!")
+    print("  ✨ ISSUE4.md completely resolved!")
+} else {
+    print("  ⚠️  Some tests failed - debugging needed")
+}
+
+print("")
+print("╚══════════════════════════════════════════════════════╝")

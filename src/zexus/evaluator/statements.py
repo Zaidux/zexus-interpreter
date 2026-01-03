@@ -1720,13 +1720,16 @@ class StatementEvaluatorMixin:
     def eval_contract_statement(self, node, env, stack_trace):
         # Prepare initial storage values
         storage = {}
+        print(f"[CONTRACT EVAL] Contract '{node.name.value}' has {len(node.storage_vars)} storage vars")
         for sv in node.storage_vars:
+            print(f"[CONTRACT EVAL]   Storage var: {sv.name.value if hasattr(sv, 'name') and hasattr(sv.name, 'value') else sv}")
             init = NULL
             if getattr(sv, 'initial_value', None):
                 init = self.eval_node(sv.initial_value, env, stack_trace)
                 if is_error(init): 
                     return init
             storage[sv.name.value] = init
+            print(f"[CONTRACT EVAL]   Initialized '{sv.name.value}' = {type(init)} {init}")
         
         actions = {}
         for act in node.actions:

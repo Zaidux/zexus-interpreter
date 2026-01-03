@@ -2,7 +2,7 @@
 import traceback
 import asyncio
 from .. import zexus_ast
-from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String
+from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
 from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
@@ -516,6 +516,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 obj = self.eval_node(node.object, env, stack_trace)
                 if is_error(obj): 
                     return obj
+                
+                # Unwrap ReturnValue if present
+                if isinstance(obj, ReturnValue):
+                    obj = obj.value
                 
                 # Determine property name based on whether it's computed (obj[expr]) or literal (obj.prop)
                 if hasattr(node, 'computed') and node.computed:

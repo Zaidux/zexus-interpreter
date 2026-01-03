@@ -574,7 +574,12 @@ class FunctionEvaluatorMixin:
             args = self.eval_expressions(node.arguments, env)
             if is_error(args): 
                 return args
-            return obj.call_method(method_name, args)
+            result = obj.call_method(method_name, args)
+            # Unwrap ReturnValue if needed
+            from ..object import ReturnValue
+            if isinstance(result, ReturnValue):
+                return result.value
+            return result
         
         # === Embedded Code Methods ===
         from ..object import EmbeddedCode

@@ -1068,6 +1068,7 @@ class SmartContract:
         from zexus.evaluator.core import Evaluator
         evaluator = Evaluator()
         result = evaluator.eval_node(action.body, action_env, stack_trace=[])
+
         
         # Save any modified state variables back to storage
         for var_node in self.storage_vars:
@@ -1084,6 +1085,7 @@ class SmartContract:
                 current_value = action_env.get(var_name)
                 if current_value is not None:
                     self.storage.set(var_name, current_value)
+
         
         return result
 

@@ -41,7 +41,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='zexus',
-    version='1.6.6',
+    version='1.6.7',
     author='Zaidux',
     author_email='devnull@example.com',
     description='A modern, security-first programming language with blockchain support',

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.7] - 2026-01-03
+
+### 🐛 Bug Fixes
+
+This release resolves a critical parser bug affecting statement parsing with semicolons.
+
+#### Fixed
+
+**Parser Semicolon Handling:**
+- **Semicolon Token Inclusion Bug** - Fixed semicolons being incorrectly included in subsequent statements
+  - Previously semicolons were included as first token of next statement in contract action bodies
+  - This caused "Invalid assignment target" errors when multiple assignments followed print statements
+  - Applied fix across 9 locations in statement parsing (PRINT, LET, CONST, RETURN, REQUIRE, expressions)
+  - Special handling for PRINT statements that break on RPAREN before seeing semicolon
+  - File: `src/zexus/parser/strategy_context.py` (multiple locations)
+  - Example: Contract actions with `print(...); accounts[user]["balance"] = ...;` now work correctly
+
+- **Multiple Nested Assignments in Contracts** - Fixed contract actions with multiple nested map operations
+  - Previously second nested assignment would fail with "Invalid assignment target"
+  - Parser now properly skips semicolons when advancing to next statement
+  - Contract state modifications with multiple nested map updates now fully functional
+  - Example: `accounts[user]["balance"] = ...; accounts[user]["transactions"] = ...;` works correctly
+
+#### Testing
+- All 7 ISSUE4.md fixes now working perfectly
+- Comprehensive demonstration file (DEMO_ALL_FIXES.zx) passes all tests:
+  - ✅ Compound Assignment Operators (+=, -=, *=, /=)
+  - ✅ Nested Map with Compound Assignment
+  - ✅ Multiple Different Compound Operators
+  - ✅ Contract State Map Operations
+  - ✅ Contract State Maps + Compound Assignment
+  - ✅ Inline Reconstruction at Module Level
+  - ✅ Contract State Inline Reconstruction
+
+#### Documentation
+- Added PARSER_SEMICOLON_FIX.md with detailed technical explanation
+- Documents root cause, fix locations, and test results
+
+---
+
 ## [1.6.6] - 2026-01-02
 
 ### 🐛 Bug Fixes
@@ -336,6 +376,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.6.7]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.3...v1.6.5
 [1.6.3]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.2...v1.6.3

@@ -1,7 +1,0 @@
-# Test running block.zx directly
-print("🔗 Testing block.zx directly (not via import)")
-
-# Just run the file to see if it parses
-use "./src/core/block.zx"
-
-print("✅ block.zx loaded successfully!")
