@@ -19,6 +19,8 @@
 - Raised default SQLite batch size to 512 writes (override with `ZEXUS_STORAGE_BATCH_SIZE`) to cut commit churn.
 - Flagged `EvaluationError` instances for O(1) error detection, removing millions of `isinstance` checks from hot loops.
 - Introduced evaluator dispatch table for common AST nodes to skip the multi-hundred `isinstance` cascade during execution.
+- Specialized stack VM by front-loading a direct opcode dispatch map plus async-aware handlers, eliminating the cascading `if/elif` chain on hot opcodes.
+- Added optional `ZEXUS_VM_PROFILE_OPS=1` instrumentation to capture opcode frequencies for future tuning.
 
 ### Profiling & VM Updates
 - Extended `profile_performance.py` with `--use-vm` flag for targeted profiling.
@@ -36,6 +38,8 @@
 | Batch tuning + error flag | 10,000 | 9,603 ms | 1,041 | Same run with tuned batch size |
 | Dispatch table fast-path | 1,000 | 719 ms | 1,390 | Hot AST nodes bypass isinstance chain |
 | Dispatch table fast-path | 10,000 | 8,231 ms | 1,214 | VM receives faster evaluator input |
+| VM opcode dispatch table | 1,000 | 733 ms | 1,364 | Direct opcode handlers collapse VM branching |
+| VM opcode dispatch table | 10,000 | 8,482 ms | 1,178 | Same tuning applied to full 10k transfer run |
 
 ## Remaining Opportunities
 - Further tune SQLite batching thresholds to squeeze commit overhead.

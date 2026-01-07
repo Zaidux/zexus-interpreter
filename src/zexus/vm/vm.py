@@ -10,6 +10,7 @@ Capabilities:
  - Blockchain: Ziver-Chain specific opcodes (Merkle, Hash, State, Gas).
 """
 
+import os
 import sys
 import time
 import asyncio
@@ -195,6 +196,7 @@ class VM:
         self._execution_count = 0
         self._total_execution_time = 0.0
         self._mode_usage = {m.value: 0 for m in VMMode}
+        self._last_opcode_profile = None
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
@@ -708,6 +710,11 @@ class VM:
         instrs = list(getattr(bytecode, "instructions", []))
         ip = 0
         stack: List[Any] = []
+        running = True
+        return_value = None
+        profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+        profile_ops = profile_flag is not None and profile_flag.lower() not in ("0", "false", "off")
+        opcode_counts: Optional[Dict[str, int]] = {} if profile_ops else None
 
         def const(idx): return consts[idx] if 0 <= idx < len(consts) else None
 
@@ -761,9 +768,153 @@ class VM:
             # Default: Create local
             self.env[name] = value
 
+        def _unwrap(value):
+            return value.value if hasattr(value, 'value') else value
+
+        def _binary_op(func):
+            def wrapper(_):
+                b = _unwrap(stack.pop() if stack else 0)
+                a = _unwrap(stack.pop() if stack else 0)
+                stack.append(func(a, b))
+            return wrapper
+
+        def _binary_bool_op(func):
+            def wrapper(_):
+                b = stack.pop() if stack else None
+                a = stack.pop() if stack else None
+                stack.append(func(a, b))
+            return wrapper
+
+        async def _op_call_name(operand):
+            if not operand:
+                stack.append(None)
+                return
+            name_idx, arg_count = operand
+            func_name = const(name_idx)
+            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            fn = _resolve(func_name) or self.builtins.get(func_name)
+            res = await self._invoke_callable_or_funcdesc(fn, args)
+            stack.append(res)
+
+        async def _op_call_top(arg_count):
+            count = arg_count or 0
+            args = [stack.pop() for _ in range(count)][::-1] if count else []
+            fn_obj = stack.pop() if stack else None
+            res = await self._invoke_callable_or_funcdesc(fn_obj, args)
+            stack.append(res)
+
+        def _op_load_const(idx):
+            stack.append(const(idx))
+
+        def _op_load_name(idx):
+            name = const(idx)
+            stack.append(_resolve(name))
+
+        def _op_store_name(idx):
+            name = const(idx)
+            val = stack.pop() if stack else None
+            _store(name, val)
+            if self.use_memory_manager and val is not None:
+                self._allocate_managed(val, name=name)
+
+        def _op_pop(_):
+            if stack:
+                stack.pop()
+
+        def _op_dup(_):
+            if stack:
+                stack.append(stack[-1])
+
+        def _op_neg(_):
+            a = _unwrap(stack.pop() if stack else 0)
+            stack.append(-a)
+
+        def _op_not(_):
+            a = stack.pop() if stack else False
+            stack.append(not a)
+
+        def _op_jump(target):
+            nonlocal ip
+            ip = target
+
+        def _op_jump_if_false(target):
+            nonlocal ip
+            cond = stack.pop() if stack else None
+            if not cond:
+                ip = target
+
+        def _op_return(_):
+            nonlocal running, return_value
+            return_value = stack.pop() if stack else None
+            running = False
+
+        def _op_build_list(count):
+            total = count if count is not None else 0
+            elements = [stack.pop() for _ in range(total)][::-1]
+            stack.append(elements)
+
+        def _op_build_map(count):
+            total = count if count is not None else 0
+            result = {}
+            for _ in range(total):
+                val = stack.pop(); key = stack.pop()
+                result[key] = val
+            stack.append(result)
+
+        def _op_index(_):
+            idx = stack.pop(); obj = stack.pop()
+            try:
+                stack.append(obj[idx] if obj is not None else None)
+            except (IndexError, KeyError, TypeError):
+                stack.append(None)
+
+        def _op_get_length(_):
+            obj = stack.pop()
+            try:
+                if obj is None:
+                    stack.append(0)
+                elif hasattr(obj, '__len__'):
+                    stack.append(len(obj))
+                else:
+                    stack.append(0)
+            except (TypeError, AttributeError):
+                stack.append(0)
+
+        dispatch_table: Dict[str, Callable[[Any], Any]] = {
+            "LOAD_CONST": _op_load_const,
+            "LOAD_NAME": _op_load_name,
+            "STORE_NAME": _op_store_name,
+            "POP": _op_pop,
+            "DUP": _op_dup,
+            "CALL_NAME": _op_call_name,
+            "CALL_TOP": _op_call_top,
+            "ADD": _binary_op(lambda a, b: a + b),
+            "SUB": _binary_op(lambda a, b: a - b),
+            "MUL": _binary_op(lambda a, b: a * b),
+            "DIV": _binary_op(lambda a, b: a / b if b != 0 else 0),
+            "MOD": _binary_op(lambda a, b: a % b if b != 0 else 0),
+            "POW": _binary_op(lambda a, b: a ** b),
+            "NEG": _op_neg,
+            "EQ": _binary_bool_op(lambda a, b: a == b),
+            "NEQ": _binary_bool_op(lambda a, b: a != b),
+            "LT": _binary_op(lambda a, b: a < b),
+            "GT": _binary_op(lambda a, b: a > b),
+            "LTE": _binary_op(lambda a, b: a <= b),
+            "GTE": _binary_op(lambda a, b: a >= b),
+            "NOT": _op_not,
+            "JUMP": _op_jump,
+            "JUMP_IF_FALSE": _op_jump_if_false,
+            "RETURN": _op_return,
+            "BUILD_LIST": _op_build_list,
+            "BUILD_MAP": _op_build_map,
+            "INDEX": _op_index,
+            "GET_LENGTH": _op_get_length,
+        }
+        async_dispatch_ops = {"CALL_NAME", "CALL_TOP"}
+
         # 3. Execution Loop
         prev_ip = None
-        while ip < len(instrs):
+        while running and ip < len(instrs):
             op, operand = instrs[ip]
             
             # Handle Opcode enum: convert to name for comparison
@@ -771,6 +922,9 @@ class VM:
                 op_name = op.name
             else:  # Already a string
                 op_name = op
+
+            if profile_ops:
+                opcode_counts[op_name] = opcode_counts.get(op_name, 0) + 1
             
             if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack}")
             
@@ -813,6 +967,16 @@ class VM:
                             self.gas_metering.gas_limit,
                             op_name
                         )
+
+            handler = dispatch_table.get(op_name)
+            if handler is not None:
+                if op_name in async_dispatch_ops:
+                    await handler(operand)
+                else:
+                    handler(operand)
+                if not running:
+                    break
+                continue
 
             # --- Basic Stack Ops ---
             if op_name == "LOAD_CONST":
@@ -1157,6 +1321,13 @@ class VM:
                 elapsed = time.perf_counter() - instr_start_time
                 self.profiler.measure_instruction(ip, elapsed)
 
+        if profile_ops and opcode_counts is not None:
+            self._last_opcode_profile = sorted(opcode_counts.items(), key=lambda item: item[1], reverse=True)
+        elif self._last_opcode_profile is not None:
+            self._last_opcode_profile = None
+
+        if not running:
+            return return_value
         return stack[-1] if stack else None
 
     # ==================== Helpers ====================
