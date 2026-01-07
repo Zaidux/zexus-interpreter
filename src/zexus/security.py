@@ -12,6 +12,7 @@ import json
 import uuid
 import sqlite3
 import time
+import hashlib
 
 # Try importing advanced database drivers
 try:
@@ -27,9 +28,14 @@ except ImportError:
     _ROCKSDB_AVAILABLE = False
 
 from .object import (
-    Environment, Map, String, Integer, Float, Boolean as BooleanObj, 
-    Builtin, List, Null, EvaluationError as ObjectEvaluationError
+    Environment, Map, String, Integer, Float, Boolean as BooleanObj,
+    Builtin, List, Null, EvaluationError as ObjectEvaluationError, NULL
 )
+
+try:
+    from .object import ContractReference
+except ImportError:  # Fallback if optional type missing
+    ContractReference = None
 
 # Ensure storage directory exists
 STORAGE_DIR = "chain_data"
@@ -729,6 +735,7 @@ class StorageBackend:
     def set(self, key, value): pass
     def get(self, key): pass
     def delete(self, key): pass
+    def scan(self, prefix): return []
     def close(self): pass
 
 class InMemoryBackend(StorageBackend):
@@ -740,18 +747,45 @@ class InMemoryBackend(StorageBackend):
         return self.data.get(key)
     def delete(self, key): 
         if key in self.data: del self.data[key]
+    def scan(self, prefix):
+        prefix_len = len(prefix)
+        return [(k, v) for k, v in self.data.items() if k.startswith(prefix)]
 
 class SQLiteBackend(StorageBackend):
     def __init__(self, db_path):
         import sqlite3
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
+        
+        # Enable WAL mode for better concurrent performance
+        self.cursor.execute("PRAGMA journal_mode=WAL")
+        
+        # Create table
         self.cursor.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
         self.conn.commit()
+        
+        self._pending_writes = []
+        self._auto_commit = False  # Default to batching for performance
+        self._batch_depth = 0  # Track nested batch contexts
+        self._write_count = 0  # Track writes in current batch
+        self._batch_size = 100  # Auto-commit every N writes
+
+    def begin_batch(self):
+        """Start transaction batching - disables auto-commit"""
+        self._batch_depth += 1
+        self._auto_commit = False
 
     def set(self, key, value):
         self.cursor.execute("INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)", (key, value))
-        self.conn.commit()
+        self._write_count += 1
+
+        should_commit = self._auto_commit or (not self._batch_depth and self._write_count >= self._batch_size)
+        if should_commit:
+            self.conn.commit()
+            self._write_count = 0
+            self._pending_writes.clear()
+        else:
+            self._pending_writes.append(key)
 
     def get(self, key):
         self.cursor.execute("SELECT value FROM kv_store WHERE key=?", (key,))
@@ -760,9 +794,33 @@ class SQLiteBackend(StorageBackend):
 
     def delete(self, key):
         self.cursor.execute("DELETE FROM kv_store WHERE key=?", (key,))
-        self.conn.commit()
+        if self._auto_commit:
+            self.conn.commit()
+        else:
+            self._pending_writes.append(key)
+    
+    def commit_batch(self, force=False):
+        """Commit pending writes when thresholds are met"""
+        if self._batch_depth > 0:
+            self._batch_depth -= 1
+
+        should_commit = force or (self._batch_depth == 0 and self._write_count >= self._batch_size)
+        if should_commit and (self._pending_writes or self._write_count):
+            self.conn.commit()
+            self._pending_writes = []
+            self._write_count = 0
+
+        if self._batch_depth == 0:
+            self._auto_commit = False
+
+    def scan(self, prefix):
+        like_pattern = f"{prefix}%"
+        self.cursor.execute("SELECT key, value FROM kv_store WHERE key LIKE ?", (like_pattern,))
+        return self.cursor.fetchall()
 
     def close(self):
+        if self._pending_writes or self._write_count > 0:
+            self.conn.commit()
         self.conn.close()
 
 class LevelDBBackend(StorageBackend):
@@ -779,6 +837,12 @@ class LevelDBBackend(StorageBackend):
 
     def delete(self, key):
         self.db.delete(key.encode('utf-8'))
+    def scan(self, prefix):
+        results = []
+        prefix_bytes = prefix.encode('utf-8')
+        for k, v in self.db.iterator(prefix=prefix_bytes):
+            results.append((k.decode('utf-8'), v.decode('utf-8')))
+        return results
 
     def close(self):
         self.db.close()
@@ -797,10 +861,63 @@ class RocksDBBackend(StorageBackend):
 
     def delete(self, key):
         self.db.delete(key.encode('utf-8'))
+    def scan(self, prefix):
+        results = []
+        prefix_bytes = prefix.encode('utf-8')
+        it = self.db.iterkeys()
+        it.seek(prefix_bytes)
+        for k in it:
+            key_str = k.decode('utf-8')
+            if not key_str.startswith(prefix):
+                break
+            results.append((key_str, self.db.get(k).decode('utf-8')))
+        return results
 
 # ===============================================
 # CONTRACT SYSTEM - Blockchain State & Logic
 # ===============================================
+
+class StorageMap(Map):
+    """Map wrapper that tracks dirty entries for persistent storage"""
+
+    __slots__ = ('_dirty_keys', '_deleted_keys', '_var_name')
+
+    def __init__(self, pairs, var_name):
+        super().__init__(pairs)
+        self._dirty_keys = set()
+        self._deleted_keys = set()
+        self._var_name = var_name
+
+    def set(self, key, value):
+        super().set(key, value)
+        self._dirty_keys.add(key)
+        self._deleted_keys.discard(key)
+
+    def delete_key(self, key):
+        if key in self.pairs:
+            del self.pairs[key]
+            self._dirty_keys.discard(key)
+            self._deleted_keys.add(key)
+
+    def mark_all_dirty(self):
+        self._dirty_keys = set(self.pairs.keys())
+        self._deleted_keys.clear()
+
+    def mark_clean(self):
+        self._dirty_keys.clear()
+        self._deleted_keys.clear()
+
+    @property
+    def dirty_keys(self):
+        return self._dirty_keys
+
+    @property
+    def deleted_keys(self):
+        return self._deleted_keys
+
+    @property
+    def var_name(self):
+        return self._var_name
 
 class ContractStorage:
     """Persistent storage for contract state with DB selection"""
@@ -808,6 +925,7 @@ class ContractStorage:
     def __init__(self, contract_id, db_type="sqlite"):
         self.transaction_log = []
         self.db_type = db_type
+        self._map_meta_cache = {}
         
         # Determine strict path
         base_path = os.path.join(STORAGE_DIR, f"{contract_id}")
@@ -823,23 +941,102 @@ class ContractStorage:
             print(f"   ⚠️ Storage Warning: '{db_type}' unavailable or unknown. Falling back to In-Memory.")
             self.backend = InMemoryBackend()
 
+        self._cache_enabled = False
+        self._action_cache = None
+
     def get(self, key):
         """Get value from storage and deserialize from JSON"""
+        if self._cache_enabled and self._action_cache is not None and key in self._action_cache:
+            return self._action_cache[key]
+
         raw_val = self.backend.get(key)
         if raw_val is None:
+            if self._cache_enabled and self._action_cache is not None:
+                self._action_cache[key] = None
             return None
-        return self._deserialize(raw_val)
+        try:
+            meta = json.loads(raw_val)
+            if isinstance(meta, dict) and meta.get("__kind") == "map":
+                entries = self.backend.scan(self._map_entry_prefix(key))
+                pairs = {}
+                for entry_key, payload in entries:
+                    entry = json.loads(payload)
+                    stored_key = self._deserialize_recursive(entry["key"])
+                    stored_value = self._deserialize_recursive(entry["value"])
+                    pairs[stored_key] = stored_value
+                storage_map = StorageMap(pairs, key)
+                storage_map.mark_clean()
+                self._map_meta_cache[key] = meta
+                if self._cache_enabled and self._action_cache is not None:
+                    self._action_cache[key] = storage_map
+                return storage_map
+        except json.JSONDecodeError:
+            pass
+
+        value = self._deserialize(raw_val)
+        if self._cache_enabled and self._action_cache is not None:
+            self._action_cache[key] = value
+        return value
 
     def set(self, key, value):
         """Serialize to JSON and set value in storage"""
+        if isinstance(value, StorageMap):
+            if self._cache_enabled and self._action_cache is not None:
+                self._action_cache[key] = value
+            self._store_map(key, value)
+            return
+
+        # Plain Map objects (not yet wrapped) should be persisted as tracked maps
+        if isinstance(value, Map):
+            storage_map = StorageMap(dict(value.pairs), key)
+            storage_map.mark_all_dirty()
+            if self._cache_enabled and self._action_cache is not None:
+                self._action_cache[key] = storage_map
+            self._store_map(key, storage_map)
+            return
+
         serialized = self._serialize(value)
         self.backend.set(key, serialized)
+        if self._cache_enabled and self._action_cache is not None:
+            self._action_cache[key] = value
         self._log_transaction("SET", key, serialized)
 
     def delete(self, key):
         """Delete value from storage"""
+        meta = self.backend.get(key)
+        if meta:
+            try:
+                meta_obj = json.loads(meta)
+            except json.JSONDecodeError:
+                meta_obj = None
+            if isinstance(meta_obj, dict) and meta_obj.get("__kind") == "map":
+                self._delete_map_entries(key)
         self.backend.delete(key)
+        if self._cache_enabled and self._action_cache is not None:
+            self._action_cache.pop(key, None)
         self._log_transaction("DELETE", key, None)
+    
+    def begin_batch(self):
+        """Start batching writes for performance - disables auto-commit"""
+        if hasattr(self.backend, 'begin_batch'):
+            self.backend.begin_batch()
+    
+    def commit_batch(self, force=False):
+        """Commit pending writes when batching thresholds are met"""
+        if hasattr(self.backend, 'commit_batch'):
+            self.backend.commit_batch(force=force)
+
+    def enable_action_cache(self):
+        self._cache_enabled = True
+        if self._action_cache is None:
+            self._action_cache = {}
+        else:
+            self._action_cache.clear()
+
+    def disable_action_cache(self):
+        self._cache_enabled = False
+        if self._action_cache is not None:
+            self._action_cache.clear()
 
     def _log_transaction(self, op, key, value):
         """Log transaction for audit trail"""
@@ -850,70 +1047,106 @@ class ContractStorage:
             "timestamp": _get_timestamp()
         })
 
+    def _map_entry_prefix(self, storage_key):
+        return f"{storage_key}::entry::"
+
+    def _map_entry_key(self, storage_key, serialized_key):
+        digest = hashlib.sha1(serialized_key.encode('utf-8')).hexdigest()
+        return f"{self._map_entry_prefix(storage_key)}{digest}"
+
+    def _serialize_map_entry(self, key_obj, value_obj):
+        key_repr = self._serialize_val_recursive(key_obj)
+        val_repr = self._serialize_val_recursive(value_obj)
+        payload = {"key": key_repr, "value": val_repr}
+        serialized_key = json.dumps(key_repr, sort_keys=True, separators=(',', ':'))
+        return serialized_key, json.dumps(payload)
+
+    def _store_map(self, storage_key, map_obj):
+        meta = {"__kind": "map", "version": 1}
+        self.backend.set(storage_key, json.dumps(meta))
+        dirty_keys = map_obj.dirty_keys if isinstance(map_obj, StorageMap) else set(map_obj.pairs.keys())
+        deleted_keys = map_obj.deleted_keys if isinstance(map_obj, StorageMap) else set()
+
+        if not isinstance(map_obj, StorageMap):
+            # Full rewrite for plain Map objects
+            self._delete_map_entries(storage_key)
+
+        for key_obj in dirty_keys:
+            entry_key_repr, payload = self._serialize_map_entry(key_obj, map_obj.pairs[key_obj])
+            entry_row = self._map_entry_key(storage_key, entry_key_repr)
+            self.backend.set(entry_row, payload)
+
+        for key_obj in deleted_keys:
+            entry_key_repr = json.dumps(self._serialize_val_recursive(key_obj), sort_keys=True, separators=(',', ':'))
+            entry_row = self._map_entry_key(storage_key, entry_key_repr)
+            self.backend.delete(entry_row)
+
+        if isinstance(map_obj, StorageMap):
+            map_obj.mark_clean()
+
+        summary = {
+            "dirty": len(dirty_keys),
+            "deleted": len(deleted_keys)
+        }
+        self._log_transaction("SET_MAP", storage_key, json.dumps(summary))
+
+    def _delete_map_entries(self, storage_key):
+        for entry_key, _ in self.backend.scan(self._map_entry_prefix(storage_key)):
+            self.backend.delete(entry_key)
+
     def _serialize(self, obj):
         """Convert Zexus Object -> JSON String"""
-        # Check for SmartContract instance first
-        if isinstance(obj, SmartContract):
-            # Store contract reference instead of the contract itself
+        cls = obj.__class__
+
+        if cls is SmartContract:
             return json.dumps({"type": "contract_ref", "val": {"address": obj.address, "name": obj.name}})
-        
-        # Import ContractReference to handle it
-        try:
-            from .object import ContractReference
-            if isinstance(obj, ContractReference):
-                return json.dumps({"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}})
-        except ImportError:
-            pass
-        
-        if isinstance(obj, String):
+
+        if ContractReference is not None and cls is ContractReference:
+            return json.dumps({"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}})
+
+        if cls is String:
             return json.dumps({"type": "string", "val": obj.value})
-        elif isinstance(obj, Integer):
+        if cls is Integer:
             return json.dumps({"type": "integer", "val": obj.value})
-        elif isinstance(obj, Float):
+        if cls is Float:
             return json.dumps({"type": "float", "val": obj.value})
-        elif isinstance(obj, BooleanObj):
+        if cls is BooleanObj:
             return json.dumps({"type": "boolean", "val": obj.value})
-        elif isinstance(obj, List):
-            # Recursively serialize list elements
+        if cls is List:
             serialized_list = [self._serialize_val_recursive(e) for e in obj.elements]
             return json.dumps({"type": "list", "val": serialized_list})
-        elif isinstance(obj, Map):
-            # Recursively serialize map elements
+        if cls is Map or cls is StorageMap:
             serialized_map = {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}
             return json.dumps({"type": "map", "val": serialized_map})
-        elif obj is Null or obj is None:
+
+        if obj is NULL or obj is None:
             return json.dumps({"type": "null", "val": None})
-        else:
-            # Fallback for complex objects or strings
-            return json.dumps({"type": "string", "val": str(obj)})
+
+        return json.dumps({"type": "string", "val": str(obj)})
 
     def _serialize_val_recursive(self, obj):
         """Helper for nested structures (returns dict, not json string)"""
-        # This mirrors _serialize but returns the inner dict structure directly
-        
-        # Check for SmartContract instance first
-        if isinstance(obj, SmartContract):
-            # Store contract reference instead of the contract itself
-            from .object import ContractReference
-            ref = ContractReference(obj.address, obj.name)
+        cls = obj.__class__
+
+        if cls is SmartContract:
             return {"type": "contract_ref", "val": {"address": obj.address, "name": obj.name}}
-        
-        # Import ContractReference here to avoid circular import
-        try:
-            from .object import ContractReference
-            if isinstance(obj, ContractReference):
-                return {"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}}
-        except ImportError:
-            pass
-        
-        if isinstance(obj, String): return {"type": "string", "val": obj.value}
-        elif isinstance(obj, Integer): return {"type": "integer", "val": obj.value}
-        elif isinstance(obj, BooleanObj): return {"type": "boolean", "val": obj.value}
-        elif isinstance(obj, List): 
+
+        if ContractReference is not None and cls is ContractReference:
+            return {"type": "contract_ref", "val": {"address": obj.address, "name": obj.contract_name}}
+
+        if cls is String:
+            return {"type": "string", "val": obj.value}
+        if cls is Integer:
+            return {"type": "integer", "val": obj.value}
+        if cls is BooleanObj:
+            return {"type": "boolean", "val": obj.value}
+        if cls is List:
             return {"type": "list", "val": [self._serialize_val_recursive(e) for e in obj.elements]}
-        elif isinstance(obj, Map): 
+        if cls is Map or cls is StorageMap:
             return {"type": "map", "val": {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}}
-        elif obj is Null: return {"type": "null", "val": None}
+        if obj is NULL:
+            return {"type": "null", "val": None}
+
         return {"type": "string", "val": str(obj)}
 
     def _deserialize(self, json_str):
@@ -930,26 +1163,28 @@ class ContractStorage:
         dtype = data.get("type")
         val = data.get("val")
 
-        if dtype == "string": return String(val)
-        elif dtype == "integer": return Integer(val)
-        elif dtype == "float": return Float(val)
-        elif dtype == "boolean": return BooleanObj(val)
-        elif dtype == "null": return Null
-        elif dtype == "contract_ref":
-            # Reconstruct contract reference
-            from .object import ContractReference
+        if dtype == "string":
+            return String(val)
+        if dtype == "integer":
+            return Integer(val)
+        if dtype == "float":
+            return Float(val)
+        if dtype == "boolean":
+            return BooleanObj(val)
+        if dtype == "null":
+            return Null
+        if dtype == "contract_ref" and ContractReference is not None:
             address = val.get("address")
             name = val.get("name")
             return ContractReference(address, name)
-        elif dtype == "list":
-            # Reconstruct list
+        if dtype == "list":
             elements = [self._deserialize_recursive(item) for item in val]
             return List(elements)
-        elif dtype == "map":
-            # Reconstruct map
+        if dtype == "map":
             pairs = {k: self._deserialize_recursive(v) for k, v in val.items()}
             return Map(pairs)
-        return String(str(val)) # Fallback
+
+        return String(str(val))
 
 
 # Global contract registry
@@ -1018,8 +1253,19 @@ class SmartContract:
         self.storage = ContractStorage(contract_id, db_type=db_pref)
         self.is_deployed = False
         
+        # Track which variables were set via this.property to avoid overwriting them
+        self._direct_storage_updates = set()
+        
         # Register this contract in the global registry
         register_contract(self)
+    
+    def __del__(self):
+        """Ensure storage is committed on cleanup"""
+        try:
+            if hasattr(self, 'storage'):
+                self.storage.commit_batch(force=True)
+        except:
+            pass  # Ignore errors during cleanup
 
     def instantiate(self, args=None):
         """Create a new instance of this contract when called like ZiverWallet()."""
@@ -1112,6 +1358,16 @@ class SmartContract:
         # Bind 'this' to the current contract instance in the action environment
         action_env.set('this', self)
         
+        # Add msg.sender context - default to contract deployer if not in transaction context
+        # In a real blockchain, this would be the transaction sender's address
+        msg_sender = getattr(self, '_current_sender', self.deployer if hasattr(self, 'deployer') else "0x0000000000000000")
+        from zexus.object import String as ZexusString, Map as ZexusMap
+        # msg is a Map with sender property for better compatibility
+        msg_obj = ZexusMap({
+            ZexusString("sender"): ZexusString(msg_sender)
+        })
+        action_env.set('msg', msg_obj)
+        
         # Make contract storage accessible in the action environment
         for var_node in self.storage_vars:
             # Extract variable name from node (same logic as in deploy)
@@ -1150,24 +1406,48 @@ class SmartContract:
         # Execute the action body
         from zexus.evaluator.core import Evaluator
         evaluator = Evaluator()
-        result = evaluator.eval_node(action.body, action_env, stack_trace=[])
-
         
-        # Save any modified state variables back to storage
-        for var_node in self.storage_vars:
-            # Extract variable name from node (same logic as above)
-            var_name = None
-            if hasattr(var_node, 'name'):
-                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
-            elif isinstance(var_node, dict):
-                var_name = var_node.get("name")
-            elif isinstance(var_node, str):
-                var_name = var_node
+        # Start batching storage writes for performance
+        self.storage.begin_batch()
+        self.storage.enable_action_cache()
+        
+        try:
+            result = evaluator.eval_node(action.body, action_env, stack_trace=[])
             
-            if var_name:
-                current_value = action_env.get(var_name)
-                if current_value is not None:
-                    self.storage.set(var_name, current_value)
+            # Save any modified state variables back to storage
+            # SKIP variables that were set via this.property (direct storage updates)
+            for var_node in self.storage_vars:
+                # Extract variable name from node (same logic as above)
+                var_name = None
+                if hasattr(var_node, 'name'):
+                    var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+                elif isinstance(var_node, dict):
+                    var_name = var_node.get("name")
+                elif isinstance(var_node, str):
+                    var_name = var_node
+                
+                if var_name:
+                    # Skip if this was updated via this.property = value
+                    if var_name in self._direct_storage_updates:
+                        continue
+                    
+                    current_value = action_env.get(var_name)
+                    if current_value is not None:
+                        self.storage.set(var_name, current_value)
+            
+            # Clear the tracking set for next action call
+            self._direct_storage_updates.clear()
+            
+            # Commit batched writes when thresholds are met
+            self.storage.commit_batch()
+            
+        except Exception as e:
+            # Clear tracking and rollback
+            self._direct_storage_updates.clear()
+            self.storage.commit_batch(force=True)
+            raise e
+        finally:
+            self.storage.disable_action_cache()
 
         
         return result
@@ -1211,6 +1491,39 @@ class SmartContract:
         # Return NULL if not found
         from ..object import NULL
         return NULL
+    
+    def set(self, property_name, value):
+        """Set a state variable in the contract
+        
+        This enables property assignment like contract.state_var = value or this.state_var = value from Zexus code.
+        Implements secure write access to contract storage.
+        """
+        # Track that this variable was set directly via this.property
+        self._direct_storage_updates.add(property_name)
+        
+        # Only allow setting state variables, not internal attributes
+        # Check if this is a declared state variable
+        is_state_var = False
+        for var_node in self.storage_vars:
+            var_name = None
+            if hasattr(var_node, 'name'):
+                var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+            elif isinstance(var_node, dict):
+                var_name = var_node.get("name")
+            elif isinstance(var_node, str):
+                var_name = var_node
+            
+            if var_name == property_name:
+                is_state_var = True
+                break
+        
+        if is_state_var:
+            # Update storage
+            self.storage.set(property_name, value)
+        else:
+            # Trying to set non-declared variable - could allow for dynamic properties
+            # or raise error. For now, we'll allow it to be flexible
+            self.storage.set(property_name, value)
 
 
 # ===============================================

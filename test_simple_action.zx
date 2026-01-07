@@ -1,0 +1,14 @@
+// Simple action-to-action test
+contract Test {
+    action helper() {
+        return 42
+    }
+    
+    action main() {
+        return this.helper()
+    }
+}
+
+let t = Test()
+let result = t.main()
+print(result)

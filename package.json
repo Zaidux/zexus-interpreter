@@ -1,6 +1,6 @@
 {
   "name": "zexus",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "A modern, security-first programming language with blockchain support",
   "main": "index.js",
   "bin": {

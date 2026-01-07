@@ -141,11 +141,11 @@ print("Task results: " + string(result1) + ", " + string(result2))
 # === TEST 10: Pattern Matching ===
 print("\n=== TEST 10: Pattern Matching ===")
 function describeValue(val) {
-    match val {
-        0 => return "Zero"
-        1 => return "One"
-        2 => return "Two"
-        _ => return "Other: " + string(val)
+    return match val {
+        0 => "Zero"
+        1 => "One"
+        2 => "Two"
+        _ => "Other: " + string(val)
     }
 }
 
@@ -156,14 +156,9 @@ print("Match 99: " + describeValue(99))
 # === TEST 11: Smart Contracts ===
 print("\n=== TEST 11: Smart Contracts ===")
 contract SimpleWallet {
-    state balance = 0
-    state owner
-    
-    action init(initialBalance) {
-        owner = "admin"
-        balance = initialBalance
-        print("Wallet initialized with balance: " + string(balance))
-    }
+    data balance = 0
+    data owner = "admin"
+    data name = "SimpleWallet"
     
     action deposit(amount) {
         balance = balance + amount
@@ -176,7 +171,6 @@ contract SimpleWallet {
 }
 
 let wallet = SimpleWallet()
-wallet.init(100)
 print(wallet.deposit(50))
 print("Current balance: " + string(wallet.getBalance()))
 

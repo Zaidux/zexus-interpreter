@@ -770,6 +770,9 @@ class StatementEvaluatorMixin:
         # Support assigning to identifiers or property access targets
         from ..object import EvaluationError, NULL
         
+        # Debug: Log assignment attempt
+        debug_log("eval_assignment", f"Attempting assignment, node.name type: {type(node.name).__name__}")
+        
         # If target is a property access expression
         if isinstance(node.name, PropertyAccessExpression):
             # Evaluate object and property
@@ -833,7 +836,7 @@ class StatementEvaluatorMixin:
             # Perform set
             try:
                 if isinstance(obj, Map):
-                    obj.pairs[prop_key] = value
+                    obj.set(prop_key, value)
                     return value
                 elif hasattr(obj, 'set'):
                     obj.set(prop_key, value)
@@ -846,6 +849,7 @@ class StatementEvaluatorMixin:
         # Otherwise it's an identifier assignment
         if isinstance(node.name, Identifier):
             name = node.name.value
+            debug_log("eval_assignment", f"Identifier assignment: {name}")
             target_obj = env.get(name)
             if isinstance(target_obj, SealedObject):
                 return EvaluationError(f"Cannot assign to sealed object: {name}")
@@ -860,6 +864,8 @@ class StatementEvaluatorMixin:
                 return EvaluationError(str(e))
             return value
 
+        debug_log("eval_assignment", f"Invalid assignment target - node.name: {node.name}, type: {type(node.name).__name__}")
+        print(f"[ASSIGN ERROR] node.name: {node.name}, type: {type(node.name).__name__}, value: {getattr(node.name, 'value', 'N/A')}")
         return EvaluationError('Invalid assignment target')
     
     def eval_try_catch_statement(self, node, env, stack_trace):
@@ -904,6 +910,20 @@ class StatementEvaluatorMixin:
     
     def eval_while_statement(self, node, env, stack_trace):
         result = NULL
+        loop_id = id(node)  # Unique identifier for this loop
+        
+        # Use unified executor if available
+        if hasattr(self, 'unified_executor') and self.unified_executor:
+            # Unified execution system handles everything automatically
+            try:
+                return self.unified_executor.execute_loop(
+                    loop_id, node.condition, node.body, env, stack_trace
+                )
+            except Exception as e:
+                # Fall back to traditional interpretation
+                debug_log("unified_executor", f"Failed: {e}, falling back to interpreter")
+        
+        # Traditional interpretation (fallback or no unified executor)
         while True:
             # Resource limit check (Security Fix #7)
             try:
@@ -921,7 +941,10 @@ class StatementEvaluatorMixin:
             if not is_truthy(cond): 
                 break
             
+            # Execute loop body normally
             result = self.eval_node(node.body, env, stack_trace)
+            
+            # Handle control flow
             if isinstance(result, ReturnValue):
                 return result
             if isinstance(result, BreakException):
@@ -929,9 +952,6 @@ class StatementEvaluatorMixin:
                 return NULL
             if isinstance(result, EvaluationError):
                 return result
-        
-        return result
-    
     def eval_foreach_statement(self, node, env, stack_trace):
         iterable = self.eval_node(node.iterable, env, stack_trace)
         if is_error(iterable): 
@@ -1283,6 +1303,7 @@ class StatementEvaluatorMixin:
             # Handle: use "./file.zx" (import all exports)
             try:
                 exports = module_env.get_exports()
+                print(f"[DEBUG USE] Importing from module, exports: {list(exports.keys())}")
                 __file_obj = env.get("__file__")
                 importer_file = None
                 if __file_obj:
@@ -1292,8 +1313,10 @@ class StatementEvaluatorMixin:
                     if importer_file:
                         if not self._check_import_permission(value, importer_file):
                             return EvaluationError(f"Permission denied for export {name}")
+                    print(f"[DEBUG USE] Setting {name} = {value}")
                     env.set(name, value)
-            except Exception:
+            except Exception as e:
+                print(f"[DEBUG USE] Exception during export import: {e}")
                 # Fallback: expose module as filename object
                 module_name = os.path.basename(file_path)
                 env.set(module_name, module_env)
@@ -1720,16 +1743,13 @@ class StatementEvaluatorMixin:
     def eval_contract_statement(self, node, env, stack_trace):
         # Prepare initial storage values
         storage = {}
-        print(f"[CONTRACT EVAL] Contract '{node.name.value}' has {len(node.storage_vars)} storage vars")
         for sv in node.storage_vars:
-            print(f"[CONTRACT EVAL]   Storage var: {sv.name.value if hasattr(sv, 'name') and hasattr(sv.name, 'value') else sv}")
             init = NULL
             if getattr(sv, 'initial_value', None):
                 init = self.eval_node(sv.initial_value, env, stack_trace)
                 if is_error(init): 
                     return init
             storage[sv.name.value] = init
-            print(f"[CONTRACT EVAL]   Initialized '{sv.name.value}' = {type(init)} {init}")
         
         actions = {}
         for act in node.actions:

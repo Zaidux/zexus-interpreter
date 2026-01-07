@@ -1,0 +1,123 @@
+// ERC20-like Token Contract
+// Implements a fungible token with transfer tracking
+
+export contract Token {
+    data name = "TestToken"
+    data symbol = "TST"
+    data decimals = 18
+    data total_supply = 0
+    data balances = {}
+    data allowances = {}
+    data transfer_history = []
+    
+    action setup(token_name, token_symbol, initial_supply) {
+        name = token_name
+        symbol = token_symbol
+        total_supply = initial_supply
+        
+        // Mint initial supply to contract creator
+        let creator = "0x0000000000000000000000000000000000000000"
+        balances[creator] = initial_supply
+        
+        print("[TOKEN] Initialized: " + string(token_name) + " (" + string(token_symbol) + ")")
+        print("[TOKEN] Total Supply: " + string(initial_supply))
+        
+        return {
+            "success": true,
+            "name": token_name,
+            "symbol": token_symbol,
+            "supply": initial_supply
+        }
+    }
+    
+    action balance_of(address) {
+        if balances[address] == null {
+            return 0
+        }
+        return balances[address]
+    }
+    
+    action transfer(from, to, amount) {
+        print("[TOKEN] Transfer: " + string(from) + " -> " + string(to) + " : " + string(amount))
+        
+        // Validate
+        if amount <= 0 {
+            return {
+                "success": false,
+                "error": "Amount must be positive"
+            }
+        }
+        
+        let from_balance = balances[from]
+        if from_balance == null {
+            from_balance = 0
+        }
+        
+        if from_balance < amount {
+            return {
+                "success": false,
+                "error": "Insufficient balance",
+                "balance": from_balance,
+                "amount": amount
+            }
+        }
+        
+        // Execute transfer
+        balances[from] = from_balance - amount
+        
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        balances[to] = to_balance + amount
+        
+        // Record in history
+        let transfer_record = {
+            "from": from,
+            "to": to,
+            "amount": amount,
+            "from_balance": balances[from],
+            "to_balance": balances[to]
+        }
+        
+        transfer_history = transfer_history + [transfer_record]
+        
+        print("[TOKEN] ✅ Transfer successful")
+        
+        return {
+            "success": true,
+            "transfer": transfer_record
+        }
+    }
+    
+    action mint(to, amount) {
+        print("[TOKEN] Minting " + string(amount) + " to " + string(to))
+        
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        balances[to] = to_balance + amount
+        total_supply = total_supply + amount
+        
+        return {
+            "success": true,
+            "new_balance": balances[to],
+            "total_supply": total_supply
+        }
+    }
+    
+    action get_history() {
+        return transfer_history
+    }
+    
+    action get_stats() {
+        return {
+            "name": name,
+            "symbol": symbol,
+            "total_supply": total_supply,
+            "total_transfers": len(transfer_history),
+            "unique_holders": len(balances)
+        }
+    }
+}

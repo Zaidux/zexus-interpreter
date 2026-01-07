@@ -1,0 +1,17 @@
+// Test JIT Integration - Simple loop that should trigger VM compilation
+let count = 0
+let total = 0
+
+// This loop will:
+// - Run 1-500 iterations with interpreter
+// - At iteration 500, compile to VM
+// - Run 501-1000 with VM (should be faster)
+
+while count < 1000 {
+    total = total + 1
+    count = count + 1
+}
+
+print("Count: " + string(count))
+print("Total: " + string(total))
+print("Expected: 1000")

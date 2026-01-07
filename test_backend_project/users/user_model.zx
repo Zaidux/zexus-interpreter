@@ -1,0 +1,45 @@
+// User Model Contract
+export contract User {
+    data id = ""
+    data email = ""
+    data password_hash = ""
+    data name = ""
+    data created_at = 0
+    data is_active = true
+    
+    action create(user_id, user_email, user_name, pwd_hash) {
+        id = user_id
+        email = user_email
+        name = user_name
+        password_hash = pwd_hash
+        created_at = 1704326400  // Mock timestamp
+        is_active = true
+        return true
+    }
+    
+    action to_dict() {
+        return {
+            "id": id,
+            "email": email,
+            "name": name,
+            "created_at": created_at,
+            "is_active": is_active
+        }
+    }
+    
+    action to_public() {
+        // Return user data without sensitive info
+        return {
+            "id": id,
+            "email": email,
+            "name": name,
+            "created_at": created_at
+        }
+    }
+    
+    action verify_password(password, crypto) {
+        return crypto.verify_password(password, password_hash)
+    }
+}
+
+print("[USER_MODEL] User model loaded")

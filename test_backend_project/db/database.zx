@@ -1,0 +1,115 @@
+// Database: In-memory storage layer
+contract Database {
+    data users = {}
+    data tasks = {}
+    data sessions = {}
+    data name = "InMemoryDB"
+    
+    action init_db() {
+        print("[DB] Database initialized")
+        return true
+    }
+    
+    // User operations
+    action save_user(user_id, user_data) {
+        users[user_id] = user_data
+        print("[DB] User saved: " + user_id)
+        return true
+    }
+    
+    action get_user(user_id) {
+        if user_id in users {
+            return users[user_id]
+        }
+        return null
+    }
+    
+    action find_user_by_email(email) {
+        // Iterate through users to find by email
+        let user_ids = keys(users)
+        let i = 0
+        while i < len(user_ids) {
+            let uid = user_ids[i]
+            let user = users[uid]
+            if user["email"] == email {
+                return user
+            }
+            i = i + 1
+        }
+        return null
+    }
+    
+    // Task operations
+    action save_task(task_id, task_data) {
+        tasks[task_id] = task_data
+        print("[DB] Task saved: " + task_id)
+        return true
+    }
+    
+    action get_task(task_id) {
+        if task_id in tasks {
+            return tasks[task_id]
+        }
+        return null
+    }
+    
+    action get_user_tasks(user_id) {
+        let user_tasks = []
+        let task_ids = keys(tasks)
+        let i = 0
+        while i < len(task_ids) {
+            let tid = task_ids[i]
+            let task = tasks[tid]
+            if task["user_id"] == user_id {
+                user_tasks = user_tasks + [task]
+            }
+            i = i + 1
+        }
+        return user_tasks
+    }
+    
+    action delete_task(task_id) {
+        if task_id in tasks {
+            // Simple deletion by setting to null
+            tasks[task_id] = null
+            print("[DB] Task deleted: " + task_id)
+            return true
+        }
+        return false
+    }
+    
+    // Session operations
+    action save_session(token, session_data) {
+        sessions[token] = session_data
+        return true
+    }
+    
+    action get_session(token) {
+        if token in sessions {
+            return sessions[token]
+        }
+        return null
+    }
+    
+    action delete_session(token) {
+        if token in sessions {
+            sessions[token] = null
+            return true
+        }
+        return false
+    }
+    
+    action get_stats() {
+        return {
+            "total_users": len(keys(users)),
+            "total_tasks": len(keys(tasks)),
+            "active_sessions": len(keys(sessions))
+        }
+    }
+}
+
+// Create and export database instance
+export let db = Database()
+db.init_db()
+
+print("[DB] Database module loaded")

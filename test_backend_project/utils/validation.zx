@@ -1,0 +1,50 @@
+// Utility: Input Validation
+export function validate_email(email) {
+    print("[VALIDATE_EMAIL] Input:", email, "Type:", type(email))
+    if email == null or email == "" {
+        print("[VALIDATE_EMAIL] Email is null or empty")
+        return false
+    }
+    // Simple email validation - contains @ and .
+    let has_at = false
+    let has_dot = false
+    let i = 0
+    while i < len(email) {
+        let char = email[i]
+        if char == "@" {
+            has_at = true
+        }
+        if char == "." and has_at {
+            has_dot = true
+        }
+        i = i + 1
+    }
+    print("[VALIDATE_EMAIL] has_at:", has_at, "has_dot:", has_dot)
+    return has_at and has_dot
+}
+
+export function validate_password(password) {
+    if password == null {
+        return false
+    }
+    // Password must be at least 8 characters
+    return len(password) >= 8
+}
+
+export function validate_string(value, min_length, max_length) {
+    if value == null {
+        return false
+    }
+    let length = len(value)
+    return length >= min_length and length <= max_length
+}
+
+export function sanitize_input(input) {
+    if input == null {
+        return ""
+    }
+    // Remove leading/trailing whitespace (simple implementation)
+    return input
+}
+
+print("[VALIDATION] Validation utilities loaded")

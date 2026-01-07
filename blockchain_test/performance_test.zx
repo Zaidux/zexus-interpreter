@@ -1,0 +1,270 @@
+// Zexus Performance & Scalability Test
+// Tests transaction throughput from 100 to 1,000,000 transactions
+// Measures: Speed, Memory efficiency, State consistency
+
+use "token.zx"
+use "wallet.zx"
+
+print("\n" + "=" * 80)
+print("  ZEXUS PERFORMANCE TEST - Transaction Scalability Analysis")
+print("  Version: 1.6.8")
+print("=" * 80 + "\n")
+
+// ===== HELPER FUNCTIONS =====
+
+action measure_performance(test_name, transaction_count, test_fn) {
+    print("\n🔬 Test: " + string(test_name))
+    print("   Transactions: " + string(transaction_count))
+    
+    let start_time = time()
+    let result = test_fn()
+    let end_time = time()
+    
+    let duration_ms = end_time - start_time
+    let duration_sec = duration_ms / 1000
+    let tps = (transaction_count * 1000) / duration_ms  // Transactions per second
+    
+    print("   Duration: " + string(duration_ms) + " ms (" + string(duration_sec) + " sec)")
+    print("   Throughput: " + string(tps) + " tx/sec")
+    print("   Result: " + (result["success"] ? "✅ SUCCESS" : "❌ FAILED"))
+    
+    return {
+        "test_name": test_name,
+        "count": transaction_count,
+        "duration_ms": duration_ms,
+        "duration_sec": duration_sec,
+        "tps": tps,
+        "success": result["success"]
+    }
+}
+
+// ===== SETUP =====
+print("📋 PHASE 1: INITIALIZATION")
+print("-" * 80)
+
+let token = Token()
+token.mint("0xTEST", 100000000)  // 100 million tokens for testing
+print("✅ Token initialized with 100,000,000 ZXS")
+
+let test_results = []
+
+// ===== TEST 1: 100 TRANSACTIONS =====
+print("\n\n📋 PHASE 2: SMALL SCALE TEST (100 TRANSACTIONS)")
+print("-" * 80)
+
+action test_100_tx() {
+    let i = 0
+    let failures = 0
+    while i < 100 {
+        let result = token.transfer("0xTEST", "0xRECEIVER_" + string(i), 100)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        i = i + 1
+    }
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_100 = measure_performance("100 Simple Transfers", 100, test_100_tx)
+test_results = test_results + [result_100]
+
+// ===== TEST 2: 1,000 TRANSACTIONS =====
+print("\n\n📋 PHASE 3: MEDIUM SCALE TEST (1,000 TRANSACTIONS)")
+print("-" * 80)
+
+// Refill balance
+token.mint("0xTEST", 1000000)
+
+action test_1000_tx() {
+    let i = 0
+    let failures = 0
+    while i < 1000 {
+        let result = token.transfer("0xTEST", "0xRECEIVER_" + string(i % 100), 50)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        i = i + 1
+    }
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_1000 = measure_performance("1,000 Simple Transfers", 1000, test_1000_tx)
+test_results = test_results + [result_1000]
+
+// ===== TEST 3: 10,000 TRANSACTIONS =====
+print("\n\n📋 PHASE 4: LARGE SCALE TEST (10,000 TRANSACTIONS)")
+print("-" * 80)
+
+// Refill balance
+token.mint("0xTEST", 10000000)
+
+action test_10000_tx() {
+    let i = 0
+    let failures = 0
+    while i < 10000 {
+        let result = token.transfer("0xTEST", "0xRECEIVER_" + string(i % 100), 10)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        i = i + 1
+    }
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_10000 = measure_performance("10,000 Simple Transfers", 10000, test_10000_tx)
+test_results = test_results + [result_10000]
+
+// ===== TEST 4: 50,000 TRANSACTIONS =====
+print("\n\n📋 PHASE 5: STRESS TEST (50,000 TRANSACTIONS)")
+print("-" * 80)
+
+// Refill balance
+token.mint("0xTEST", 50000000)
+
+action test_50000_tx() {
+    let i = 0
+    let failures = 0
+    while i < 50000 {
+        let result = token.transfer("0xTEST", "0xRECEIVER_" + string(i % 100), 5)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        i = i + 1
+    }
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_50000 = measure_performance("50,000 Simple Transfers", 50000, test_50000_tx)
+test_results = test_results + [result_50000]
+
+// ===== TEST 5: 100,000 TRANSACTIONS =====
+print("\n\n📋 PHASE 6: MAXIMUM STRESS TEST (100,000 TRANSACTIONS)")
+print("-" * 80)
+
+// Refill balance
+token.mint("0xTEST", 100000000)
+
+action test_100000_tx() {
+    let i = 0
+    let failures = 0
+    while i < 100000 {
+        let result = token.transfer("0xTEST", "0xRECEIVER_" + string(i % 100), 5)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        i = i + 1
+    }
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_100000 = measure_performance("100,000 Simple Transfers", 100000, test_100000_tx)
+test_results = test_results + [result_100000]
+
+// ===== OPTIONAL TEST 6: 1,000,000 COMPLEX TRANSACTIONS =====
+print("\n\n📋 PHASE 7: ULTIMATE STRESS TEST (1,000,000 COMPLEX TRANSACTIONS)")
+print("-" * 80)
+print("⚠️  WARNING: This test may take several minutes to complete...")
+
+// Create wallets for complex scenarios
+let wallet_pool = []
+let w_i = 0
+while w_i < 10 {
+    let w = Wallet()
+    w.setup("0xWALLET_" + string(w_i), "User" + string(w_i))
+    token.mint("0xWALLET_" + string(w_i), 10000000)
+    wallet_pool = wallet_pool + [w]
+    w_i = w_i + 1
+}
+print("✅ Created 10 wallets with 10M ZXS each")
+
+action test_1000000_complex_tx() {
+    let i = 0
+    let failures = 0
+    
+    while i < 1000000 {
+        // Rotate through wallets for more realistic simulation
+        let wallet_idx = i % 10
+        let target_idx = (i + 1) % 10
+        let from_addr = "0xWALLET_" + string(wallet_idx)
+        let to_addr = "0xWALLET_" + string(target_idx)
+        
+        // Variable transaction amounts
+        let amount = 1 + (i % 100)
+        
+        let result = token.transfer(from_addr, to_addr, amount)
+        if !result["success"] {
+            failures = failures + 1
+        }
+        
+        // Progress indicator every 100,000 transactions
+        if i % 100000 == 0 && i > 0 {
+            print("   Progress: " + string(i) + " / 1,000,000 (" + string((i * 100) / 1000000) + "%)")
+        }
+        
+        i = i + 1
+    }
+    
+    return {"success": failures == 0, "failures": failures}
+}
+
+let result_1000000 = measure_performance("1,000,000 Complex Transfers", 1000000, test_1000000_complex_tx)
+test_results = test_results + [result_1000000]
+
+// ===== FINAL STATISTICS =====
+print("\n\n📋 PHASE 8: PERFORMANCE SUMMARY")
+print("=" * 80)
+
+print("\n📊 Test Results:")
+print("-" * 80)
+print("Test Name                             | Count      | Duration    | TPS        | Status")
+print("-" * 80)
+
+let r_i = 0
+while r_i < len(test_results) {
+    let r = test_results[r_i]
+    
+    print(string(r["test_name"]) + " | " + string(r["count"]) + " | " + string(r["duration_ms"]) + " ms | " + string(r["tps"]) + " | " + (r["success"] ? "✅ PASS" : "❌ FAIL"))
+    r_i = r_i + 1
+}
+
+// Calculate average TPS
+let total_tx = 0
+let total_duration = 0
+let all_passed = true
+
+r_i = 0
+while r_i < len(test_results) {
+    total_tx = total_tx + test_results[r_i]["count"]
+    total_duration = total_duration + test_results[r_i]["duration_ms"]
+    if !test_results[r_i]["success"] {
+        all_passed = false
+    }
+    r_i = r_i + 1
+}
+
+let average_tps = (total_tx * 1000) / total_duration
+
+print("\n📈 Overall Performance:")
+print("   Total Transactions: " + string(total_tx))
+print("   Total Duration: " + string(total_duration) + " ms (" + string(total_duration / 1000) + " sec)")
+print("   Average Throughput: " + string(average_tps) + " tx/sec")
+print("   All Tests: " + (all_passed ? "✅ PASSED" : "❌ SOME FAILED"))
+
+// Verify state consistency
+print("\n🔍 State Consistency Check:")
+let token_stats = token.get_stats()
+print("   Total Supply: " + string(token_stats["total_supply"]) + " ZXS")
+print("   Total Transfers: " + string(token_stats["total_transfers"]))
+print("   Unique Holders: " + string(token_stats["unique_holders"]))
+
+print("\n" + "=" * 80)
+if all_passed {
+    print("  ✅ ALL PERFORMANCE TESTS PASSED")
+} else {
+    print("  ⚠️  SOME PERFORMANCE TESTS FAILED")
+}
+print("=" * 80 + "\n")
+
+// Export results for analysis
+print("\n💾 Test results ready for export")
+print("   Results object contains " + string(len(test_results)) + " test runs")

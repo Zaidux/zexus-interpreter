@@ -1,0 +1,126 @@
+// Bridge Contract
+// Enables cross-chain token transfers between different networks
+
+export contract Bridge {
+    data name = "TokenBridge"
+    data source_chain = "ChainA"
+    data target_chain = "ChainB"
+    data locked_tokens = {}  // address -> amount (locked on source chain)
+    data minted_tokens = {}  // address -> amount (minted on target chain)
+    data bridge_transactions = []
+    data bridge_fee = 10  // Fee in basis points (0.1%)
+    
+    action setup(source, target) {
+        source_chain = source
+        target_chain = target
+        print("[BRIDGE] Initialized: " + string(source) + " <-> " + string(target))
+        
+        return {
+            "success": true,
+            "source": source,
+            "target": target
+        }
+    }
+    
+    action lock_and_bridge(token_contract, from_wallet, to_address, amount) {
+        print("[BRIDGE] Initiating bridge transfer...")
+        print("[BRIDGE] From: " + string(from_wallet) + " (Chain: " + string(source_chain) + ")")
+        print("[BRIDGE] To: " + string(to_address) + " (Chain: " + string(target_chain) + ")")
+        print("[BRIDGE] Amount: " + string(amount))
+        
+        // Calculate fee
+        let fee = (amount * bridge_fee) / 10000
+        let amount_after_fee = amount - fee
+        
+        print("[BRIDGE] Bridge fee: " + string(fee) + " (" + string(bridge_fee / 100) + "%)")
+        print("[BRIDGE] Amount after fee: " + string(amount_after_fee))
+        
+        // Lock tokens on source chain
+        let bridge_address = "0xBRIDGE"
+        let lock_result = token_contract.transfer(from_wallet, bridge_address, amount)
+        
+        if !lock_result["success"] {
+            print("[BRIDGE] ❌ Failed to lock tokens: " + string(lock_result["error"]))
+            return lock_result
+        }
+        
+        // Update locked tokens
+        let current_locked = locked_tokens[from_wallet]
+        if current_locked == null {
+            current_locked = 0
+        }
+        locked_tokens[from_wallet] = current_locked + amount
+        
+        // Simulate minting on target chain (in real bridge, this would be separate)
+        let current_minted = minted_tokens[to_address]
+        if current_minted == null {
+            current_minted = 0
+        }
+        minted_tokens[to_address] = current_minted + amount_after_fee
+        
+        // Record bridge transaction
+        let bridge_tx = {
+            "from_wallet": from_wallet,
+            "to_address": to_address,
+            "amount": amount,
+            "fee": fee,
+            "amount_after_fee": amount_after_fee,
+            "source_chain": source_chain,
+            "target_chain": target_chain,
+            "tx_hash": "0xBRIDGE_" + string(len(bridge_transactions))
+        }
+        
+        bridge_transactions = bridge_transactions + [bridge_tx]
+        
+        print("[BRIDGE] ✅ Bridge transfer completed")
+        print("[BRIDGE] Transaction hash: " + string(bridge_tx["tx_hash"]))
+        
+        return {
+            "success": true,
+            "bridge_tx": bridge_tx
+        }
+    }
+    
+    action get_locked_balance(address) {
+        let balance = locked_tokens[address]
+        if balance == null {
+            return 0
+        }
+        return balance
+    }
+    
+    action get_minted_balance(address) {
+        let balance = minted_tokens[address]
+        if balance == null {
+            return 0
+        }
+        return balance
+    }
+    
+    action get_bridge_history() {
+        return bridge_transactions
+    }
+    
+    action get_stats() {
+        let total_locked = 0
+        let total_minted = 0
+        let total_fees = 0
+        
+        // Calculate totals from bridge transactions
+        let i = 0
+        while i < len(bridge_transactions) {
+            let tx = bridge_transactions[i]
+            total_fees = total_fees + tx["fee"]
+            i = i + 1
+        }
+        
+        return {
+            "name": name,
+            "source_chain": source_chain,
+            "target_chain": target_chain,
+            "total_bridges": len(bridge_transactions),
+            "total_fees_collected": total_fees,
+            "bridge_fee_bp": bridge_fee
+        }
+    }
+}

@@ -1,0 +1,24 @@
+// Quick test to verify time() builtin works
+
+print("Testing time() builtin...")
+let start = time()
+print("Start time: " + string(start))
+
+// Do some work
+let sum = 0
+let i = 0
+while i < 1000 {
+    sum = sum + i
+    i = i + 1
+}
+
+let end = time()
+print("End time: " + string(end))
+print("Elapsed: " + string(end - start) + " ms")
+print("Sum: " + string(sum))
+
+if end > start {
+    print("✅ time() builtin is working!")
+} else {
+    print("❌ time() builtin NOT working")
+}

@@ -1,0 +1,43 @@
+Warning: cryptography library not installed. Signature features will be limited.
+Install with: pip install cryptography
+
+ZEXUS COMPREHENSIVE STRESS TEST
+Testing from 10K to 1M transactions
+Features: Security checks, unique addresses, VM auto-optimization
+
+================================================================================
+STRESS TEST - 10000 Transactions
+================================================================================
+📄 SmartContract.instantiate() called for: TokenStress
+   🔗 Contract Address: 30ed3855-2dc3-49
+   Available actions: ['initialize', 'transfer']
+  Progress: 10%
+  Progress: 20%
+  Progress: 30%
+  Progress: 40%
+  Progress: 50%
+  Progress: 60%
+  Progress: 70%
+  Progress: 80%
+  Progress: 90%
+  Progress: 100%
+
+RESULTS
+================================================================================
+  Transactions: 10000
+  Time: 244711 ms (244 seconds)
+  TPS: 40
+  Avg time per tx: 24 ms
+================================================================================
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+| Transactions | Time (s) | TPS       |
+|--------------|----------|-----------|
+| 10000 | 244 | 40 |
+
+✅ STRESS TEST COMPLETE
+================================================================================

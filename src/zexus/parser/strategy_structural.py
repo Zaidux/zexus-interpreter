@@ -122,6 +122,170 @@ class StructuralAnalyzer:
                 block_id += 1
                 continue
 
+            # EXPORT statement detection - collect export + declaration
+            elif t.type == EXPORT:
+                start_idx = i
+                export_tokens = [t]
+                i += 1
+
+                # Check if followed by const/let declaration
+                if i < n and tokens[i].type in [CONST, LET]:
+                    # Collect the entire const/let declaration (including CONST/LET keyword)
+                    declaration_type = tokens[i].type
+                    export_tokens.append(tokens[i])
+                    i += 1
+                    # Now collect the rest of the declaration (NAME = VALUE)
+                    while i < n and tokens[i].type not in stop_types:
+                        # Stop if we see another statement starter (but not CONST/LET since we just saw it)
+                        if tokens[i].type in statement_starters and tokens[i].type not in [CONST, LET]:
+                            break
+                        export_tokens.append(tokens[i])
+                        i += 1
+                elif i < n and tokens[i].type == CONTRACT:
+                    # export contract Name { ... } - collect entire contract
+                    export_tokens.append(tokens[i])
+                    i += 1
+                    
+                    # Collect contract name
+                    if i < n and tokens[i].type == IDENT:
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    # Collect until closing brace
+                    brace_count = 0
+                    while i < n:
+                        if tokens[i].type == LBRACE:
+                            brace_count = 1
+                            export_tokens.append(tokens[i])
+                            i += 1
+                            break
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    # Now collect until matching closing brace
+                    while i < n and brace_count > 0:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                elif i < n and tokens[i].type == FUNCTION:
+                    # export function name(...) { ... } - collect entire function
+                    export_tokens.append(tokens[i])
+                    i += 1
+                    
+                    # Collect function name
+                    if i < n and tokens[i].type == IDENT:
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    # Collect parameters (...)
+                    paren_count = 0
+                    while i < n:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LPAREN:
+                            paren_count += 1
+                        elif tokens[i].type == RPAREN:
+                            paren_count -= 1
+                            if paren_count == 0:
+                                i += 1
+                                break
+                        i += 1
+                    
+                    # Collect function body { ... }
+                    brace_count = 0
+                    while i < n:
+                        if tokens[i].type == LBRACE:
+                            brace_count = 1
+                            export_tokens.append(tokens[i])
+                            i += 1
+                            break
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    while i < n and brace_count > 0:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                elif i < n and tokens[i].type == ACTION:
+                    # export action name(...) { ... } - collect entire action
+                    export_tokens.append(tokens[i])
+                    i += 1
+                    
+                    # Collect action name
+                    if i < n and tokens[i].type == IDENT:
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    # Collect parameters (...)
+                    paren_count = 0
+                    while i < n:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LPAREN:
+                            paren_count += 1
+                        elif tokens[i].type == RPAREN:
+                            paren_count -= 1
+                            if paren_count == 0:
+                                i += 1
+                                break
+                        i += 1
+                    
+                    # Collect action body { ... }
+                    brace_count = 0
+                    while i < n:
+                        if tokens[i].type == LBRACE:
+                            brace_count = 1
+                            export_tokens.append(tokens[i])
+                            i += 1
+                            break
+                        export_tokens.append(tokens[i])
+                        i += 1
+                    
+                    while i < n and brace_count > 0:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                elif i < n and tokens[i].type == LBRACE:
+                    # export { names } syntax
+                    brace_count = 1
+                    export_tokens.append(tokens[i])
+                    i += 1
+                    while i < n and brace_count > 0:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                else:
+                    # export name syntax
+                    while i < n and tokens[i].type not in stop_types and tokens[i].type not in statement_starters:
+                        export_tokens.append(tokens[i])
+                        i += 1
+
+                # Create block for this export statement
+                filtered_tokens = [tk for tk in export_tokens if not _is_empty_token(tk)]
+                
+                self.blocks[block_id] = {
+                    'id': block_id,
+                    'type': 'statement',
+                    'subtype': 'export_statement',
+                    'tokens': filtered_tokens,
+                    'start_token': tokens[start_idx],
+                    'start_index': start_idx,
+                    'end_index': i - 1,
+                    'parent': None
+                }
+                block_id += 1
+                continue
+
             # Enhanced ENTITY statement detection
             elif t.type == ENTITY:
                 start_idx = i
@@ -546,6 +710,39 @@ class StructuralAnalyzer:
                                 # Break if we've already completed the LET/CONST
                                 if in_assignment and seen_assign:
                                     break
+                        
+                        # Pattern 3: IDENT followed by LBRACKET could be start of indexed assignment (arr[idx] = ...)
+                        # This is a NEW statement if we're in LET/CONST and have seen the main assign
+                        elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LBRACKET:
+                            # Check if this is on a new line (likely a new statement)
+                            if stmt_tokens:
+                                last_line = stmt_tokens[-1].line
+                                if tj.line > last_line and in_assignment and seen_assign:
+                                    # New line after completed assignment - this is a new statement
+                                    break
+                            
+                            # Look ahead to see if this becomes an indexed assignment
+                            # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
+                            # Scan for matching RBRACKET followed by ASSIGN
+                            is_indexed_assignment = False
+                            bracket_depth = 1
+                            scan_idx = j + 2
+                            while scan_idx < n and scan_idx < j + 20:  # Limit scan to prevent infinite loops
+                                if tokens[scan_idx].type == LBRACKET:
+                                    bracket_depth += 1
+                                elif tokens[scan_idx].type == RBRACKET:
+                                    bracket_depth -= 1
+                                    if bracket_depth == 0:
+                                        # Found matching closing bracket, check for ASSIGN
+                                        if scan_idx + 1 < n and tokens[scan_idx + 1].type == ASSIGN:
+                                            # This is an indexed assignment starting!
+                                            is_indexed_assignment = True
+                                        break
+                                scan_idx += 1
+                            
+                            # Break if we've already completed the LET/CONST and this is an indexed assignment
+                            if is_indexed_assignment and in_assignment and seen_assign:
+                                break
                         # IDENT followed by LPAREN is a function call (already handled below, but listed for clarity)
                     
                     # Detect colon-based block (tolerable syntax for action/function/if/while etc.)
@@ -653,6 +850,14 @@ class StructuralAnalyzer:
                     # Always collect tokens
                     stmt_tokens.append(tj)
                     j += 1
+                    
+                    # CRITICAL FIX: For LET/CONST statements, break when we see LBRACE at nesting 0
+                    # This prevents standalone blocks from being consumed by the previous statement
+                    if t.type in {LET, CONST} and nesting == 0 and tj.type == NULL:
+                        # After collecting the initial value (which could be null), check if next is LBRACE
+                        if j < n and tokens[j].type == LBRACE:
+                            # Next token is a standalone block - stop collecting
+                            break
                     
                     # MODIFIED: For RETURN, CONTINUE, PRINT, and REQUIRE, stop after closing parens at nesting 0
                     # These can have multiple comma-separated arguments inside the parens
@@ -845,7 +1050,7 @@ class StructuralAnalyzer:
             
             filtered_run_tokens = [tk for tk in run_tokens if not _is_empty_token(tk)]
             if filtered_run_tokens:  # Only create block if we have meaningful tokens
-                print(f"[DEBUG STRUCTURAL] Creating block from tokens: {[f'{t.type}:{t.literal}' for t in filtered_run_tokens[:10]]}")
+                # print(f"[DEBUG STRUCTURAL] Creating block from tokens: {[f'{t.type}:{t.literal}' for t in filtered_run_tokens[:10]]}")
                 self.blocks[block_id] = {
                     'id': block_id,
                     'type': 'statement',
@@ -910,7 +1115,8 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, ATOMIC, ASYNC  # Added ASYNC to recognize async expressions as statement boundaries
+              CHANNEL, ATOMIC, ASYNC,  # Added ASYNC to recognize async expressions as statement boundaries
+              LBRACE  # Added LBRACE to recognize standalone blocks as statements
           }
 
         cur = []
@@ -957,6 +1163,44 @@ class StructuralAnalyzer:
 
                 results.append(use_tokens)
                 i += 1
+                continue
+
+            # Export statement detection - collect export keyword + following declaration
+            if t.type == EXPORT:
+                print(f"[DEBUG STRUCT] Found EXPORT token at index {i}")
+                if cur:
+                    results.append(cur)
+                    cur = []
+
+                # Collect export tokens
+                export_tokens = [t]
+                i += 1
+
+                # Check if followed by const/let declaration (export const X = value)
+                print(f"[DEBUG STRUCT] Next token at {i}: {tokens[i].type if i < n else 'EOF'}, CONST={CONST}, LET={LET}")
+                if i < n and tokens[i].type in [CONST, LET]:
+                    print(f"[DEBUG STRUCT] Export followed by CONST/LET, collecting declaration")
+                    # Collect the entire declaration
+                    while i < n and tokens[i].type not in stop_types:
+                        export_tokens.append(tokens[i])
+                        i += 1
+                else:
+                    # Traditional export { names } or export name
+                    brace_count = 0
+                    while i < n:
+                        if brace_count == 0 and tokens[i].type in stop_types:
+                            break
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                            if brace_count == 0:
+                                i += 1
+                                break
+                        i += 1
+
+                results.append(export_tokens)
                 continue
 
             # Entity/Contract statement detection (generic brace collector)

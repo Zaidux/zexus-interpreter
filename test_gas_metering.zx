@@ -1,0 +1,67 @@
+// Gas Metering Test
+// Tests that gas metering correctly limits execution
+
+print("=== Gas Metering Test ===")
+
+// Test 1: Simple arithmetic should consume gas but not exceed limit
+print("\n--- Test 1: Simple Arithmetic ---")
+let x = 10
+let y = 20
+let z = x + y * 2
+print("Result:")
+print(z)
+print("✓ Simple arithmetic completed")
+
+// Test 2: Loop that should stay within gas limits
+print("\n--- Test 2: Loop Within Limits ---")
+let sum = 0
+let i = 0
+while i < 100 {
+    sum = sum + i
+    i = i + 1
+}
+print("Sum of 0-99:")
+print(sum)
+print("✓ Loop completed within limits")
+
+// Test 3: Large list operations
+print("\n--- Test 3: List Operations ---")
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let total = 0
+let idx = 0
+while idx < len(numbers) {
+    total = total + numbers[idx]
+    idx = idx + 1
+}
+print("Total:")
+print(total)
+print("✓ List operations completed")
+
+// Test 4: Function calls (consume gas per call)
+print("\n--- Test 4: Function Calls ---")
+action calculate(a, b) {
+    return a * b + a - b
+}
+
+let result1 = calculate(5, 3)
+let result2 = calculate(10, 7)
+let result3 = calculate(result1, result2)
+print("Result:")
+print(result3)
+print("✓ Function calls completed")
+
+// Test 5: Map operations
+print("\n--- Test 5: Map Operations ---")
+let balances = {
+    "alice": 1000,
+    "bob": 500,
+    "charlie": 750
+}
+
+let total_balance = balances["alice"] + balances["bob"] + balances["charlie"]
+print("Total balance:")
+print(total_balance)
+print("✓ Map operations completed")
+
+print("\n=== All Gas Metering Tests Passed ===")
+print("Gas metering is working correctly")

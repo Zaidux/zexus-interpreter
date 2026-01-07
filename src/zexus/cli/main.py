@@ -20,6 +20,9 @@ from ..hybrid_orchestrator import orchestrator
 from ..config import config
 # Import error handling
 from ..error_reporter import get_error_reporter, ZexusError, print_error
+# VM and Compiler for high-performance execution
+from ..vm.vm import VM, VMMode
+from ..vm.compiler import compile_ast_to_bytecode
 
 console = Console()
 
@@ -91,7 +94,7 @@ def show_all_commands():
     console.print("\n[bold green]💡 Tip:[/bold green] Use 'zx <command> --help' for detailed command options\n")
 
 @click.group(invoke_without_command=True)
-@click.version_option(version="1.6.7", prog_name="Zexus")
+@click.version_option(version="1.6.8", prog_name="Zexus")
 @click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']),
               default='auto', help='Syntax style to use (universal=strict, tolerable=flexible)')
 @click.option('--advanced-parsing', is_flag=True, default=True,
@@ -133,8 +136,12 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
 @cli.command()
 @click.argument('file', type=click.Path(exists=True))
 @click.argument('args', nargs=-1)  # Accept any number of additional arguments
+@click.option('--use-vm', is_flag=True, default=True, help='Use VM for execution (default: enabled for performance)')
+@click.option('--vm-mode', type=click.Choice(['auto', 'stack', 'register', 'parallel']),
+              default='auto', help='VM execution mode (auto=best performance)')
+@click.option('--no-optimize', is_flag=True, default=False, help='Disable bytecode optimizations')
 @click.pass_context
-def run(ctx, file, args):
+def run(ctx, file, args, use_vm, vm_mode, no_optimize):
     """Run a Zexus program with hybrid execution"""
     # Register source for error reporting
     error_reporter = get_error_reporter()
@@ -155,6 +162,8 @@ def run(ctx, file, args):
         console.print(f"🔧 [bold blue]Execution mode:[/bold blue] {execution_mode}")
         console.print(f"📝 [bold blue]Syntax style:[/bold blue] {syntax_style}")
         console.print(f"🎯 [bold blue]Advanced parsing:[/bold blue] {'Enabled' if advanced_parsing else 'Disabled'}")
+        if use_vm:
+            console.print(f"⚡ [bold magenta]VM Mode:[/bold magenta] {vm_mode.upper()} | Optimizations: {'OFF' if no_optimize else 'ON'}")
         
         # Auto-detect syntax style if needed
         if syntax_style == 'auto':
@@ -221,8 +230,52 @@ def run(ctx, file, args):
             pass  # Unable to determine package name
         env.set("__PACKAGE__", package_name)
         
-        # UPDATED: Use the evaluate function from the evaluator package
-        result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+        # Execute based on mode
+        if use_vm:
+            # VM EXECUTION PATH (High Performance)
+            console.print("[dim]Compiling to bytecode...[/dim]", end="")
+            try:
+                bytecode = compile_ast_to_bytecode(program, optimize=not no_optimize)
+                console.print(" [green]done[/green]")
+                console.print(f"[dim]Bytecode: {len(bytecode.instructions)} instructions, {len(bytecode.constants)} constants[/dim]")
+            except Exception as e:
+                console.print(f" [red]failed[/red]")
+                console.print(f"[bold red]Bytecode compilation error:[/bold red] {str(e)}")
+                if ctx.obj.get('DEBUG'):
+                    import traceback
+                    traceback.print_exc()
+                sys.exit(1)
+            
+            # Initialize VM
+            vm_mode_enum = {
+                'auto': VMMode.AUTO,
+                'stack': VMMode.STACK,
+                'register': VMMode.REGISTER,
+                'parallel': VMMode.PARALLEL
+            }[vm_mode]
+            
+            console.print(f"[dim]Initializing VM ({vm_mode} mode)...[/dim]", end="")
+            vm = VM(
+                mode=vm_mode_enum,
+                use_jit=not no_optimize,
+                max_heap_mb=1000,  # 1GB heap limit
+                debug=ctx.obj.get('DEBUG', False)
+            )
+            console.print(" [green]done[/green]")
+            
+            # Execute on VM
+            console.print("[dim]Executing on VM...[/dim]")
+            try:
+                result = vm.execute(bytecode, debug=ctx.obj.get('DEBUG', False))
+            except Exception as e:
+                console.print(f"[bold red]VM Execution error:[/bold red] {str(e)}")
+                if ctx.obj.get('DEBUG'):
+                    import traceback
+                    traceback.print_exc()
+                sys.exit(1)
+        else:
+            # INTERPRETER EXECUTION PATH (Standard)
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
         
         if result and hasattr(result, 'inspect') and result.inspect() != 'null':
             console.print(f"\n✅ [bold green]Result:[/bold green] {result.inspect()}")

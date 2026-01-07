@@ -1,0 +1,25 @@
+// Configuration module
+export const CONFIG = {
+    "app_name": "TaskMaster API",
+    "version": "1.0.0",
+    "port": 3000,
+    "db_path": "./data/tasks.db",
+    "session_timeout": 3600,
+    "max_tasks_per_user": 100,
+    "allowed_task_statuses": ["pending", "in_progress", "completed", "cancelled"],
+    "log_level": "info"
+}
+
+export function get_config(key) {
+    if key in CONFIG {
+        return CONFIG[key]
+    }
+    return null
+}
+
+export function validate_status(status) {
+    let allowed = CONFIG["allowed_task_statuses"]
+    return status in allowed
+}
+
+print("[CONFIG] Configuration loaded: " + CONFIG["app_name"] + " v" + CONFIG["version"])

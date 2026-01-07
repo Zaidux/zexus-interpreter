@@ -1,0 +1,59 @@
+Warning: cryptography library not installed. Signature features will be limited.
+Install with: pip install cryptography
+[CONTRACT EVAL] Contract 'TokenSilent' has 6 storage vars
+[CONTRACT EVAL]   Storage var: name
+[CONTRACT EVAL]   Initialized 'name' = <class 'zexus.object.String'> TestToken
+[CONTRACT EVAL]   Storage var: symbol
+[CONTRACT EVAL]   Initialized 'symbol' = <class 'zexus.object.String'> TST
+[CONTRACT EVAL]   Storage var: decimals
+[CONTRACT EVAL]   Initialized 'decimals' = <class 'zexus.object.Integer'> <zexus.object.Integer object at 0x741f92565fd0>
+[CONTRACT EVAL]   Storage var: total_supply
+[CONTRACT EVAL]   Initialized 'total_supply' = <class 'zexus.object.Integer'> <zexus.object.Integer object at 0x741f92566000>
+[CONTRACT EVAL]   Storage var: balances
+[CONTRACT EVAL]   Initialized 'balances' = <class 'zexus.object.Map'> <zexus.object.Map object at 0x741f92566060>
+[CONTRACT EVAL]   Storage var: transfer_history
+[CONTRACT EVAL]   Initialized 'transfer_history' = <class 'zexus.object.List'> <zexus.object.List object at 0x741f92566030>
+[DEBUG USE] Importing from module, exports: ['TokenSilent']
+[DEBUG USE] Setting TokenSilent = <zexus.security.SmartContract object at 0x741f92565f70>
+
+================================================================================
+  ZEXUS PERFORMANCE & STRESS TEST
+  Version: 1.6.8
+================================================================================
+
+📄 SmartContract.instantiate() called for: TokenSilent
+   🔗 Contract Address: e5f47494-c172-40
+   Available actions: ['balance_of', 'mint', 'transfer', 'get_stats']
+📋 Test Configuration:
+   Token: Silent TestToken (zero logging overhead)
+   Initial Balance: 100,000,000 ZXS
+   Transfer Amount: 10 ZXS per transaction
+   Test Levels: 100 → 1K → 10K → 50K → 100K
+
+================================================================================
+🚀 TEST 1: 100 Transactions
+================================================================================
+
+📊 Results:
+   ✅ Successful: 100
+   ❌ Failed: 0
+   ⏱️  Time: 1407 ms (1 sec)
+   ⚡ Speed: 71 TPS
+   💾 Balance: ✅ OK
+
+================================================================================
+🚀 TEST 2: 500 Transactions
+================================================================================
+
+📊 Results:
+   ✅ Successful: 500
+   ❌ Failed: 0
+   ⏱️  Time: 10692 ms (10 sec)
+   ⚡ Speed: 46 TPS
+   💾 Balance: ❌ MISMATCH
+      Expected: 99995000
+      Actual: 99994000
+
+================================================================================
+🚀 TEST 3: 1K Transactions
+================================================================================

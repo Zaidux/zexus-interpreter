@@ -56,6 +56,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         self.continue_on_error = False
         self.error_log = []  # Store errors when continue_on_error is enabled
         
+        # Initialize unified executor (automatic VM integration)
+        self.unified_executor = None
+        try:
+            from .unified_execution import create_unified_executor
+            self.unified_executor = create_unified_executor(self)
+        except ImportError:
+            debug_log("Evaluator", "Unified executor not available")
+        
         if self.use_vm and VM_AVAILABLE:
             self._initialize_vm()
     
@@ -696,9 +704,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 use_cache=True,
                 cache_size=1000
             )
-            # Create VM instance with JIT enabled
-            self.vm_instance = VM(use_jit=True, jit_threshold=100)
-            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT)")
+            # Create VM instance with JIT and gas metering enabled
+            self.vm_instance = VM(
+                use_jit=True, 
+                jit_threshold=100,
+                enable_gas_metering=True,
+                gas_limit=1_000_000  # Default 1M gas limit
+            )
+            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT + gas metering)")
         except Exception as e:
             debug_log("Evaluator", f"Failed to initialize VM: {e}")
             self.use_vm = False

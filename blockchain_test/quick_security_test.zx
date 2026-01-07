@@ -1,0 +1,97 @@
+// Quick Security Test - Inline Contract Test
+// Testing require() function and msg.sender context
+
+print("\n" + "=" * 80)
+print("  QUICK SECURITY TEST - Testing require() and msg.sender")
+print("=" * 80 + "\n")
+
+// Define a simple contract inline
+contract TestToken {
+    data balance = 0
+    data owner = ""
+    
+    action init() {
+        owner = msg["sender"]
+        balance = 1000
+        print("✅ Token initialized. Owner: " + string(owner))
+        print("✅ Initial balance: " + string(balance))
+        return { "success": true, "owner": owner }
+    }
+    
+    action withdraw(amount) {
+        print("\n🔒 Testing withdraw with require()...")
+        print("   Requested amount: " + string(amount))
+        print("   Current balance: " + string(balance))
+        
+        // Test require() with positive amount
+        require(amount > 0, "Amount must be positive")
+        print("   ✅ Passed: amount > 0")
+        
+        // Test require() with sufficient balance  
+        require(balance >= amount, "Insufficient balance")
+        print("   ✅ Passed: balance >= amount")
+        
+        balance = balance - amount
+        print("   ✅ Withdrawal successful. New balance: " + string(balance))
+        
+        return { "success": true, "amount": amount, "balance": balance }
+    }
+}
+
+// Test 1: Create contract and initialize
+print("\n📋 Test 1: Contract Creation and Initialization")
+let token = TestToken()
+let init_result = token.init()
+print("Result: " + string(init_result["success"]))
+
+// Test 2: Valid withdrawal
+print("\n📋 Test 2: Valid Withdrawal (should succeed)")
+let withdraw1 = token.withdraw(100)
+if withdraw1["success"] {
+    print("✅ PASS: Valid withdrawal succeeded")
+} else {
+    print("❌ FAIL: Valid withdrawal failed")
+}
+
+// Test 3: Withdraw with insufficient balance
+print("\n📋 Test 3: Withdraw More Than Balance (should fail)")
+print("   Attempting to withdraw 2000 when balance is " + string(token.balance))
+print("   Expected error: 'Contract requirement failed: Insufficient balance'")
+
+let withdraw2 = token.withdraw(2000)
+if withdraw2["error"] {
+    print("✅ PASS: Insufficient balance correctly blocked")
+    print("   Error: " + string(withdraw2["error"]))
+} else {
+    print("❌ FAIL: Insufficient balance check did not work!")
+}
+
+// Test 4: Withdraw with negative amount
+print("\n📋 Test 4: Withdraw Negative Amount (should fail)")
+print("   Attempting to withdraw -50")
+print("   Expected error: 'Contract requirement failed: Amount must be positive'")
+
+let withdraw3 = token.withdraw(-50)
+if withdraw3["error"] {
+    print("✅ PASS: Negative amount correctly blocked")
+    print("   Error: " + string(withdraw3["error"]))
+} else {
+    print("❌ FAIL: Negative amount check did not work!")
+}
+
+// Test 5: Withdraw zero amount
+print("\n📋 Test 5: Withdraw Zero Amount (should fail)")
+print("   Attempting to withdraw 0")
+print("   Expected error: 'Contract requirement failed: Amount must be positive'")
+
+let withdraw4 = token.withdraw(0)
+if withdraw4["error"] {
+    print("✅ PASS: Zero amount correctly blocked")
+    print("   Error: " + string(withdraw4["error"]))
+} else {
+    print("❌ FAIL: Zero amount check did not work!")
+}
+
+print("\n" + "=" * 80)
+print("  TEST COMPLETE")
+print("=" * 80)

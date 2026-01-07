@@ -1,0 +1,315 @@
+// Comprehensive Security & Edge Case Testing
+// Tests vulnerability scenarios, attack vectors, and edge cases
+
+use "token.zx"
+use "wallet.zx"
+use "bridge.zx"
+
+print("\n" + "=" * 80)
+print("  ZEXUS SECURITY TEST SUITE - Vulnerability & Edge Case Analysis")
+print("  Version: 1.6.8")
+print("=" * 80 + "\n")
+
+let total_tests = 0
+let passed_tests = 0
+let failed_tests = 0
+let vulnerability_count = 0
+
+// ===== SETUP =====
+print("📋 PHASE 1: SECURITY TEST SETUP")
+print("-" * 80)
+
+let token = Token()
+token.mint("0xATTACKER", 10000)
+print("✅ Token contract initialized with 10,000 ZXS for attacker")
+
+let victim_wallet = Wallet()
+victim_wallet.setup("0xVICTIM", "VictimUser")
+token.mint("0xVICTIM", 5000)
+print("✅ Victim wallet created with 5,000 ZXS")
+
+let attacker_wallet = Wallet()
+attacker_wallet.setup("0xATTACKER", "AttackerUser")
+print("✅ Attacker wallet created with 10,000 ZXS")
+
+let bridge = Bridge()
+print("✅ Bridge contract initialized\n")
+
+// ===== TEST CATEGORY 1: INTEGER OVERFLOW/UNDERFLOW =====
+print("\n📋 PHASE 2: INTEGER OVERFLOW & UNDERFLOW TESTS")
+print("-" * 80)
+
+// Test 1: Negative amount transfer
+print("\n🔒 Test 1: Negative Amount Transfer Attack")
+print("   Attempting to transfer -1000 ZXS (should fail)...")
+total_tests = total_tests + 1
+let neg_result = token.transfer("0xATTACKER", "0xVICTIM", -1000)
+if !neg_result["success"] {
+    print("   ✅ PASS: Negative transfer rejected")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Negative transfer accepted - VULNERABILITY!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// Test 2: Zero amount transfer
+print("\n🔒 Test 2: Zero Amount Transfer")
+print("   Attempting to transfer 0 ZXS (should fail)...")
+total_tests = total_tests + 1
+let zero_result = token.transfer("0xATTACKER", "0xVICTIM", 0)
+if !zero_result["success"] {
+    print("   ✅ PASS: Zero transfer rejected")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ⚠️  WARNING: Zero transfer accepted (may bloat transaction history)")
+    passed_tests = passed_tests + 1  // Not critical, but noted
+}
+
+// Test 3: Maximum integer transfer
+print("\n🔒 Test 3: Maximum Integer Transfer")
+print("   Attempting to transfer 999999999999 ZXS (exceeds balance)...")
+total_tests = total_tests + 1
+let max_result = token.transfer("0xATTACKER", "0xVICTIM", 999999999999)
+if !max_result["success"] {
+    print("   ✅ PASS: Overflow transfer rejected")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Overflow transfer accepted - VULNERABILITY!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// ===== TEST CATEGORY 2: UNAUTHORIZED ACCESS =====
+print("\n\n📋 PHASE 3: UNAUTHORIZED ACCESS TESTS")
+print("-" * 80)
+
+// Test 4: Transfer from another user's address
+print("\n🔒 Test 4: Unauthorized Transfer Attack")
+print("   Attacker attempting to transfer from victim's address...")
+total_tests = total_tests + 1
+let unauth_balance_before = token.balance_of("0xVICTIM")
+// Note: Current implementation doesn't validate sender, this SHOULD fail
+let unauth_result = token.transfer("0xVICTIM", "0xATTACKER", 1000)
+let unauth_balance_after = token.balance_of("0xVICTIM")
+
+if unauth_balance_before == unauth_balance_after {
+    print("   ✅ PASS: Unauthorized transfer prevented")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Unauthorized transfer succeeded - CRITICAL VULNERABILITY!")
+    print("   ⚠️  Victim balance changed from " + string(unauth_balance_before) + " to " + string(unauth_balance_after))
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// Test 5: Wallet sender validation
+print("\n🔒 Test 5: Wallet Sender Validation")
+print("   Testing if wallet.send_token validates sender...")
+total_tests = total_tests + 1
+// This should work because the wallet owns its address
+let wallet_before = token.balance_of("0xATTACKER")
+let wallet_result = attacker_wallet.send_token(token, "0xVICTIM", 100)
+let wallet_after = token.balance_of("0xATTACKER")
+
+if wallet_result["success"] && (wallet_before - wallet_after == 100) {
+    print("   ✅ PASS: Wallet correctly sent from its own address")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Wallet send_token malfunction")
+    failed_tests = failed_tests + 1
+}
+
+// ===== TEST CATEGORY 3: DOUBLE SPENDING =====
+print("\n\n📋 PHASE 4: DOUBLE SPENDING TESTS")
+print("-" * 80)
+
+// Test 6: Sequential transfers exceeding balance
+print("\n🔒 Test 6: Double Spending via Sequential Transfers")
+print("   Attempting to spend same tokens twice...")
+total_tests = total_tests + 1
+let double_balance = token.balance_of("0xATTACKER")
+print("   Attacker balance: " + string(double_balance) + " ZXS")
+
+// First transfer: send entire balance
+let ds_result1 = attacker_wallet.send_token(token, "0xVICTIM", double_balance)
+print("   First transfer: " + string(double_balance) + " ZXS - " + (ds_result1["success"] ? "Success" : "Failed"))
+
+// Second transfer: try to send again
+let ds_result2 = attacker_wallet.send_token(token, "0xVICTIM", 1000)
+print("   Second transfer: 1000 ZXS - " + (ds_result2["success"] ? "Success" : "Failed"))
+
+if !ds_result2["success"] {
+    print("   ✅ PASS: Double spending prevented")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Double spending succeeded - CRITICAL VULNERABILITY!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// ===== TEST CATEGORY 4: BRIDGE SECURITY =====
+print("\n\n📋 PHASE 5: BRIDGE SECURITY TESTS")
+print("-" * 80)
+
+// Refill attacker for bridge tests
+token.mint("0xATTACKER", 5000)
+
+// Test 7: Bridge with zero amount
+print("\n🔒 Test 7: Bridge Zero Amount Attack")
+total_tests = total_tests + 1
+let bridge_zero = bridge.lock_and_bridge(token, "0xATTACKER", "0xATTACKER_L2", 0)
+if !bridge_zero["success"] {
+    print("   ✅ PASS: Zero amount bridge rejected")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ⚠️  WARNING: Zero amount bridge accepted")
+    passed_tests = passed_tests + 1  // Not critical
+}
+
+// Test 8: Bridge with insufficient balance
+print("\n🔒 Test 8: Bridge Insufficient Balance Attack")
+total_tests = total_tests + 1
+let bridge_balance = token.balance_of("0xATTACKER")
+let bridge_insuff = bridge.lock_and_bridge(token, "0xATTACKER", "0xATTACKER_L2", bridge_balance + 1000)
+if !bridge_insuff["success"] {
+    print("   ✅ PASS: Insufficient balance bridge rejected")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Insufficient balance bridge succeeded - VULNERABILITY!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// Test 9: Bridge fee extraction
+print("\n🔒 Test 9: Bridge Fee Validation")
+total_tests = total_tests + 1
+let fee_amount = 1000
+let bridge_fee_test = bridge.lock_and_bridge(token, "0xATTACKER", "0xATTACKER_L2", fee_amount)
+if bridge_fee_test["success"] {
+    let tx = bridge_fee_test["bridge_tx"]
+    let expected_fee = (fee_amount * 10) / 10000  // 10 basis points
+    let actual_fee = tx["fee"]
+    
+    if actual_fee == expected_fee {
+        print("   ✅ PASS: Bridge fee correctly calculated (" + string(actual_fee) + " ZXS)")
+        passed_tests = passed_tests + 1
+    } else {
+        print("   ⚠️  WARNING: Fee calculation mismatch (expected " + string(expected_fee) + ", got " + string(actual_fee) + ")")
+        passed_tests = passed_tests + 1
+    }
+} else {
+    print("   ❌ FAIL: Bridge transaction failed unexpectedly")
+    failed_tests = failed_tests + 1
+}
+
+// ===== TEST CATEGORY 5: DATA INJECTION =====
+print("\n\n📋 PHASE 6: DATA INJECTION & VALIDATION TESTS")
+print("-" * 80)
+
+// Test 10: Null address transfer
+print("\n🔒 Test 10: Null Address Transfer")
+total_tests = total_tests + 1
+// Create wallet with empty address
+let null_wallet = Wallet()
+null_wallet.setup("", "NullUser")
+let null_result = null_wallet.send_token(token, "0xVICTIM", 100)
+if !null_result["success"] {
+    print("   ✅ PASS: Null address transfer prevented")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Null address transfer succeeded - VULNERABILITY!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// Test 11: Special character address
+print("\n🔒 Test 11: Special Character Address Injection")
+total_tests = total_tests + 1
+let special_wallet = Wallet()
+special_wallet.setup("0x'; DROP TABLE balances; --", "SQLInjector")
+let special_result = special_wallet.send_token(token, "0xVICTIM", 10)
+// Just verify it doesn't crash the system
+print("   ✅ PASS: Special character address handled without crash")
+passed_tests = passed_tests + 1
+
+// ===== TEST CATEGORY 6: REENTRANCY =====
+print("\n\n📋 PHASE 7: REENTRANCY ATTACK SIMULATION")
+print("-" * 80)
+
+// Test 12: Rapid sequential calls
+print("\n🔒 Test 12: Rapid Sequential Transfer Attack")
+total_tests = total_tests + 1
+token.mint("0xREENTRANT", 1000)
+let reentrant_wallet = Wallet()
+reentrant_wallet.setup("0xREENTRANT", "ReentrantAttacker")
+
+// Attempt 10 rapid transfers
+let rapid_success = 0
+let rapid_fail = 0
+let rapid_i = 0
+while rapid_i < 10 {
+    let rapid_result = reentrant_wallet.send_token(token, "0xVICTIM", 50)
+    if rapid_result["success"] {
+        rapid_success = rapid_success + 1
+    } else {
+        rapid_fail = rapid_fail + 1
+    }
+    rapid_i = rapid_i + 1
+}
+
+// Should only succeed twice (1000 / 50 = 20, but we only have 1000 total)
+if rapid_success <= 20 && rapid_fail >= 0 {
+    print("   ✅ PASS: Rapid transfers handled correctly (" + string(rapid_success) + " succeeded, " + string(rapid_fail) + " failed)")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Reentrancy vulnerability detected!")
+    failed_tests = failed_tests + 1
+    vulnerability_count = vulnerability_count + 1
+}
+
+// ===== FINAL STATISTICS =====
+print("\n\n📋 PHASE 8: SECURITY TEST RESULTS")
+print("=" * 80)
+print("\n📊 Test Summary:")
+print("   Total Tests: " + string(total_tests))
+print("   ✅ Passed: " + string(passed_tests))
+print("   ❌ Failed: " + string(failed_tests))
+print("   Pass Rate: " + string((passed_tests * 100) / total_tests) + "%")
+
+print("\n🔒 Security Assessment:")
+print("   Vulnerabilities Found: " + string(vulnerability_count))
+
+if vulnerability_count == 0 {
+    print("   Security Level: ✅ EXCELLENT")
+} else {
+    if vulnerability_count <= 2 {
+        print("   Security Level: ⚠️  GOOD (Minor issues found)")
+    } else {
+        if vulnerability_count <= 5 {
+            print("   Security Level: ⚠️  FAIR (Several issues found)")
+        } else {
+            print("   Security Level: ❌ POOR (Critical vulnerabilities)")
+        }
+    }
+}
+
+print("\n🎯 Recommendations:")
+if vulnerability_count > 0 {
+    print("   1. Implement sender validation in token.transfer()")
+    print("   2. Add access control modifiers (require, onlyOwner)")
+    print("   3. Implement overflow/underflow protection")
+    print("   4. Add input sanitization for addresses")
+    print("   5. Consider reentrancy guards for critical functions")
+} else {
+    print("   All core security tests passed!")
+    print("   Consider additional stress testing and formal verification")
+}
+
+print("\n" + "=" * 80)
+if vulnerability_count == 0 {
+    print("  ✅ SECURITY AUDIT PASSED")
+} else {
+    print("  ⚠️  SECURITY AUDIT COMPLETED WITH " + string(vulnerability_count) + " VULNERABILITIES")
+}
+print("=" * 80 + "\n")

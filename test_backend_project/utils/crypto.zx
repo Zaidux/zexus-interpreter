@@ -1,0 +1,31 @@
+// Utility: Simple crypto/hashing functions
+export function hash_password(password) {
+    // Simple hash simulation - in real app use proper crypto
+    let hash = 0
+    let i = 0
+    while i < len(password) {
+        hash = hash + i * 31
+        i = i + 1
+    }
+    return "hash_" + string(hash) + "_" + password
+}
+
+export function verify_password(password, hash) {
+    let computed = hash_password(password)
+    return computed == hash
+}
+
+export function generate_token(user_id) {
+    // Generate simple token - in real app use proper token generation
+    let timestamp = 1704326400  // Mock timestamp
+    return "token_" + string(user_id) + "_" + string(timestamp)
+}
+
+export function generate_id() {
+    // Generate simple ID - in real app use UUID
+    let timestamp = 1704326400
+    let random = 42
+    return string(timestamp) + "_" + string(random)
+}
+
+print("[CRYPTO] Crypto utilities loaded")

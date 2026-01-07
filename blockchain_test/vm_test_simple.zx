@@ -1,0 +1,9 @@
+// Simple VM test
+let x = 10
+let y = 20
+let z = x + y
+
+print("x = " + string(x))
+print("y = " + string(y))
+print("z = " + string(z))
+print("Result: " + string(z))

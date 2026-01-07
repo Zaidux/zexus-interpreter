@@ -1,0 +1,92 @@
+// Silent Token Contract - For Performance Testing Only
+// Absolutely NO print statements for maximum speed
+
+export contract TokenSilent {
+    data name = "TestToken"
+    data symbol = "TST"
+    data decimals = 18
+    data total_supply = 0
+    data balances = {}
+    data transfer_history = []
+    
+    // Dummy action to work around parser bug (first action after data gets skipped)
+    action _dummy() {
+        return true
+    }
+    
+    action balance_of(address) {
+        if balances[address] == null {
+            return 0
+        }
+        return balances[address]
+    }
+    
+    action mint(address, amount) {
+        let current = balances[address]
+        if current == null {
+            current = 0
+        }
+        balances[address] = current + amount
+        total_supply = total_supply + amount
+        
+        return {
+            "success": true,
+            "amount": amount
+        }
+    }
+    
+    action transfer(from, to, amount) {
+        // Validate amount
+        if amount <= 0 {
+            return {
+                "success": false,
+                "error": "Amount must be positive"
+            }
+        }
+        
+        // Check balance
+        let from_balance = balances[from]
+        if from_balance == null {
+            from_balance = 0
+        }
+        
+        if from_balance < amount {
+            return {
+                "success": false,
+                "error": "Insufficient balance"
+            }
+        }
+        
+        // Update balances (no logging!)
+        balances[from] = from_balance - amount
+        
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        balances[to] = to_balance + amount
+        
+        // Record transfer silently
+        transfer_history = transfer_history + [{
+            "from": from,
+            "to": to,
+            "amount": amount
+        }]
+        
+        return {
+            "success": true,
+            "from": from,
+            "to": to,
+            "amount": amount
+        }
+    }
+    
+    action get_stats() {
+        return {
+            "name": name,
+            "symbol": symbol,
+            "total_supply": total_supply,
+            "total_transfers": len(transfer_history)
+        }
+    }
+}

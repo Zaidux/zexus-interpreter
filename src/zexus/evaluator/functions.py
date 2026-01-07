@@ -519,6 +519,19 @@ class FunctionEvaluatorMixin:
                 key = args[0].value if hasattr(args[0], 'value') else str(args[0])
                 default = args[1] if len(args) > 1 else NULL
                 return obj.pairs.get(key, default)
+            elif method_name == "keys":
+                # Return array of all keys
+                return List([String(k) if isinstance(k, str) else k for k in obj.pairs.keys()])
+            elif method_name == "values":
+                # Return array of all values
+                return List([v for v in obj.pairs.values()])
+            elif method_name == "entries":
+                # Return array of [key, value] pairs
+                return List([List([String(k) if isinstance(k, str) else k, v]) for k, v in obj.pairs.items()])
+            elif method_name == "size":
+                # Return number of entries
+                return Integer(len(obj.pairs))
+
         
         # === Module Methods ===
         from ..complexity_system import Module, Package
@@ -676,6 +689,11 @@ class FunctionEvaluatorMixin:
             if len(a) == 1 and isinstance(a[0], DateTime): 
                 return a[0].to_timestamp()
             return EvaluationError("timestamp() takes 0 or 1 DateTime")
+        
+        def _time(*a):
+            """Get current time in milliseconds since epoch (for performance measurement)"""
+            import time
+            return Integer(int(time.time() * 1000))
         
         # Math
         def _random(*a):
@@ -2311,10 +2329,54 @@ class FunctionEvaluatorMixin:
             # Condition passed, return NULL
             return NULL
         
+        # Map/Object helper functions
+        def _keys(*a):
+            """Get all keys from a map: keys(map) -> [key1, key2, ...]"""
+            if len(a) != 1:
+                return EvaluationError("keys() requires exactly 1 argument: map")
+            if not isinstance(a[0], Map):
+                return EvaluationError(f"keys() argument must be a Map, got {type(a[0]).__name__}")
+            
+            return List([String(k) if isinstance(k, str) else k for k in a[0].pairs.keys()])
+        
+        def _values(*a):
+            """Get all values from a map: values(map) -> [val1, val2, ...]"""
+            if len(a) != 1:
+                return EvaluationError("values() requires exactly 1 argument: map")
+            if not isinstance(a[0], Map):
+                return EvaluationError(f"values() argument must be a Map, got {type(a[0]).__name__}")
+            
+            return List([v for v in a[0].pairs.values()])
+        
+        def _entries(*a):
+            """Get all entries from a map: entries(map) -> [[k1,v1], [k2,v2], ...]"""
+            if len(a) != 1:
+                return EvaluationError("entries() requires exactly 1 argument: map")
+            if not isinstance(a[0], Map):
+                return EvaluationError(f"entries() argument must be a Map, got {type(a[0]).__name__}")
+            
+            return List([List([String(k) if isinstance(k, str) else k, v]) for k, v in a[0].pairs.items()])
+        
+        def _size(*a):
+            """Get size of a collection: size(map|list) -> int"""
+            if len(a) != 1:
+                return EvaluationError("size() requires exactly 1 argument")
+            
+            obj = a[0]
+            if isinstance(obj, Map):
+                return Integer(len(obj.pairs))
+            elif isinstance(obj, List):
+                return Integer(len(obj.elements))
+            elif isinstance(obj, String):
+                return Integer(len(obj.value))
+            else:
+                return EvaluationError(f"size() argument must be a Map, List, or String, got {type(obj).__name__}")
+        
         # Register mappings
         self.builtins.update({
             "now": Builtin(_now, "now"),
             "timestamp": Builtin(_timestamp, "timestamp"),
+            "time": Builtin(_time, "time"),
             "random": Builtin(_random, "random"),
             "to_hex": Builtin(_to_hex, "to_hex"),
             "from_hex": Builtin(_from_hex, "from_hex"),
@@ -2376,6 +2438,10 @@ class FunctionEvaluatorMixin:
             "reduce": Builtin(_reduce, "reduce"),
             "map": Builtin(_map, "map"),
             "filter": Builtin(_filter, "filter"),
+            "keys": Builtin(_keys, "keys"),
+            "values": Builtin(_values, "values"),
+            "entries": Builtin(_entries, "entries"),
+            "size": Builtin(_size, "size"),
         })
         
         # Register access control builtins
@@ -4416,6 +4482,39 @@ class FunctionEvaluatorMixin:
             
             return TRUE if is_valid else FALSE
         
+        def _require(*a):
+            """Assert a condition is true, revert transaction if false: require(condition, error_message?)"""
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("require() takes 1 or 2 arguments: condition, error_message?")
+            
+            condition = a[0]
+            
+            # Evaluate condition as boolean
+            is_true = False
+            if isinstance(condition, BooleanObj):
+                is_true = condition.value
+            elif isinstance(condition, Integer):
+                is_true = condition.value != 0
+            elif isinstance(condition, String):
+                is_true = len(condition.value) > 0
+            elif condition == NULL:
+                is_true = False
+            else:
+                is_true = True  # Non-null objects are truthy
+            
+            if not is_true:
+                # Condition failed - revert transaction
+                error_msg = "Requirement failed"
+                if len(a) >= 2:
+                    msg_obj = a[1]
+                    error_msg = msg_obj.value if isinstance(msg_obj, String) else str(msg_obj)
+                
+                # Return an EvaluationError which will stop execution
+                return EvaluationError(f"require() failed: {error_msg}")
+            
+            # Condition passed - return true
+            return TRUE
+        
         # Register verification builtins
         self.builtins.update({
             "is_email": Builtin(_is_email, "is_email"),
@@ -4431,6 +4530,7 @@ class FunctionEvaluatorMixin:
             "password_strength": Builtin(_password_strength, "password_strength"),
             "sanitize_input": Builtin(_sanitize_input, "sanitize_input"),
             "validate_length": Builtin(_validate_length, "validate_length"),
+            "require": Builtin(_require, "require"),
         })
         
         # Register main entry point and event loop builtins

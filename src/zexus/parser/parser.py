@@ -261,6 +261,7 @@ class UltimateParser:
         self.lexer.position = 0
         self.lexer.read_position = 0
         self.lexer.ch = ''
+        self.lexer.last_token_type = None  # ✅ CRITICAL: Reset context-aware state
         self.lexer.read_char()
 
         # OPTIMIZATION: Pre-allocate list with reasonable capacity
@@ -2668,9 +2669,11 @@ class UltimateParser:
                not self.peek_token_is(RBRACKET) and 
                precedence <= self.peek_precedence()):
 
+            print(f"[EXPR LOOP] cur={self.cur_token.literal}@L{self.cur_token.line}, peek={self.peek_token.literal}@L{self.peek_token.line}, precedence={precedence}, peek_prec={self.peek_precedence()}")
             # CRITICAL FIX: Stop if next token is on a new line and could start a new statement
             # This prevents expressions from spanning multiple logical lines
             if self.cur_token.line < self.peek_token.line:
+                print(f"[NEWLINE CHECK] cur_line={self.cur_token.line}, peek_line={self.peek_token.line}, peek_type={self.peek_token.type}, peek_lit={self.peek_token.literal}")
                 # Next token is on a new line - check if it could start a new statement
                 next_could_be_statement = (
                     self.peek_token.type == IDENT or
@@ -2681,6 +2684,7 @@ class UltimateParser:
                     self.peek_token.type == WHILE or
                     self.peek_token.type == FOR
                 )
+                print(f"[NEWLINE CHECK] next_could_be_statement={next_could_be_statement}")
                 if next_could_be_statement:
                     # Additional check: is the next token followed by [ or = ?
                     # This would indicate it's an assignment/index expression starting
@@ -3138,6 +3142,30 @@ class UltimateParser:
                 state_stmt = self.parse_state_statement()
                 if state_stmt:
                     storage_vars.append(state_stmt)
+
+            # Check for data member declaration
+            elif self.cur_token_is(DATA):
+                # Parse: data name = value [;]
+                if not self.expect_peek(IDENT):
+                    continue
+                data_name = self.cur_token.literal
+                
+                # Check for assignment
+                if self.peek_token_is(ASSIGN):
+                    self.next_token()  # Move to =
+                    self.next_token()  # Move to value
+                    data_value = self.parse_expression(LOWEST)
+                    
+                    # Create a let statement for the data member
+                    from ..zexus_ast import LetStatement
+                    data_stmt = LetStatement()
+                    data_stmt.name = Identifier(data_name)
+                    data_stmt.value = data_value
+                    storage_vars.append(data_stmt)
+                    
+                    # Consume optional semicolon (same as parse_state_statement)
+                    if self.peek_token_is(SEMICOLON):
+                        self.next_token()
 
             # Check for persistent storage declaration
             elif self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":

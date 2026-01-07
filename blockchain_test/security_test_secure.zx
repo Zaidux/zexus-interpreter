@@ -1,0 +1,209 @@
+// Security Test - Testing SECURE Contract Implementations
+// This test should show all vulnerabilities FIXED
+
+use "token_secure.zx"
+use "wallet.zx"
+use "bridge_secure.zx"
+
+print("\n" + "=" * 80)
+print("  ZEXUS SECURITY TEST SUITE - SECURE CONTRACTS")
+print("  Version: 1.6.8 - Security Fixes Applied")
+print("=" * 80 + "\n")
+
+let total_tests = 0
+let passed_tests = 0
+let failed_tests = 0
+
+// ===== SETUP =====
+print("📋 PHASE 1: SECURITY TEST SETUP")
+print("-" * 80)
+
+let token = TokenSecure()
+token.mint("0xATTACKER", 10000)
+print("✅ Token contract initialized with 10,000 ZXS for attacker")
+
+let victim_wallet = Wallet()
+victim_wallet.setup("0xVICTIM", "VictimUser")
+token.mint("0xVICTIM", 5000)
+print("✅ Victim wallet created with 5,000 ZXS")
+
+let attacker_wallet = Wallet()
+attacker_wallet.setup("0xATTACKER", "AttackerUser")
+print("✅ Attacker wallet created with 10,000 ZXS")
+
+let bridge = BridgeSecure()
+bridge.setup("ChainA", "ChainB")
+print("✅ Bridge contract initialized\n")
+
+// ===== TEST CATEGORY 1: INTEGER OVERFLOW/UNDERFLOW =====
+print("\n📋 PHASE 2: INTEGER OVERFLOW & UNDERFLOW TESTS")
+print("-" * 80)
+
+// Test 1: Negative amount transfer
+print("\n🔒 Test 1: Negative Amount Transfer Attack")
+print("   Attempting to transfer -1000 ZXS (should be blocked by require())...")
+total_tests = total_tests + 1
+
+// Note: require() will throw an error, so we expect this to fail
+print("   Expected: Contract requirement failed: Amount must be positive")
+let neg_result = token.transfer("0xATTACKER", "0xVICTIM", -1000)
+
+// This line should not be reached if require() works properly
+if neg_result["error"] {
+    print("   ✅ PASS: Negative transfer blocked - " + string(neg_result["error"]))
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Negative transfer not properly blocked!")
+    failed_tests = failed_tests + 1
+}
+
+print("\n   Test complete - moving to next test")
+
+// Test 2: Zero amount transfer
+print("\n🔒 Test 2: Zero Amount Transfer")
+print("   Attempting to transfer 0 ZXS (should be blocked)...")
+total_tests = total_tests + 1
+
+print("   Expected: Contract requirement failed: Amount must be positive")
+let zero_result = token.transfer("0xATTACKER", "0xVICTIM", 0)
+
+if zero_result["error"] {
+    print("   ✅ PASS: Zero transfer blocked - " + string(zero_result["error"]))
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Zero transfer not properly blocked!")
+    failed_tests = failed_tests + 1
+}
+
+print("\n📋 PHASE 3: UNAUTHORIZED ACCESS TESTS")
+print("-" * 80)
+
+// Test 3: Transfer from another user's address
+print("\n🔒 Test 3: Unauthorized Transfer Attack")
+print("   Attacker attempting to transfer from victim's address...")
+print("   This should fail with 'Not authorized' error")
+total_tests = total_tests + 1
+
+let unauth_balance_before = token.balance_of("0xVICTIM")
+print("   Victim balance before attack: " + string(unauth_balance_before) + " ZXS")
+
+let unauth_result = token.transfer("0xVICTIM", "0xATTACKER", 1000)
+let unauth_balance_after = token.balance_of("0xVICTIM")
+
+if unauth_result["error"] {
+    print("   ✅ PASS: Unauthorized transfer blocked!")
+    print("   Error: " + string(unauth_result["error"]))
+    print("   Victim balance unchanged: " + string(unauth_balance_after) + " ZXS")
+    passed_tests = passed_tests + 1
+} else if unauth_balance_before == unauth_balance_after {
+    print("   ✅ PASS: Unauthorized transfer prevented")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Unauthorized transfer succeeded - CRITICAL VULNERABILITY!")
+    print("   Victim balance changed from " + string(unauth_balance_before) + " to " + string(unauth_balance_after))
+    failed_tests = failed_tests + 1
+}
+
+// Test 4: Valid transfer (sender is authorized)
+print("\n🔒 Test 4: Authorized Transfer (Should Succeed)")
+print("   Testing normal transfer with proper authorization...")
+total_tests = total_tests + 1
+
+let auth_balance_before = token.balance_of("0xATTACKER")
+let auth_result = token.transfer("0xATTACKER", "0xVICTIM", 100)
+let auth_balance_after = token.balance_of("0xATTACKER")
+
+if auth_result["success"] {
+    print("   ✅ PASS: Authorized transfer successful")
+    print("   Transferred 100 ZXS from attacker to victim")
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Authorized transfer blocked incorrectly")
+    print("   Error: " + string(auth_result["error"]))
+    failed_tests = failed_tests + 1
+}
+
+// ===== TEST CATEGORY 3: ADDRESS VALIDATION =====
+print("\n\n📋 PHASE 4: ADDRESS VALIDATION TESTS")
+print("-" * 80)
+
+// Test 5: Empty address
+print("\n🔒 Test 5: Empty Address Validation")
+print("   Attempting transfer with empty 'to' address...")
+total_tests = total_tests + 1
+
+let empty_result = token.transfer("0xATTACKER", "", 100)
+if empty_result["error"] {
+    print("   ✅ PASS: Empty address blocked - " + string(empty_result["error"]))
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Empty address accepted!")
+    failed_tests = failed_tests + 1
+}
+
+// Test 6: Short address
+print("\n🔒 Test 6: Short Address Validation")
+print("   Attempting transfer with address too short...")
+total_tests = total_tests + 1
+
+let short_result = token.transfer("0xATTACKER", "0x123", 100)
+if short_result["error"] {
+    print("   ✅ PASS: Short address blocked - " + string(short_result["error"]))
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Short address accepted!")
+    failed_tests = failed_tests + 1
+}
+
+// ===== TEST CATEGORY 4: MINTING AUTHORIZATION =====
+print("\n\n📋 PHASE 5: MINTING AUTHORIZATION TESTS")
+print("-" * 80)
+
+// Test 7: Unauthorized minting
+print("\n🔒 Test 7: Unauthorized Minting Attack")
+print("   Non-owner attempting to mint tokens...")
+print("   Note: In current implementation, msg.sender may not work as expected")
+print("   This test may show a limitation of the current system")
+total_tests = total_tests + 1
+
+// For now, we'll just log that this test needs proper transaction context
+print("   ⚠️  SKIP: Test requires transaction context (msg.sender)")
+print("   In a real blockchain, this would fail with 'Only owner can mint'")
+
+// Test 8: Authorized minting (owner)
+print("\n🔒 Test 8: Authorized Minting (Owner)")
+print("   Testing owner minting new tokens...")
+total_tests = total_tests + 1
+
+let supply_before = token.get_stats()["total_supply"]
+let mint_result = token.mint("0xNEWUSER", 1000)
+let supply_after = token.get_stats()["total_supply"]
+
+if mint_result["success"] {
+    print("   ✅ PASS: Owner successfully minted tokens")
+    print("   Total supply: " + string(supply_before) + " -> " + string(supply_after))
+    passed_tests = passed_tests + 1
+} else {
+    print("   ❌ FAIL: Owner minting failed - " + string(mint_result["error"]))
+    failed_tests = failed_tests + 1
+}
+
+// ===== SUMMARY =====
+print("\n\n" + "=" * 80)
+print("  SECURITY TEST RESULTS")
+print("=" * 80)
+print("\n📊 Test Summary:")
+print("   Total Tests: " + string(total_tests))
+print("   Passed: " + string(passed_tests) + " ✅")
+print("   Failed: " + string(failed_tests) + " ❌")
+
+let pass_rate = (passed_tests * 100) / total_tests
+print("\n   Pass Rate: " + string(pass_rate) + "%")
+
+if failed_tests == 0 {
+    print("\n✅ ALL TESTS PASSED! Security fixes working correctly.")
+} else {
+    print("\n⚠️  Some tests failed. Review security implementation.")
+}
+
+print("\n" + "=" * 80)

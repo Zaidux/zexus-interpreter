@@ -1,0 +1,30 @@
+// Quick performance test - 50 transactions only
+use "./token_silent.zx"
+
+print("\n⚡ Quick Performance Test (50 transactions)")
+print("=" * 50)
+
+let token = TokenSilent()
+token.mint("0xTEST", 1000000)
+
+let start = time()
+
+let i = 0
+while i < 50 {
+    token.transfer("0xTEST", "0xUSER_" + string(i), 10)
+    i = i + 1
+}
+
+let end = time()
+let elapsed = end - start
+let tps = (50 * 1000) / elapsed
+
+print("\n📊 Results:")
+print("   Transactions: 50")
+print("   Time: " + string(elapsed) + " ms")
+print("   TPS: " + string(tps))
+
+let final_bal = token.balance_of("0xTEST")
+let expected = 1000000 - 500
+print("   Balance: " + string(final_bal) + " (expected: " + string(expected) + ")")
+print("\n" + "=" * 50 + "\n")

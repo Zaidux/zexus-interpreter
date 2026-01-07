@@ -1,0 +1,5 @@
+use "model.zx"
+
+let instance = User()
+let result = instance.create("123")
+print("Result:", result)

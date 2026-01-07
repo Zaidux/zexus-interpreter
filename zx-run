@@ -15,7 +15,7 @@ from zexus.evaluator.core import Evaluator
 from zexus.object import Environment
 from zexus import config
 
-def run_zexus_file(filename, debug_level='none'):
+def run_zexus_file(filename, debug_level='none', use_vm=False):
     """Execute a Zexus file directly"""
     
     # Set debug level
@@ -42,10 +42,50 @@ def run_zexus_file(filename, debug_level='none'):
             for error in parser.errors[:10]:  # Show first 10 errors
                 print(f"  - {error}", file=sys.stderr)
         
-        # Evaluate
-        evaluator = Evaluator()
-        env = Environment()
-        result = evaluator.eval_node(ast, env)
+        if use_vm:
+            # VM Execution Path (High Performance - Real Implementation)
+            print("🚀 Using VM execution mode with bytecode compilation", file=sys.stderr)
+            
+            try:
+                from zexus.vm.vm import VM, VMMode
+                from zexus.vm.compiler import compile_ast_to_bytecode
+                
+                # Compile AST to bytecode
+                if debug_level != 'none':
+                    print("   📦 Compiling AST to bytecode...", file=sys.stderr)
+                
+                bytecode = compile_ast_to_bytecode(ast, optimize=True)
+                
+                if debug_level == 'full':
+                    print("\n" + bytecode.disassemble(), file=sys.stderr)
+                
+                # Execute with VM
+                if debug_level != 'none':
+                    print(f"   ⚡ Executing {len(bytecode.instructions)} instructions...", file=sys.stderr)
+                
+                vm = VM(mode=VMMode.AUTO, use_jit=True, max_heap_mb=512, debug=(debug_level == 'full'))
+                result = vm.execute(bytecode, debug=(debug_level == 'full'))
+                
+                if debug_level != 'none':
+                    print(f"   ✅ VM execution complete", file=sys.stderr)
+                
+            except ImportError as e:
+                print(f"⚠️  VM not available: {e}", file=sys.stderr)
+                print("   Falling back to evaluator...", file=sys.stderr)
+                use_vm = False  # Fall through to evaluator
+            except Exception as e:
+                print(f"⚠️  VM execution failed: {e}", file=sys.stderr)
+                if debug_level == 'full':
+                    import traceback
+                    traceback.print_exc(file=sys.stderr)
+                print("   Falling back to evaluator...", file=sys.stderr)
+                use_vm = False  # Fall through to evaluator
+        
+        if not use_vm:
+            # Standard Evaluator Path (Stable - Lower Performance)
+            evaluator = Evaluator()
+            env = Environment()
+            result = evaluator.eval_node(ast, env)
         
         # Check if result is an error
         from zexus.object import Null, EvaluationError
@@ -71,6 +111,8 @@ if __name__ == "__main__":
                         help='Enable verbose debug output')
     parser.add_argument('--quiet', '-q', action='store_true',
                         help='Suppress parser debug output (default)')
+    parser.add_argument('--use-vm', action='store_true',
+                        help='Use VM execution mode for better performance (experimental)')
     
     args = parser.parse_args()
     
@@ -80,4 +122,4 @@ if __name__ == "__main__":
     else:
         debug_level = 'none'
     
-    run_zexus_file(args.file, debug_level)
+    run_zexus_file(args.file, debug_level, use_vm=args.use_vm)

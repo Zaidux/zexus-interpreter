@@ -1,0 +1,197 @@
+// SIMPLIFIED ULTIMATE STRESS TEST
+// Tests: 10K, 50K, 100K, 250K, 500K, 1M transactions
+// Removes batch storage functions (not available as builtins)
+
+// Ultra-performant token contract
+contract UltraToken {
+    data total_supply = 0
+    data balances = {}
+    data transaction_count = 0
+    data owner = ""
+    
+    action initialize(initial_owner) {
+        owner = initial_owner
+        total_supply = 1000000000  // 1 billion tokens
+        balances = {}
+        balances[initial_owner] = total_supply
+        transaction_count = 0
+    }
+    
+    action transfer(from, to, amount) {
+        // Security validation
+        require(amount > 0, "Amount must be positive")
+        require(from != to, "Cannot transfer to self")
+        
+        // Check balance
+        let from_balance = balances[from]
+        if from_balance == null {
+            from_balance = 0
+        }
+        require(from_balance >= amount, "Insufficient balance")
+        
+        // Execute transfer
+        balances[from] = from_balance - amount
+        
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        balances[to] = to_balance + amount
+        
+        transaction_count = transaction_count + 1
+        
+        return {success: true}
+    }
+    
+    action batch_transfer(recipients, amounts) {
+        let count = 0
+        let total = len(recipients)
+        
+        while count < total {
+            let recipient = recipients[count]
+            let amount = amounts[count]
+            
+            this.transfer(msg.sender, recipient, amount)
+            count = count + 1
+        }
+        
+        return {success: true, count: total}
+    }
+    
+    action get_stats() {
+        return {
+            total_supply: total_supply,
+            transaction_count: transaction_count
+        }
+    }
+}
+
+// Generate unique address
+action gen_addr(index) {
+    return "0xADDR_" + string(index)
+}
+
+// Run performance test
+action perf_test(num_txs, test_name) {
+    print("=" * 100)
+    print("TEST: " + test_name + " - " + string(num_txs) + " Transactions")
+    print("=" * 100)
+    
+    // Initialize contract
+    let owner = "0xOWNER"
+    let token = UltraToken()
+    token.initialize(owner)
+    
+    print("✅ Token initialized")
+    print("Starting transactions...")
+    
+    // Start timing
+    let start_time = time()
+    
+    // Execute transactions
+    let count = 0
+    let from = owner
+    
+    while count < num_txs {
+        // Generate unique recipient
+        let to = gen_addr(count)
+        let amount = 100
+        
+        // Execute transfer
+        let result = token.transfer(from, to, amount)
+        
+        count = count + 1
+        
+        // Progress indicator every 10%
+        if count % (num_txs / 10) == 0 {
+            let progress = (count * 100) / num_txs
+            print("  Progress: " + string(progress) + "%")
+        }
+    }
+    
+    // Calculate performance
+    let end_time = time()
+    let elapsed_ms = end_time - start_time
+    let elapsed_s = elapsed_ms / 1000
+    let tps = 0
+    
+    if elapsed_s > 0 {
+        tps = num_txs / elapsed_s
+    }
+    
+    let avg_time_ms = 0
+    if num_txs > 0 {
+        avg_time_ms = elapsed_ms / num_txs
+    }
+    
+    print("\nRESULTS")
+    print("=" * 100)
+    print("  Transactions: " + string(num_txs))
+    print("  Time: " + string(elapsed_ms) + " ms (" + string(elapsed_s) + " seconds)")
+    print("  TPS: " + string(tps))
+    print("  Avg time per tx: " + string(avg_time_ms) + " ms")
+    print("=" * 100)
+    
+    return {
+        txs: num_txs,
+        time_ms: elapsed_ms,
+        time_s: elapsed_s,
+        tps: tps,
+        avg_ms: avg_time_ms
+    }
+}
+
+// Main test execution
+print("\n")
+print("*" * 100)
+print("ZEXUS ULTIMATE STRESS TEST")
+print("Testing from 10,000 to 1,000,000 transactions")
+print("Features: Security checks, unique addresses, VM auto-optimization")
+print("*" * 100)
+print("\n")
+
+// Test levels
+let results = []
+
+// 10K test
+let r1 = perf_test(10000, "10K Transactions")
+results = push(results, r1)
+
+// 50K test
+let r2 = perf_test(50000, "50K Transactions")
+results = push(results, r2)
+
+// 100K test
+let r3 = perf_test(100000, "100K Transactions")
+results = push(results, r3)
+
+// 250K test
+let r4 = perf_test(250000, "250K Transactions")
+results = push(results, r4)
+
+// 500K test
+let r5 = perf_test(500000, "500K Transactions")
+results = push(results, r5)
+
+// 1M test
+let r6 = perf_test(1000000, "1M Transactions")
+results = push(results, r6)
+
+// Summary
+print("\n")
+print("*" * 100)
+print("SUMMARY - All Tests Complete")
+print("*" * 100)
+print("\n")
+print("| Transactions | Time (s) | TPS       | Avg (ms)  |")
+print("|--------------|----------|-----------|-----------|")
+
+let i = 0
+while i < len(results) {
+    let r = results[i]
+    print("| " + string(r.txs) + " | " + string(r.time_s) + " | " + string(r.tps) + " | " + string(r.avg_ms) + " |")
+    i = i + 1
+}
+
+print("\n✅ ALL STRESS TESTS COMPLETE")
+print("*" * 100)

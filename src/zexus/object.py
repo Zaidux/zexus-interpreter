@@ -49,6 +49,23 @@ class String(Object):
         """Enable String objects to be used as dict keys"""
         return hash(self.value)
     
+    def __getitem__(self, index):
+        """Enable string indexing: str[i] returns character at index i"""
+        try:
+            # Handle Integer object or raw int
+            idx = index.value if hasattr(index, 'value') else index
+            idx = int(idx)
+            if 0 <= idx < len(self.value):
+                # Return a new String object containing the character
+                return String(self.value[idx], sanitized_for=self.sanitized_for, is_trusted=self.is_trusted)
+            return NULL
+        except (ValueError, TypeError, AttributeError):
+            return NULL
+    
+    def get(self, index):
+        """Get character by index (for evaluator compatibility)"""
+        return self.__getitem__(index)
+    
     def mark_sanitized(self, context):
         """Mark this string as sanitized for a specific context"""
         self.sanitized_for = context
@@ -115,6 +132,31 @@ class Map(Object):
         if existing is not None and existing.__class__.__name__ == 'SealedObject':
             raise EvaluationError(f"Cannot modify sealed map key: {key}")
         self.pairs[key] = value
+
+    def keys(self):
+        """Return array of map keys"""
+        from .object import Array
+        return Array([k for k in self.pairs.keys()])
+
+    def values(self):
+        """Return array of map values"""
+        from .object import Array
+        return Array([v for v in self.pairs.values()])
+
+    def entries(self):
+        """Return array of [key, value] pairs"""
+        from .object import Array
+        return Array([Array([k, v]) for k, v in self.pairs.items()])
+
+    def has(self, key):
+        """Check if key exists in map"""
+        from .object import Boolean
+        return Boolean(key in self.pairs)
+
+    def size(self):
+        """Return number of entries in map"""
+        from .object import Integer
+        return Integer(len(self.pairs))
 
 class EmbeddedCode(Object):
     def __init__(self, name, language, code):

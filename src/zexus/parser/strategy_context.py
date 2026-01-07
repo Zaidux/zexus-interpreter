@@ -82,6 +82,7 @@ class ContextStackParser:
             'USE': self._parse_use_statement_block,
             'use_statement': self._parse_use_statement_block,  # Fix: add lowercase version
             'EXPORT': self._parse_export_statement_block,
+            'export_statement': self._parse_export_statement_block,  # Fix: add string version
             EXPORT: self._parse_export_statement_block,  # Handle EXPORT token type from structural analyzer
             # Added contract handling
             'contract_statement': self._parse_contract_statement_block,
@@ -334,6 +335,56 @@ class ContextStackParser:
                 if t.type == SEMICOLON:
                     j += 1  # Skip the semicolon
                     break
+                
+                # CRITICAL FIX: Check for newline followed by indexed assignment (e.g., data["key"] = value)
+                # This prevents the let statement from consuming the next line
+                if len(value_tokens) > 0 and t.type == IDENT:
+                    prev_token = value_tokens[-1]
+                    # Check if we're on a new line
+                    last_line = prev_token.line if hasattr(prev_token, 'line') else 0
+                    current_line = t.line if hasattr(t, 'line') else 0
+                    is_new_line = current_line > last_line
+                    
+                    if is_new_line and prev_token.type not in {DOT, LPAREN, LBRACKET, LBRACE, ASSIGN}:
+                        # Check if this starts an indexed assignment: ident[...] = value
+                        k = j + 1
+                        is_indexed_assignment = False
+                        
+                        if k < len(tokens) and tokens[k].type == LBRACKET:
+                            # Scan for matching RBRACKET followed by ASSIGN
+                            bracket_depth = 1
+                            scan_idx = k + 1
+                            while scan_idx < len(tokens) and scan_idx < k + 20:
+                                if tokens[scan_idx].type == LBRACKET:
+                                    bracket_depth += 1
+                                elif tokens[scan_idx].type == RBRACKET:
+                                    bracket_depth -= 1
+                                    if bracket_depth == 0:
+                                        # Found matching closing bracket, check for ASSIGN
+                                        if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
+                                            is_indexed_assignment = True
+                                        break
+                                scan_idx += 1
+                        # Also check for direct assignment: ident = value
+                        elif k < len(tokens) and tokens[k].type == ASSIGN:
+                            is_indexed_assignment = True
+                        # Also check for property assignment: ident.prop = value
+                        elif k < len(tokens) and tokens[k].type == DOT:
+                            # Scan for ASSIGN after property access
+                            prop_scan = k
+                            while prop_scan < len(tokens) and prop_scan < k + 10:
+                                if tokens[prop_scan].type == ASSIGN:
+                                    is_indexed_assignment = True
+                                    break
+                                elif tokens[prop_scan].type in {DOT, IDENT}:
+                                    prop_scan += 1
+                                else:
+                                    break
+                        
+                        # Break if this is a new assignment statement on a new line
+                        if is_indexed_assignment:
+                            break
+                
                 # Check for statement starters that should break
                 # Context-sensitive: IF followed by THEN is an expression, not a statement
                 if t.type in {LET, PRINT, FOR, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
@@ -1614,6 +1665,93 @@ class ContextStackParser:
 
                         i = current_idx
                         continue
+                
+                # B3. Handle DATA keyword for contract data variables
+                # This is the same as STATE but uses DATA keyword
+                elif token.type == DATA:
+                    # Move to next token to check what kind of DATA usage this is
+                    i += 1
+                    
+                    # Check if this is a data declaration (data name = value)
+                    # vs. a data reference (data = ..., data[...], data.prop)
+                    # A declaration must have an IDENT after DATA keyword
+                    if i >= brace_end or tokens[i].type not in [IDENT]:
+                        # Not a valid data declaration, skip
+                        continue
+                    
+                    if i < brace_end and (tokens[i].type == IDENT or hasattr(tokens[i], 'literal')):
+                        prop_name = tokens[i].literal
+                        prop_type = "any"
+                        default_val = None
+                        current_idx = i + 1
+
+                        # Check for type annotation (optional)
+                        if current_idx < brace_end and tokens[current_idx].type == COLON:
+                            current_idx += 1
+                            if current_idx < brace_end and tokens[current_idx].type == IDENT:
+                                prop_type = tokens[current_idx].literal
+                                current_idx += 1
+
+                        # Check for default/initial value
+                        if current_idx < brace_end and tokens[current_idx].type == ASSIGN:
+                            current_idx += 1
+                            if current_idx < brace_end:
+                                val_token = tokens[current_idx]
+                                if val_token.type == STRING:
+                                    default_val = StringLiteral(val_token.literal)
+                                elif val_token.type == INT:
+                                    default_val = IntegerLiteral(int(val_token.literal))
+                                elif val_token.type == FLOAT:
+                                    default_val = FloatLiteral(float(val_token.literal))
+                                elif val_token.type == TRUE:
+                                    default_val = Boolean(True)
+                                elif val_token.type == FALSE:
+                                    default_val = Boolean(False)
+                                elif val_token.type == LBRACE:
+                                    # Map literal: {}
+                                    # Find matching RBRACE
+                                    map_start = current_idx
+                                    depth = 1
+                                    current_idx += 1
+                                    while current_idx < brace_end and depth > 0:
+                                        if tokens[current_idx].type == LBRACE:
+                                            depth += 1
+                                        elif tokens[current_idx].type == RBRACE:
+                                            depth -= 1
+                                        current_idx += 1
+                                    # Parse the map literal
+                                    map_tokens = tokens[map_start:current_idx]
+                                    default_val = self._parse_map_literal(map_tokens)
+                                elif val_token.type == LBRACKET:
+                                    # List literal: []
+                                    # Find matching RBRACKET
+                                    list_start = current_idx
+                                    depth = 1
+                                    current_idx += 1
+                                    while current_idx < brace_end and depth > 0:
+                                        if tokens[current_idx].type == LBRACKET:
+                                            depth += 1
+                                        elif tokens[current_idx].type == RBRACKET:
+                                            depth -= 1
+                                        current_idx += 1
+                                    # Parse the list literal
+                                    list_tokens = tokens[list_start:current_idx]
+                                    default_val = self._parse_list_literal(list_tokens)
+                                elif val_token.type == IDENT:
+                                    default_val = Identifier(val_token.literal)
+                                    current_idx += 1
+                                # Note: current_idx already advanced for LBRACE and LBRACKET cases
+
+                        # Use AstNodeShim for compatibility with evaluator
+                        storage_vars.append(AstNodeShim(
+                            name=Identifier(prop_name),
+                            type=Identifier(prop_type),
+                            initial_value=default_val,
+                            default_value=default_val
+                        ))
+
+                        i = current_idx
+                        continue
 
                 # C. Handle State Variables (Properties)
                 elif token.type == IDENT:
@@ -1765,10 +1903,161 @@ class ContextStackParser:
         )
 
     def _parse_export_statement_block(self, block_info, all_tokens):
-        """Parse export statement: export { name1, name2, ... }"""
+        """Parse export statement: export { name1, name2, ... } or export const/let X = value"""
         tokens = block_info['tokens']
         parser_debug(f"    📝 Found export statement: {[t.literal for t in tokens]}")
 
+        # Check if this is "export const/let ..." syntax
+        if len(tokens) >= 2 and tokens[0].type == EXPORT and tokens[1].type in [CONST, LET]:
+            # This is export const/let syntax
+            # Parse the const/let statement (skip the export keyword)
+            declaration_tokens = tokens[1:]  # Skip EXPORT token
+            
+            # Parse the const or let statement
+            if tokens[1].type == CONST:
+                const_block = {
+                    'id': block_info['id'],
+                    'type': 'statement',
+                    'subtype': 'const_statement',
+                    'tokens': declaration_tokens,
+                    'start_token': declaration_tokens[0] if declaration_tokens else None,
+                    'start_index': block_info.get('start_index', 0),
+                    'end_index': block_info.get('end_index', len(tokens) - 1),
+                    'parent': block_info.get('parent')
+                }
+                const_stmt = self._parse_const_statement_block(const_block, all_tokens)
+            else:  # LET
+                let_block = {
+                    'id': block_info['id'],
+                    'type': 'statement',
+                    'subtype': 'let_statement',
+                    'tokens': declaration_tokens,
+                    'start_token': declaration_tokens[0] if declaration_tokens else None,
+                    'start_index': block_info.get('start_index', 0),
+                    'end_index': block_info.get('end_index', len(tokens) - 1),
+                    'parent': block_info.get('parent')
+                }
+                const_stmt = self._parse_let_statement_block(let_block, all_tokens)
+            
+            if const_stmt is None:
+                return None
+            
+            # Extract the variable name from the const/let statement
+            # LetStatement and ConstStatement have .name which is an Identifier
+            var_name = const_stmt.name.value if hasattr(const_stmt.name, 'value') else str(const_stmt.name)
+            
+            # Create an export statement for this variable
+            export_stmt = ExportStatement(names=[Identifier(var_name)])
+            
+            # Return a block containing both statements
+            from ..zexus_ast import BlockStatement
+            result = BlockStatement()
+            result.statements = [const_stmt, export_stmt]
+            return result
+        
+        # Check if this is "export contract Name {...}" syntax
+        if len(tokens) >= 3 and tokens[0].type == EXPORT and tokens[1].type == CONTRACT:
+            # Parse the contract (skip the export keyword)
+            contract_tokens = tokens[1:]  # Skip EXPORT token
+            
+            # Parse the contract
+            contract_block = {
+                'id': block_info['id'],
+                'type': 'statement',
+                'subtype': 'contract_statement',
+                'tokens': contract_tokens,
+                'start_token': contract_tokens[0] if contract_tokens else None,
+                'start_index': block_info.get('start_index', 0),
+                'end_index': block_info.get('end_index', len(tokens) - 1),
+                'parent': block_info.get('parent')
+            }
+            contract_stmt = self._parse_contract_statement_block(contract_block, all_tokens)
+            
+            if contract_stmt is None:
+                return None
+            
+            # Extract the contract name
+            # ContractStatement has .name which is an Identifier
+            contract_name = contract_stmt.name.value if hasattr(contract_stmt.name, 'value') else str(contract_stmt.name)
+            
+            # Create an export statement for this contract
+            export_stmt = ExportStatement(names=[Identifier(contract_name)])
+            
+            # Return a block containing both statements
+            from ..zexus_ast import BlockStatement
+            result = BlockStatement()
+            result.statements = [contract_stmt, export_stmt]
+            return result
+        
+        # Check if this is "export function name(...) {...}" syntax
+        if len(tokens) >= 3 and tokens[0].type == EXPORT and tokens[1].type == FUNCTION:
+            parser_debug("    🎯 Handling 'export function' statement")
+            
+            # Parse the function (skip the export keyword)
+            func_tokens = tokens[1:]  # Skip EXPORT token
+            
+            func_block = {
+                'id': block_info['id'],
+                'type': 'statement',
+                'subtype': 'function_statement',
+                'tokens': func_tokens,
+                'start_token': func_tokens[0] if func_tokens else None,
+                'start_index': block_info.get('start_index', 0),
+                'end_index': block_info.get('end_index', len(tokens) - 1),
+                'parent': block_info.get('parent')
+            }
+            func_stmt = self._parse_function_statement_block(func_block, all_tokens)
+            
+            if func_stmt is None:
+                return None
+            
+            # Extract the function name
+            func_name = func_stmt.name.value if hasattr(func_stmt.name, 'value') else str(func_stmt.name)
+            
+            # Create an export statement for this function
+            export_stmt = ExportStatement(names=[Identifier(func_name)])
+            
+            # Return a block containing both statements
+            from ..zexus_ast import BlockStatement
+            result = BlockStatement()
+            result.statements = [func_stmt, export_stmt]
+            return result
+        
+        # Check if this is "export action name(...) {...}" syntax
+        if len(tokens) >= 3 and tokens[0].type == EXPORT and tokens[1].type == ACTION:
+            parser_debug("    🎯 Handling 'export action' statement")
+            
+            # Parse the action (skip the export keyword)
+            action_tokens = tokens[1:]  # Skip EXPORT token
+            
+            action_block = {
+                'id': block_info['id'],
+                'type': 'statement',
+                'subtype': 'action_statement',
+                'tokens': action_tokens,
+                'start_token': action_tokens[0] if action_tokens else None,
+                'start_index': block_info.get('start_index', 0),
+                'end_index': block_info.get('end_index', len(tokens) - 1),
+                'parent': block_info.get('parent')
+            }
+            action_stmt = self._parse_action_statement_block(action_block, all_tokens)
+            
+            if action_stmt is None:
+                return None
+            
+            # Extract the action name
+            action_name = action_stmt.name.value if hasattr(action_stmt.name, 'value') else str(action_stmt.name)
+            
+            # Create an export statement for this action
+            export_stmt = ExportStatement(names=[Identifier(action_name)])
+            
+            # Return a block containing both statements
+            from ..zexus_ast import BlockStatement
+            result = BlockStatement()
+            result.statements = [action_stmt, export_stmt]
+            return result
+
+        # Original logic: export { name1, name2, ... }
         names = []
         i = 0
         while i < len(tokens):
@@ -2094,6 +2383,23 @@ class ContextStackParser:
                                 # IDENT followed by DOT (method call) or LPAREN (function call) on new line
                                 if next_tok.type in {DOT, LPAREN}:
                                     is_new_statement = True
+                                # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
+                                elif next_tok.type == LBRACKET:
+                                    # Look ahead to confirm it's an indexed assignment
+                                    # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
+                                    bracket_depth = 1
+                                    scan_idx = lookahead_idx + 1
+                                    while scan_idx < len(tokens) and scan_idx < lookahead_idx + 20:
+                                        if tokens[scan_idx].type == LBRACKET:
+                                            bracket_depth += 1
+                                        elif tokens[scan_idx].type == RBRACKET:
+                                            bracket_depth -= 1
+                                            if bracket_depth == 0:
+                                                # Found matching closing bracket, check for ASSIGN
+                                                if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
+                                                    is_new_statement = True
+                                                break
+                                        scan_idx += 1
                             
                             # Original checks (keep for non-newline cases)
                             if not is_new_statement and lookahead_idx < len(tokens):
@@ -4358,9 +4664,8 @@ class ContextStackParser:
         else:
             # Keywords that can be used as identifiers (variable names):
             # DATA, ENTITY, VERIFY, PROTECT, etc. - treat them as identifiers when used in expression context
-            # But not punctuation or operators
             if hasattr(token, 'literal') and token.literal and token.literal[0].isalpha():
-                # This is likely a keyword being used as a variable name
+                # This is likely a keyword being used as a variable name (DATA, ENTITY, etc.)
                 return Identifier(token.literal)
             # Otherwise, default to StringLiteral for backward compatibility
             return StringLiteral(token.literal if hasattr(token, 'literal') else "")
@@ -4591,7 +4896,7 @@ class ContextStackParser:
                 i = arrow_idx + 1
                 continue
             
-            # Find result expression end (comma, semicolon, or end of body)
+            # Find result expression end (comma, semicolon, or next pattern)
             result_start = arrow_idx + 1
             result_end = result_start
             depth = 0
@@ -4603,6 +4908,47 @@ class ContextStackParser:
                     depth -= 1
                 elif body_tokens[result_end].type in {COMMA, SEMICOLON} and depth == 0:
                     break
+                # CRITICAL FIX: Also break if we encounter a pattern start (token followed by =>)
+                # This handles cases without commas/semicolons between them
+                elif depth == 0 and result_end + 1 < len(body_tokens):
+                    # Check if this looks like the start of a new pattern
+                    # Patterns can start with: INT, STRING, IDENT (for constructor or wildcard)
+                    current_tok = body_tokens[result_end]
+                    next_tok = body_tokens[result_end + 1]
+                    
+                    # Pattern: literal => or _  => or Constructor( =>
+                    if current_tok.type in {INT, STRING, TRUE, FALSE}:
+                        # Look ahead for =>
+                        lookahead = result_end + 1
+                        while lookahead < len(body_tokens) and body_tokens[lookahead].type in {SEMICOLON, COMMA}:
+                            lookahead += 1
+                        if lookahead < len(body_tokens) and body_tokens[lookahead].type == LAMBDA:
+                            break  # Start of new pattern
+                    elif current_tok.type == IDENT:
+                        # Could be wildcard _, variable, or constructor
+                        # Look ahead for => or (
+                        lookahead = result_end + 1
+                        while lookahead < len(body_tokens) and body_tokens[lookahead].type in {SEMICOLON, COMMA}:
+                            lookahead += 1
+                        if lookahead < len(body_tokens):
+                            if body_tokens[lookahead].type == LAMBDA:
+                                break  # Start of new pattern (wildcard or variable)
+                            elif body_tokens[lookahead].type == LPAREN:
+                                # Constructor pattern, look for matching ) then =>
+                                paren_depth = 1
+                                lookahead += 1
+                                while lookahead < len(body_tokens) and paren_depth > 0:
+                                    if body_tokens[lookahead].type == LPAREN:
+                                        paren_depth += 1
+                                    elif body_tokens[lookahead].type == RPAREN:
+                                        paren_depth -= 1
+                                    lookahead += 1
+                                # Skip optional comma/semicolon after )
+                                while lookahead < len(body_tokens) and body_tokens[lookahead].type in {SEMICOLON, COMMA}:
+                                    lookahead += 1
+                                if lookahead < len(body_tokens) and body_tokens[lookahead].type == LAMBDA:
+                                    break  # Start of new constructor pattern
+                
                 result_end += 1
             
             # Parse result expression
@@ -5052,6 +5398,8 @@ class ContextStackParser:
         
         Example: async producer()
         This creates an AsyncExpression that executes the expression in a background thread.
+        
+        Note: Does NOT handle "async function" - that's handled by _parse_function_statement_context
         """
         from ..zexus_ast import AsyncExpression, ExpressionStatement
         import sys
@@ -5059,6 +5407,10 @@ class ContextStackParser:
         tokens = block_info.get('tokens', [])
         if not tokens or tokens[0].type != ASYNC:
             return None
+        
+        # If this is "async function", let _parse_function_statement_context handle it
+        if len(tokens) > 1 and tokens[1].type == FUNCTION:
+            return self._parse_function_statement_context(block_info, all_tokens)
         
         # The tokens are [ASYNC, ...expression tokens...]
         # We can just call parse_async_expression from the main parser!
@@ -5103,9 +5455,20 @@ class ContextStackParser:
         return None
 
     def _parse_function_statement_context(self, block_info, all_tokens):
-        """Parse function statement: function name(params) [-> return_type] { body }"""
+        """Parse function statement: [async] function name(params) [-> return_type] { body }"""
         tokens = block_info.get('tokens', [])
-        if not tokens or tokens[0].type != FUNCTION:
+        if not tokens:
+            return None
+        
+        # Check if this starts with ASYNC modifier
+        is_async = False
+        start_idx = 0
+        if tokens[0].type == ASYNC:
+            is_async = True
+            start_idx = 1
+        
+        # Now check for FUNCTION keyword
+        if start_idx >= len(tokens) or tokens[start_idx].type != FUNCTION:
             return None
         
         # Extract function name (next IDENT after FUNCTION)
@@ -5114,7 +5477,7 @@ class ContextStackParser:
         return_type = None
         body_tokens = []
         
-        i = 1
+        i = start_idx + 1
         while i < len(tokens):
             if tokens[i].type == IDENT:
                 name = Identifier(tokens[i].literal)
@@ -5163,12 +5526,28 @@ class ContextStackParser:
                 parsed_stmts = self._parse_block_statements(body_tokens)
                 body.statements = parsed_stmts
         
-        return FunctionStatement(
+        # Create FunctionStatement with async modifier if present
+        func_stmt = FunctionStatement(
             name=name or Identifier('anonymous'),
             parameters=params,
             body=body,
             return_type=return_type
         )
+        
+        # Set async flag if modifier was present
+        if is_async:
+            func_stmt.modifiers = ['async']
+        
+        return func_stmt
+    
+    # Aliases for export statement parsing
+    def _parse_function_statement_block(self, block_info, all_tokens):
+        """Alias for _parse_function_statement_context"""
+        return self._parse_function_statement_context(block_info, all_tokens)
+    
+    def _parse_action_statement_block(self, block_info, all_tokens):
+        """Alias for _parse_action_statement_context"""
+        return self._parse_action_statement_context(block_info, all_tokens)
 
     def _parse_conditional_context(self, block_info, all_tokens):
         """Parse if/else blocks with context awareness"""

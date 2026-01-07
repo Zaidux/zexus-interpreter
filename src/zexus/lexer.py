@@ -457,33 +457,71 @@ class Lexer:
             }
             return keywords[ident]
         
-        # Context-aware keyword recognition: allow keywords as identifiers in certain contexts
-        # These contexts are where variable names are expected:
-        # - After LET, CONST (variable declarations)
-        # - After DOT (property/method names)
-        # - After LPAREN, COMMA (function parameters)
-        # - After LBRACKET (map keys when used as identifiers)
-        # - After ASSIGN (right-hand side values)
-        # - After operators (PLUS, MINUS, etc.)
-        contexts_allowing_keywords = {
-            LET, CONST, DOT, LPAREN, COMMA, LBRACKET, COLON,
-            ASSIGN, PLUS, MINUS, STAR, SLASH, MOD,
-            EQ, NOT_EQ, LT, GT, LTE, GTE,
-            AND, OR, BANG,
-            RETURN, PRINT, RPAREN, RBRACKET
+        # Define strict keywords that should NEVER be treated as identifiers
+        # These are control flow, operators, and modifiers that must always be keywords
+        strict_keywords = {
+            'if', 'elif', 'else', 'while', 'for', 'each', 'in',
+            'return', 'break', 'continue', 'throw', 'try', 'catch',
+            'await', 'async', 'spawn', 'let', 'const', 'print',
+            'use', 'export', 'import', 'debug', 'match'
         }
         
-        if self.last_token_type in contexts_allowing_keywords:
-            # In these contexts, treat everything as an identifier
-            return IDENT
+        # If this is a strict keyword, always treat as keyword
+        if ident in strict_keywords:
+            # Fall through to normal keyword lookup at the end
+            pass
+        else:
+            # Context-aware keyword recognition: allow non-strict keywords as identifiers in certain contexts
+            # These contexts are where variable names are expected:
+            # - After LET, CONST (variable declarations)
+            # - After DOT (property/method names)
+            # - After COMMA (function parameters, after first param)
+            # - After LBRACKET (map keys when used as identifiers)
+            # - After ASSIGN (right-hand side can use keywords as identifiers: x = data)
+            # - After COLON (map keys, type annotations)
+            #
+            # Note: LPAREN removed - it was causing keywords after '(' to become identifiers
+            # even at the start of new statements. Instead, keywords as param names will
+            # work after the first parameter (via COMMA).
+            contexts_allowing_keywords_as_idents = {
+                LET, CONST, DOT, COMMA, LBRACKET, COLON, ASSIGN
+            }
+            
+            if self.last_token_type in contexts_allowing_keywords_as_idents:
+                # In these contexts, treat non-strict keywords as identifiers
+                return IDENT
         
         # Special case: ACTION and FUNCTION keywords should only be recognized
-        # when they actually start a definition, not when used as variable names
-        # So we check if the context suggests this is truly a keyword usage
+        # when they actually start a definition, not when used as variable names in expressions
+        # Allow them as keywords at statement boundaries or after contract/data blocks
         if ident in ['action', 'function']:
-            # These should only be keywords at the start of a statement or after certain tokens
-            # For now, if we're not sure, treat as identifier
-            if self.last_token_type not in {None, SEMICOLON, LBRACE, RBRACE}:
+            # These should be keywords at the start of a statement or after RETURN
+            # Allow after: None, SEMICOLON, LBRACE, RBRACE, INT, STRING, RPAREN (end of previous statement)
+            # Also allow after RETURN for function expressions: return function() {...}
+            # Also allow after ASYNC for async functions: async function name() {...}
+            # Also allow after EXPORT for exported functions: export function name() {...}
+            statement_boundaries = {None, SEMICOLON, LBRACE, RBRACE, INT, STRING, FLOAT, RPAREN, TRUE, FALSE, NULL, RETURN, ASYNC, EXPORT}
+            if self.last_token_type in statement_boundaries:
+                # Treat as keyword
+                pass  # Fall through to keyword lookup
+            else:
+                # In expression context, treat as identifier
+                return IDENT
+        
+        # Special case: DATA keyword should only be recognized in contract storage contexts
+        # When used as a parameter name, variable name, or in expressions, treat as identifier
+        if ident == 'data':
+            # Allow as keyword only in contract contexts (after CONTRACT or in contract body)
+            # In all other contexts (parameters, variables, expressions), treat as identifier
+            # Safe contexts for DATA keyword: after statement boundaries and value literals in contracts
+            # This includes: LBRACE (contract start), RBRACE (after Map {}), RBRACKET (after List []),
+            # STRING, INT, FLOAT, TRUE, FALSE (after literal values), SEMICOLON
+            contract_contexts = {SEMICOLON, LBRACE, RBRACE, RBRACKET, STRING, INT, FLOAT, TRUE, FALSE, NULL}
+            if self.last_token_type in contract_contexts:
+                # Might be a data declaration in contract, allow as keyword
+                pass  # Fall through to keyword lookup
+            else:
+                # In expression context, parameter list, or other contexts, treat as identifier
                 return IDENT
         
         # keyword lookup mapping (string -> token constant)

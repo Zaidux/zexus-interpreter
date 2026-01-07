@@ -1,0 +1,66 @@
+// Wallet Contract
+// Represents a blockchain wallet that can hold and transfer tokens
+
+export contract Wallet {
+    data owner = ""
+    data address = ""
+    data tokens = {}  // token_address -> balance
+    data transaction_count = 0
+    data created_at = 0
+    
+    action setup(wallet_address, owner_name) {
+        address = wallet_address
+        owner = owner_name
+        created_at = 0
+        
+        print("[WALLET] Created wallet: " + string(wallet_address) + " (Owner: " + string(owner_name) + ")")
+        
+        return {
+            "success": true,
+            "address": wallet_address,
+            "owner": owner_name
+        }
+    }
+    
+    action get_address() {
+        return address
+    }
+    
+    action get_owner() {
+        return owner
+    }
+    
+    action send_token(token_contract, to_address, amount) {
+        print("[WALLET " + string(address) + "] Sending " + string(amount) + " tokens to " + string(to_address))
+        
+        // Execute transfer through token contract
+        let result = token_contract.transfer(address, to_address, amount)
+        
+        if result["success"] {
+            transaction_count = transaction_count + 1
+            
+            print("[WALLET " + string(address) + "] ✅ Transaction #" + string(transaction_count) + " completed")
+            
+            return {
+                "success": true,
+                "tx_count": transaction_count
+            }
+        }
+        
+        print("[WALLET " + string(address) + "] ❌ Transaction failed: " + string(result["error"]))
+        return result
+    }
+    
+    action get_balance(token_contract) {
+        return token_contract.balance_of(address)
+    }
+    
+    action get_stats() {
+        return {
+            "address": address,
+            "owner": owner,
+            "transaction_count": transaction_count,
+            "created_at": created_at
+        }
+    }
+}

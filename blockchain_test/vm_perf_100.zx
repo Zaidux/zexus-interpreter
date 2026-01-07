@@ -1,0 +1,19 @@
+// VM Performance Test - 100 transaction simulation
+let start = time()
+let count = 0
+
+while (count < 100) {
+    // Simulate transaction processing
+    let balance = 1000
+    let amount = 10
+    let new_balance = balance - amount
+    count = count + 1
+}
+
+let end = time()
+let duration = end - start
+let tps = 100 / duration
+
+print("Processed 100 transactions")
+print("Duration: " + string(duration) + " seconds")
+print("TPS: " + string(tps))

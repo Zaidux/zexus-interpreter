@@ -1,0 +1,18 @@
+// VM Performance Test - Simple arithmetic benchmark
+let count = 10000
+let total = 0
+let i = 0
+
+// Manual loop unrolling for now (compiler doesn't have while yet)
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+total = total + 1
+
+print(total)

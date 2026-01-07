@@ -1,0 +1,62 @@
+// Session Management
+use "../utils/crypto.zx"
+use "../db/database.zx"
+
+export contract SessionManager {
+    data name = "SessionManager"
+    
+    action create_session(user_id, email) {
+        print("[SESSION] Creating session for user: " + string(user_id))
+        
+        let token = generate_token(user_id)
+        let session_data = {
+            "user_id": user_id,
+            "email": email,
+            "created_at": 1704326400,
+            "expires_at": 1704330000
+        }
+        
+        db.save_session(token, session_data)
+        
+        return {
+            "success": true,
+            "token": token
+        }
+    }
+    
+    action validate_session(token) {
+        if token == null or token == "" {
+            return {
+                "valid": false,
+                "error": "No token provided"
+            }
+        }
+        
+        let session = db.get_session(token)
+        if session == null {
+            return {
+                "valid": false,
+                "error": "Invalid session"
+            }
+        }
+        
+        // In real app, check expiration
+        return {
+            "valid": true,
+            "user_id": session["user_id"],
+            "email": session["email"]
+        }
+    }
+    
+    action destroy_session(token) {
+        print("[SESSION] Destroying session")
+        db.delete_session(token)
+        return {
+            "success": true
+        }
+    }
+}
+
+export let sessionManager = SessionManager()
+
+print("[SESSION] Session manager loaded")

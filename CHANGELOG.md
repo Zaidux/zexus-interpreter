@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.8] - 2026-01-06
+
+### 🐛 Bug Fixes
+
+**Parser - Indexed Assignment on New Line:**
+- **Fixed "Invalid assignment target" error for indexed assignments on new lines**
+  - Previously code like `let data = obj.method(); data["key"] = value` would fail
+  - Parser was incorrectly treating both lines as a single `let` statement
+  - Added newline-aware indexed assignment detection in two locations:
+    - `strategy_structural.py`: Added Pattern 3 for `IDENT[...]` detection (~line 697-730)
+    - `strategy_context.py`: Added indexed assignment check in LET heuristic (~line 2377-2393)
+  - Both fixes detect `IDENT LBRACKET ... RBRACKET ASSIGN` pattern on new lines
+  - Files: `src/zexus/parser/strategy_structural.py`, `src/zexus/parser/strategy_context.py`
+  - Example: Multi-line data manipulation in contracts now works correctly
+
+**Parser - Contract DATA Member Declarations:**
+- **Fixed contract parser skipping DATA member declarations**
+  - Contract parser only handled `STATE`, `persistent storage`, and `ACTION` keywords
+  - `DATA` keyword declarations were being skipped, causing first action to be missed
+  - Added DATA keyword handling in `parse_contract_statement()` to create LetStatement nodes
+  - Now properly initializes: `data name = "value"`, `data balance = 0`, `data items = {}`
+  - Files: `src/zexus/parser/parser.py` (~line 3130-3148)
+  - Impact: All contract data members now properly initialized and accessible in actions
+  - Example: Smart contract wallets, tokens, and bridges now work correctly
+
+**Test Backend - String Concatenation:**
+- Fixed type mismatch errors when concatenating strings with potentially NULL values
+- Added `string()` conversion for safe concatenation in logging statements
+- Files: `test_backend_project/auth/session.zx`, `test_backend_project/tasks/task_service.zx`, `test_backend_project/main.zx`
+
+### ✨ Features
+
+**Blockchain Test Suite:**
+- Added comprehensive blockchain test demonstrating smart contract capabilities
+- Includes ERC20-like token contract with minting, transfers, and balance tracking
+- Wallet contract with multi-step transfer flows (A→B→C→D→E)
+- Cross-chain bridge contract with fee calculation and locked token tracking
+- Full test coverage with sequential transfers and state validation
+- Files: `blockchain_test/token.zx`, `blockchain_test/wallet.zx`, `blockchain_test/bridge.zx`, `blockchain_test/run_test.zx`
+- Test results documented in `blockchain_test/TEST_RESULTS.md`
+
+### 📝 Documentation
+- Updated ISSUE5.md with complete fix documentation (Fix #5 and Fix #6)
+- Added TEST_RESULTS.md documenting blockchain test execution and parser fixes
+
+---
+
 ## [1.6.7] - 2026-01-03
 
 ### 🐛 Bug Fixes
@@ -405,6 +452,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.6.8]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.5...v1.6.6
 [1.6.5]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.3...v1.6.5

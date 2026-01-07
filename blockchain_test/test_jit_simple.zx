@@ -1,0 +1,13 @@
+// Simple JIT test - using only operations the compiler supports
+let x = 10
+let y = 20
+
+// Basic loop with arithmetic (compiler supports this)
+let i = 0
+while i < 10 {
+    let z = x + y  // Simple addition - compiler supports this
+    i = i + 1      // Assignment - may not be supported yet
+}
+
+print("Done")
+print(i)

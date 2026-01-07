@@ -1,0 +1,216 @@
+// Blockchain Test - Comprehensive Token Transfer and Bridge Testing
+// Tests: Multi-wallet transfers, performance monitoring, and cross-chain bridging
+
+use "token.zx"
+use "wallet.zx"
+use "bridge.zx"
+
+print("\n" + "=" * 80)
+print("  ZEXUS BLOCKCHAIN TEST - Token Transfer & Bridging")
+print("  Version: 1.6.8")
+print("=" * 80 + "\n")
+
+// ===== SETUP PHASE =====
+print("📋 PHASE 1: SETUP")
+print("-" * 80)
+
+// Create token - use mint to initialize instead of setup
+let token = Token()
+
+// Mint initial supply directly
+print("💰 Creating ZexusToken (ZXS)...")
+let mint_init = token.mint("0x0000", 1000000)
+print("[TOKEN] Total Supply: 1000000")
+
+// Create wallets A, B, C, D, E
+let wallet_a = Wallet()
+wallet_a.setup("0xAAAA", "Alice")
+
+let wallet_b = Wallet()
+wallet_b.setup("0xBBBB", "Bob")
+
+let wallet_c = Wallet()
+wallet_c.setup("0xCCCC", "Charlie")
+
+let wallet_d = Wallet()
+wallet_d.setup("0xDDDD", "David")
+
+let wallet_e = Wallet()
+wallet_e.setup("0xEEEE", "Eve")
+
+// Mint initial tokens to Wallet A
+print("\n💰 Minting initial tokens to Wallet A...")
+let mint_result = token.mint("0xAAAA", 10000)
+print("   Initial balance A: " + string(token.balance_of("0xAAAA")) + " ZXS")
+print("")
+
+// ===== TRANSFER PHASE =====
+print("\n📋 PHASE 2: SEQUENTIAL TRANSFERS (A → B → C → D → E)")
+print("-" * 80)
+
+let transfer_results = []
+
+// Transfer A -> B
+print("\n🔄 Transfer 1: A → B (1000 ZXS)")
+let result_ab = wallet_a.send_token(token, "0xBBBB", 1000)
+transfer_results = transfer_results + [result_ab]
+print("   Balance A: " + string(token.balance_of("0xAAAA")) + " ZXS")
+print("   Balance B: " + string(token.balance_of("0xBBBB")) + " ZXS")
+
+// Transfer B -> C
+print("\n🔄 Transfer 2: B → C (800 ZXS)")
+let result_bc = wallet_b.send_token(token, "0xCCCC", 800)
+transfer_results = transfer_results + [result_bc]
+print("   Balance B: " + string(token.balance_of("0xBBBB")) + " ZXS")
+print("   Balance C: " + string(token.balance_of("0xCCCC")) + " ZXS")
+
+// Transfer C -> D
+print("\n🔄 Transfer 3: C → D (600 ZXS)")
+let result_cd = wallet_c.send_token(token, "0xDDDD", 600)
+transfer_results = transfer_results + [result_cd]
+print("   Balance C: " + string(token.balance_of("0xCCCC")) + " ZXS")
+print("   Balance D: " + string(token.balance_of("0xDDDD")) + " ZXS")
+
+// Transfer D -> E
+print("\n🔄 Transfer 4: D → E (400 ZXS)")
+let result_de = wallet_d.send_token(token, "0xEEEE", 400)
+transfer_results = transfer_results + [result_de]
+print("   Balance D: " + string(token.balance_of("0xDDDD")) + " ZXS")
+print("   Balance E: " + string(token.balance_of("0xEEEE")) + " ZXS")
+
+// Additional transfer E -> A (completing the circle)
+print("\n🔄 Transfer 5: E → A (200 ZXS) - Completing the circle")
+let result_ea = wallet_e.send_token(token, "0xAAAA", 200)
+transfer_results = transfer_results + [result_ea]
+print("   Balance E: " + string(token.balance_of("0xEEEE")) + " ZXS")
+print("   Balance A: " + string(token.balance_of("0xAAAA")) + " ZXS")
+
+print("\n✅ All transfers completed")
+
+// ===== PERFORMANCE ANALYSIS =====
+print("\n\n📋 PHASE 3: TRANSFER VERIFICATION")
+print("-" * 80)
+
+// ===== BRIDGE TESTING =====
+print("\n\n📋 PHASE 4: CROSS-CHAIN BRIDGE TESTING")
+print("-" * 80)
+
+// Create bridge
+print("\n🌉 Creating bridge...")
+let bridge = Bridge()
+print("[BRIDGE] Initialized: Ethereum <-> Polygon")
+
+print("\n🌉 Bridge Test 1: Wallet A bridges 500 ZXS to Polygon")
+let bridge_result_1 = bridge.lock_and_bridge(token, "0xAAAA", "0xAAAA_POLYGON", 500)
+
+if bridge_result_1["success"] {
+    let bridge_tx = bridge_result_1["bridge_tx"]
+    print("\n   ✅ Bridge successful!")
+    print("   Amount locked: " + string(bridge_tx["amount"]) + " ZXS")
+    print("   Bridge fee: " + string(bridge_tx["fee"]) + " ZXS")
+    print("   Amount minted on target: " + string(bridge_tx["amount_after_fee"]) + " ZXS")
+}
+
+print("\n🌉 Bridge Test 2: Wallet B bridges 200 ZXS to Polygon")
+let bridge_result_2 = bridge.lock_and_bridge(token, "0xBBBB", "0xBBBB_POLYGON", 200)
+
+// ===== FINAL STATISTICS =====
+print("\n\n📋 PHASE 5: FINAL STATISTICS & VERIFICATION")
+print("-" * 80)
+
+print("\n💰 Token Statistics:")
+let token_stats = token.get_stats()
+print("   Name: " + string(token_stats["name"]))
+print("   Symbol: " + string(token_stats["symbol"]))
+print("   Total Supply: " + string(token_stats["total_supply"]) + " ZXS")
+print("   Total Transfers: " + string(token_stats["total_transfers"]))
+print("   Unique Holders: " + string(token_stats["unique_holders"]))
+
+print("\n👛 Wallet Balances:")
+print("   Wallet A (Alice):   " + string(token.balance_of("0xAAAA")) + " ZXS")
+print("   Wallet B (Bob):     " + string(token.balance_of("0xBBBB")) + " ZXS")
+print("   Wallet C (Charlie): " + string(token.balance_of("0xCCCC")) + " ZXS")
+print("   Wallet D (David):   " + string(token.balance_of("0xDDDD")) + " ZXS")
+print("   Wallet E (Eve):     " + string(token.balance_of("0xEEEE")) + " ZXS")
+
+print("\n🌉 Bridge Statistics:")
+let bridge_stats = bridge.get_stats()
+print("   Bridge: " + string(bridge_stats["source_chain"]) + " <-> " + string(bridge_stats["target_chain"]))
+print("   Total Bridges: " + string(bridge_stats["total_bridges"]))
+print("   Total Fees Collected: " + string(bridge_stats["total_fees_collected"]) + " ZXS")
+print("   Bridge Fee: " + string(bridge_stats["bridge_fee_bp"] / 100) + "%")
+
+print("\n📊 Transfer History:")
+let history = token.get_history()
+i = 0
+while i < len(history) {
+    let tx = history[i]
+    print("   " + string(i + 1) + ". " + string(tx["from"]) + " → " + string(tx["to"]) + ": " + string(tx["amount"]) + " ZXS")
+    i = i + 1
+}
+
+// ===== TEST VALIDATION =====
+print("\n\n📋 PHASE 6: TEST VALIDATION")
+print("-" * 80)
+
+let all_tests_passed = true
+
+// Test 1: Verify transfer chain
+print("\n🧪 Test 1: Verify sequential transfer chain")
+let expected_b = 0  // Received 1000, sent 800 to C, then bridged remaining 200
+let actual_b = token.balance_of("0xBBBB")
+if actual_b == expected_b {
+    print("   ✅ Wallet B balance correct: " + string(actual_b) + " ZXS")
+} else {
+    print("   ❌ Wallet B balance incorrect: Expected " + string(expected_b) + ", got " + string(actual_b))
+    all_tests_passed = false
+}
+
+// Test 2: Verify no tokens lost
+print("\n🧪 Test 2: Verify total supply conservation")
+let sum_balances = token.balance_of("0xAAAA") + token.balance_of("0xBBBB") + token.balance_of("0xCCCC") + token.balance_of("0xDDDD") + token.balance_of("0xEEEE") + token.balance_of("0xBRIDGE")
+let expected_total = 10000
+if sum_balances == expected_total {
+    print("   ✅ Total supply conserved: " + string(sum_balances) + " ZXS")
+} else {
+    print("   ❌ Total supply mismatch: Expected " + string(expected_total) + ", got " + string(sum_balances))
+    all_tests_passed = false
+}
+
+// Test 3: Verify bridge locked tokens
+print("\n🧪 Test 3: Verify bridge locked tokens")
+let expected_locked = 500 + 200  // Two bridge transactions (A: 500, B: 200)
+let actual_locked = token.balance_of("0xBRIDGE")
+if actual_locked == expected_locked {
+    print("   ✅ Bridge locked tokens correct: " + string(actual_locked) + " ZXS")
+} else {
+    print("   ❌ Bridge locked tokens incorrect: Expected " + string(expected_locked) + ", got " + string(actual_locked))
+    all_tests_passed = false
+}
+
+// Test 4: Verify all transfers succeeded
+print("\n🧪 Test 4: Verify all transfers succeeded")
+let failed_transfers = 0
+i = 0
+while i < len(transfer_results) {
+    if !transfer_results[i]["success"] {
+        failed_transfers = failed_transfers + 1
+    }
+    i = i + 1
+}
+if failed_transfers == 0 {
+    print("   ✅ All " + string(len(transfer_results)) + " transfers succeeded")
+} else {
+    print("   ❌ " + string(failed_transfers) + " transfers failed")
+    all_tests_passed = false
+}
+
+// ===== FINAL RESULTS =====
+print("\n\n" + "=" * 80)
+if all_tests_passed {
+    print("  ✅ ALL TESTS PASSED")
+} else {
+    print("  ❌ SOME TESTS FAILED")
+}
+print("=" * 80)
+print("\n")

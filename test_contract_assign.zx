@@ -1,0 +1,13 @@
+// Simple test for contract data assignment
+contract TestContract {
+    data id = ""
+    
+    action setId(value) {
+        id = value
+        return id
+    }
+}
+
+let tc = TestContract()
+let result = tc.setId("test123")
+print("Result: " + result)

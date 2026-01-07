@@ -1,0 +1,71 @@
+// Performance Test: 10,000 transactions
+// Using exact working format
+
+export contract TestToken {
+    data balances = {}
+    
+    action _dummy() {
+        return true
+    }
+    
+    action mint(address, amount) {
+        let current = balances[address]
+        if current == null {
+            current = 0
+        }
+        balances[address] = current + amount
+        return {"success": true}
+    }
+    
+    action transfer(from, to, amount) {
+        let from_balance = balances[from]
+        if from_balance == null {
+            from_balance = 0
+        }
+        
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        
+        if from_balance < amount {
+            return {"success": false, "error": "Insufficient balance"}
+        }
+        
+        if amount <= 0 {
+            return {"success": false, "error": "Invalid amount"}
+        }
+        
+        balances[from] = from_balance - amount
+        balances[to] = to_balance + amount
+        
+        return {"success": true}
+    }
+}
+
+// Initialize
+let token = TestToken()
+token.mint("0xALICE", 100000000)
+
+// Run test
+let start = time()
+let count = 0
+let target = 10000
+
+storage_begin_batch()
+
+while count < target {
+    let addr = "0xUSER_" + string(count)
+    token.transfer("0xALICE", addr, 10)
+    count = count + 1
+}
+
+storage_commit_batch()
+
+let end = time()
+let duration = end - start
+let tps = target / duration
+
+print("Processed " + string(target) + " transactions")
+print("Duration: " + string(duration) + " seconds")
+print("TPS: " + string(tps))

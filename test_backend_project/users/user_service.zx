@@ -1,0 +1,108 @@
+// User Service - Business logic for user operations
+use "../utils/validation.zx"
+use "../utils/crypto.zx"
+use "../db/database.zx"
+use "./user_model.zx"
+
+export contract UserService {
+    data name = "UserService"
+    
+    action register_user(email, password, user_name) {
+        print("[USER_SERVICE] Registering user: " + email)
+        
+        // Validate input
+        if !validate_email(email) {
+            return {
+                "success": false,
+                "error": "Invalid email address"
+            }
+        }
+        
+        if !validate_password(password) {
+            return {
+                "success": false,
+                "error": "Password must be at least 8 characters"
+            }
+        }
+        
+        if !validate_string(user_name, 2, 50) {
+            return {
+                "success": false,
+                "error": "Name must be between 2 and 50 characters"
+            }
+        }
+        
+        // Check if user already exists
+        let existing = db.find_user_by_email(email)
+        if existing != null {
+            return {
+                "success": false,
+                "error": "User already exists"
+            }
+        }
+        
+        // Create user
+        let user_id = generate_id()
+        let pwd_hash = hash_password(password)
+        
+        let user = User()
+        user.create(user_id, email, user_name, pwd_hash)
+        
+        // Save to database
+        let user_data = user.to_dict()
+        user_data["password_hash"] = pwd_hash
+        db.save_user(user_id, user_data)
+        
+        return {
+            "success": true,
+            "user": user.to_public()
+        }
+    }
+    
+    action authenticate(email, password) {
+        print("[USER_SERVICE] Authenticating user: " + email)
+        
+        // Find user
+        let user_data = db.find_user_by_email(email)
+        if user_data == null {
+            return {
+                "success": false,
+                "error": "Invalid credentials"
+            }
+        }
+        
+        // Verify password
+        let pwd_hash = user_data["password_hash"]
+        if !verify_password(password, pwd_hash) {
+            return {
+                "success": false,
+                "error": "Invalid credentials"
+            }
+        }
+        
+        return {
+            "success": true,
+            "user_id": user_data["id"],
+            "email": user_data["email"],
+            "name": user_data["name"]
+        }
+    }
+    
+    action get_user_profile(user_id) {
+        let user_data = db.get_user(user_id)
+        if user_data == null {
+            return null
+        }
+        
+        return {
+            "id": user_data["id"],
+            "email": user_data["email"],
+            "name": user_data["name"],
+            "created_at": user_data["created_at"]
+        }
+    }
+}
+
+export let userService = UserService()
+
+print("[USER_SERVICE] User service loaded")

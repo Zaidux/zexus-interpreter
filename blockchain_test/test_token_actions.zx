@@ -1,0 +1,32 @@
+// Quick test to verify all token actions are available
+use "./token_silent.zx"
+
+print("\n🧪 Testing TokenSilent Actions\n")
+
+let token = TokenSilent()
+
+// Check available actions
+print("Available actions: " + string(token.actions))
+
+// Test each action
+print("\n1. Testing balance_of...")
+let balance = token.balance_of("0xALICE")
+print("   ✓ balance_of works - Balance: " + string(balance))
+
+print("\n2. Testing mint...")
+let mint_result = token.mint("0xALICE", 1000)
+print("   ✓ mint works - Result: " + string(mint_result))
+
+print("\n3. Testing balance_of again...")
+balance = token.balance_of("0xALICE")
+print("   ✓ New balance: " + string(balance))
+
+print("\n4. Testing transfer...")
+let transfer_result = token.transfer("0xALICE", "0xBOB", 100)
+print("   ✓ transfer works - Result: " + string(transfer_result))
+
+print("\n5. Testing get_stats...")
+let stats = token.get_stats()
+print("   ✓ get_stats works - Stats: " + string(stats))
+
+print("\n✅ All actions working correctly!\n")

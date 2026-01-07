@@ -1,0 +1,212 @@
+// Task Service - Business logic for task operations
+use "../utils/validation.zx"
+use "../utils/crypto.zx"
+use "../db/database.zx"
+use "../config.zx"
+use "./task_model.zx"
+
+export contract TaskService {
+    data name = "TaskService"
+    
+    action create_task(user_id, title, description) {
+        print("[TASK_SERVICE] Creating task for user: " + string(user_id))
+        
+        // Validate input
+        if !validate_string(title, 1, 100) {
+            return {
+                "success": false,
+                "error": "Title must be between 1 and 100 characters"
+            }
+        }
+        
+        if !validate_string(description, 0, 500) {
+            return {
+                "success": false,
+                "error": "Description must be less than 500 characters"
+            }
+        }
+        
+        // Check user task limit
+        let user_tasks = db.get_user_tasks(user_id)
+        let max_tasks = get_config("max_tasks_per_user")
+        if len(user_tasks) >= max_tasks {
+            return {
+                "success": false,
+                "error": "Maximum task limit reached"
+            }
+        }
+        
+        // Create task
+        let task_id = generate_id()
+        let task = Task()
+        task.create(task_id, user_id, title, description)
+        
+        // Save to database
+        db.save_task(task_id, task.to_dict())
+        
+        return {
+            "success": true,
+            "task": task.to_dict()
+        }
+    }
+    
+    action get_task(task_id, user_id) {
+        let task_data = db.get_task(task_id)
+        
+        if task_data == null {
+            return {
+                "success": false,
+                "error": "Task not found"
+            }
+        }
+        
+        // Check ownership
+        if task_data["user_id"] != user_id {
+            return {
+                "success": false,
+                "error": "Unauthorized"
+            }
+        }
+        
+        return {
+            "success": true,
+            "task": task_data
+        }
+    }
+    
+    action update_task_status(task_id, user_id, new_status) {
+        print("[TASK_SERVICE] Updating task status: " + task_id)
+        
+        // Validate status
+        if !validate_status(new_status) {
+            return {
+                "success": false,
+                "error": "Invalid status"
+            }
+        }
+        
+        // Get task
+        let task_data = db.get_task(task_id)
+        if task_data == null {
+            return {
+                "success": false,
+                "error": "Task not found"
+            }
+        }
+        
+        // Check ownership
+        if task_data["user_id"] != user_id {
+            return {
+                "success": false,
+                "error": "Unauthorized"
+            }
+        }
+        
+        // Update status
+        task_data["status"] = new_status
+        task_data["updated_at"] = 1704326400
+        db.save_task(task_id, task_data)
+        
+        return {
+            "success": true,
+            "task": task_data
+        }
+    }
+    
+    action list_user_tasks(user_id, filter_status) {
+        print("[TASK_SERVICE] Listing tasks for user: " + string(user_id))
+        
+        let all_tasks = db.get_user_tasks(user_id)
+        
+        // Filter by status if provided
+        if filter_status != null and filter_status != "" {
+            let filtered = []
+            let i = 0
+            while i < len(all_tasks) {
+                let task = all_tasks[i]
+                if task != null and task["status"] == filter_status {
+                    filtered = filtered + [task]
+                }
+                i = i + 1
+            }
+            return {
+                "success": true,
+                "tasks": filtered,
+                "count": len(filtered)
+            }
+        }
+        
+        return {
+            "success": true,
+            "tasks": all_tasks,
+            "count": len(all_tasks)
+        }
+    }
+    
+    action delete_task(task_id, user_id) {
+        print("[TASK_SERVICE] Deleting task: " + task_id)
+        
+        // Get task
+        let task_data = db.get_task(task_id)
+        if task_data == null {
+            return {
+                "success": false,
+                "error": "Task not found"
+            }
+        }
+        
+        // Check ownership
+        if task_data["user_id"] != user_id {
+            return {
+                "success": false,
+                "error": "Unauthorized"
+            }
+        }
+        
+        // Delete
+        db.delete_task(task_id)
+        
+        return {
+            "success": true,
+            "message": "Task deleted"
+        }
+    }
+    
+    action get_task_stats(user_id) {
+        let tasks = db.get_user_tasks(user_id)
+        let stats = {
+            "total": len(tasks),
+            "pending": 0,
+            "in_progress": 0,
+            "completed": 0,
+            "cancelled": 0
+        }
+        
+        let i = 0
+        while i < len(tasks) {
+            let task = tasks[i]
+            if task != null {
+                let status = task["status"]
+                if status == "pending" {
+                    stats["pending"] = stats["pending"] + 1
+                }
+                if status == "in_progress" {
+                    stats["in_progress"] = stats["in_progress"] + 1
+                }
+                if status == "completed" {
+                    stats["completed"] = stats["completed"] + 1
+                }
+                if status == "cancelled" {
+                    stats["cancelled"] = stats["cancelled"] + 1
+                }
+            }
+            i = i + 1
+        }
+        
+        return stats
+    }
+}
+
+export let taskService = TaskService()
+
+print("[TASK_SERVICE] Task service loaded")

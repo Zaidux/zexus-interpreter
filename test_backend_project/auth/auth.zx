@@ -1,0 +1,71 @@
+// Authentication Service
+use "../users/user_service.zx"
+use "./session.zx"
+
+export contract AuthService {
+    data name = "AuthService"
+    
+    action register(email, password, user_name) {
+        print("[AUTH] Registration attempt: " + email)
+        
+        let result = userService.register_user(email, password, user_name)
+        
+        print("[AUTH DEBUG] result:", result)
+        print("[AUTH DEBUG] result type:", type(result))
+        print("[AUTH DEBUG] result['success']:", result["success"])
+        print("[AUTH DEBUG] result['user']:", result["user"])
+        
+        if !result["success"] {
+            return result
+        }
+        
+        // Create session for new user
+        let user = result["user"]
+        let session = sessionManager.create_session(user["id"], user["email"])
+        
+        return {
+            "success": true,
+            "user": user,
+            "token": session["token"]
+        }
+    }
+    
+    action login(email, password) {
+        print("[AUTH] Login attempt: " + email)
+        
+        let auth_result = userService.authenticate(email, password)
+        
+        if !auth_result["success"] {
+            return auth_result
+        }
+        
+        // Create session
+        let session = sessionManager.create_session(
+            auth_result["user_id"],
+            auth_result["email"]
+        )
+        
+        return {
+            "success": true,
+            "user": {
+                "id": auth_result["user_id"],
+                "email": auth_result["email"],
+                "name": auth_result["name"]
+            },
+            "token": session["token"]
+        }
+    }
+    
+    action logout(token) {
+        print("[AUTH] Logout")
+        return sessionManager.destroy_session(token)
+    }
+    
+    action verify_token(token) {
+        return sessionManager.validate_session(token)
+    }
+}
+
+export let authService = AuthService()
+
+print("[AUTH] Auth service loaded")

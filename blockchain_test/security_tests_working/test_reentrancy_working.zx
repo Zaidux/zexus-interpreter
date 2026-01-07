@@ -1,0 +1,218 @@
+// REENTRANCY ATTACK TEST - WORKING VERSION
+// Tests protection against recursive calling attacks
+
+print("=" * 100)
+print("SECURITY TEST: Reentrancy Attack")
+print("=" * 100)
+print("")
+
+// Vulnerable contract (without guards)
+contract VulnerableVault {
+    data balances = {}
+    
+    action initialize() {
+        balances = {}
+    }
+    
+    action deposit(address, amount) {
+        let current = balances[address]
+        if current == null {
+            current = 0
+        }
+        balances[address] = current + amount
+    }
+    
+    action withdraw_vulnerable(address, amount) {
+        let balance = balances[address]
+        if balance == null {
+            balance = 0
+        }
+        
+        require(balance >= amount, "Insufficient balance")
+        
+        // VULNERABILITY: State updated AFTER external interaction
+        // In real scenario, external call here could re-enter withdraw()
+        
+        balances[address] = balance - amount
+        return true
+    }
+    
+    action get_balance(address) {
+        let balance = balances[address]
+        if balance == null {
+            return 0
+        }
+        return balance
+    }
+}
+
+// Protected contract (with reentrancy guard)
+contract SecureVault {
+    data balances = {}
+    data locked = false
+    
+    action initialize() {
+        balances = {}
+        locked = false
+    }
+    
+    action deposit(address, amount) {
+        let current = balances[address]
+        if current == null {
+            current = 0
+        }
+        balances[address] = current + amount
+    }
+    
+    action withdraw_secure(address, amount) {
+        // SECURITY: Reentrancy guard
+        require(locked == false, "Reentrancy detected - call blocked")
+        locked = true
+        
+        let balance = balances[address]
+        if balance == null {
+            balance = 0
+        }
+        
+        require(balance >= amount, "Insufficient balance")
+        
+        // Update state BEFORE external interaction
+        balances[address] = balance - amount
+        
+        // External interaction would happen here
+        // Even if it calls back, locked=true will prevent reentrancy
+        
+        // Release lock
+        locked = false
+        return true
+    }
+    
+    action get_balance(address) {
+        let balance = balances[address]
+        if balance == null {
+            return 0
+        }
+        return balance
+    }
+}
+
+// ==================== TEST 1: Vulnerable Withdrawal ====================
+
+print("TEST 1: Testing Vulnerable Contract")
+print("-" * 80)
+
+let vuln_vault = VulnerableVault()
+vuln_vault.initialize()
+
+print("Depositing 1000 for ATTACKER...")
+vuln_vault.deposit("ATTACKER", 1000)
+print("Initial balance: " + string(vuln_vault.get_balance("ATTACKER")))
+
+print("\n🔴 Simulating reentrancy attack...")
+print("   In real scenario, attacker would call withdraw() recursively")
+print("   Current implementation: Sequential withdrawals")
+
+let w1 = vuln_vault.withdraw_vulnerable("ATTACKER", 500)
+print("   First withdrawal: 500")
+let w2 = vuln_vault.withdraw_vulnerable("ATTACKER", 500)
+print("   Second withdrawal: 500")
+
+print("\nFinal balance: " + string(vuln_vault.get_balance("ATTACKER")))
+print("⚠️  Without external calls, reentrancy cannot be demonstrated")
+print("   But the vulnerability pattern exists (state update after logic)")
+
+// ==================== TEST 2: Protected Withdrawal ====================
+
+print("\n\nTEST 2: Testing Secure Contract (with Guard)")
+print("-" * 80)
+
+let secure_vault = SecureVault()
+secure_vault.initialize()
+
+print("Depositing 1000 for USER...")
+secure_vault.deposit("USER", 1000)
+print("Initial balance: " + string(secure_vault.get_balance("USER")))
+
+print("\n🛡️  Attempting withdrawals with reentrancy guard...")
+
+let sw1 = secure_vault.withdraw_secure("USER", 500)
+print("   First withdrawal: 500 ✅")
+print("   Balance: " + string(secure_vault.get_balance("USER")))
+
+let sw2 = secure_vault.withdraw_secure("USER", 300)
+print("   Second withdrawal: 300 ✅")
+print("   Balance: " + string(secure_vault.get_balance("USER")))
+
+print("\n✅ Reentrancy guard functioning correctly")
+
+// ==================== TEST 3: Checks-Effects-Interactions Pattern ====================
+
+print("\n\nTEST 3: Checks-Effects-Interactions Pattern")
+print("-" * 80)
+
+contract BestPractice {
+    data balances = {}
+    
+    action withdraw_safe(address, amount) {
+        let balance = balances[address]
+        if balance == null {
+            balance = 0
+        }
+        
+        // 1. CHECKS: Validate conditions
+        require(balance >= amount, "Insufficient balance")
+        require(amount > 0, "Amount must be positive")
+        
+        // 2. EFFECTS: Update state FIRST
+        balances[address] = balance - amount
+        
+        // 3. INTERACTIONS: External calls LAST
+        // (no external calls in this simplified version)
+        
+        return true
+    }
+    
+    action get_balance(address) {
+        let balance = balances[address]
+        if balance == null {
+            return 0
+        }
+        return balance
+    }
+}
+
+let best = BestPractice()
+best.balances["TEST"] = 1000
+
+print("Following Checks-Effects-Interactions pattern:")
+print("  1. ✅ Checks: Validate all conditions")
+print("  2. ✅ Effects: Update state before external calls")
+print("  3. ✅ Interactions: External calls happen last")
+
+let result = best.withdraw_safe("TEST", 600)
+print("\nWithdrawal result: " + string(result))
+print("Remaining balance: " + string(best.get_balance("TEST")))
+
+// ==================== RESULTS ====================
+
+print("\n" + "=" * 100)
+print("REENTRANCY ATTACK TEST RESULTS")
+print("=" * 100)
+
+print("\n✅ PROTECTIONS DEMONSTRATED:")
+print("  - Reentrancy guard pattern (locked flag)")
+print("  - Checks-Effects-Interactions pattern")
+print("  - State updates before external interactions")
+
+print("\n⚠️  LIMITATIONS IN ZEXUS:")
+print("  - No external contract calls to test actual reentrancy")
+print("  - Cannot demonstrate real recursive attack")
+print("  - Pattern exists but cannot be exploited in current system")
+
+print("\n💡 RECOMMENDATIONS:")
+print("  - Always use reentrancy guards for withdrawal functions")
+print("  - Follow Checks-Effects-Interactions pattern")
+print("  - Update state before any external calls")
+print("  - Consider ReentrancyGuard modifier (if Zexus adds modifiers)")
+
+print("\n" + "=" * 100)

@@ -1,0 +1,8 @@
+export contract User {
+    data id = ""
+    
+    action create(user_id) {
+        id = user_id
+        return true
+    }
+}

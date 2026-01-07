@@ -1,0 +1,151 @@
+// ERC20-like Token Contract - SECURE VERSION
+// Implements proper access control and input validation
+
+export contract TokenSecure {
+    data name = "TestToken"
+    data symbol = "TST"
+    data decimals = 18
+    data total_supply = 0
+    data balances = {}
+    data allowances = {}
+    data transfer_history = []
+    data owner = ""  // Contract owner
+    
+    action setup(token_name, token_symbol, initial_supply) {
+        name = token_name
+        symbol = token_symbol
+        total_supply = initial_supply
+        
+        // Set contract owner to deployer
+        owner = msg["sender"]
+        
+        // Mint initial supply to contract creator
+        let creator = msg["sender"]
+        balances[creator] = initial_supply
+        
+        print("[TOKEN] Initialized: " + string(token_name) + " (" + string(token_symbol) + ")")
+        print("[TOKEN] Total Supply: " + string(initial_supply))
+        print("[TOKEN] Owner: " + string(owner))
+        
+        return {
+            "success": true,
+            "name": token_name,
+            "symbol": token_symbol,
+            "supply": initial_supply,
+            "owner": owner
+        }
+    }
+    
+    action balance_of(address) {
+        if balances[address] == null {
+            return 0
+        }
+        return balances[address]
+    }
+    
+    action transfer(from, to, amount) {
+        print("[TOKEN] Transfer: " + string(from) + " -> " + string(to) + " : " + string(amount))
+        
+        // SECURITY FIX #1: Validate sender authorization
+        // Only the sender themselves or an approved spender can transfer
+        let sender = msg["sender"]
+        require(sender == from, "Not authorized to transfer from this address")
+        
+        // SECURITY FIX #2: Validate amount is positive
+        require(amount > 0, "Amount must be positive")
+        
+        // SECURITY FIX #3: Validate addresses are not empty
+        require(from != "", "From address cannot be empty")
+        require(to != "", "To address cannot be empty")
+        require(len(from) >= 6, "From address too short")
+        require(len(to) >= 6, "To address too short")
+        
+        // Get balances
+        let from_balance = balances[from]
+        if from_balance == null {
+            from_balance = 0
+        }
+        
+        // SECURITY FIX #4: Validate sufficient balance
+        require(from_balance >= amount, "Insufficient balance")
+        
+        // SECURITY FIX #5: Overflow protection on recipient balance
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        require(to_balance + amount > to_balance, "Overflow detected on recipient balance")
+        
+        // Execute transfer
+        balances[from] = from_balance - amount
+        balances[to] = to_balance + amount
+        
+        // Record in history
+        let transfer_record = {
+            "from": from,
+            "to": to,
+            "amount": amount,
+            "from_balance": balances[from],
+            "to_balance": balances[to],
+            "sender": sender
+        }
+        
+        transfer_history = transfer_history + [transfer_record]
+        
+        print("[TOKEN] ✅ Transfer successful")
+        
+        return {
+            "success": true,
+            "transfer": transfer_record
+        }
+    }
+    
+    action mint(to, amount) {
+        print("[TOKEN] Minting " + string(amount) + " to " + string(to))
+        
+        // SECURITY FIX #6: Only owner can mint
+        let sender = msg["sender"]
+        require(sender == owner, "Only owner can mint tokens")
+        
+        // SECURITY FIX #7: Validate amount
+        require(amount > 0, "Mint amount must be positive")
+        require(to != "", "To address cannot be empty")
+        require(len(to) >= 6, "To address too short")
+        
+        // Get current balance
+        let to_balance = balances[to]
+        if to_balance == null {
+            to_balance = 0
+        }
+        
+        // SECURITY FIX #8: Overflow protection
+        require(to_balance + amount > to_balance, "Overflow detected on mint")
+        require(total_supply + amount > total_supply, "Overflow detected on total supply")
+        
+        // Execute mint
+        balances[to] = to_balance + amount
+        total_supply = total_supply + amount
+        
+        return {
+            "success": true,
+            "amount": amount,
+            "new_balance": balances[to],
+            "total_supply": total_supply
+        }
+    }
+    
+    action get_history() {
+        return transfer_history
+    }
+    
+    action get_stats() {
+        return {
+            "name": name,
+            "symbol": symbol,
+            "total_supply": total_supply,
+            "total_transfers": len(transfer_history),
+            "unique_holders": len(balances),
+            "owner": owner
+        }
+    }
+}

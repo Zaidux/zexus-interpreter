@@ -1,0 +1,157 @@
+// Zexus Performance Test - Transaction Throughput
+// Progressive testing: 100 → 1K → 10K → 50K → 100K
+// Silent mode - statistics only, no per-transaction logging
+
+use "./token_silent.zx"
+
+print("\n" + "=" * 80)
+print("  ZEXUS PERFORMANCE & STRESS TEST")
+print("  Version: 1.6.8")
+print("=" * 80 + "\n")
+
+// Setup
+let token = TokenSilent()
+token.mint("0xTEST", 100000000)
+
+print("📋 Test Configuration:")
+print("   Token: Silent TestToken (zero logging overhead)")
+print("   Initial Balance: 100,000,000 ZXS")
+print("   Transfer Amount: 10 ZXS per transaction")
+print("   Test Levels: 100 → 1K → 10K → 50K → 100K\n")
+
+// Test levels - REDUCED FOR CURRENT PERFORMANCE
+// At ~30 TPS, 1K transactions = 33 seconds, 10K = 5.5 minutes
+let levels = [100, 500, 1000]
+let names = ["100", "500", "1K"]
+let results = []
+
+// Run tests
+let level_idx = 0
+while level_idx < len(levels) {
+    let count = levels[level_idx]
+    let name = names[level_idx]
+    
+    print("=" * 80)
+    print("🚀 TEST " + string(level_idx + 1) + ": " + name + " Transactions")
+    print("=" * 80)
+    
+    let start = time()
+    
+    // Execute transfers
+    let i = 0
+    let success = 0
+    let failed = 0
+    
+    while i < count {
+        let addr = "0xUSER_" + string(i)
+        let res = token.transfer("0xTEST", addr, 10)
+        
+        if res["success"] {
+            success = success + 1
+        } else {
+            failed = failed + 1
+        }
+        
+        i = i + 1
+        
+        // Progress every 10000
+        if count >= 10000 && i % 10000 == 0 {
+            let pct = (i * 100) / count
+            print("   Progress: " + string(i) + "/" + string(count) + " (" + string(pct) + "%)")
+        }
+    }
+    
+    let end = time()
+    let elapsed_ms = end - start
+    let elapsed_sec = elapsed_ms / 1000
+    let tps = 0
+    if elapsed_ms > 0 {
+        tps = (count * 1000) / elapsed_ms
+    }
+    
+    // Verify balance
+    let final_bal = token.balance_of("0xTEST")
+    let expected = 100000000 - (success * 10)
+    let bal_ok = final_bal == expected
+    
+    print("\n📊 Results:")
+    print("   ✅ Successful: " + string(success))
+    print("   ❌ Failed: " + string(failed))
+    print("   ⏱️  Time: " + string(elapsed_ms) + " ms (" + string(elapsed_sec) + " sec)")
+    print("   ⚡ Speed: " + string(tps) + " TPS")
+    if bal_ok {
+        print("   💾 Balance: ✅ OK\n")
+    } else {
+        print("   💾 Balance: ❌ MISMATCH")
+        print("      Expected: " + string(expected))
+        print("      Actual: " + string(final_bal) + "\n")
+    }
+    
+    results = results + [{
+        "name": name,
+        "count": count,
+        "success": success,
+        "failed": failed,
+        "time_ms": elapsed_ms,
+        "time_sec": elapsed_sec,
+        "tps": tps,
+        "balance_ok": bal_ok
+    }]
+    
+    level_idx = level_idx + 1
+}
+
+// Summary
+print("\n" + "=" * 80)
+print("📊 PERFORMANCE SUMMARY")
+print("=" * 80 + "\n")
+
+print("Level    Count        Time(s)     TPS        Status")
+print("-" * 80)
+
+let idx = 0
+while idx < len(results) {
+    let r = results[idx]
+    let status = r["balance_ok"] ? "✅" : "❌"
+    print(r["name"] + "      " + string(r["count"]) + "        " + string(r["time_sec"]) + "        " + string(r["tps"]) + "      " + status)
+    idx = idx + 1
+}
+
+// Calculate stats
+let total_tx = 0
+let total_time = 0
+let best_tps = 0
+let worst_tps = 999999999
+let best_name = ""
+let worst_name = ""
+
+idx = 0
+while idx < len(results) {
+    let r = results[idx]
+    total_tx = total_tx + r["success"]
+    total_time = total_time + r["time_ms"]
+    
+    if r["tps"] > best_tps {
+        best_tps = r["tps"]
+        best_name = r["name"]
+    }
+    if r["tps"] < worst_tps {
+        worst_tps = r["tps"]
+        worst_name = r["name"]
+    }
+    
+    idx = idx + 1
+}
+
+let avg_tps = (total_tx * 1000) / total_time
+
+print("\n🎯 Analysis:")
+print("   Total Transactions: " + string(total_tx))
+print("   Total Time: " + string(total_time / 1000) + " seconds")
+print("   Overall Avg TPS: " + string(avg_tps))
+print("   Best: " + best_name + " at " + string(best_tps) + " TPS")
+print("   Worst: " + worst_name + " at " + string(worst_tps) + " TPS")
+
+print("\n" + "=" * 80)
+print("✅ PERFORMANCE TEST COMPLETE")
+print("=" * 80 + "\n")

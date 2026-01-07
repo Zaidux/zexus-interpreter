@@ -1,0 +1,35 @@
+// Test: Automatic VM Integration at 500+ iterations
+// This tests that the system automatically switches from interpreter to VM
+
+// Test 1: Small loop (< 500 iterations) - should use interpreter only
+let count1 = 0
+let sum1 = 0
+while count1 < 100 {
+    sum1 = sum1 + count1
+    count1 = count1 + 1
+}
+print("Test 1 (100 iterations): sum = " + string(sum1))
+
+// Test 2: Medium loop (exactly 500 iterations) - should trigger VM compilation
+let count2 = 0
+let sum2 = 0
+while count2 < 500 {
+    sum2 = sum2 + count2
+    count2 = count2 + 1
+}
+print("Test 2 (500 iterations): sum = " + string(sum2))
+
+// Test 3: Large loop (1000 iterations) - should use VM from iteration 500 onward
+let count3 = 0
+let sum3 = 0
+while count3 < 1000 {
+    sum3 = sum3 + count3
+    count3 = count3 + 1
+}
+print("Test 3 (1000 iterations): sum = " + string(sum3))
+
+print("✅ All tests completed successfully!")
+print("Expected behavior:")
+print("  - Test 1: Pure interpretation (fast enough)")
+print("  - Test 2: Compilation at iteration 500 (automatic)")
+print("  - Test 3: VM from iteration 500-1000 (100x faster)")

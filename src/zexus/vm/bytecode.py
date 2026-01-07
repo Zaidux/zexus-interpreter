@@ -155,13 +155,13 @@ class Bytecode:
     Bytecode container with instructions and constants pool.
     Used by both compiler and evaluator to represent compiled code.
     """
-    def __init__(self):
-        self.instructions: List[Tuple[str, Any]] = []
-        self.constants: List[Any] = []
+    def __init__(self, instructions=None, constants=None):
+        self.instructions: List[Tuple] = instructions if instructions is not None else []
+        self.constants: List[Any] = constants if constants is not None else []
         self.metadata: Dict[str, Any] = {
             'source_file': None,
             'version': '1.0',
-            'created_by': 'unknown'
+            'created_by': 'compiler'
         }
         
     def add_instruction(self, opcode: str, operand: Any = None) -> int:
@@ -224,9 +224,9 @@ class Bytecode:
         lines.append("\nInstructions:")
         for i, (opcode, operand) in enumerate(self.instructions):
             if operand is not None:
-                lines.append(f"  {i:4d}  {opcode:20s} {operand}")
+                lines.append(f"  {i:4d}  {opcode.name:20s} {operand}")
             else:
-                lines.append(f"  {i:4d}  {opcode:20s}")
+                lines.append(f"  {i:4d}  {opcode.name:20s}")
         
         return "\n".join(lines)
     

@@ -1,0 +1,312 @@
+// TaskMaster API - Main Entry Point
+// This backend demonstrates:
+// - Multi-file imports/exports
+// - Contract-based architecture
+// - Business logic separation
+// - Authentication & Authorization
+// - CRUD operations
+// - Data validation
+// - Session management
+
+use "config.zx"
+use "auth/auth.zx"
+use "users/user_service.zx"
+use "tasks/task_service.zx"
+use "db/database.zx"
+
+print("\n============================================================")
+print("  TaskMaster API - Backend Server")
+print("  Version: 1.0.0")
+print("============================================================\n")
+
+// Route handler using pattern matching
+function handle_request(method, path, data, token) {
+    print("\n[REQUEST] " + method + " " + path)
+    
+    return match path {
+        "/auth/register" => handle_register(data)
+        "/auth/login" => handle_login(data)
+        "/auth/logout" => handle_logout(token)
+        "/tasks" => handle_tasks_list(method, token, data)
+        "/tasks/create" => handle_task_create(token, data)
+        "/tasks/stats" => handle_task_stats(token)
+        "/user/profile" => handle_user_profile(token)
+        "/health" => handle_health()
+        _ => {
+            "status": 404,
+            "error": "Route not found"
+        }
+    }
+}
+
+// Auth handlers
+function handle_register(data) {
+    let result = authService.register(
+        data["email"],
+        data["password"],
+        data["name"]
+    )
+    
+    if result["success"] {
+        return {
+            "status": 201,
+            "message": "User registered successfully",
+            "user": result["user"],
+            "token": result["token"]
+        }
+    }
+    
+    return {
+        "status": 400,
+        "error": result["error"]
+    }
+}
+
+function handle_login(data) {
+    let result = authService.login(data["email"], data["password"])
+    
+    if result["success"] {
+        return {
+            "status": 200,
+            "message": "Login successful",
+            "user": result["user"],
+            "token": result["token"]
+        }
+    }
+    
+    return {
+        "status": 401,
+        "error": result["error"]
+    }
+}
+
+function handle_logout(token) {
+    authService.logout(token)
+    return {
+        "status": 200,
+        "message": "Logged out successfully"
+    }
+}
+
+// Task handlers
+function handle_task_create(token, data) {
+    // Verify authentication
+    let auth = authService.verify_token(token)
+    if !auth["valid"] {
+        return {
+            "status": 401,
+            "error": "Unauthorized"
+        }
+    }
+    
+    let result = taskService.create_task(
+        auth["user_id"],
+        data["title"],
+        data["description"]
+    )
+    
+    if result["success"] {
+        return {
+            "status": 201,
+            "message": "Task created",
+            "task": result["task"]
+        }
+    }
+    
+    return {
+        "status": 400,
+        "error": result["error"]
+    }
+}
+
+function handle_tasks_list(method, token, data) {
+    // Verify authentication
+    let auth = authService.verify_token(token)
+    if !auth["valid"] {
+        return {
+            "status": 401,
+            "error": "Unauthorized"
+        }
+    }
+    
+    let filter = null
+    if data != null and "status" in data {
+        filter = data["status"]
+    }
+    
+    let result = taskService.list_user_tasks(auth["user_id"], filter)
+    
+    return {
+        "status": 200,
+        "tasks": result["tasks"],
+        "count": result["count"]
+    }
+}
+
+function handle_task_stats(token) {
+    let auth = authService.verify_token(token)
+    if !auth["valid"] {
+        return {
+            "status": 401,
+            "error": "Unauthorized"
+        }
+    }
+    
+    let stats = taskService.get_task_stats(auth["user_id"])
+    
+    return {
+        "status": 200,
+        "stats": stats
+    }
+}
+
+function handle_user_profile(token) {
+    let auth = authService.verify_token(token)
+    if !auth["valid"] {
+        return {
+            "status": 401,
+            "error": "Unauthorized"
+        }
+    }
+    
+    let profile = userService.get_user_profile(auth["user_id"])
+    
+    return {
+        "status": 200,
+        "profile": profile
+    }
+}
+
+function handle_health() {
+    let stats = db.get_stats()
+    return {
+        "status": 200,
+        "message": "Server is healthy",
+        "stats": stats
+    }
+}
+
+// Simulate API requests
+print("\n============================================================")
+print("  TESTING API ENDPOINTS")
+print("============================================================\n")
+
+// Test 1: Health check
+print("--- Test 1: Health Check ---")
+let health = handle_request("GET", "/health", null, null)
+print("Response: " + string(health["status"]) + " - " + health["message"])
+print("Stats: " + string(health["stats"]["total_users"]) + " users, " + 
+      string(health["stats"]["total_tasks"]) + " tasks\n")
+
+// Test 2: Register user
+print("--- Test 2: User Registration ---")
+let reg_data = {
+    "email": "alice@example.com",
+    "password": "securepass123",
+    "name": "Alice Johnson"
+}
+let reg_response = handle_request("POST", "/auth/register", reg_data, null)
+print("Response: " + string(reg_response["status"]) + " - " + reg_response["message"])
+print("User: " + reg_response["user"]["name"] + " (" + reg_response["user"]["email"] + ")")
+let alice_token = reg_response["token"]
+print("Token: " + alice_token + "\n")
+
+// Test 3: Register another user
+print("--- Test 3: Register Second User ---")
+let bob_data = {
+    "email": "bob@example.com",
+    "password": "password999",
+    "name": "Bob Smith"
+}
+let bob_response = handle_request("POST", "/auth/register", bob_data, null)
+print("Response: " + string(bob_response["status"]) + " - " + bob_response["message"])
+print("User: " + bob_response["user"]["name"] + "\n")
+
+// Test 4: Login
+print("--- Test 4: User Login ---")
+let login_data = {
+    "email": "alice@example.com",
+    "password": "securepass123"
+}
+let login_response = handle_request("POST", "/auth/login", login_data, null)
+print("Response: " + string(login_response["status"]) + " - " + login_response["message"])
+print("Logged in as: " + string(login_response["user"]["name"]) + "\n")
+
+// Test 5: Create tasks
+print("--- Test 5: Create Tasks ---")
+let task1_data = {
+    "title": "Implement authentication",
+    "description": "Add user auth system with JWT tokens"
+}
+let task1_response = handle_request("POST", "/tasks/create", task1_data, alice_token)
+print("Task 1: " + string(task1_response["status"]) + " - " + task1_response["task"]["title"])
+
+let task2_data = {
+    "title": "Write documentation",
+    "description": "Document all API endpoints"
+}
+let task2_response = handle_request("POST", "/tasks/create", task2_data, alice_token)
+print("Task 2: " + string(task2_response["status"]) + " - " + task2_response["task"]["title"])
+
+let task3_data = {
+    "title": "Deploy to production",
+    "description": "Set up CI/CD pipeline"
+}
+let task3_response = handle_request("POST", "/tasks/create", task3_data, alice_token)
+print("Task 3: " + string(task3_response["status"]) + " - " + task3_response["task"]["title"] + "\n")
+
+// Test 6: List tasks
+print("--- Test 6: List All Tasks ---")
+let tasks_response = handle_request("GET", "/tasks", null, alice_token)
+print("Response: " + string(tasks_response["status"]) + " - Found " + string(tasks_response["count"]) + " tasks")
+print("Tasks:")
+let tasks = tasks_response["tasks"]
+let i = 0
+while i < len(tasks) {
+    let task = tasks[i]
+    if task != null {
+        print("  - " + task["title"] + " [" + task["status"] + "]")
+    }
+    i = i + 1
+}
+print("")
+
+// Test 7: Get task stats
+print("--- Test 7: Task Statistics ---")
+let stats_response = handle_request("GET", "/tasks/stats", null, alice_token)
+print("Response: " + string(stats_response["status"]))
+let stats = stats_response["stats"]
+print("Total: " + string(stats["total"]))
+print("Pending: " + string(stats["pending"]))
+print("In Progress: " + string(stats["in_progress"]))
+print("Completed: " + string(stats["completed"]) + "\n")
+
+// Test 8: Get user profile
+print("--- Test 8: User Profile ---")
+let profile_response = handle_request("GET", "/user/profile", null, alice_token)
+print("Response: " + string(profile_response["status"]))
+let profile = profile_response["profile"]
+print("Name: " + string(profile["name"]))
+print("Email: " + string(profile["email"]) + "\n")
+
+// Test 9: Unauthorized access
+print("--- Test 9: Unauthorized Access ---")
+let unauth_response = handle_request("GET", "/tasks", null, "invalid_token")
+print("Response: " + string(unauth_response["status"]) + " - " + unauth_response["error"] + "\n")
+
+// Test 10: Invalid route
+print("--- Test 10: Invalid Route ---")
+let notfound_response = handle_request("GET", "/invalid/path", null, alice_token)
+print("Response: " + string(notfound_response["status"]) + " - " + notfound_response["error"] + "\n")
+
+// Final stats
+print("\n============================================================")
+print("  FINAL DATABASE STATISTICS")
+print("============================================================")
+let final_stats = db.get_stats()
+print("Total Users: " + string(final_stats["total_users"]))
+print("Total Tasks: " + string(final_stats["total_tasks"]))
+print("Active Sessions: " + string(final_stats["active_sessions"]))
+print("\n============================================================")
+print("  API TESTING COMPLETE ✅")
+print("============================================================\n")
