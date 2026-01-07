@@ -768,7 +768,11 @@ class SQLiteBackend(StorageBackend):
         self._auto_commit = False  # Default to batching for performance
         self._batch_depth = 0  # Track nested batch contexts
         self._write_count = 0  # Track writes in current batch
-        self._batch_size = 100  # Auto-commit every N writes
+        try:
+            env_batch_size = int(os.environ.get("ZEXUS_STORAGE_BATCH_SIZE", "512"))
+            self._batch_size = max(env_batch_size, 1)
+        except ValueError:
+            self._batch_size = 512
 
     def begin_batch(self):
         """Start transaction batching - disables auto-commit"""
@@ -943,16 +947,24 @@ class ContractStorage:
 
         self._cache_enabled = False
         self._action_cache = None
+        self._persistent_cache = {}
 
     def get(self, key):
         """Get value from storage and deserialize from JSON"""
         if self._cache_enabled and self._action_cache is not None and key in self._action_cache:
             return self._action_cache[key]
 
+        if key in self._persistent_cache:
+            value = self._persistent_cache[key]
+            if self._cache_enabled and self._action_cache is not None:
+                self._action_cache[key] = value
+            return value
+
         raw_val = self.backend.get(key)
         if raw_val is None:
             if self._cache_enabled and self._action_cache is not None:
                 self._action_cache[key] = None
+            self._persistent_cache[key] = None
             return None
         try:
             meta = json.loads(raw_val)
@@ -969,6 +981,7 @@ class ContractStorage:
                 self._map_meta_cache[key] = meta
                 if self._cache_enabled and self._action_cache is not None:
                     self._action_cache[key] = storage_map
+                self._persistent_cache[key] = storage_map
                 return storage_map
         except json.JSONDecodeError:
             pass
@@ -976,6 +989,7 @@ class ContractStorage:
         value = self._deserialize(raw_val)
         if self._cache_enabled and self._action_cache is not None:
             self._action_cache[key] = value
+        self._persistent_cache[key] = value
         return value
 
     def set(self, key, value):
@@ -983,6 +997,7 @@ class ContractStorage:
         if isinstance(value, StorageMap):
             if self._cache_enabled and self._action_cache is not None:
                 self._action_cache[key] = value
+            self._persistent_cache[key] = value
             self._store_map(key, value)
             return
 
@@ -992,6 +1007,7 @@ class ContractStorage:
             storage_map.mark_all_dirty()
             if self._cache_enabled and self._action_cache is not None:
                 self._action_cache[key] = storage_map
+            self._persistent_cache[key] = storage_map
             self._store_map(key, storage_map)
             return
 
@@ -999,6 +1015,7 @@ class ContractStorage:
         self.backend.set(key, serialized)
         if self._cache_enabled and self._action_cache is not None:
             self._action_cache[key] = value
+        self._persistent_cache[key] = value
         self._log_transaction("SET", key, serialized)
 
     def delete(self, key):
@@ -1014,6 +1031,7 @@ class ContractStorage:
         self.backend.delete(key)
         if self._cache_enabled and self._action_cache is not None:
             self._action_cache.pop(key, None)
+        self._persistent_cache.pop(key, None)
         self._log_transaction("DELETE", key, None)
     
     def begin_batch(self):

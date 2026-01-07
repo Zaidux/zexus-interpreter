@@ -18,9 +18,12 @@ EVAL_SUMMARY = {
 }
 
 def is_error(obj):
-    return isinstance(obj, EvaluationError)
+    return getattr(obj, "_is_error", False)
 
 def debug_log(message, data=None, level='debug'):
+    # Fast path: most hot paths pass level='debug' with logging disabled
+    if level == 'debug' and not zexus_config.enable_debug_logs:
+        return
     try:
         if not zexus_config.should_log(level):
             return

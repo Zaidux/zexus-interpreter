@@ -1071,6 +1071,7 @@ class EvaluationError(Object):
         self.stack_trace = stack_trace or []
         self.filename = filename
         self.suggestion = suggestion
+        self._is_error = True
 
     def inspect(self):
         return f"❌ Error: {self.message}"

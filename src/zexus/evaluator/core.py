@@ -64,8 +64,132 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         except ImportError:
             debug_log("Evaluator", "Unified executor not available")
         
+        # Dispatch table for hot node types (avoids repeated isinstance chains)
+        self._node_handlers = {}
+        self._initialize_dispatch_table()
+
         if self.use_vm and VM_AVAILABLE:
             self._initialize_vm()
+
+    def _initialize_dispatch_table(self):
+        """Precompute handlers for hot node types to reduce isinstance overhead."""
+        try:
+            self._node_handlers = {
+                zexus_ast.Program: self._handle_program_node,
+                zexus_ast.ExpressionStatement: self._handle_expression_statement,
+                zexus_ast.BlockStatement: self._handle_block_statement,
+                zexus_ast.ReturnStatement: self._handle_return_statement,
+                zexus_ast.LetStatement: self._handle_let_statement,
+                zexus_ast.ConstStatement: self._handle_const_statement,
+                zexus_ast.AssignmentExpression: self._handle_assignment_expression,
+                zexus_ast.IfStatement: self._handle_if_statement,
+                zexus_ast.WhileStatement: self._handle_while_statement,
+                zexus_ast.ActionStatement: self._handle_action_statement,
+                zexus_ast.FunctionStatement: self._handle_function_statement,
+                zexus_ast.Identifier: self._handle_identifier,
+                zexus_ast.IntegerLiteral: self._handle_integer_literal,
+                zexus_ast.Boolean: self._handle_boolean_literal,
+                zexus_ast.NullLiteral: self._handle_null_literal,
+                zexus_ast.ThisExpression: self._handle_this_expression,
+                zexus_ast.InfixExpression: self._handle_infix_expression,
+                zexus_ast.PrefixExpression: self._handle_prefix_expression,
+                zexus_ast.CallExpression: self._handle_call_expression,
+                zexus_ast.MethodCallExpression: self._handle_method_call_expression,
+                zexus_ast.ListLiteral: self._handle_list_literal,
+            }
+        except AttributeError:
+            # AST variants may omit certain nodes; keep table empty in that case
+            self._node_handlers = {}
+
+    def _handle_program_node(self, node, env, stack_trace):
+        debug_log("  Program node", f"{len(node.statements)} statements")
+        return self.ceval_program(node.statements, env)
+
+    def _handle_expression_statement(self, node, env, stack_trace):
+        debug_log("  ExpressionStatement node")
+        return self.eval_node(node.expression, env, stack_trace)
+
+    def _handle_block_statement(self, node, env, stack_trace):
+        debug_log("  BlockStatement node", f"{len(node.statements)} statements")
+        return self.eval_block_statement(node, env, stack_trace)
+
+    def _handle_return_statement(self, node, env, stack_trace):
+        debug_log("  ReturnStatement node")
+        return self.eval_return_statement(node, env, stack_trace)
+
+    def _handle_let_statement(self, node, env, stack_trace):
+        return self.eval_let_statement(node, env, stack_trace)
+
+    def _handle_const_statement(self, node, env, stack_trace):
+        return self.eval_const_statement(node, env, stack_trace)
+
+    def _handle_assignment_expression(self, node, env, stack_trace):
+        debug_log("  AssignmentExpression node")
+        return self.eval_assignment_expression(node, env, stack_trace)
+
+    def _handle_if_statement(self, node, env, stack_trace):
+        debug_log("  IfStatement node")
+        return self.eval_if_statement(node, env, stack_trace)
+
+    def _handle_while_statement(self, node, env, stack_trace):
+        debug_log("  WhileStatement node")
+        return self.eval_while_statement(node, env, stack_trace)
+
+    def _handle_action_statement(self, node, env, stack_trace):
+        debug_log("  ActionStatement node", f"action {node.name.value}")
+        return self.eval_action_statement(node, env, stack_trace)
+
+    def _handle_function_statement(self, node, env, stack_trace):
+        debug_log("  FunctionStatement node", f"function {node.name.value}")
+        print(f"[CORE] Evaluating FunctionStatement: {node.name.value}, modifiers: {getattr(node, 'modifiers', [])}", flush=True)
+        result = self.eval_function_statement(node, env, stack_trace)
+        print(f"[CORE] FunctionStatement result: {result}", flush=True)
+        return result
+
+    def _handle_identifier(self, node, env, stack_trace):
+        debug_log("  Identifier node", node.value)
+        return self.eval_identifier(node, env)
+
+    def _handle_integer_literal(self, node, env, stack_trace):
+        debug_log("  IntegerLiteral node", node.value)
+        from ..object import Integer
+        return Integer(node.value)
+
+    def _handle_boolean_literal(self, node, env, stack_trace):
+        debug_log("  Boolean node", f"value: {node.value}")
+        from ..object import Boolean
+        return Boolean(node.value)
+
+    def _handle_null_literal(self, node, env, stack_trace):
+        debug_log("  NullLiteral node")
+        return NULL
+
+    def _handle_this_expression(self, node, env, stack_trace):
+        debug_log("  ThisExpression node")
+        return self.eval_this_expression(node, env, stack_trace)
+
+    def _handle_infix_expression(self, node, env, stack_trace):
+        debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
+        return self.eval_infix_expression(node, env, stack_trace)
+
+    def _handle_prefix_expression(self, node, env, stack_trace):
+        debug_log("  PrefixExpression node", f"{node.operator} {node.right}")
+        return self.eval_prefix_expression(node, env, stack_trace)
+
+    def _handle_call_expression(self, node, env, stack_trace):
+        debug_log("🚀 CallExpression node", f"Calling {node.function}")
+        return self.eval_call_expression(node, env, stack_trace)
+
+    def _handle_method_call_expression(self, node, env, stack_trace):
+        debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
+        return self.eval_method_call_expression(node, env, stack_trace)
+
+    def _handle_list_literal(self, node, env, stack_trace):
+        debug_log("  ListLiteral node", f"{len(node.elements)} elements")
+        elems = self.eval_expressions(node.elements, env)
+        if is_error(elems):
+            return elems
+        return List(elems)
     
     def eval_node(self, node, env, stack_trace=None):
         if node is None: 
@@ -82,6 +206,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         stack_trace.append(current_frame)
         
         debug_log("eval_node", f"Processing {node_type.__name__}")
+
+        handler = self._node_handlers.get(node_type)
+        if handler:
+            return handler(node, env, stack_trace)
         
         try:
             # === STATEMENTS ===
