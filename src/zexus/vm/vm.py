@@ -709,12 +709,59 @@ class VM:
         consts = list(getattr(bytecode, "constants", []))
         instrs = list(getattr(bytecode, "instructions", []))
         ip = 0
-        stack: List[Any] = []
         running = True
         return_value = None
         profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
         profile_ops = profile_flag is not None and profile_flag.lower() not in ("0", "false", "off")
         opcode_counts: Optional[Dict[str, int]] = {} if profile_ops else None
+
+        class _EvalStack:
+            __slots__ = ("data", "sp")
+
+            def __init__(self, capacity: int):
+                base = max(32, capacity)
+                self.data = [None] * base
+                self.sp = 0
+
+            def _ensure_capacity(self):
+                if self.sp >= len(self.data):
+                    self.data.extend([None] * len(self.data))
+
+            def append(self, value: Any):
+                self._ensure_capacity()
+                self.data[self.sp] = value
+                self.sp += 1
+
+            def pop(self):
+                if self.sp == 0:
+                    raise IndexError("pop from empty stack")
+                self.sp -= 1
+                value = self.data[self.sp]
+                self.data[self.sp] = None
+                return value
+
+            def peek(self, default: Any = None):
+                if self.sp == 0:
+                    return default
+                return self.data[self.sp - 1]
+
+            def __len__(self) -> int:
+                return self.sp
+
+            def __bool__(self) -> bool:
+                return self.sp > 0
+
+            def __getitem__(self, index: int):
+                if index < 0:
+                    index = self.sp + index
+                if index < 0 or index >= self.sp:
+                    raise IndexError("stack index out of range")
+                return self.data[index]
+
+            def snapshot(self) -> List[Any]:
+                return self.data[:self.sp]
+
+        stack = _EvalStack(len(instrs) * 2 if instrs else 32)
 
         def const(idx): return consts[idx] if 0 <= idx < len(consts) else None
 
@@ -926,7 +973,7 @@ class VM:
             if profile_ops:
                 opcode_counts[op_name] = opcode_counts.get(op_name, 0) + 1
             
-            if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack}")
+            if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack.snapshot()}")
             
             # Profile instruction (if enabled) - start timing
             instr_start_time = None
@@ -1139,7 +1186,7 @@ class VM:
             elif op == "AWAIT":
                 # Keep popping until we find a task to await
                 result_found = False
-                temp_stack = []
+                temp_stack = self.allocate_list(0)
                 
                 while stack and not result_found:
                     top = stack.pop()
@@ -1174,6 +1221,10 @@ class VM:
                 if not result_found:
                     for val in reversed(temp_stack):
                         stack.append(val)
+
+                if temp_stack:
+                    temp_stack.clear()
+                self.release_list(temp_stack)
 
             elif op_name == "REGISTER_EVENT":
                 event_name = const(operand[0]) if isinstance(operand, (list,tuple)) else const(operand)

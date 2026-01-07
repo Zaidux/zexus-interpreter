@@ -21,6 +21,7 @@
 - Introduced evaluator dispatch table for common AST nodes to skip the multi-hundred `isinstance` cascade during execution.
 - Specialized stack VM by front-loading a direct opcode dispatch map plus async-aware handlers, eliminating the cascading `if/elif` chain on hot opcodes.
 - Added optional `ZEXUS_VM_PROFILE_OPS=1` instrumentation to capture opcode frequencies for future tuning.
+- Preallocated stack arrays and reused pooled await buffers to slash transient list allocations inside the VM hot path.
 
 ### Profiling & VM Updates
 - Extended `profile_performance.py` with `--use-vm` flag for targeted profiling.
@@ -40,8 +41,11 @@
 | Dispatch table fast-path | 10,000 | 8,231 ms | 1,214 | VM receives faster evaluator input |
 | VM opcode dispatch table | 1,000 | 733 ms | 1,364 | Direct opcode handlers collapse VM branching |
 | VM opcode dispatch table | 10,000 | 8,482 ms | 1,178 | Same tuning applied to full 10k transfer run |
+| Stack preallocation + pooled await buffers | 1,000 | 670 ms | 1,492 | Batch size 2,048; lowest stack churn observed |
+| Stack preallocation + pooled await buffers | 10,000 | 8,064 ms | 1,240 | Batch size 2,048; fewer storage commits |
 
 ## Remaining Opportunities
 - Further tune SQLite batching thresholds to squeeze commit overhead.
 - Investigate VM dispatch hotspots (`eval_node`, `isinstance`) for specialization.
 - Explore incremental map hydration to support selective entry loading for very large maps.
+- Fix opcode profiling path (current `ZEXUS_VM_PROFILE_OPS=1` runs emit empty datasets).
