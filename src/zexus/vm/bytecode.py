@@ -54,6 +54,7 @@ class Opcode(IntEnum):
     CALL_FUNC_CONST = 51  # Call function by constant descriptor
     CALL_TOP = 52       # Call function on top of stack
     CALL_BUILTIN = 53   # Call builtin function
+    CALL_METHOD = 54    # Call method on object
     
     # Collections
     BUILD_LIST = 60     # Build list from stack items
@@ -163,6 +164,8 @@ class Bytecode:
             'version': '1.0',
             'created_by': 'compiler'
         }
+        self.names: List[str] = []
+        self.labels: Dict[str, int] = {}
         
     def add_instruction(self, opcode: str, operand: Any = None) -> int:
         """Add an instruction and return its index"""
@@ -270,6 +273,11 @@ class BytecodeBuilder:
         """Emit CALL_NAME instruction"""
         name_idx = self.bytecode.add_constant(name)
         return self.emit("CALL_NAME", (name_idx, arg_count))
+
+    def emit_call_method(self, method_name: str, arg_count: int) -> int:
+        """Emit CALL_METHOD instruction"""
+        name_idx = self.bytecode.add_constant(method_name)
+        return self.emit("CALL_METHOD", (name_idx, arg_count))
     
     def mark_label(self, label: str):
         """Mark a position with a label for jumps"""

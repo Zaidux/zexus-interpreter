@@ -10,6 +10,7 @@ NO FLAGS NEEDED - The system automatically chooses the best execution method.
 
 from typing import Any, Dict, Optional
 import time
+import os
 
 
 class WorkloadDetector:
@@ -162,6 +163,7 @@ class UnifiedExecutor:
         
         # VM instance (lazy init)
         self.vm = None
+        self._profile_reported = False
         
         # Compilation failures (don't retry)
         self.failed_compilations: set = set()
@@ -195,6 +197,10 @@ class UnifiedExecutor:
             Loop result
         """
         from ..object import NULL, EvaluationError
+        profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+        profile_active = profile_flag and profile_flag.lower() not in ("0", "false", "off")
+        verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+        profile_verbose = profile_active and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
         from ..evaluator.utils import is_error, is_truthy
         
         self.stats["total_executions"] += 1
@@ -278,6 +284,10 @@ class UnifiedExecutor:
         try:
             from ..vm.compiler import BytecodeCompiler
             from ..evaluator.bytecode_compiler import EvaluatorBytecodeCompiler
+            profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+            profile_active = profile_flag and profile_flag.lower() not in ("0", "false", "off")
+            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+            profile_verbose = profile_active and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
             
             # Try evaluator's bytecode compiler first (better integration)
             compiler = EvaluatorBytecodeCompiler()
@@ -286,14 +296,23 @@ class UnifiedExecutor:
             if bytecode and not compiler.errors:
                 self.compiled_loops[loop_id] = bytecode
                 self.workload.stats["vm_compilations"] += 1
+                if profile_verbose:
+                    print(f"[VM DEBUG] loop {loop_id} compiled to bytecode")
+                    print(f"[VM DEBUG] instructions={bytecode.instructions}")
+                    print("[VM DEBUG] constants={}".format(list(enumerate(bytecode.constants))))
                 return True
             else:
                 # Compilation failed
+                if profile_active:
+                    print(f"[VM DEBUG] loop {loop_id} compilation errors={compiler.errors}")
                 self.stats["compilation_failures"] += 1
                 return False
         
         except Exception as e:
             # Unexpected compilation error
+            profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+            if profile_flag and profile_flag.lower() not in ("0", "false", "off"):
+                print(f"[VM DEBUG] loop {loop_id} compilation exception={e}")
             self.stats["compilation_failures"] += 1
             return False
     
@@ -313,19 +332,38 @@ class UnifiedExecutor:
             # Lazy init VM
             if self.vm is None:
                 from ..vm.vm import VM, VMMode
+                gas_limit = 10_000_000
+                if profile_active:
+                    profile_limit_env = os.environ.get("ZEXUS_VM_PROFILE_GAS_LIMIT")
+                    if profile_limit_env is not None:
+                        try:
+                            gas_limit = int(profile_limit_env)
+                        except ValueError:
+                            gas_limit = 50_000_000
+                    else:
+                        gas_limit = 50_000_000
                 self.vm = VM(
                     mode=VMMode.AUTO,
                     use_jit=True,
                     max_heap_mb=1024,
-                    debug=False
+                    debug=False,
+                    gas_limit=gas_limit
                 )
             
             # Sync environment to VM
             self._sync_env_to_vm(env)
+            if hasattr(self.evaluator, 'builtins') and self.evaluator.builtins:
+                self.vm.builtins = {k: v for k, v in self.evaluator.builtins.items()}
             
             # Execute bytecode
             bytecode = self.compiled_loops[loop_id]
             result = self.vm.execute(bytecode, debug=False)
+            if profile_active:
+                profile = getattr(self.vm, "_last_opcode_profile", None)
+                if profile and not self._profile_reported:
+                    top_entries = profile[:10]
+                    print(f"[VM OPCODES] top={top_entries}")
+                    self._profile_reported = True
             
             # Sync environment back from VM
             self._sync_env_from_vm(env)
@@ -337,6 +375,8 @@ class UnifiedExecutor:
         
         except Exception as e:
             # VM execution failed
+            if profile_verbose:
+                print(f"[VM DEBUG] unified execution exception={e}")
             return EvaluationError(f"VM execution error: {e}")
     
     def _sync_env_to_vm(self, env):

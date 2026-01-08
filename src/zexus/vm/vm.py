@@ -20,6 +20,16 @@ import types
 from typing import List, Any, Dict, Tuple, Optional, Union, Callable
 from enum import Enum
 
+from ..object import (
+    Integer as ZInteger,
+    Float as ZFloat,
+    Boolean as ZBoolean,
+    String as ZString,
+    List as ZList,
+    Map as ZMap,
+    Null as ZNull,
+)
+
 # ==================== Backend / Optional Imports ====================
 
 # JIT Compiler
@@ -187,6 +197,21 @@ class VM:
             self.gas_metering = GasMetering(gas_limit=gas_limit, enable_timeout=enable_timeout)
             if debug:
                 print(f"[VM] Gas metering enabled: limit={gas_limit or 'unlimited'}")
+            profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+            if profile_flag and profile_flag.lower() not in ("0", "false", "off"):
+                profile_max_ops = os.environ.get("ZEXUS_VM_PROFILE_OPS_MAX", "50000000")
+                try:
+                    parsed_max = int(profile_max_ops)
+                except ValueError:
+                    parsed_max = 50_000_000
+                self.gas_metering.max_operations = max(parsed_max, self.gas_metering.max_operations)
+                profile_gas_limit = os.environ.get("ZEXUS_VM_PROFILE_GAS_LIMIT")
+                if profile_gas_limit is not None:
+                    try:
+                        parsed_limit = int(profile_gas_limit)
+                        self.gas_metering.set_limit(parsed_limit)
+                    except ValueError:
+                        pass
         
         # --- State Tracking ---
         self._events: Dict[str, List[Any]] = {}  # Event registry
@@ -340,6 +365,52 @@ class VM:
 
         if debug:
             print(f"[VM] Initialized | Mode: {mode.value} | JIT: {self.use_jit} | MemMgr: {self.use_memory_manager}")
+
+    # ==================== VM <-> Evaluator Conversions ====================
+
+    @staticmethod
+    def _wrap_for_builtin(value: Any) -> Any:
+        if isinstance(value, (ZInteger, ZFloat, ZString, ZBoolean, ZList, ZMap)) or value is None:
+            return value
+        if isinstance(value, bool):
+            return ZBoolean(value)
+        if isinstance(value, int):
+            return ZInteger(value)
+        if isinstance(value, float):
+            return ZFloat(value)
+        if isinstance(value, str):
+            return ZString(value)
+        if isinstance(value, list):
+            return ZList([VM._wrap_for_builtin(elem) for elem in value])
+        if isinstance(value, dict):
+            pairs = {}
+            for key, val in value.items():
+                wrapped_key = VM._wrap_for_builtin(key)
+                wrapped_val = VM._wrap_for_builtin(val)
+                pairs[wrapped_key] = wrapped_val
+            return ZMap(pairs)
+        return value
+
+    @staticmethod
+    def _unwrap_after_builtin(value: Any) -> Any:
+        if isinstance(value, (ZInteger, ZFloat, ZBoolean)):
+            return value.value
+        if isinstance(value, ZString):
+            # Return plain string while VM operates on Python primitives
+            return value.value
+        if isinstance(value, ZNull):
+            return None
+        if isinstance(value, ZList):
+            return [VM._unwrap_after_builtin(elem) for elem in value.elements]
+        if isinstance(value, ZMap):
+            return {
+                VM._unwrap_after_builtin(k): VM._unwrap_after_builtin(v)
+                for k, v in value.pairs.items()
+            }
+        # Fallback for simple wrapper objects that expose a value attr
+        if hasattr(value, "value") and not callable(getattr(value, "value")):
+            return value.value
+        return value
 
     def _get_cpu_count(self) -> int:
         import os
@@ -713,7 +784,11 @@ class VM:
         return_value = None
         profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
         profile_ops = profile_flag is not None and profile_flag.lower() not in ("0", "false", "off")
+        profile_verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+        profile_verbose = profile_verbose_flag and profile_verbose_flag.lower() not in ("0", "false", "off")
         opcode_counts: Optional[Dict[str, int]] = {} if profile_ops else None
+        if profile_ops and profile_verbose:
+            print(f"[VM DEBUG] opcode profiling enabled; instrs={len(instrs)}")
 
         class _EvalStack:
             __slots__ = ("data", "sp")
@@ -822,7 +897,12 @@ class VM:
             def wrapper(_):
                 b = _unwrap(stack.pop() if stack else 0)
                 a = _unwrap(stack.pop() if stack else 0)
-                stack.append(func(a, b))
+                try:
+                    stack.append(func(a, b))
+                except Exception as exc:
+                    if os.environ.get("ZEXUS_VM_PROFILE_OPS"):
+                        print(f"[VM DEBUG] binary op error func={func} a={a!r} b={b!r} exc={exc}")
+                    raise
             return wrapper
 
         def _binary_bool_op(func):
@@ -849,6 +929,41 @@ class VM:
             fn_obj = stack.pop() if stack else None
             res = await self._invoke_callable_or_funcdesc(fn_obj, args)
             stack.append(res)
+
+        async def _op_call_method(operand):
+            if not operand:
+                stack.append(None)
+                return
+
+            method_idx, arg_count = operand
+            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            target = stack.pop() if stack else None
+            method_name = const(method_idx)
+
+            if target is None:
+                stack.append(None)
+                return
+
+            result = None
+            try:
+                if hasattr(target, "call_method"):
+                    wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
+                    result = target.call_method(method_name, wrapped_args)
+                else:
+                    attr = getattr(target, method_name, None)
+                    if callable(attr):
+                        result = attr(*args)
+                    elif isinstance(target, dict) and method_name in target:
+                        candidate = target[method_name]
+                        result = candidate(*args) if callable(candidate) else candidate
+                    else:
+                        result = attr
+            except Exception as exc:
+                if debug:
+                    print(f"[VM] CALL_METHOD failed for {method_name}: {exc}")
+                raise
+
+            stack.append(self._unwrap_after_builtin(result))
 
         def _op_load_const(idx):
             stack.append(const(idx))
@@ -935,6 +1050,7 @@ class VM:
             "DUP": _op_dup,
             "CALL_NAME": _op_call_name,
             "CALL_TOP": _op_call_top,
+            "CALL_METHOD": _op_call_method,
             "ADD": _binary_op(lambda a, b: a + b),
             "SUB": _binary_op(lambda a, b: a - b),
             "MUL": _binary_op(lambda a, b: a * b),
@@ -957,7 +1073,7 @@ class VM:
             "INDEX": _op_index,
             "GET_LENGTH": _op_get_length,
         }
-        async_dispatch_ops = {"CALL_NAME", "CALL_TOP"}
+        async_dispatch_ops = {"CALL_NAME", "CALL_TOP", "CALL_METHOD"}
 
         # 3. Execution Loop
         prev_ip = None
@@ -994,11 +1110,13 @@ class VM:
                     gas_kwargs['count'] = operand if operand is not None else 0
                 elif op_name == "MERKLE_ROOT":
                     gas_kwargs['leaf_count'] = operand if operand is not None else 0
-                elif op_name in ("CALL_NAME", "CALL_TOP"):
+                elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD"):
                     if op_name == "CALL_NAME":
                         gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
-                    else:
+                    elif op_name == "CALL_TOP":
                         gas_kwargs['arg_count'] = operand if operand is not None else 0
+                    else:
+                        gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
                 
                 # Consume gas for operation
                 if not self.gas_metering.consume(op_name, **gas_kwargs):
@@ -1427,10 +1545,19 @@ class VM:
             
             if not callable(real_fn): return real_fn
             
-            res = real_fn(*args)
+            wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
+            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+            verbose_active = verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
+            if verbose_active:
+                fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
+                print(f"[VM DEBUG] calling builtin {fn_name} args={[type(a).__name__ for a in wrapped_args]}")
+            res = real_fn(*wrapped_args)
+            if verbose_active and res is None:
+                fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
+                print(f"[VM DEBUG] builtin {fn_name} returned None args={wrapped_args}")
             if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
-                return await res
-            return res
+                res = await res
+            return self._unwrap_after_builtin(res)
         except Exception as e:
             return e
 

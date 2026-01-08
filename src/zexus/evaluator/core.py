@@ -1,6 +1,7 @@
 # src/zexus/evaluator/core.py
 import traceback
 import asyncio
+import os
 from .. import zexus_ast
 from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
@@ -892,6 +893,15 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             self.vm_instance.builtins = vm_builtins
             self.vm_instance.env = vm_env
             result = self.vm_instance.execute(bytecode, debug=debug_mode)
+            profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+            if (
+                profile_flag and profile_flag.lower() not in ("0", "false", "off")
+                and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
+            ):
+                profile = getattr(self.vm_instance, "_last_opcode_profile", None)
+                size = len(profile) if profile else 0
+                print(f"[VM DEBUG] evaluator opcode profile size={size}")
             
             self.vm_stats['vm_executions'] += 1
             

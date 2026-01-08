@@ -4,6 +4,7 @@ Bytecode Compiler for Evaluator
 This module allows the evaluator to compile AST nodes to bytecode
 for VM execution when performance is critical.
 """
+import os
 from typing import Dict, List, Optional
 from .. import zexus_ast
 from ..vm.bytecode import Bytecode, BytecodeBuilder
@@ -145,13 +146,15 @@ class EvaluatorBytecodeCompiler:
         # Compile the value expression
         self._compile_node(node.value)
         # Store it
-        self.builder.emit_store(node.name.value)
+        name = str(node.name.value).strip()
+        self.builder.emit_store(name)
     
     def _compile_ConstStatement(self, node: zexus_ast.ConstStatement):
         """Compile const statement"""
         # Similar to let for now
         self._compile_node(node.value)
-        self.builder.emit_store(node.name.value)
+        name = str(node.name.value).strip()
+        self.builder.emit_store(name)
     
     def _compile_ReturnStatement(self, node: zexus_ast.ReturnStatement):
         """Compile return statement"""
@@ -314,7 +317,7 @@ class EvaluatorBytecodeCompiler:
         
         # Store function descriptor
         func_const_idx = self.builder.bytecode.add_constant(func_desc)
-        name_idx = self.builder.bytecode.add_constant(node.name.value)
+        name_idx = self.builder.bytecode.add_constant(str(node.name.value).strip())
         self.builder.emit("STORE_FUNC", (name_idx, func_const_idx))
     
     def _compile_FunctionStatement(self, node: zexus_ast.FunctionStatement):
@@ -426,7 +429,15 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_Identifier(self, node: zexus_ast.Identifier):
         """Compile identifier (variable load)"""
-        self.builder.emit_load(node.value)
+        name = str(node.value).strip()
+        profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+        verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+        if (
+            profile_flag and profile_flag.lower() not in ("0", "false", "off")
+            and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
+        ):
+            print(f"[VM DEBUG] compile identifier raw={node.value!r} normalized={name!r}")
+        self.builder.emit_load(name)
     
     def _compile_IntegerLiteral(self, node: zexus_ast.IntegerLiteral):
         """Compile integer literal"""
@@ -558,6 +569,21 @@ class EvaluatorBytecodeCompiler:
         self._compile_node(node.expression)
         # Emit await
         self.builder.emit("AWAIT")
+
+    def _compile_MethodCallExpression(self, node: zexus_ast.MethodCallExpression):
+        """Compile method call (object.method(...))"""
+        if self.builder is None:
+            return
+
+        # Load object first so it sits below the arguments on the stack
+        self._compile_node(node.object)
+
+        # Compile arguments in order
+        for arg in node.arguments:
+            self._compile_node(arg)
+
+        method_name = node.method.value if hasattr(node.method, 'value') else str(node.method)
+        self.builder.emit_call_method(method_name, len(node.arguments))
     
     def _compile_SpawnExpression(self, node):
         """Compile spawn expression"""
@@ -573,7 +599,8 @@ class EvaluatorBytecodeCompiler:
         # Store to name
         if isinstance(node.name, zexus_ast.Identifier):
             self.builder.emit("DUP")  # Keep value on stack
-            self.builder.emit_store(node.name.value)
+            name = str(node.name.value).strip()
+            self.builder.emit_store(name)
         else:
             self.errors.append(
                 "Complex assignment targets not yet supported in bytecode")

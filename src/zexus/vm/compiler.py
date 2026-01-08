@@ -321,7 +321,7 @@ class BytecodeCompiler:
             self._compile_node(arg)
         
         # Compile function
-        if isinstance(node.function, Identifier):
+        if isinstance(node.function, zexus_ast.Identifier):
             # Direct function call by name
             name = node.function.value
             const_idx = self._add_constant(name)
@@ -335,20 +335,18 @@ class BytecodeCompiler:
     
     def _compile_MethodCallExpression(self, node):
         """Compile method call (object.method())"""
-        # Load object
+        # Load object first (object must be below arguments on stack)
         self._compile_node(node.object)
-        
+
         # Compile arguments
         for arg in node.arguments:
             self._compile_node(arg)
-        
-        # Call method
+
+        # Call method via dedicated opcode
         method_name = node.method.value if hasattr(node.method, 'value') else str(node.method)
-        const_idx = self._add_constant(method_name)
+        name_idx = self._add_constant(method_name)
         arg_count = len(node.arguments)
-        
-        # For now, use CALL_NAME (will be enhanced for method dispatch)
-        self._emit(Opcode.CALL_NAME, const_idx, arg_count)
+        self._emit(Opcode.CALL_METHOD, name_idx, arg_count)
     
     # ==================== Collections ====================
     
