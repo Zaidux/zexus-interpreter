@@ -24,16 +24,13 @@ defer close_file();
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ DEFER statements evaluated successfully")
-    return True
 
 def test_pattern_statement():
     """Test pattern statement"""
@@ -52,16 +49,13 @@ pattern x {
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ PATTERN statement evaluated successfully")
-    return True
 
 def test_enum_statement():
     """Test enum statement"""
@@ -79,16 +73,13 @@ enum Color {
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ ENUM statement evaluated successfully")
-    return True
 
 def test_stream_statement():
     """Test stream statement"""
@@ -108,16 +99,13 @@ stream api_responses as response => {
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ STREAM statements evaluated successfully")
-    return True
 
 def test_watch_statement():
     """Test watch statement"""
@@ -136,16 +124,13 @@ watch user_name => print "Name updated";
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ WATCH statement evaluated successfully")
-    return True
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -163,7 +148,8 @@ if __name__ == "__main__":
     results = []
     for test in tests:
         try:
-            results.append(test())
+            result = test()
+            results.append(False if result is False else True)
         except Exception as e:
             print(f"✗ Test failed with exception: {e}")
             import traceback

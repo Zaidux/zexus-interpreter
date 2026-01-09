@@ -30,12 +30,8 @@ def test_environment_cleanup():
     gc.collect()
     
     # Check if it was collected
-    if weak_ref() is None:
-        print("✅ Environment cleanup: environments garbage collected properly")
-    else:
-        print("⚠️  Environment cleanup: environment still referenced")
-    
-    return True
+    assert weak_ref() is None, "Environment should be garbage collected"
+    print("✅ Environment cleanup: environments garbage collected properly")
 
 
 def test_object_reference_cleanup():
@@ -52,12 +48,8 @@ def test_object_reference_cleanup():
     final = len(gc.get_objects())
     growth = final - initial
     
-    if growth < 50:
-        print(f"✅ Object reference cleanup: minimal growth ({growth} objects)")
-    else:
-        print(f"⚠️  Object reference cleanup: some growth ({growth} objects)")
-    
-    return True
+    assert growth < 50, f"Object references retained unexpectedly ({growth})"
+    print(f"✅ Object reference cleanup: minimal growth ({growth} objects)")
 
 
 def test_nested_scope_cleanup():
@@ -74,15 +66,11 @@ def test_nested_scope_cleanup():
     del inner
     gc.collect()
     
-    if weak_inner() is None:
-        print("✅ Nested scope cleanup: inner scope collected")
-    else:
-        print("⚠️  Nested scope cleanup: inner scope retained")
-    
+    assert weak_inner() is None, "Inner scope should be collected"
+    print("✅ Nested scope cleanup: inner scope collected")
+
     del outer
     gc.collect()
-    
-    return True
 
 
 def test_circular_reference():
@@ -102,12 +90,8 @@ def test_circular_reference():
     del obj1, obj2
     gc.collect()
     
-    if weak1() is None and weak2() is None:
-        print("✅ Circular reference: Python GC handles circular refs")
-    else:
-        print("⚠️  Circular reference: some objects retained")
-    
-    return True
+    assert weak1() is None and weak2() is None, "Circular reference objects still alive"
+    print("✅ Circular reference: Python GC handles circular refs")
 
 
 def test_exception_cleanup():
@@ -126,12 +110,8 @@ def test_exception_cleanup():
     final = len(gc.get_objects())
     growth = final - initial
     
-    if growth < 30:
-        print(f"✅ Exception cleanup: minimal growth on errors ({growth} objects)")
-    else:
-        print(f"⚠️  Exception cleanup: some growth on errors ({growth} objects)")
-    
-    return True
+    assert growth < 30, f"Objects retained after exceptions: {growth}"
+    print(f"✅ Exception cleanup: minimal growth on errors ({growth} objects)")
 
 
 if __name__ == '__main__':
@@ -153,7 +133,10 @@ if __name__ == '__main__':
     
     for test in tests:
         try:
-            if test():
+            result = test()
+            if result is False:
+                failed += 1
+            else:
                 passed += 1
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")

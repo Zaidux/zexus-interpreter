@@ -13,7 +13,7 @@ from zexus.evaluator.core import evaluate, Evaluator
 from zexus.object import Environment
 
 
-def test_phase(name, code, description):
+def run_phase(name, code, description):
     """Run a single test phase"""
     print(f"\n{'='*80}")
     print(f"{name}")
@@ -62,7 +62,7 @@ let b = 5 * 6;
 let result = a + b;
 result
 """
-    result1, time1 = test_phase(
+    result1, time1 = run_phase(
         "TEST 1: Basic Arithmetic",
         code1,
         "Constant folding optimization"
@@ -102,7 +102,7 @@ while (i < 150) {
 }
 sum
 """
-    result3, time3 = test_phase(
+    result3, time3 = run_phase(
         "TEST 3: Hot Loop",
         code3,
         "JIT compilation after 100 iterations"
@@ -118,7 +118,7 @@ STATE["balance"] = STATE["balance"] - 100;
 TX_COMMIT();
 STATE["balance"]
 """
-    result4, time4 = test_phase(
+    result4, time4 = run_phase(
         "TEST 4: Blockchain Operations",
         code4,
         "STATE, TX_BEGIN, TX_COMMIT opcodes"
@@ -136,7 +136,7 @@ while (i < 120) {
 }
 count
 """
-    result5, time5 = test_phase(
+    result5, time5 = run_phase(
         "TEST 5: Combined Test",
         code5,
         "Optimization + JIT + Cache"

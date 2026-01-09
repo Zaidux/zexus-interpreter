@@ -25,6 +25,7 @@ class FunctionEvaluatorMixin:
     def __init__(self):
         # Initialize registries
         self.builtins = {}
+        self._allow_coroutine_result = False
         
         # Renderer Registry (moved from global scope to instance scope)
         self.render_registry = {
@@ -40,6 +41,22 @@ class FunctionEvaluatorMixin:
         self._register_main_entry_point_builtins()
         self._register_renderer_builtins()
     
+    def _execute_coroutine_to_completion(self, coroutine):
+        from ..object import EvaluationError
+
+        max_steps = 10000
+        pending_value = None
+
+        for _ in range(max_steps):
+            done, value = coroutine.resume(pending_value)
+            if done:
+                if isinstance(value, EvaluationError):
+                    return value
+                return value if value is not None else coroutine.result
+            pending_value = None
+
+        return EvaluationError("Coroutine did not complete within step limit")
+
     def eval_call_expression(self, node, env, stack_trace):
         debug_log("🚀 CallExpression node", f"Calling {node.function}")
         
@@ -268,10 +285,12 @@ class FunctionEvaluatorMixin:
                             # Re-raise exception to be caught by coroutine
                             raise e
                     
-                    # Create and return coroutine
+                    # Create coroutine and decide how to surface result
                     gen = async_generator()
                     coroutine = Coroutine(gen, fn)
-                    return coroutine
+                    if getattr(self, "_allow_coroutine_result", False):
+                        return coroutine
+                    return self._execute_coroutine_to_completion(coroutine)
                 
                 # Synchronous function execution
                 new_env = Environment(outer=fn.env)

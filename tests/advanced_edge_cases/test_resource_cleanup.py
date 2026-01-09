@@ -13,6 +13,8 @@ import tempfile
 import traceback
 import gc
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 from zexus.lexer import Lexer
@@ -39,33 +41,25 @@ def test_file_handle_cleanup():
         f.write("test content")
     
     try:
-        # Run code that opens the file
+        if not os.path.exists('/proc/self/fd'):
+            pytest.skip("/proc/self/fd not available for descriptor counting")
+
         code = f"""
         let content = file_read_text("{temp_path}");
         """
-        
-        initial_open_files = len([f for f in os.listdir('/proc/self/fd')] if os.path.exists('/proc/self/fd') else [])
-        
-        # Run code multiple times
+
+        initial_open_files = len(os.listdir('/proc/self/fd'))
+
         for _ in range(10):
             run_code(code)
-        
-        # Force garbage collection
+
         gc.collect()
-        
-        final_open_files = len([f for f in os.listdir('/proc/self/fd')] if os.path.exists('/proc/self/fd') else [])
-        
-        # Check if file descriptors didn't grow significantly
-        if os.path.exists('/proc/self/fd'):
-            growth = final_open_files - initial_open_files
-            if growth < 5:  # Allow some growth for normal operations
-                print(f"✅ File handle cleanup: handles managed properly ({growth} growth)")
-            else:
-                print(f"⚠️  File handle cleanup: potential leak ({growth} descriptors added)")
-        else:
-            print("✅ File handle cleanup: tested (fd counting not available)")
-        
-        return True
+
+        final_open_files = len(os.listdir('/proc/self/fd'))
+        growth = final_open_files - initial_open_files
+
+        assert growth < 5, f"File descriptors grew unexpectedly: {growth}"
+        print(f"✅ File handle cleanup: handles managed properly ({growth} growth)")
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -99,12 +93,8 @@ def test_memory_cleanup_after_execution():
     final_refs = len(gc.get_objects())
     growth = final_refs - initial_refs
     
-    if growth < 1000:  # Allow reasonable growth
-        print(f"✅ Memory cleanup after execution: managed properly ({growth} objects growth)")
-    else:
-        print(f"⚠️  Memory cleanup after execution: potential leak ({growth} objects added)")
-    
-    return True
+    assert growth < 1000, f"Potential memory leak detected: {growth} objects added"
+    print(f"✅ Memory cleanup after execution: managed properly ({growth} objects growth)")
 
 
 def test_environment_cleanup():
@@ -121,12 +111,8 @@ def test_environment_cleanup():
     gc.collect()
     
     # Check if it was collected
-    if weak_ref() is None:
-        print("✅ Environment cleanup: environments garbage collected properly")
-    else:
-        print("⚠️  Environment cleanup: environment still referenced")
-    
-    return True
+    assert weak_ref() is None, "Environment instance should be garbage collected"
+    print("✅ Environment cleanup: environments garbage collected properly")
 
 
 def test_function_closure_cleanup():
@@ -159,12 +145,8 @@ def test_function_closure_cleanup():
     final_objects = len(gc.get_objects())
     growth = final_objects - initial_objects
     
-    if growth < 500:
-        print(f"✅ Function closure cleanup: closures managed properly ({growth} objects growth)")
-    else:
-        print(f"⚠️  Function closure cleanup: potential leak ({growth} objects added)")
-    
-    return True
+    assert growth < 500, f"Closure objects leaking: {growth} additional objects"
+    print(f"✅ Function closure cleanup: closures managed properly ({growth} objects growth)")
 
 
 def test_circular_reference_cleanup():
@@ -189,12 +171,8 @@ def test_circular_reference_cleanup():
     final_objects = len(gc.get_objects())
     growth = final_objects - initial_objects
     
-    if growth < 300:
-        print(f"✅ Circular reference cleanup: managed properly ({growth} objects growth)")
-    else:
-        print(f"⚠️  Circular reference cleanup: potential leak ({growth} objects added)")
-    
-    return True
+    assert growth < 300, f"Circular references not cleaned up: {growth} objects"
+    print(f"✅ Circular reference cleanup: managed properly ({growth} objects growth)")
 
 
 def test_exception_cleanup():
@@ -222,12 +200,8 @@ def test_exception_cleanup():
     final_objects = len(gc.get_objects())
     growth = final_objects - initial_objects
     
-    if growth < 200:
-        print(f"✅ Exception cleanup: resources cleaned up on error ({growth} objects growth)")
-    else:
-        print(f"⚠️  Exception cleanup: potential leak on errors ({growth} objects added)")
-    
-    return True
+    assert growth < 200, f"Resources not cleaned after exceptions: {growth} objects"
+    print(f"✅ Exception cleanup: resources cleaned up on error ({growth} objects growth)")
 
 
 if __name__ == '__main__':
@@ -250,10 +224,11 @@ if __name__ == '__main__':
     
     for test in tests:
         try:
-            if test():
-                passed += 1
-            else:
+            result = test()
+            if result is False:
                 failed += 1
+            else:
+                passed += 1
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")
             traceback.print_exc()

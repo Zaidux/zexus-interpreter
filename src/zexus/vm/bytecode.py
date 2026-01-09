@@ -250,12 +250,33 @@ class BytecodeBuilder:
         self._label_positions: Dict[str, int] = {}
         self._forward_refs: Dict[str, List[int]] = {}
     
-    def emit(self, opcode: str, operand: Any = None) -> int:
-        """Emit an instruction"""
-        return self.bytecode.add_instruction(opcode, operand)
+    def emit(self, opcode: Any, operand: Any = None) -> int:
+        """Emit an instruction, normalizing opcode names to Opcode enum when possible."""
+        normalized = opcode
+        if isinstance(opcode, str):
+            try:
+                normalized = Opcode[opcode]
+            except KeyError:
+                normalized = opcode  # Leave custom opcodes untouched
+        return self.bytecode.add_instruction(normalized, operand)
     
-    def emit_constant(self, value: Any) -> int:
-        """Emit LOAD_CONST instruction"""
+    def emit_constant(self, value: Any, legacy_operand: Any = None) -> int:
+        """Emit LOAD_CONST instruction (legacy-compatible)."""
+        # Legacy call signature: emit_constant("LOAD_CONST", actual_value)
+        if legacy_operand is not None and isinstance(value, str):
+            opcode = value
+            operand = legacy_operand
+
+            if opcode == "LOAD_CONST":
+                const_idx = self.bytecode.add_constant(operand)
+                return self.emit("LOAD_CONST", const_idx)
+            if opcode == "LOAD_NAME":
+                # Legacy builder pushed raw identifiers instead of constant indices
+                return self.emit("LOAD_NAME", operand)
+            if opcode == "STORE_NAME":
+                return self.emit("STORE_NAME", operand)
+            return self.emit(opcode, operand)
+
         const_idx = self.bytecode.add_constant(value)
         return self.emit("LOAD_CONST", const_idx)
     
@@ -317,14 +338,14 @@ class BytecodeBuilder:
         """Emit MERKLE_ROOT - expects leaf_count items on stack"""
         return self.emit("MERKLE_ROOT", leaf_count)
     
-    def emit_state_read(self, key: str) -> int:
+    def emit_state_read(self, key: Any) -> int:
         """Emit STATE_READ instruction"""
-        key_idx = self.bytecode.add_constant(key)
+        key_idx = key if isinstance(key, int) else self.bytecode.add_constant(key)
         return self.emit("STATE_READ", key_idx)
     
-    def emit_state_write(self, key: str) -> int:
+    def emit_state_write(self, key: Any) -> int:
         """Emit STATE_WRITE instruction - expects value on stack"""
-        key_idx = self.bytecode.add_constant(key)
+        key_idx = key if isinstance(key, int) else self.bytecode.add_constant(key)
         return self.emit("STATE_WRITE", key_idx)
     
     def emit_tx_begin(self) -> int:

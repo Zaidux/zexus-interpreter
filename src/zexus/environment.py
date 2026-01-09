@@ -8,12 +8,72 @@ class Environment:
         self.modules = {}
         self._debug = False
 
-    def get(self, name):
+    # ---- Mapping protocol helpers -------------------------------------------------
+
+    def __contains__(self, name):
+        if name in self.store:
+            return True
+
+        if "." in name:
+            module_name, var_name = name.split(".", 1)
+            module = self.modules.get(module_name)
+            if module and var_name in module:
+                return True
+
+        if self.outer is not None and hasattr(self.outer, '__contains__'):
+            try:
+                return name in self.outer
+            except TypeError:
+                pass
+        return False
+
+    def __getitem__(self, name):
+        return self.get(name)
+
+    def __setitem__(self, name, value):
+        self.set(name, value)
+
+    def __iter__(self):
+        return iter(self.store)
+
+    def __len__(self):
+        return len(self.store)
+
+    def keys(self):
+        return self.store.keys()
+
+    def items(self):
+        return self.store.items()
+
+    def values(self):
+        return self.store.values()
+
+    def copy(self):
+        return dict(self.store)
+
+    def update(self, other):
+        if other is None:
+            return
+        if hasattr(other, 'items'):
+            for key, value in other.items():
+                self.set(key, value)
+        else:
+            for key in other:
+                self.set(key, other[key])
+
+    def setdefault(self, name, default=None):
+        if name in self:
+            return self.get(name)
+        self.set(name, default)
+        return default
+
+    # ---- Core environment operations ---------------------------------------------
+
+    def get(self, name, default=None):
         """Get a value from the environment"""
-        # Check local store
-        value = self.store.get(name)
-        if value is not None:
-            return value
+        # Check local store (allow storing None explicitly)
+        if name in self.store:
+            return self.store[name]
             
         # Check modules
         if "." in name:
@@ -24,9 +84,15 @@ class Environment:
                 
         # Check outer scope
         if self.outer:
-            return self.outer.get(name)
-            
-        return None
+            getter = getattr(self.outer, 'get', None)
+            if callable(getter):
+                return getter(name, default)
+            try:
+                return self.outer[name]
+            except (KeyError, TypeError, AttributeError):
+                pass
+        
+        return default
 
     def set(self, name, value):
         """Set a value in the environment (creates new variable)"""

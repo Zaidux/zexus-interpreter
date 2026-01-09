@@ -4,6 +4,7 @@ Integrated Extended VM for Zexus.
 Capabilities:
  - Architecture: Stack, Register, and Parallel execution modes.
  - Compilation: Tiered compilation with JIT (Hot path detection).
+        self._ensure_recursion_headroom()
  - Memory: Managed memory with Garbage Collection.
  - Formats: High-level ops list and Low-level Bytecode.
  - Features: Async primitives (SPAWN/AWAIT), Event System, Module Imports.
@@ -393,10 +394,7 @@ class VM:
 
     @staticmethod
     def _unwrap_after_builtin(value: Any) -> Any:
-        if isinstance(value, (ZInteger, ZFloat, ZBoolean)):
-            return value.value
-        if isinstance(value, ZString):
-            # Return plain string while VM operates on Python primitives
+        if isinstance(value, (ZInteger, ZFloat, ZBoolean, ZString)):
             return value.value
         if isinstance(value, ZNull):
             return None
@@ -474,6 +472,9 @@ class VM:
         if self.mode != VMMode.AUTO:
             return self.mode
         
+        if self.use_jit:
+            return VMMode.STACK
+
         if hasattr(code, 'instructions'):
             instructions = code.instructions
             if self._parallel_vm and self._is_parallelizable(instructions):
@@ -562,6 +563,14 @@ class VM:
             return stats
         return {'jit_enabled': False}
 
+    def _ensure_recursion_headroom(self, minimum: int = 5000):
+        try:
+            current = sys.getrecursionlimit()
+            if current < minimum:
+                sys.setrecursionlimit(minimum)
+        except Exception:
+            pass
+
     def clear_jit_cache(self):
         if self.use_jit and self.jit_compiler:
             with self._jit_lock:
@@ -593,6 +602,7 @@ class VM:
             with self._memory_lock:
                 stats = self.memory_manager.get_stats()
                 stats['managed_objects_count'] = len(self._managed_objects)
+                stats['memory_manager_enabled'] = True
             return stats
         return {'memory_manager_enabled': False}
     
@@ -716,7 +726,9 @@ class VM:
                         self.env[alias or module_path] = None
                 elif code == "DEFINE_ENUM":
                     _, name, members = op
-                    self.env.setdefault("enums", {})[name] = members
+                    enum_registry = self.env.setdefault("enums", {})
+                    enum_registry[name] = members
+                    self.env[name] = members
                 elif code == "DEFINE_PROTOCOL":
                     _, name, spec = op
                     self.env.setdefault("protocols", {})[name] = spec
@@ -770,6 +782,7 @@ class VM:
                     stack = []
                     result = jit_function(self, stack, self.env)
                     with self._jit_lock:
+                        self.jit_compiler.stats.cache_hits += 1
                         self.jit_compiler.record_execution_time(bytecode_hash, time.perf_counter() - start_t, ExecutionTier.JIT_NATIVE)
                     if debug: print(f"[VM JIT] Executed cached function")
                     return result
@@ -838,7 +851,10 @@ class VM:
 
         stack = _EvalStack(len(instrs) * 2 if instrs else 32)
 
-        def const(idx): return consts[idx] if 0 <= idx < len(consts) else None
+        def const(idx):
+            if isinstance(idx, int):
+                return consts[idx] if 0 <= idx < len(consts) else None
+            return idx
 
         # Lexical Resolution Helper (Closures/Cells)
         def _resolve(name):
@@ -1097,7 +1113,7 @@ class VM:
                 if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
                     instr_start_time = time.perf_counter()
                 # Record instruction (count only for BASIC level)
-                self.profiler.record_instruction(ip, op, operand, prev_ip, len(stack))
+                self.profiler.record_instruction(ip, op_name, operand, prev_ip, len(stack))
             
             prev_ip = ip
             ip += 1
@@ -1255,18 +1271,18 @@ class VM:
                 count = operand if operand is not None else 0
                 elements = [stack.pop() for _ in range(count)][::-1]
                 stack.append(elements)
-            elif op == "BUILD_MAP":
+            elif op_name == "BUILD_MAP":
                 count = operand if operand is not None else 0
                 result = {}
                 for _ in range(count):
                     val = stack.pop(); key = stack.pop()
                     result[key] = val
                 stack.append(result)
-            elif op == "INDEX":
+            elif op_name == "INDEX":
                 idx = stack.pop(); obj = stack.pop()
                 try: stack.append(obj[idx] if obj is not None else None)
                 except (IndexError, KeyError, TypeError): stack.append(None)
-            elif op == "GET_LENGTH":
+            elif op_name == "GET_LENGTH":
                 obj = stack.pop()
                 try:
                     if obj is None:
@@ -1279,7 +1295,7 @@ class VM:
                     stack.append(0)
 
             # --- Async & Events ---
-            elif op == "SPAWN":
+            elif op_name == "SPAWN":
                 # operand: tuple ("CALL", func_name, arg_count) OR index
                 task_handle = None
                 if isinstance(operand, tuple) and operand[0] == "CALL":
@@ -1301,7 +1317,7 @@ class VM:
                     task_handle = tid
                 stack.append(task_handle)
 
-            elif op == "AWAIT":
+            elif op_name == "AWAIT":
                 # Keep popping until we find a task to await
                 result_found = False
                 temp_stack = self.allocate_list(0)
@@ -1345,17 +1361,39 @@ class VM:
                 self.release_list(temp_stack)
 
             elif op_name == "REGISTER_EVENT":
-                event_name = const(operand[0]) if isinstance(operand, (list,tuple)) else const(operand)
-                handler = const(operand[1]) if isinstance(operand, (list,tuple)) else None
-                self._events.setdefault(event_name, []).append(handler)
+                event_parts = operand if isinstance(operand, (list, tuple)) else (operand,)
+                event_name = const(event_parts[0]) if event_parts else None
+                handler = const(event_parts[1]) if len(event_parts) > 1 else None
+                if event_name is not None:
+                    handlers = self._events.setdefault(event_name, [])
+                    if handler and handler not in handlers:
+                        handlers.append(handler)
 
             elif op_name == "EMIT_EVENT":
-                event_name = const(operand[0])
-                payload = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else None
+                event_ref = const(operand[0]) if operand else None
+                payload_ref = None
+                event_name = event_ref
+                if isinstance(event_ref, (list, tuple)) and event_ref:
+                    event_name = event_ref[0]
+                    if len(event_ref) > 1:
+                        payload_ref = event_ref[1]
+
+                payload = None
+                if stack:
+                    payload = stack.pop()
+                elif payload_ref is not None:
+                    payload = const(payload_ref)
+                elif isinstance(operand, (list, tuple)) and len(operand) > 1:
+                    payload = const(operand[1])
+
+                payload = _unwrap(payload)
+
                 handlers = self._events.get(event_name, [])
                 for h in handlers:
                     fn = self.builtins.get(h) or self.env.get(h)
-                    asyncio.create_task(self._call_builtin_async_obj(fn, [payload]))
+                    if fn is None:
+                        continue
+                    await self._call_builtin_async_obj(fn, [payload], wrap_args=False)
 
             elif op_name == "IMPORT":
                 mod_name = const(operand[0])
@@ -1367,8 +1405,9 @@ class VM:
                     self.env[alias or mod_name] = None
 
             elif op_name == "DEFINE_ENUM":
-                enum_name = const(operand[0])
+                enum_name = _unwrap(const(operand[0]))
                 enum_map = const(operand[1])
+                self.env.setdefault("enums", {})[enum_name] = enum_map
                 self.env[enum_name] = enum_map
 
             elif op_name == "ASSERT_PROTOCOL":
@@ -1430,12 +1469,18 @@ class VM:
                     stack.append(hashes[0] if hashes else "")
 
             elif op_name == "STATE_READ":
-                key = const(operand)
+                if operand is None:
+                    key = _unwrap(stack.pop() if stack else None)
+                else:
+                    key = const(operand)
                 stack.append(self.env.setdefault("_blockchain_state", {}).get(key))
 
             elif op_name == "STATE_WRITE":
-                key = const(operand)
-                val = stack.pop() if stack else None
+                val = _unwrap(stack.pop() if stack else None)
+                if operand is None:
+                    key = _unwrap(stack.pop() if stack else None)
+                else:
+                    key = const(operand)
                 if self.env.get("_in_transaction", False):
                     self.env.setdefault("_tx_pending_state", {})[key] = val
                 else:
@@ -1525,7 +1570,7 @@ class VM:
         # 2. Python Callable / Builtin Wrapper
         return await self._call_builtin_async_obj(fn, args)
 
-    async def _call_builtin_async(self, name: str, args: List[Any]):
+    async def _call_builtin_async(self, name: str, args: List[Any], wrap_args: bool = True):
         target = self.builtins.get(name) or self.env.get(name)
         
         # Check Renderer Backend
@@ -1534,9 +1579,9 @@ class VM:
             if asyncio.iscoroutinefunction(fn): return await fn(*args)
             return fn(*args)
             
-        return await self._call_builtin_async_obj(target, args)
+        return await self._call_builtin_async_obj(target, args, wrap_args=wrap_args)
 
-    async def _call_builtin_async_obj(self, fn_obj, args: List[Any]):
+    async def _call_builtin_async_obj(self, fn_obj, args: List[Any], wrap_args: bool = True):
         try:
             if fn_obj is None: return None
             
@@ -1545,16 +1590,16 @@ class VM:
             
             if not callable(real_fn): return real_fn
             
-            wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
+            call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
             verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
             verbose_active = verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
             if verbose_active:
                 fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
-                print(f"[VM DEBUG] calling builtin {fn_name} args={[type(a).__name__ for a in wrapped_args]}")
-            res = real_fn(*wrapped_args)
+                print(f"[VM DEBUG] calling builtin {fn_name} args={[type(a).__name__ for a in call_args]}")
+            res = real_fn(*call_args)
             if verbose_active and res is None:
                 fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
-                print(f"[VM DEBUG] builtin {fn_name} returned None args={wrapped_args}")
+                print(f"[VM DEBUG] builtin {fn_name} returned None args={call_args}")
             if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
                 res = await res
             return self._unwrap_after_builtin(res)
@@ -1577,13 +1622,18 @@ class VM:
         # Stack
         def run_stack(): return asyncio.run(self._execute_stack(bytecode))
         t_stack = timeit.timeit(run_stack, number=iterations)
-        results['modes']['stack'] = {'total': t_stack, 'avg': t_stack/iterations}
+        stack_avg = t_stack / iterations if iterations else 0.0
+        results['modes']['stack'] = {'total': t_stack, 'avg': stack_avg}
         
         # Register
         if self._register_vm:
             def run_reg(): return self._execute_register(bytecode)
             t_reg = timeit.timeit(run_reg, number=iterations)
-            results['modes']['register'] = {'total': t_reg, 'speedup': t_stack/t_reg}
+            reg_avg = t_reg / iterations if iterations else 0.0
+            reg_entry = {'total': t_reg, 'avg': reg_avg}
+            if t_reg > 0:
+                reg_entry['speedup'] = t_stack / t_reg if t_stack > 0 else float('inf')
+            results['modes']['register'] = reg_entry
             
         return results
     

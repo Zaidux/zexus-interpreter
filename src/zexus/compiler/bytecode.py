@@ -47,12 +47,19 @@ class BytecodeGenerator:
 
     def generate(self, program: Program) -> Bytecode:
         self.bytecode = Bytecode()
-        for stmt in getattr(program, "statements", []):
-            self._emit_statement(stmt, self.bytecode)
+        statements = list(getattr(program, "statements", []) or [])
+        total = len(statements)
+        for index, stmt in enumerate(statements):
+            self._emit_statement(
+                stmt,
+                self.bytecode,
+                is_top_level=True,
+                is_last=(index == total - 1),
+            )
         return self.bytecode
 
     # Statement lowering
-    def _emit_statement(self, stmt, bc: Bytecode):
+    def _emit_statement(self, stmt, bc: Bytecode, *, is_top_level: bool = False, is_last: bool = False):
         t = type(stmt).__name__
 
         if t == "LetStatement":
@@ -64,8 +71,8 @@ class BytecodeGenerator:
 
         if t == "ExpressionStatement":
             self._emit_expression(stmt.expression, bc)
-            # drop result (no-op) or keep for top-level
-            bc.add_instruction("POP", None)
+            if not (is_top_level and is_last):
+                bc.add_instruction("POP", None)
             return
 
         if t == "PrintStatement":
@@ -138,6 +145,11 @@ class BytecodeGenerator:
 
         if typ == "IntegerLiteral":
             const_idx = bc.add_constant(expr.value)
+            bc.add_instruction("LOAD_CONST", const_idx)
+            return
+
+        if typ == "FloatLiteral":
+            const_idx = bc.add_constant(float(expr.value))
             bc.add_instruction("LOAD_CONST", const_idx)
             return
 

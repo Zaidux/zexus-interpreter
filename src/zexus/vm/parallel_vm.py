@@ -125,6 +125,7 @@ def _execute_chunk_helper(args):
         
         # Create bytecode from chunk
         bytecode = Bytecode()
+        bytecode.constants = list(chunk.constants)
         for opcode, operand in chunk.instructions:
             bytecode.instructions.append((opcode, operand))
         
@@ -184,6 +185,7 @@ class BytecodeChunk:
     variables_read: Set[str] = field(default_factory=set)
     variables_written: Set[str] = field(default_factory=set)
     can_parallelize: bool = True
+    constants: List[Any] = field(default_factory=list)
     
     def __repr__(self):
         ins_count = len(self.instructions)
@@ -302,6 +304,7 @@ class BytecodeChunker:
                         chunk.variables_read.update(reads)
                         chunk.variables_written.update(writes)
             
+            chunk.constants = list(bytecode.constants)
             chunks.append(chunk)
         
         # Detect dependencies
@@ -398,8 +401,14 @@ class ResultMerger:
         for result in sorted_results:
             merged_variables.update(result.variables_modified)
         
-        # Last result is the final result
-        final_result = sorted_results[-1].result if sorted_results else None
+        # Prefer the last non-None result; fall back to merged variables
+        final_result = None
+        for result in reversed(sorted_results):
+            if result.result is not None:
+                final_result = result.result
+                break
+        if final_result is None and merged_variables:
+            final_result = merged_variables
         
         return True, final_result, merged_variables
     
@@ -701,6 +710,11 @@ class ParallelVM:
         # Metrics
         self.last_metrics: Optional[ExecutionMetrics] = None
         self.cumulative_metrics = ExecutionMetrics()
+        self.stats = {
+            "parallel_executions": 0,
+            "sequential_executions": 0,
+            "fallback_executions": 0,
+        }
         
         logger.info(f"ParallelVM initialized: {self.config.worker_count} workers, "
                    f"chunk_size={self.config.chunk_size}, mode={mode.value}")
@@ -788,6 +802,7 @@ class ParallelVM:
             
             if not success and sequential_fallback:
                 logger.warning(f"Parallel execution failed: {final_result}. Falling back to sequential.")
+                self.stats["fallback_executions"] += 1
                 result = self._execute_sequential(bytecode)
                 metrics.total_time = time.time() - start_time
                 self.last_metrics = metrics
@@ -811,6 +826,7 @@ class ParallelVM:
             self.cumulative_metrics.chunks_retried += metrics.chunks_retried
             
             self.last_metrics = metrics
+            self.stats["parallel_executions"] += 1
             
             if self.config.enable_metrics:
                 logger.info(f"Execution metrics: {metrics.to_dict()}")
@@ -826,6 +842,7 @@ class ParallelVM:
             
             if sequential_fallback and self.config.enable_fallback:
                 logger.warning("Falling back to sequential execution due to error")
+                self.stats["fallback_executions"] += 1
                 return self._execute_sequential(bytecode)
             else:
                 raise
@@ -834,7 +851,9 @@ class ParallelVM:
         """Execute bytecode sequentially (fallback mode)"""
         logger.info("Executing in sequential mode")
         vm = VM()
-        return vm.execute(bytecode)
+        result = vm.execute(bytecode)
+        self.stats["sequential_executions"] += 1
+        return result
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get execution statistics"""

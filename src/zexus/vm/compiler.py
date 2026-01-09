@@ -10,6 +10,20 @@ from .bytecode import Opcode, Bytecode
 from .. import zexus_ast
 
 
+class BytecodeCompilationError(Exception):
+    """Raised when bytecode compilation cannot complete successfully."""
+
+
+class UnsupportedNodeError(BytecodeCompilationError):
+    """Raised when the compiler encounters an unsupported AST node."""
+
+    def __init__(self, node_type: str, detail: Optional[str] = None):
+        message = detail or f"Node type '{node_type}' is not supported by the bytecode compiler"
+        super().__init__(message)
+        self.node_type = node_type
+        self.detail = detail
+
+
 class BytecodeCompiler:
     """
     Compiles Zexus AST to VM bytecode.
@@ -28,6 +42,7 @@ class BytecodeCompiler:
         self.constant_map = {}  # Deduplicate constants
         self.label_counter = 0
         self.loop_stack = []  # For break/continue
+        self.temp_counter = 0
         
     def compile(self, node) -> Bytecode:
         """Compile AST node to bytecode"""
@@ -35,6 +50,7 @@ class BytecodeCompiler:
         self.instructions = []
         self.constant_map = {}
         self.label_counter = 0
+        self.temp_counter = 0
         
         self._compile_node(node)
         
@@ -66,6 +82,15 @@ class BytecodeCompiler:
         label = f"L{self.label_counter}"
         self.label_counter += 1
         return label
+
+    def _make_temp_name(self, prefix: str = "tmp") -> str:
+        name = f"__{prefix}_{self.temp_counter}"
+        self.temp_counter += 1
+        return name
+
+    def _mark_label(self, label: str):
+        self._emit(Opcode.NOP)
+        self.instructions[-1] = (Opcode.NOP, label)
     
     def _compile_node(self, node):
         """Dispatch to specific compiler method"""
@@ -76,10 +101,38 @@ class BytecodeCompiler:
         method_name = f'_compile_{node_type}'
         method = getattr(self, method_name, None)
         
-        if method:
+        if method is None:
+            raise UnsupportedNodeError(node_type, self._unsupported_message(node_type))
+
+        try:
             method(node)
-        else:
-            raise NotImplementedError(f"Compiler not implemented for {node_type}")
+        except UnsupportedNodeError:
+            raise
+        except Exception as exc:
+            raise BytecodeCompilationError(
+                f"Failed to compile {node_type}: {exc}"
+            ) from exc
+
+    def _unsupported_message(self, node_type: str) -> str:
+        """Return a friendly message for unsupported nodes."""
+        hints = {
+            "UseStatement": "Module imports",
+            "EntityStatement": "Entity declarations",
+            "ContractStatement": "Contract declarations",
+            "ActionStatement": "Action/function declarations",
+            "FunctionStatement": "Function declarations",
+            "IfStatement": "If statements",
+            "WhileStatement": "While loops",
+            "ForStatement": "For loops",
+            "ForEachStatement": "For-each loops",
+            "TxStatement": "Transaction blocks",
+            "RequireStatement": "Require statements",
+            "RevertStatement": "Revert statements",
+        }
+        prefix = hints.get(node_type)
+        if prefix:
+            return f"{prefix} are not yet supported by the VM bytecode compiler"
+        return f"Node type '{node_type}' is not supported by the VM bytecode compiler"
     
     # ==================== Program & Statements ====================
     
@@ -251,28 +304,31 @@ class BytecodeCompiler:
         """Compile while loop"""
         start_label = self._make_label()
         end_label = self._make_label()
-        
-        # Track loop for break/continue
-        self.loop_stack.append((start_label, end_label))
-        
-        # Start of loop
-        self._emit(Opcode.NOP)
-        self.instructions[-1] = (Opcode.NOP, start_label)
-        
-        # Compile condition
+        loop_info = {
+            'start': start_label,
+            'end': end_label,
+            'continue': start_label,
+        }
+        self.loop_stack.append(loop_info)
+
+        # Start label before evaluating condition
+        self._mark_label(start_label)
+
+        # Condition
         self._compile_node(node.condition)
-        self._emit(Opcode.JUMP_IF_FALSE, end_label)
-        
-        # Compile body
+        exit_jump_idx = len(self.instructions)
+        self._emit(Opcode.JUMP_IF_FALSE, None)
+
+        # Body
         self._compile_node(node.body)
-        
-        # Loop back
+
+        # Jump back to start
         self._emit(Opcode.JUMP, start_label)
-        
-        # End of loop
-        self._emit(Opcode.NOP)
-        self.instructions[-1] = (Opcode.NOP, end_label)
-        
+
+        # End label
+        self._mark_label(end_label)
+        self.instructions[exit_jump_idx] = (Opcode.JUMP_IF_FALSE, end_label)
+
         self.loop_stack.pop()
     
     def _compile_ForStatement(self, node):
@@ -283,33 +339,40 @@ class BytecodeCompiler:
         
         start_label = self._make_label()
         end_label = self._make_label()
-        
-        self.loop_stack.append((start_label, end_label))
-        
-        # Start of loop
-        self._emit(Opcode.NOP)
-        self.instructions[-1] = (Opcode.NOP, start_label)
-        
-        # Condition
+        continue_label = start_label if node.increment is None else self._make_label()
+
+        self.loop_stack.append({
+            'start': start_label,
+            'end': end_label,
+            'continue': continue_label,
+        })
+
+        # Loop start (condition)
+        self._mark_label(start_label)
+
+        exit_jump_idx = None
         if node.condition:
             self._compile_node(node.condition)
-            self._emit(Opcode.JUMP_IF_FALSE, end_label)
+            exit_jump_idx = len(self.instructions)
+            self._emit(Opcode.JUMP_IF_FALSE, None)
         
         # Body
         self._compile_node(node.body)
-        
-        # Increment
+
+        # Continue label placed before increment (if present)
         if node.increment:
+            self._mark_label(continue_label)
             self._compile_node(node.increment)
             self._emit(Opcode.POP)
-        
-        # Loop back
+
+        # Jump back to condition
         self._emit(Opcode.JUMP, start_label)
-        
-        # End
-        self._emit(Opcode.NOP)
-        self.instructions[-1] = (Opcode.NOP, end_label)
-        
+
+        # Loop end label
+        self._mark_label(end_label)
+        if exit_jump_idx is not None:
+            self.instructions[exit_jump_idx] = (Opcode.JUMP_IF_FALSE, end_label)
+
         self.loop_stack.pop()
     
     # ==================== Function Calls ====================
@@ -363,12 +426,20 @@ class BytecodeCompiler:
     def _compile_MapLiteral(self, node):
         """Compile map/dictionary literal"""
         # Compile key-value pairs
-        for key, value in node.pairs.items():
+        pairs = node.pairs or []
+
+        if isinstance(pairs, dict):
+            iterable = pairs.items()
+            count = len(pairs)
+        else:
+            iterable = pairs
+            count = len(pairs)
+
+        for key, value in iterable:
             self._compile_node(key)
             self._compile_node(value)
         
         # Build map
-        count = len(node.pairs)
         self._emit(Opcode.BUILD_MAP, count)
     
     def _compile_IndexExpression(self, node):
@@ -384,10 +455,8 @@ class BytecodeCompiler:
         if name.startswith('_compile_'):
             # Return a stub that logs and continues
             def stub(node):
-                print(f"⚠️  Bytecode compiler: {name[9:]} not yet implemented, skipping")
-                # Push null as placeholder
-                null_idx = self._add_constant(None)
-                self._emit(Opcode.LOAD_CONST, null_idx)
+                node_type = name[9:]
+                raise UnsupportedNodeError(node_type, self._unsupported_message(node_type))
             return stub
         raise AttributeError(name)
 

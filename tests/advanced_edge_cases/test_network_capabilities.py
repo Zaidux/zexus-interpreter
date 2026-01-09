@@ -11,46 +11,38 @@ import sys
 import os
 import traceback
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 
 def test_network_capability_system():
     """Test that network capability system exists."""
-    try:
-        from zexus.capability_system import CapabilityManager
-        
-        manager = CapabilityManager()
-        
-        # Check if network capabilities are defined
-        if hasattr(manager, 'has_capability'):
-            has_network = manager.has_capability("network.tcp") or manager.has_capability("network.http")
-            print(f"✅ Network capability system: defined ({'available' if has_network else 'configured'})")
-        else:
-            print("✅ Network capability system: framework present")
-        
-        return True
-    except Exception as e:
-        print(f"✅ Network capability system: tested (limited - {type(e).__name__})")
-        return False
+    capability_mod = pytest.importorskip(
+        "zexus.capability_system", reason="Capability system module not available"
+    )
+
+    manager = capability_mod.CapabilityManager()
+    assert manager is not None
+    assert any(
+        hasattr(manager, attr) for attr in ("has_capability", "create_context", "register_capability")
+    )
+    print("✅ Network capability system: framework present")
 
 
 def test_network_permission_check():
     """Test network permission checking."""
-    try:
-        from zexus.capability_system import check_capability
-        
-        # Try to check network capability
-        try:
-            result = check_capability("network.http", "test")
-            print(f"✅ Network permission check: enforced (result: {result})")
-        except NameError:
-            # Function might have different name
-            print("✅ Network permission check: framework present")
-        
-        return True
-    except Exception as e:
-        print(f"✅ Network permission check: tested (limited - {type(e).__name__})")
-        return False
+    capability_mod = pytest.importorskip(
+        "zexus.capability_system", reason="Capability system module not available"
+    )
+
+    check_capability = getattr(capability_mod, "check_capability", None)
+    if check_capability is None:
+        pytest.skip("check_capability helper not implemented")
+
+    result = check_capability("network.http", "test")
+    assert isinstance(result, bool)
+    print(f"✅ Network permission check: enforced (result: {result})")
 
 
 def test_network_timeout_simulation():
@@ -71,39 +63,26 @@ def test_network_timeout_simulation():
         
         return "success"
     
-    try:
-        # Test that timeout works
-        try:
-            _ = slow_operation(timeout=0.1)
-        except TimeoutError:
-            print("✅ Network timeout simulation: timeout mechanism works")
-            return True
-    except Exception as e:
-        print(f"✅ Network timeout simulation: tested - {type(e).__name__}")
-        return False
-    
-    print("✅ Network timeout simulation: timeout pattern validated")
-    return True
+    with pytest.raises(TimeoutError):
+        slow_operation(timeout=0.1)
+
+    print("✅ Network timeout simulation: timeout mechanism works")
 
 
 def test_capability_sandbox():
     """Test that capability sandbox can restrict network access."""
-    try:
-        from zexus.capability_system import CapabilityManager
-        
-        manager = CapabilityManager()
-        
-        # Try to create a restricted context
-        if hasattr(manager, 'create_context'):
-            _ = manager.create_context(capabilities=[])  # No capabilities
-            print("✅ Capability sandbox: restriction mechanism present")
-        else:
-            print("✅ Capability sandbox: framework available")
-        
-        return True
-    except Exception as e:
-        print(f"✅ Capability sandbox: tested (limited - {type(e).__name__})")
-        return False
+    capability_mod = pytest.importorskip(
+        "zexus.capability_system", reason="Capability system module not available"
+    )
+
+    manager = capability_mod.CapabilityManager()
+    create_context = getattr(manager, "create_context", None)
+    if create_context is None:
+        pytest.skip("CapabilityManager.create_context not implemented")
+
+    context = create_context(capabilities=[])
+    assert context is not None
+    print("✅ Capability sandbox: restriction mechanism present")
 
 
 def test_network_error_handling():
@@ -140,7 +119,6 @@ def test_network_error_handling():
     assert result["status"] == "success"
     
     print("✅ Network error handling: error patterns validated")
-    return True
 
 
 def test_url_validation():
@@ -161,7 +139,6 @@ def test_url_validation():
     assert not is_valid_url("ftp://example.com")  # Wrong protocol
     
     print("✅ URL validation: validation patterns work")
-    return True
 
 
 if __name__ == '__main__':
@@ -184,10 +161,11 @@ if __name__ == '__main__':
     
     for test in tests:
         try:
-            if test():
-                passed += 1
-            else:
+            result = test()
+            if result is False:
                 failed += 1
+            else:
+                passed += 1
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")
             traceback.print_exc()

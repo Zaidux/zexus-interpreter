@@ -25,16 +25,13 @@ gc "resume";
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ GC statements evaluated successfully")
-    return True
 
 def test_inline_statement():
     """Test inline statement"""
@@ -53,16 +50,13 @@ inline factorial;
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ INLINE statement evaluated successfully")
-    return True
 
 def test_buffer_statement():
     """Test buffer statement"""
@@ -78,16 +72,13 @@ buffer my_buf.read(0, 4);
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ BUFFER statements evaluated successfully")
-    return True
 
 def test_simd_statement():
     """Test SIMD statement"""
@@ -103,16 +94,13 @@ simd a + b;
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     evaluator = Evaluator()
     env = Environment()
     result = evaluator.eval_node(program, env)
     
     print(f"✓ SIMD statement evaluated successfully")
-    return True
 
 def test_native_statement():
     """Test native statement (basic parsing test, requires actual .so file for full execution)"""
@@ -126,12 +114,9 @@ native "libmath.so", "pow"(2, 3);
     parser = UltimateParser(lexer)
     program = parser.parse_program()
     
-    if parser.errors:
-        print(f"Parser errors: {parser.errors}")
-        return False
+    assert not parser.errors, f"Parser errors: {parser.errors}"
     
     print(f"✓ NATIVE statement parsed successfully")
-    return True
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -149,7 +134,8 @@ if __name__ == "__main__":
     results = []
     for test in tests:
         try:
-            results.append(test())
+            result = test()
+            results.append(False if result is False else True)
         except Exception as e:
             print(f"✗ Test failed with exception: {e}")
             import traceback

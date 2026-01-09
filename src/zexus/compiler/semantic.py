@@ -54,31 +54,33 @@ class SemanticAnalyzer:
 				errors.append("Invalid AST: missing 'statements' list")
 				return errors
 
-			# Run new checks: await usage and protocol/event validation
-			# Walk AST with context
+			visited = set()
+
 			def walk(node, in_async=False):
-				# Protect against cycles by tracking visited node ids
-				if not hasattr(walk, '_visited'):
-					walk._visited = set()
 				if node is None:
 					return
 				node_id = id(node)
-				if node_id in walk._visited:
+				if node_id in visited:
 					return
-				walk._visited.add(node_id)
-				# Quick type checks for relevant nodes
+				visited.add(node_id)
+
 				if isinstance(node, AwaitExpression):
 					if not in_async:
 						errors.append("Semantic error: 'await' used outside an async function")
-				# ActionStatement may have is_async flag
+						return
+					expr = getattr(node, "expression", None)
+					if hasattr(expr, "__dict__"):
+						walk(expr, in_async=True)
+					return
+
 				if isinstance(node, ActionStatement):
 					body = getattr(node, "body", None)
 					async_flag = getattr(node, "is_async", False)
 					if body:
-						# walk body with in_async = async_flag
 						for s in getattr(body, "statements", []):
 							walk(s, in_async=async_flag)
 					return
+
 				if isinstance(node, ProtocolDeclaration):
 					spec = getattr(node, "spec", {})
 					methods = spec.get("methods") if isinstance(spec, dict) else None
@@ -89,26 +91,23 @@ class SemanticAnalyzer:
 							if not isinstance(m, str):
 								errors.append(f"Protocol '{node.name.value}' has non-string method name: {m}")
 					return
+
 				if isinstance(node, EventDeclaration):
 					props = getattr(node, "properties", None)
 					if not isinstance(props, (MapLiteral, BlockStatement)):
 						errors.append(f"Event '{node.name.value}' properties should be a map or block")
-					# further checks can be added
 					return
 
-				# Generic traversal
-				for attr in dir(node):
-					if attr.startswith("_") or attr in ("token_literal", "__repr__"):
+				for attr, val in vars(node).items():
+					if attr.startswith("_") or attr in ("token", "token_literal"):
 						continue
-					val = getattr(node, attr)
 					if isinstance(val, list):
 						for item in val:
-							if hasattr(item, "__class__"):
+							if hasattr(item, "__dict__"):
 								walk(item, in_async=in_async)
-					elif hasattr(val, "__class__"):
+					elif hasattr(val, "__dict__"):
 						walk(val, in_async=in_async)
 
-			# Walk top-level statements
 			for s in stmts:
 				walk(s, in_async=False)
 

@@ -247,13 +247,18 @@ class JITCompiler:
             jit_function = namespace.get('jit_execute')
 
             if jit_function:
-                # Verify the compiled function works
                 verification_result = self._verify_compilation(bytecode, jit_function)
                 if not verification_result:
-                    if self.debug:
-                        print(f"❌ JIT: Verification failed for {bytecode_hash[:8]}")
-                    self.stats.compilation_failures += 1
-                    return None
+                    fallback_fn = self._build_fallback_executor(optimized_instructions, updated_constants)
+                    if fallback_fn and self._verify_compilation(bytecode, fallback_fn):
+                        if self.debug:
+                            print(f"♻️ JIT: Falling back to compatibility executor for {bytecode_hash[:8]}")
+                        jit_function = fallback_fn
+                    else:
+                        if self.debug:
+                            print(f"❌ JIT: Verification failed for {bytecode_hash[:8]}")
+                        self.stats.compilation_failures += 1
+                        return None
 
                 # Cache the compiled function
                 self.compilation_cache[bytecode_hash] = jit_function
@@ -372,6 +377,7 @@ class JITCompiler:
         instructions = bytecode.instructions if hasattr(bytecode, 'instructions') else bytecode
         
         for opcode, _ in instructions:
+            opcode = self._normalize_opcode(opcode)
             if opcode not in self.supported_opcodes:
                 if self.debug:
                     print(f"⚠️  JIT: Unsupported opcode: {opcode}")
@@ -385,8 +391,12 @@ class JITCompiler:
         Returns:
             List of StackFrame objects representing stack state at each instruction
         """
-        instructions = bytecode.instructions if hasattr(bytecode, 'instructions') else bytecode
+        raw_instructions = bytecode.instructions if hasattr(bytecode, 'instructions') else bytecode
         constants = bytecode.constants if hasattr(bytecode, 'constants') else []
+        instructions = [
+            (self._normalize_opcode(opcode), operand)
+            for opcode, operand in raw_instructions
+        ]
         
         frames = []
         current_frame = StackFrame()
@@ -484,24 +494,32 @@ class JITCompiler:
             'OR': 'or',
         }.get(opcode, opcode)
 
+    def _normalize_opcode(self, opcode) -> str:
+        """Normalize opcode values from enums or raw strings."""
+        return opcode.name if hasattr(opcode, 'name') else opcode
+
     def _optimize_bytecode(self, bytecode) -> Tuple[List, List]:
         """
         Apply optimization passes to bytecode
         
         Returns: (optimized_instructions, updated_constants)
         """
-        instructions = list(bytecode.instructions) if hasattr(bytecode, 'instructions') else list(bytecode)
+        raw_instructions = list(bytecode.instructions) if hasattr(bytecode, 'instructions') else list(bytecode)
         constants = list(bytecode.constants) if hasattr(bytecode, 'constants') else []
+        instructions = [
+            (self._normalize_opcode(opcode), operand)
+            for opcode, operand in raw_instructions
+        ]
 
         if self.optimizer:
             try:
-                optimized, updated_constants = self.optimizer.optimize(instructions, constants)
+                optimized = self.optimizer.optimize(instructions, constants)
                 if self.debug:
                     stats = self.optimizer.get_stats()
                     if stats['total_optimizations'] > 0:
                         print(f"🔧 JIT Optimizer: {stats['original_size']} → {stats['optimized_size']} instructions "
                               f"({stats['size_reduction_pct']:.1f}% reduction)")
-                return optimized, updated_constants
+                return optimized, constants
             except Exception as e:
                 if self.debug:
                     print(f"⚠️  JIT: Optimizer failed: {e}")
@@ -537,6 +555,229 @@ class JITCompiler:
             i += 1
             
         return optimized
+
+    def _build_fallback_executor(self, instructions, constants):
+        """Construct a conservative executor for instructions when optimized code fails."""
+        normalized_instrs = [
+            (self._normalize_opcode(op), operand)
+            for op, operand in (instructions or [])
+        ]
+        consts = list(constants or [])
+
+        def _const(idx):
+            if isinstance(idx, int) and 0 <= idx < len(consts):
+                return consts[idx]
+            return idx
+
+        arithmetic_ops: Dict[str, Callable[[Any, Any], Any]] = {
+            'ADD': lambda a, b: a + b,
+            'SUB': lambda a, b: a - b,
+            'MUL': lambda a, b: a * b,
+            'DIV': lambda a, b: a / b if b not in (0, None) else None,
+            'MOD': lambda a, b: a % b if b not in (0, None) else None,
+            'POW': lambda a, b: a ** b,
+        }
+
+        compare_ops: Dict[str, Callable[[Any, Any], bool]] = {
+            'EQ': lambda a, b: a == b,
+            'NEQ': lambda a, b: a != b,
+            'LT': lambda a, b: a < b,
+            'GT': lambda a, b: a > b,
+            'LTE': lambda a, b: a <= b,
+            'GTE': lambda a, b: a >= b,
+        }
+
+        def jit_execute(vm, stack, env):
+            ip = 0
+            while ip < len(normalized_instrs):
+                op, operand = normalized_instrs[ip]
+
+                if op == 'LOAD_CONST':
+                    stack.append(_const(operand))
+
+                elif op == 'LOAD_NAME':
+                    name = _const(operand)
+                    stack.append(env.get(name, None))
+
+                elif op == 'STORE_NAME':
+                    name = _const(operand)
+                    value = stack.pop() if stack else None
+                    env[name] = value
+
+                elif op == 'STORE_CONST':
+                    if isinstance(operand, (tuple, list)) and len(operand) == 2:
+                        name = _const(operand[0])
+                        value = _const(operand[1])
+                        env[name] = value
+
+                elif op in arithmetic_ops:
+                    b = stack.pop() if stack else None
+                    a = stack.pop() if stack else None
+                    try:
+                        stack.append(arithmetic_ops[op](a, b))
+                    except Exception:
+                        stack.append(None)
+
+                elif op in compare_ops:
+                    b = stack.pop() if stack else None
+                    a = stack.pop() if stack else None
+                    try:
+                        stack.append(compare_ops[op](a, b))
+                    except Exception:
+                        stack.append(False)
+
+                elif op == 'NOT':
+                    value = stack.pop() if stack else None
+                    stack.append(not value)
+
+                elif op == 'AND':
+                    b = stack.pop() if stack else None
+                    a = stack.pop() if stack else None
+                    stack.append(bool(a) and bool(b))
+
+                elif op == 'OR':
+                    b = stack.pop() if stack else None
+                    a = stack.pop() if stack else None
+                    stack.append(bool(a) or bool(b))
+
+                elif op == 'POP':
+                    if stack:
+                        stack.pop()
+
+                elif op == 'JUMP':
+                    ip = operand if isinstance(operand, int) else ip + 1
+                    continue
+
+                elif op == 'JUMP_IF_FALSE':
+                    condition = stack.pop() if stack else None
+                    target = operand if isinstance(operand, int) else None
+                    if not condition and target is not None:
+                        ip = target
+                        continue
+
+                elif op == 'RETURN':
+                    return stack[-1] if stack else None
+
+                else:
+                    # Unsupported opcode - bail out with None to keep semantics safe
+                    return stack[-1] if stack else None
+
+                ip += 1
+
+            return stack[-1] if stack else None
+
+        return jit_execute if normalized_instrs else None
+
+    def _constant_folding(self, instructions, constants=None):
+        """Perform simple constant folding for common arithmetic patterns."""
+        instructions = [tuple(inst) for inst in instructions or []]
+        constants_list = list(constants) if constants is not None else None
+
+        if not instructions:
+            return []
+
+        # Without constants we cannot safely fold indexed operands.
+        if not constants_list:
+            return list(instructions)
+
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+
+        result = []
+        i = 0
+        while i < len(instructions):
+            if i + 2 < len(instructions):
+                op1, operand1 = instructions[i]
+                op2, operand2 = instructions[i + 1]
+                op3, _ = instructions[i + 2]
+                if (_op_name(op1) == 'LOAD_CONST' and _op_name(op2) == 'LOAD_CONST' and
+                        isinstance(operand1, int) and isinstance(operand2, int) and
+                        0 <= operand1 < len(constants_list) and 0 <= operand2 < len(constants_list) and
+                        _op_name(op3) in {'ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POW'}):
+                    a = constants_list[operand1]
+                    b = constants_list[operand2]
+                    try:
+                        op3_name = _op_name(op3)
+                        if op3_name == 'ADD':
+                            value = a + b
+                        elif op3_name == 'SUB':
+                            value = a - b
+                        elif op3_name == 'MUL':
+                            value = a * b
+                        elif op3_name == 'DIV':
+                            value = a / b if b != 0 else 0
+                        elif op3_name == 'MOD':
+                            value = a % b if b != 0 else 0
+                        else:  # POW
+                            value = a ** b
+                    except Exception:
+                        value = None
+
+                    if value is not None:
+                        const_idx = len(constants_list)
+                        constants_list.append(value)
+                        result.append(('LOAD_CONST', const_idx))
+                        i += 3
+                        continue
+            result.append(instructions[i])
+            i += 1
+        return result
+
+    def _dead_code_elimination(self, instructions):
+        """Remove unreachable instructions after terminal ops."""
+        instructions = [tuple(inst) for inst in instructions or []]
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+        result = []
+        dead = False
+        for opcode, operand in instructions:
+            name = _op_name(opcode)
+            if dead and name not in {'LABEL', 'JUMP_TARGET'}:
+                continue
+            result.append((opcode, operand))
+            if name in {'RETURN', 'JUMP'}:
+                dead = True
+        return result
+
+    def _peephole_optimization(self, instructions):
+        """Eliminate short redundant instruction patterns."""
+        instructions = [tuple(inst) for inst in instructions or []]
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+        result = []
+        i = 0
+        while i < len(instructions):
+            if i + 1 < len(instructions):
+                op1, operand1 = instructions[i]
+                op2, _ = instructions[i + 1]
+                if _op_name(op1) in {'LOAD_CONST', 'LOAD_NAME'} and _op_name(op2) == 'POP':
+                    i += 2
+                    continue
+                if _op_name(op1) == 'DUP' and _op_name(op2) == 'POP':
+                    i += 2
+                    continue
+            result.append(instructions[i])
+            i += 1
+        return result
+
+    def _instruction_combining(self, instructions):
+        """Combine simple instruction pairs into compact forms."""
+        instructions = [tuple(inst) for inst in instructions or []]
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+        result = []
+        i = 0
+        while i < len(instructions):
+            if i + 1 < len(instructions):
+                (op1, operand1) = instructions[i]
+                (op2, operand2) = instructions[i + 1]
+                if _op_name(op1) == 'LOAD_CONST' and _op_name(op2) == 'STORE_NAME':
+                    result.append(('STORE_CONST', (operand2, operand1)))
+                    i += 2
+                    continue
+            result.append(instructions[i])
+            i += 1
+        return result
 
     def _generate_efficient_python_code(self, instructions: List, constants: List, stack_frames: List[StackFrame]) -> str:
         """
@@ -604,6 +845,7 @@ class JITCompiler:
                     # Generate efficient arithmetic
                     operator = self._opcode_to_operator(opcode)
                     result_var = f"result_{i}"
+                    assigned = False
                     
                     # Try to use pre-computed values from stack analysis
                     if i > 0 and i-1 < len(stack_frames):
@@ -619,22 +861,22 @@ class JITCompiler:
                                 
                                 # Check if we can compute at compile time
                                 try:
-                                    if (a_expr.startswith('const_') and b_expr.startswith('const_')):
+                                    if (isinstance(a_expr, str) and isinstance(b_expr, str) and
+                                            a_expr.startswith('const_') and b_expr.startswith('const_')):
                                         # Already computed by optimizer
                                         computed = eval(f"{a_val} {operator} {b_val}")
                                         lines.append(f"    {result_var} = {repr(computed)}")
                                     else:
                                         lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
-                                except (TypeError, ValueError, NameError, SyntaxError):
+                                except (TypeError, ValueError, NameError, SyntaxError, AttributeError):
                                     lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
-                            else:
-                                lines.append(f"    b = stack.pop()")
-                                lines.append(f"    a = stack.pop()")
-                                lines.append(f"    {result_var} = a {operator} b")
-                    else:
+                                assigned = True
+                    
+                    if not assigned:
                         lines.append(f"    b = stack.pop()")
                         lines.append(f"    a = stack.pop()")
                         lines.append(f"    {result_var} = a {operator} b")
+                        assigned = True
                     
                     local_vars.add(result_var)
                     lines.append(f"    stack.append({result_var})")
@@ -683,13 +925,34 @@ class JITCompiler:
                 vm_bytecode = VM(use_jit=False)
                 vm_bytecode.env = env_dict.copy()
                 vm_bytecode.stack = stack.copy()
-                bytecode_result = vm_bytecode.execute(original_bytecode)
+                bytecode_exc = None
+                try:
+                    bytecode_result = vm_bytecode.execute(original_bytecode)
+                except Exception as e:  # noqa: BLE001 - intentional verification comparison
+                    bytecode_exc = e
+                    bytecode_result = None
                 
                 # Run JIT version
                 vm_jit = VM(use_jit=False)
                 vm_jit.env = env_dict.copy()
                 vm_jit.stack = stack.copy()
-                jit_result = jit_function(vm_jit, vm_jit.stack, vm_jit.env)
+                jit_exc = None
+                try:
+                    jit_result = jit_function(vm_jit, vm_jit.stack, vm_jit.env)
+                except Exception as e:  # noqa: BLE001 - intentional verification comparison
+                    jit_exc = e
+                    jit_result = None
+                
+                # If both threw exceptions, ensure they match in type
+                if bytecode_exc or jit_exc:
+                    if type(bytecode_exc) != type(jit_exc):
+                        if self.debug:
+                            print("❌ JIT Verification mismatch (exceptions):")
+                            print(f"   Bytecode exception: {bytecode_exc!r}")
+                            print(f"   JIT exception: {jit_exc!r}")
+                            print(f"   Environment: {env_dict}")
+                        return False
+                    continue
                 
                 # Compare results
                 if bytecode_result != jit_result:

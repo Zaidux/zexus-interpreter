@@ -1,6 +1,7 @@
 ## src/zexus/parser.py
 import tempfile
 import os
+import sys
 from ..zexus_token import *
 from ..lexer import Lexer
 from ..zexus_ast import *
@@ -83,6 +84,7 @@ class UltimateParser:
             TRY: self.parse_try_catch_statement,
             EXTERNAL: self.parse_external_declaration,
             ASYNC: self.parse_async_expression,  # Support async <expression>
+            AWAIT: self.parse_await_expression,  # Support await <expression>
             SANITIZE: self.parse_sanitize_expression,  # FIX #4: Support sanitize as expression
         }
         self.infix_parse_fns = {
@@ -110,6 +112,55 @@ class UltimateParser:
         }
         self.next_token()
         self.next_token()
+
+    def _snapshot_lexer_state(self):
+        """Capture the lexer's mutable state so it can be restored after lookahead."""
+        lex = self.lexer
+        return (
+            lex.position,
+            lex.read_position,
+            lex.ch,
+            lex.line,
+            lex.column,
+            lex.last_token_type,
+        )
+
+    def _restore_lexer_state(self, snapshot):
+        """Restore the lexer's mutable state captured via _snapshot_lexer_state."""
+        if not snapshot:
+            return
+        (
+            self.lexer.position,
+            self.lexer.read_position,
+            self.lexer.ch,
+            self.lexer.line,
+            self.lexer.column,
+            self.lexer.last_token_type,
+        ) = snapshot
+
+    # ------------------------------------------------------------------
+    # Legacy compatibility helpers
+    # ------------------------------------------------------------------
+
+    def parse(self, *, raise_on_error: bool = False):
+        """Backward compatible entrypoint returning the parsed program.
+
+        Args:
+            raise_on_error: When True, raise the first parse error instead of
+                returning a program with errors collected in ``self.errors``.
+
+        Returns:
+            Program AST node produced by :meth:`parse_program`.
+        """
+        program = self.parse_program()
+
+        if raise_on_error and self.errors:
+            first_error = self.errors[0]
+            if isinstance(first_error, Exception):
+                raise first_error
+            raise self._create_parse_error(str(first_error))
+
+        return program
 
     def _log(self, message, level="normal"):
         """Controlled logging based on config"""
@@ -159,6 +210,14 @@ class UltimateParser:
             
             all_tokens = self._cached_tokens
 
+            # Arrow lambdas currently parse reliably via the traditional engine.
+            # When the token stream contains the '=>' literal, switch to the
+            # classic parser immediately to keep AST output deterministic.
+            if any(t.type == LAMBDA and getattr(t, 'literal', None) == '=>'
+                   for t in all_tokens):
+                self.use_advanced_parsing = False
+                return self._parse_traditional()
+
             # OPTIMIZATION: Only analyze structure if not done before
             if not hasattr(self, '_structure_analyzed'):
                 self.block_map = self.structural_analyzer.analyze(all_tokens)
@@ -170,9 +229,22 @@ class UltimateParser:
             # Phase 2: Parse ALL blocks
             program = self._parse_all_blocks_tolerantly(all_tokens)
 
+            if self._advanced_result_needs_fallback(program):
+                self._log("⚠️ Advanced parser produced incomplete AST, using traditional parser", "normal")
+                self.use_advanced_parsing = False
+                return self._parse_traditional()
+
             # Fallback if advanced parsing fails
             if len(program.statements) == 0 and len(all_tokens) > 10:
                 return self._parse_traditional()
+
+            if self._should_verify_with_traditional(program, all_tokens):
+                fallback_program, fallback_errors = self._parse_traditional_copy()
+                if fallback_program and len(fallback_program.statements) > len(program.statements):
+                    self._log("🔁 Traditional parser produced a richer AST; switching to fallback result", "normal")
+                    self.errors = list(fallback_errors or [])
+                    self.use_advanced_parsing = False
+                    return fallback_program
 
             self._log(f"✅ Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors", "minimal")
             return program
@@ -182,71 +254,125 @@ class UltimateParser:
             self.use_advanced_parsing = False
             return self._parse_traditional()
 
+    def _advanced_result_needs_fallback(self, program):
+        """Detect obvious advanced-parser failures and trigger traditional fallback."""
+        try:
+            statements = getattr(program, "statements", []) or []
+        except Exception:
+            return True
+
+        for stmt in statements:
+            if isinstance(stmt, BlockStatement):
+                # Top-level block indicates context parser stitched raw blocks
+                return True
+            if isinstance(stmt, ActionStatement):
+                name_obj = getattr(stmt, "name", None)
+                name_value = getattr(name_obj, "value", name_obj)
+                if not name_value or name_value == "anonymous":
+                    return True
+                body = getattr(stmt, "body", None)
+                if not body or not getattr(body, "statements", None):
+                    return True
+            if isinstance(stmt, FunctionStatement):
+                name_obj = getattr(stmt, "name", None)
+                name_value = getattr(name_obj, "value", name_obj)
+                if not name_value:
+                    return True
+        return False
+
+    def _should_verify_with_traditional(self, program, tokens):
+        """Decide if we should cross-check the advanced result against the traditional parser."""
+        try:
+            statements = getattr(program, "statements", []) or []
+        except Exception:
+            statements = []
+
+        # Small programs are cheap to re-parse and are more likely to hit edge cases
+        if len(statements) <= 1:
+            return True
+
+        last_token = self._last_meaningful_token(tokens)
+        if not last_token:
+            return False
+
+        # If the source ends with an expression-y token but AST does not, verify with traditional parser
+        expressiony_tokens = {IDENT, INT, FLOAT, STRING, TRUE, FALSE, NULL, RPAREN, RBRACKET}
+        if last_token.type in expressiony_tokens:
+            from ..zexus_ast import ExpressionStatement
+            if statements and isinstance(statements[-1], ExpressionStatement):
+                return False
+            return True
+
+        return False
+
+    def _last_meaningful_token(self, tokens):
+        for tok in reversed(tokens or []):
+            if tok.type in {EOF, SEMICOLON}:
+                continue
+            literal = getattr(tok, "literal", "") or ""
+            if literal.strip() == "":
+                continue
+            return tok
+        return None
+
+    def _parse_traditional_copy(self):
+        """Parse the current source with the traditional engine in an isolated parser instance."""
+        try:
+            clone_lexer = Lexer(self.lexer.input, getattr(self.lexer, "filename", "<stdin>"))
+            fallback_parser = UltimateParser(clone_lexer, self.syntax_style, enable_advanced_strategies=False)
+            fallback_program = fallback_parser.parse_program()
+            return fallback_program, getattr(fallback_parser, "errors", [])
+        except Exception:
+            return None, []
+
     def parse_map_literal(self):
         """Parse a map/object literal: { key: value, ... }"""
-        # consume '{'
+        # Consume '{'
         self.next_token()
 
         pairs = []
 
-        # Empty map
+        # Empty map literal {}
         if self.cur_token_is(RBRACE):
             self.next_token()
             return MapLiteral(pairs=pairs)
 
-        # Collect key:value pairs with nesting support
-        while not self.cur_token_is(EOF) and not self.cur_token_is(RBRACE):
-            # Parse key
+        while not self.cur_token_is(EOF):
+            # Parse key (identifier or string)
             if self.cur_token_is(STRING):
                 key = StringLiteral(self.cur_token.literal)
-                self.next_token()
             elif self.cur_token_is(IDENT):
                 key = Identifier(self.cur_token.literal)
-                self.next_token()
             else:
-                # Tolerant: skip unexpected tokens until colon or next pair
-                self.next_token()
-                continue
+                self.errors.append(
+                    f"Line {self.cur_token.line}:{self.cur_token.column} - Expected string or identifier for map key"
+                )
+                return None
 
-            # Expect colon
-            if not self.cur_token_is(COLON):
-                # Tolerant: try to recover by searching forward
-                while not self.cur_token_is(COLON) and not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-                    self.next_token()
-                if not self.cur_token_is(COLON):
-                    break
+            if not self.expect_peek(COLON):
+                return None
 
-            # consume ':'
-            self.next_token()
+            self.next_token()  # move to first token of the value
+            value = self.parse_expression(LOWEST)
+            pairs.append((key, value))
 
-            # Parse value expression until comma or closing brace
-            value_tokens = []
-            nesting = 0
-            while not self.cur_token_is(EOF) and not (self.cur_token_is(COMMA) and nesting == 0) and not (self.cur_token_is(RBRACE) and nesting == 0):
-                if self.cur_token_is(LPAREN) or self.cur_token_is(LBRACE) or self.cur_token_is(LBRACKET):
-                    nesting += 1
-                elif self.cur_token_is(RPAREN) or self.cur_token_is(RBRACE) or self.cur_token_is(RBRACKET):
-                    nesting -= 1
-                value_tokens.append(self.cur_token)
-                self.next_token()
+            if self.peek_token_is(RBRACE):
+                self.next_token()  # consume '}'
+                break
 
-            value_expr = self.parse_expression(LOWEST) if value_tokens else None
-            pairs.append((key, value_expr))
+            if not self.peek_token_is(COMMA):
+                self.errors.append(
+                    f"Line {self.peek_token.line}:{self.peek_token.column} - Expected ',' or '}}' after map value"
+                )
+                return None
 
-            # If current token is comma, consume it and continue
-            if self.cur_token_is(COMMA):
-                self.next_token()
+            # Consume comma and handle optional trailing separator
+            self.next_token()  # move to comma
+            if self.peek_token_is(RBRACE):
+                self.next_token()  # consume closing brace
+                break
 
-        # Expect closing brace
-        if not self.cur_token_is(RBRACE):
-            error = self._create_parse_error(
-                "Expected '}' to close map literal",
-                suggestion="Make sure all opening braces { have matching closing braces }"
-            )
-            raise error
-
-        # consume '}'
-        self.next_token()
+            self.next_token()  # move to next key token
 
         return MapLiteral(pairs=pairs)
 
@@ -254,6 +380,11 @@ class UltimateParser:
         """Collect all tokens for structural analysis - OPTIMIZED"""
         tokens = []
         original_position = self.lexer.position
+        original_read_position = self.lexer.read_position
+        original_ch = self.lexer.ch
+        original_line = self.lexer.line
+        original_column = self.lexer.column
+        original_last_token_type = self.lexer.last_token_type
         original_cur = self.cur_token
         original_peek = self.peek_token
 
@@ -282,6 +413,11 @@ class UltimateParser:
 
         # Restore parser state
         self.lexer.position = original_position
+        self.lexer.read_position = original_read_position
+        self.lexer.ch = original_ch
+        self.lexer.line = original_line
+        self.lexer.column = original_column
+        self.lexer.last_token_type = original_last_token_type
         self.cur_token = original_cur
         self.peek_token = original_peek
 
@@ -369,6 +505,10 @@ class UltimateParser:
         modifiers = []
         if self.cur_token and self.cur_token.type in {PUBLIC, PRIVATE, SEALED, ASYNC, NATIVE, INLINE, SECURE, PURE, VIEW, PAYABLE}:
             modifiers = self._parse_modifiers()
+
+        # Skip stray semicolons that may appear between statements
+        if self.cur_token_is(SEMICOLON):
+            return None
         try:
             node = None
             if self.cur_token_is(LET):
@@ -699,6 +839,11 @@ class UltimateParser:
 
     def parse_action_statement(self):
         """Tolerant action parser supporting both syntax styles"""
+        is_async_modifier = False
+        if self.peek_token_is(ASYNC):
+            self.next_token()  # consume inline async modifier
+            is_async_modifier = True
+
         if not self.expect_peek(IDENT):
             self.errors.append("Expected function name after 'action'")
             return None
@@ -734,8 +879,26 @@ class UltimateParser:
         if not body:
             return None
 
-        # Note: is_async will be set by parse_statement if async modifier is present
-        return ActionStatement(name=name, parameters=parameters, body=body, is_async=False, return_type=return_type)
+        action_node = ActionStatement(
+            name=name,
+            parameters=parameters,
+            body=body,
+            is_async=is_async_modifier,
+            return_type=return_type,
+        )
+
+        if is_async_modifier:
+            # Mirror modifier behavior so downstream consumers find 'async'
+            existing_modifiers = getattr(action_node, 'modifiers', []) or []
+            if 'async' not in (m.lower() if isinstance(m, str) else m for m in existing_modifiers):
+                try:
+                    existing_modifiers = list(existing_modifiers)
+                    existing_modifiers.append('async')
+                    action_node.modifiers = existing_modifiers
+                except Exception:
+                    action_node.modifiers = ['async']
+
+        return action_node
 
     def parse_function_statement(self):
         """Tolerant function parser supporting both syntax styles"""
@@ -2085,79 +2248,91 @@ class UltimateParser:
         return DeferStatement(code_block)
 
     def parse_pattern_statement(self):
-        """Parse pattern statement - pattern matching.
-        
-        Syntax:
-            pattern value {
-              case 1 => print "one";
-              case 2 => print "two";
-              default => print "other";
-            }
-        """
+        """Parse pattern statement - pattern matching."""
         token = self.cur_token
 
-        # Parse expression to match against
-        if not self.expect_peek(IDENT):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected identifier after 'pattern'")
+        # Parse the expression being matched
+        self.next_token()
+        match_expression = self.parse_expression(LOWEST)
+        if match_expression is None:
+            self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'pattern'")
             return None
-        expression = Identifier(self.cur_token.literal)
 
-        # Expect opening brace
         if not self.expect_peek(LBRACE):
             self.errors.append(f"Line {token.line}:{token.column} - Expected '{{' after pattern expression")
             return None
 
-        # Parse pattern cases
         cases = []
         self.next_token()
+        lambda_infix_fn = self.infix_parse_fns.get(LAMBDA)
 
         while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
-            # Expect 'case' or 'default'
+            if self.cur_token_is(SEMICOLON):
+                self.next_token()
+                continue
+
             if self.cur_token.literal == "case":
                 self.next_token()
-                pattern = self.parse_expression(LOWEST)
-                
-                # Expect '=>'
-                if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
-                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in pattern case")
-                    return None
-                
-                self.next_token()
-                action = self.parse_expression(LOWEST)
-                
-                cases.append(PatternCase(pattern, action))
-                
-                # Optional semicolon
-                if self.peek_token_is(SEMICOLON):
-                    self.next_token()
-            
-            elif self.cur_token.literal == "default":
-                self.next_token()
-                
-                # Expect '=>'
-                if not self.expect_peek(ASSIGN):
-                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in default case")
-                    return None
-                
-                self.next_token()
-                action = self.parse_expression(LOWEST)
-                
-                cases.append(PatternCase("default", action))
-                
-                # Optional semicolon
-                if self.peek_token_is(SEMICOLON):
-                    self.next_token()
-                
-                break  # Default should be last
-            
+
+            is_default = False
+            pattern_node = None
+
+            if self.cur_token.literal == "default" and self.peek_token_is(LAMBDA):
+                is_default = True
+                pattern_node = "default"
+            else:
+                try:
+                    if lambda_infix_fn:
+                        self.infix_parse_fns.pop(LAMBDA, None)
+                    pattern_node = self.parse_expression(LOWEST)
+                finally:
+                    if lambda_infix_fn:
+                        self.infix_parse_fns[LAMBDA] = lambda_infix_fn
+
+            if pattern_node is None and not is_default:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected pattern value before '=>'")
+                return None
+
+            if not self.expect_peek(LAMBDA):
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in pattern case")
+                return None
+
             self.next_token()
 
-        # Expect closing brace
+            parsed_block = False
+            action_node = None
+            if self.cur_token_is(LBRACE):
+                action_node = self.parse_block("pattern-case")
+                parsed_block = True
+            else:
+                action_node = self.parse_statement()
+                if action_node is None:
+                    action_expr = self.parse_expression(LOWEST)
+                    if action_expr is not None:
+                        action_node = ExpressionStatement(expression=action_expr)
+                    else:
+                        self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected action after '=>'")
+                        return None
+
+            cases.append(PatternCase(pattern_node if not is_default else "default", action_node))
+
+            advanced = False
+            if parsed_block and self.cur_token_is(RBRACE):
+                self.next_token()
+                advanced = True
+
+            while self.cur_token_is(SEMICOLON):
+                self.next_token()
+                advanced = True
+
+            if not advanced and not self.cur_token_is(RBRACE):
+                self.next_token()
+
         if not self.cur_token_is(RBRACE):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '}}' after pattern cases")
             return None
 
-        return PatternStatement(expression, cases)
+        return PatternStatement(match_expression, cases)
 
     def parse_enum_statement(self):
         """Parse enum statement - type-safe enumerations.
@@ -2248,18 +2423,26 @@ class UltimateParser:
         event_var = Identifier(self.cur_token.literal)
 
         # Expect '=>'
-        if not self.expect_peek(ASSIGN):  # Using = as stand-in for =>
+        if not self.expect_peek(LAMBDA):
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' after event variable")
             return None
 
-        # Expect block
-        if not self.expect_peek(LBRACE):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' for stream handler")
-            return None
+        self.next_token()
 
-        handler = self.parse_block("stream")
-        if handler is None:
-            return None
+        if self.cur_token_is(LBRACE):
+            handler = self.parse_block("stream")
+            if handler is None:
+                return None
+        else:
+            handler_expr = self.parse_expression(LOWEST)
+            if handler_expr is None:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected handler after '=>'")
+                return None
+            handler = BlockStatement()
+            handler.statements.append(ExpressionStatement(handler_expr))
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
 
         return StreamStatement(stream_name, event_var, handler)
 
@@ -2615,6 +2798,8 @@ class UltimateParser:
         stmt = ReturnStatement(return_value=None)
         self.next_token()
         stmt.return_value = self.parse_expression(LOWEST)
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
         return stmt
 
     def parse_continue_statement(self):
@@ -2662,11 +2847,12 @@ class UltimateParser:
 
         # Stop parsing when we hit closing delimiters or terminators
         # This prevents the parser from trying to parse beyond expression boundaries
-        while (not self.peek_token_is(SEMICOLON) and 
+        while (not self.peek_token_is(SEMICOLON) and
                not self.peek_token_is(EOF) and
                not self.peek_token_is(RPAREN) and
                not self.peek_token_is(RBRACE) and
-               not self.peek_token_is(RBRACKET) and 
+               not self.peek_token_is(RBRACKET) and
+               not self.peek_token_is(LBRACE) and
                precedence <= self.peek_precedence()):
 
             print(f"[EXPR LOOP] cur={self.cur_token.literal}@L{self.cur_token.line}, peek={self.peek_token.literal}@L{self.peek_token.line}, precedence={precedence}, peek_prec={self.peek_precedence()}")
@@ -2692,16 +2878,16 @@ class UltimateParser:
                         # Save current state to peek ahead
                         saved_cur = self.cur_token
                         saved_peek = self.peek_token
-                        saved_pos = self.cur_pos
-                        
+                        lexer_snapshot = self._snapshot_lexer_state()
+
                         # Peek ahead one more token
                         self.next_token()  # Now peek_token is what we want to check
                         next_next = self.peek_token
-                        
+
                         # Restore state
+                        self._restore_lexer_state(lexer_snapshot)
                         self.cur_token = saved_cur
                         self.peek_token = saved_peek
-                        self.cur_pos = saved_pos
                         
                         # If next token after IDENT is LBRACKET or ASSIGN, it's likely a new statement
                         if next_next.type in (LBRACKET, ASSIGN, LPAREN):
@@ -2712,6 +2898,9 @@ class UltimateParser:
             if self.peek_token.type not in self.infix_parse_fns:
                 return left_exp
 
+            if self.peek_token.type == LBRACE and not self._can_start_constructor(left_exp):
+                break
+
             infix = self.infix_parse_fns[self.peek_token.type]
             self.next_token()
             left_exp = infix(left_exp)
@@ -2719,7 +2908,60 @@ class UltimateParser:
             if left_exp is None:
                 return None
 
+        if (self.peek_token_is(LBRACE) and
+                self._can_start_constructor(left_exp) and
+                self._brace_starts_constructor()):
+            self.next_token()
+            left_exp = self.parse_constructor_call_expression(left_exp)
+
         return left_exp
+
+    def _can_start_constructor(self, left_exp):
+        from ..zexus_ast import Identifier, CallExpression, ExpressionStatement
+        # Allow constructor syntax for identifiers or chained calls
+        if isinstance(left_exp, Identifier):
+            return True
+        if isinstance(left_exp, CallExpression):
+            return True
+        if isinstance(left_exp, ExpressionStatement):
+            return self._can_start_constructor(left_exp.expression)
+        return False
+
+    def _brace_starts_constructor(self):
+        """Look ahead to determine if the upcoming '{' begins a constructor literal."""
+        if not self.peek_token_is(LBRACE):
+            return False
+
+        saved_cur = self.cur_token
+        saved_peek = self.peek_token
+        lexer_snapshot = self._snapshot_lexer_state()
+
+        try:
+            # Move to '{'
+            self.next_token()
+            # Move to first token inside braces
+            self.next_token()
+            inner_first = self.cur_token
+            inner_second = self.peek_token
+
+            if inner_first is None:
+                return False
+
+            # Empty constructor literal like Foo{}
+            if inner_first.type == RBRACE:
+                return True
+
+            if inner_first.type not in (IDENT, STRING):
+                return False
+
+            if inner_second is None:
+                return False
+
+            return inner_second.type == COLON
+        finally:
+            self._restore_lexer_state(lexer_snapshot)
+            self.cur_token = saved_cur
+            self.peek_token = saved_peek
 
     def parse_identifier(self):
         # Allow DEBUG keyword to be used as identifier in expression contexts
@@ -2804,6 +3046,14 @@ class UltimateParser:
         expr = self.parse_expression(PREFIX)
         return AsyncExpression(expression=expr)
 
+    def parse_await_expression(self):
+        """Parse await expression: await <expression>"""
+        from ..zexus_ast import AwaitExpression
+
+        self.next_token()  # consume 'await'
+        awaited = self.parse_expression(PREFIX)
+        return AwaitExpression(expression=awaited)
+
     def parse_infix_expression(self, left):
         expression = InfixExpression(left=left, operator=self.cur_token.literal, right=None)
         precedence = self.cur_precedence()
@@ -2812,34 +3062,23 @@ class UltimateParser:
         return expression
 
     def parse_grouped_expression(self):
-        # Special-case: if this parenthesized group is followed by a lambda arrow
-        # treat its contents as a parameter list for an arrow-style lambda: (a, b) => ...
-        # The lexer sets a hint flag when it detects a ')' followed by '=>'. Use
-        # that as a fast-path check to parse the contents as parameter identifiers.
-        if getattr(self.lexer, '_next_paren_has_lambda', False) or self._lookahead_token_after_matching_paren() == LAMBDA:
-            # Consume '('
-            self.next_token()
-            self.lexer._next_paren_has_lambda = False  # Clear lexer hint after consuming parenthesis
+        is_lambda_param_list = (
+            getattr(self.lexer, '_next_paren_has_lambda', False)
+            or self._lookahead_token_after_matching_paren() == LAMBDA
+        )
+
+        if is_lambda_param_list:
+            self.next_token()  # move to first token inside the parentheses
+            self.lexer._next_paren_has_lambda = False
+
             params = []
-            # If immediate RPAREN, empty params
-            if self.cur_token_is(RPAREN):
-                self.next_token()
-                return ListLiteral(elements=params)
 
-            # Collect identifiers separated by commas
-            if self.cur_token_is(IDENT):
-                params.append(Identifier(self.cur_token.literal))
-
-            while self.peek_token_is(COMMA):
-                self.next_token()  # move to comma
-                self.next_token()  # move to next identifier
-                if self.cur_token_is(IDENT):
-                    params.append(Identifier(self.cur_token.literal))
-                else:
-                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected parameter name")
-                    break
-
-    
+            if not self.cur_token_is(RPAREN):
+                params = self._parse_parameter_list()
+                if not self.expect_peek(RPAREN):
+                    return None
+            # When the parameter list is empty, the current token is already RPAREN.
+            return ListLiteral(elements=params)
 
         # Default grouped expression behavior
         self.next_token()
@@ -4092,5 +4331,13 @@ class UltimateParser:
         
         return ModifierDeclaration(name, parameters, body)
 
-# Backward compatibility
-Parser = UltimateParser
+# Backward compatibility facade: defaults to traditional parsing pipeline.
+class Parser(UltimateParser):
+    def __init__(self, lexer, syntax_style=None, enable_advanced_strategies=True):
+        if enable_advanced_strategies is None:
+            enable_advanced_strategies = True
+        super().__init__(
+            lexer,
+            syntax_style=syntax_style,
+            enable_advanced_strategies=enable_advanced_strategies,
+        )

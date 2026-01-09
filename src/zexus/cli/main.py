@@ -22,7 +22,7 @@ from ..config import config
 from ..error_reporter import get_error_reporter, ZexusError, print_error
 # VM and Compiler for high-performance execution
 from ..vm.vm import VM, VMMode
-from ..vm.compiler import compile_ast_to_bytecode
+from ..vm.compiler import compile_ast_to_bytecode, UnsupportedNodeError
 
 console = Console()
 
@@ -231,6 +231,9 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
         env.set("__PACKAGE__", package_name)
         
         # Execute based on mode
+        bytecode = None
+        fallback_reason = None
+
         if use_vm:
             # VM EXECUTION PATH (High Performance)
             console.print("[dim]Compiling to bytecode...[/dim]", end="")
@@ -238,22 +241,29 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 bytecode = compile_ast_to_bytecode(program, optimize=not no_optimize)
                 console.print(" [green]done[/green]")
                 console.print(f"[dim]Bytecode: {len(bytecode.instructions)} instructions, {len(bytecode.constants)} constants[/dim]")
+            except UnsupportedNodeError as e:
+                console.print(" [yellow]unsupported[/yellow]")
+                console.print(f"[bold yellow]⚠️  VM fallback:[/bold yellow] {e}")
+                if ctx.obj.get('DEBUG'):
+                    import traceback
+                    traceback.print_exc()
+                fallback_reason = str(e)
             except Exception as e:
-                console.print(f" [red]failed[/red]")
+                console.print(" [red]failed[/red]")
                 console.print(f"[bold red]Bytecode compilation error:[/bold red] {str(e)}")
                 if ctx.obj.get('DEBUG'):
                     import traceback
                     traceback.print_exc()
-                sys.exit(1)
-            
-            # Initialize VM
+                fallback_reason = str(e)
+
+        if bytecode is not None and fallback_reason is None:
             vm_mode_enum = {
                 'auto': VMMode.AUTO,
                 'stack': VMMode.STACK,
                 'register': VMMode.REGISTER,
                 'parallel': VMMode.PARALLEL
             }[vm_mode]
-            
+
             console.print(f"[dim]Initializing VM ({vm_mode} mode)...[/dim]", end="")
             vm = VM(
                 mode=vm_mode_enum,
@@ -262,8 +272,7 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 debug=ctx.obj.get('DEBUG', False)
             )
             console.print(" [green]done[/green]")
-            
-            # Execute on VM
+
             console.print("[dim]Executing on VM...[/dim]")
             try:
                 result = vm.execute(bytecode, debug=ctx.obj.get('DEBUG', False))
@@ -272,9 +281,13 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 if ctx.obj.get('DEBUG'):
                     import traceback
                     traceback.print_exc()
-                sys.exit(1)
-        else:
-            # INTERPRETER EXECUTION PATH (Standard)
+                fallback_reason = str(e)
+
+        if fallback_reason is not None:
+            console.print("[bold yellow]🔄 Falling back to interpreter execution...[/bold yellow]")
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+        elif bytecode is None:
+            # No bytecode generated but VM not requested or compile skipped
             result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
         
         if result and hasattr(result, 'inspect') and result.inspect() != 'null':

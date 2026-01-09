@@ -1,36 +1,28 @@
-# test_parser_debug.py
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+"""Regression coverage for parser assignment handling."""
 
-from lexer import Lexer
-from parser import Parser
-from zexus_ast import *
+from zexus.lexer import Lexer
+from zexus.parser.parser import UltimateParser
+from zexus.zexus_ast import (
+    AssignmentExpression,
+    ExpressionStatement,
+    Identifier,
+    IntegerLiteral,
+)
 
-def test_assignment_parsing():
-    source = "x = 10"
-    lexer = Lexer(source)
-    parser = Parser(lexer)
-    
-    print("=== Testing assignment parsing ===")
-    print(f"Source: '{source}'")
-    
-    # Parse as expression statement
-    stmt = parser.parse_expression_statement()
-    
-    if parser.errors:
-        print("PARSER ERRORS:")
-        for error in parser.errors:
-            print(f"  {error}")
-    else:
-        print("SUCCESS: No parser errors")
-        if stmt and stmt.expression:
-            print(f"Parsed expression type: {type(stmt.expression).__name__}")
-            if isinstance(stmt.expression, AssignmentExpression):
-                print(f"  Left: {stmt.expression.name.value}")
-                print(f"  Right: {stmt.expression.value.value}")
-            else:
-                print(f"  Expression: {stmt.expression}")
 
-if __name__ == "__main__":
-    test_assignment_parsing()
+def test_assignment_expression_round_trip():
+    parser = UltimateParser(Lexer("x = 10"), enable_advanced_strategies=False)
+    program = parser.parse_program()
+
+    assert parser.errors == []
+    assert len(program.statements) == 1
+
+    statement = program.statements[0]
+    assert isinstance(statement, ExpressionStatement)
+
+    expression = statement.expression
+    assert isinstance(expression, AssignmentExpression)
+    assert isinstance(expression.name, Identifier)
+    assert expression.name.value == "x"
+    assert isinstance(expression.value, IntegerLiteral)
+    assert expression.value.value == 10

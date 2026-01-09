@@ -2,6 +2,7 @@
 import traceback
 import asyncio
 import os
+import sys
 from .. import zexus_ast
 from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
@@ -27,6 +28,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     def __init__(self, trusted: bool = False, use_vm: bool = True, resource_limiter=None):
         # Initialize mixins (FunctionEvaluatorMixin sets up builtins)
         FunctionEvaluatorMixin.__init__(self)
+
+        self._ensure_recursion_headroom()
         
         # Initialize 10-phase integration
         self.integration_context = EvaluationContext("evaluator")
@@ -71,6 +74,35 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
 
         if self.use_vm and VM_AVAILABLE:
             self._initialize_vm()
+
+    # ------------------------------------------------------------------
+    # Backward compatible entrypoints
+    # ------------------------------------------------------------------
+
+    def eval(self, program, env, *, debug_mode: bool = False, use_vm: bool | None = None):
+        """Evaluate an AST node, mirroring the legacy Evaluator API."""
+        previous_use_vm = self.use_vm
+        try:
+            if use_vm is not None:
+                self.use_vm = bool(use_vm) and VM_AVAILABLE
+
+            if debug_mode and hasattr(env, "enable_debug"):
+                env.enable_debug()
+
+            return self.eval_with_vm_support(program, env, debug_mode=debug_mode)
+        finally:
+            if debug_mode and hasattr(env, "disable_debug"):
+                env.disable_debug()
+            self.use_vm = previous_use_vm
+
+    def _ensure_recursion_headroom(self, minimum: int = 5000):
+        """Ensure Python's recursion limit can accommodate deep language recursion."""
+        try:
+            current = sys.getrecursionlimit()
+            if current < minimum:
+                sys.setrecursionlimit(minimum)
+        except Exception:
+            pass
 
     def _initialize_dispatch_table(self):
         """Precompute handlers for hot node types to reduce isinstance overhead."""
@@ -1042,7 +1074,15 @@ def evaluate(program, env, debug_mode=False, use_vm=True):
     try:
         from . import builtins as injected_builtins
         if isinstance(injected_builtins, dict):
-            evaluator.builtins.update(injected_builtins)
+            from ..object import Builtin
+
+            for name, value in injected_builtins.items():
+                if isinstance(value, Builtin):
+                    evaluator.builtins[name] = value
+                elif callable(value):
+                    evaluator.builtins[name] = Builtin(value, name)
+                else:
+                    evaluator.builtins[name] = value
     except Exception:
         pass
     

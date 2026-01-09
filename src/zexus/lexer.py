@@ -463,7 +463,7 @@ class Lexer:
             'if', 'elif', 'else', 'while', 'for', 'each', 'in',
             'return', 'break', 'continue', 'throw', 'try', 'catch',
             'await', 'async', 'spawn', 'let', 'const', 'print',
-            'use', 'export', 'import', 'debug', 'match'
+            'use', 'export', 'import', 'debug', 'match', 'lambda'
         }
         
         # If this is a strict keyword, always treat as keyword
@@ -500,7 +500,31 @@ class Lexer:
             # Also allow after RETURN for function expressions: return function() {...}
             # Also allow after ASYNC for async functions: async function name() {...}
             # Also allow after EXPORT for exported functions: export function name() {...}
-            statement_boundaries = {None, SEMICOLON, LBRACE, RBRACE, INT, STRING, FLOAT, RPAREN, TRUE, FALSE, NULL, RETURN, ASYNC, EXPORT}
+            statement_boundaries = {
+                None,
+                SEMICOLON,
+                LBRACE,
+                RBRACE,
+                INT,
+                STRING,
+                FLOAT,
+                RPAREN,
+                TRUE,
+                FALSE,
+                NULL,
+                RETURN,
+                ASYNC,
+                EXPORT,
+                PUBLIC,
+                PRIVATE,
+                SEALED,
+                INLINE,
+                SECURE,
+                PURE,
+                VIEW,
+                PAYABLE,
+                NATIVE,
+            }
             if self.last_token_type in statement_boundaries:
                 # Treat as keyword
                 pass  # Fall through to keyword lookup

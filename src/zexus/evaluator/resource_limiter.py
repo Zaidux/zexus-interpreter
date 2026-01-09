@@ -33,7 +33,7 @@ class ResourceLimiter:
     Limits:
     - max_iterations: Maximum loop iterations across all loops (default: 1,000,000)
     - timeout_seconds: Maximum execution time (default: 30 seconds)
-    - max_call_depth: Maximum call stack depth (default: 1000)
+    - max_call_depth: Maximum call stack depth (default: 5000)
     - max_memory_mb: Maximum memory usage (default: 500 MB, not enforced by default)
     
     Usage:
@@ -54,7 +54,7 @@ class ResourceLimiter:
     # Default limits
     DEFAULT_MAX_ITERATIONS = 1_000_000  # 1 million iterations
     DEFAULT_TIMEOUT_SECONDS = 30  # 30 seconds
-    DEFAULT_MAX_CALL_DEPTH = 100  # 100 nested calls (Python interpreter uses many stack frames per Zexus call)
+    DEFAULT_MAX_CALL_DEPTH = 5000  # Allow substantial recursion depth before stopping
     DEFAULT_MAX_MEMORY_MB = 500  # 500 MB (not enforced by default)
     
     def __init__(self, 
@@ -70,7 +70,7 @@ class ResourceLimiter:
         Args:
             max_iterations: Maximum total loop iterations (default: 1,000,000)
             timeout_seconds: Maximum execution time (default: 30)
-            max_call_depth: Maximum call stack depth (default: 1000)
+            max_call_depth: Maximum call stack depth (default: 5000)
             max_memory_mb: Maximum memory usage in MB (default: 500)
             enable_timeout: Enable timeout enforcement (default: False, Linux only)
             enable_memory_check: Enable memory checking (default: False, requires psutil)
@@ -212,7 +212,7 @@ class ResourceLimiter:
                 f"Call depth limit exceeded: {self.max_call_depth} nested calls{func_info}\n"
                 f"This prevents stack overflow from excessive recursion.\n\n"
                 f"Suggestion: Review your recursion or increase limit with:\n"
-                f"  zx-run --max-call-depth 5000 script.zx"
+                f"  zx-run --max-call-depth 20000 script.zx"
             )
     
     def exit_call(self):

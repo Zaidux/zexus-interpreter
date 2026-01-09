@@ -11,135 +11,97 @@ import sys
 import os
 import traceback
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 
 def test_memory_manager_exists():
     """Test that memory manager can be imported and instantiated."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        _ = MemoryManager(max_heap_size=1024*1024)  # 1MB limit
-        print("✅ Memory manager: instantiated successfully")
-        return True
-    except Exception as e:
-        print(f"✅ Memory manager: not available ({type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager(max_heap_size=1024 * 1024)
+    assert manager.heap.max_size == 1024 * 1024
+    print("✅ Memory manager: instantiated successfully")
 
 
 def test_memory_allocation_tracking():
     """Test that memory allocations can be tracked."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        manager = MemoryManager()
-        
-        # Allocate some objects
-        _ = manager.allocate([1, 2, 3, 4, 5])
-        _ = manager.allocate({"key": "value"})
-        _ = manager.allocate("test string")
-        
-        stats = manager.get_stats()
-        assert stats['allocation_count'] >= 3
-        print(f"✅ Memory allocation tracking: {stats['allocation_count']} allocations tracked")
-        return True
-    except Exception as e:
-        print(f"✅ Memory allocation tracking: tested (limited - {type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager()
+    manager.allocate([1, 2, 3, 4, 5])
+    manager.allocate({"key": "value"})
+    manager.allocate("test string")
+
+    stats = manager.get_stats()
+    assert stats['allocation_count'] >= 3
+    print(f"✅ Memory allocation tracking: {stats['allocation_count']} allocations tracked")
 
 
 def test_memory_limit_enforcement():
     """Test that memory limits can be enforced."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        
-        # Create manager with small limit
-        manager = MemoryManager(max_heap_size=1024)  # 1KB limit
-        
-        # Try to allocate large object
-        large_data = [0] * 10000  # Much larger than limit
-        try:
-            manager.allocate(large_data)
-            print("✅ Memory limit enforcement: allocation allowed (no strict enforcement)")
-        except Exception:
-            print("✅ Memory limit enforcement: limit enforced successfully")
-        
-        return True
-    except Exception as e:
-        print(f"✅ Memory limit enforcement: tested (limited - {type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager(max_heap_size=1024)
+    large_data = [0] * 10_000
+
+    with pytest.raises(MemoryError):
+        manager.allocate(large_data)
+
+    print("✅ Memory limit enforcement: limit enforced successfully")
 
 
 def test_garbage_collection():
     """Test that garbage collection works."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        manager = MemoryManager()
-        
-        # Allocate objects
-        for i in range(10):
-            manager.allocate([i] * 100)
-        
-        stats_before = manager.get_stats()
-        
-        # Trigger GC
-        manager.collect()
-        
-        stats_after = manager.get_stats()
-        
-        print(f"✅ Garbage collection: ran successfully ({stats_before.get('allocation_count', 0)} → {stats_after.get('allocation_count', 0)} objects)")
-        return True
-    except Exception as e:
-        print(f"✅ Garbage collection: tested (limited - {type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager()
+
+    for i in range(10):
+        manager.allocate([i] * 100)
+
+    stats_before = manager.get_stats()
+    collected, _ = manager.collect_garbage(force=True)
+    stats_after = manager.get_stats()
+
+    assert collected >= 0
+    assert stats_after['gc_runs'] >= stats_before['gc_runs']
+    print(
+        "✅ Garbage collection: ran successfully "
+        f"({stats_before.get('allocation_count', 0)} → {stats_after.get('allocation_count', 0)} allocations)"
+    )
 
 
 def test_memory_stats():
     """Test that memory statistics can be retrieved."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        manager = MemoryManager()
-        
-        stats = manager.get_stats()
-        
-        # Check for expected stats
-        expected_keys = ['allocation_count', 'total_size', 'gc_collections']
-        found_keys = [k for k in expected_keys if k in stats]
-        
-        print(f"✅ Memory statistics: {len(found_keys)}/{len(expected_keys)} metrics available")
-        return True
-    except Exception as e:
-        print(f"✅ Memory statistics: tested (limited - {type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager()
+    stats = manager.get_stats()
+
+    expected_keys = {'allocation_count', 'current_usage', 'peak_usage'}
+    assert expected_keys.issubset(stats.keys())
+    print(f"✅ Memory statistics: {len(expected_keys)} metrics verified")
 
 
 def test_memory_leak_detection():
     """Test basic memory leak detection."""
-    try:
-        from zexus.vm.memory_manager import MemoryManager
-        manager = MemoryManager()
-        
-        # Create objects that should be cleaned up
-        objects = []
-        for i in range(100):
-            obj = manager.allocate([i] * 10)
-            objects.append(obj)
-        
-        # Clear references
-        objects.clear()
-        
-        # Run GC
-        manager.collect()
-        
-        # Check for leaks
-        if hasattr(manager, 'check_leaks'):
-            leaks = manager.check_leaks()
-            print(f"✅ Memory leak detection: {len(leaks) if leaks else 0} leaks detected")
-        else:
-            print("✅ Memory leak detection: basic tracking available")
-        
-        return True
-    except Exception as e:
-        print(f"✅ Memory leak detection: tested (limited - {type(e).__name__})")
-        return False
+    from zexus.vm.memory_manager import MemoryManager
+
+    manager = MemoryManager()
+
+    objects = [manager.allocate([i] * 10) for i in range(100)]
+    objects.clear()
+
+    manager.collect_garbage(force=True)
+
+    if hasattr(manager, 'detect_leaks'):
+        leaks = manager.detect_leaks()
+        assert isinstance(leaks, list)
+        print(f"✅ Memory leak detection: {len(leaks)} potential leaks reported")
+    else:
+        pytest.skip("Memory manager does not expose leak detection")
 
 
 if __name__ == '__main__':
@@ -162,10 +124,11 @@ if __name__ == '__main__':
     
     for test in tests:
         try:
-            if test():
-                passed += 1
-            else:
+            result = test()
+            if result is False:
                 failed += 1
+            else:
+                passed += 1
         except Exception as e:
             print(f"❌ {test.__name__} failed: {e}")
             traceback.print_exc()

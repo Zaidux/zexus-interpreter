@@ -111,16 +111,22 @@ class ExpressionEvaluatorMixin:
         # SECURITY FIX #6: Integer overflow protection
         # Python integers have arbitrary precision, but we enforce safe ranges
         # to prevent resource exhaustion and match real-world integer behavior
-        MAX_SAFE_INT = 2**63 - 1  # 64-bit signed integer max
-        MIN_SAFE_INT = -(2**63)   # 64-bit signed integer min
-        
+        MAX_SAFE_BIT_LENGTH = 4096  # Allow values up to ~10^1233 before flagging overflow
+
         def check_overflow(result, operation):
             """Check if integer operation resulted in overflow"""
-            if result > MAX_SAFE_INT or result < MIN_SAFE_INT:
-                return EvaluationError(
-                    f"Integer overflow in {operation}",
-                    suggestion=f"Result {result} exceeds safe integer range [{MIN_SAFE_INT}, {MAX_SAFE_INT}]. Use require() to validate inputs or break calculation into smaller parts."
-                )
+            if isinstance(result, int):
+                bit_length = abs(result).bit_length()
+                if bit_length > MAX_SAFE_BIT_LENGTH:
+                    # Use a quick log10 approximation without importing decimal-heavy helpers
+                    approx_digits = int(bit_length * 0.30103) + 1 if bit_length else 1
+                    return EvaluationError(
+                        f"Integer overflow in {operation}",
+                        suggestion=(
+                            f"Result requires {bit_length} bits (~{approx_digits} digits), exceeding the safe limit of "
+                            f"{MAX_SAFE_BIT_LENGTH} bits. Break the calculation into smaller parts or enable big-integer support."
+                        )
+                    )
             return Integer(result)
         
         if operator == "+":
@@ -851,7 +857,12 @@ class ExpressionEvaluatorMixin:
             return NULL
         
         # For other expressions, evaluate first then check if it's a Coroutine
-        result = self.eval_node(node.expression, env, stack_trace)
+        previous_allow = getattr(self, "_allow_coroutine_result", False)
+        self._allow_coroutine_result = True
+        try:
+            result = self.eval_node(node.expression, env, stack_trace)
+        finally:
+            self._allow_coroutine_result = previous_allow
         
         if is_error(result):
             return result
