@@ -2,14 +2,14 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.6.8-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.7.1-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
 
 **A modern, security-first programming language with built-in blockchain support, VM-accelerated execution, advanced memory management, and policy-as-code**
 
-[What's New](#-whats-new-in-v150) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
+[What's New](#-whats-new-in-v171) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
 
 </div>
 
@@ -18,7 +18,7 @@
 ## 📋 Table of Contents
 
 - [What is Zexus?](#-what-is-zexus)
-- [What's New](#-whats-new-in-v150)
+- [What's New](#-whats-new-in-v171)
 - [Key Features](#-key-features)
   - [VM-Accelerated Performance](#-vm-accelerated-performance-new)
   - [Security & Policy-as-Code](#-security--policy-as-code--verify-enhanced)
@@ -67,9 +67,16 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ---
 
-## 🎉 What's New in v1.6.3
+## 🎉 What's New in v1.7.1
 
-### Latest Features (v1.6.3)
+### Latest Features (v1.7.1)
+
+✅ **FIND Keyword** - Declarative project search that resolves exact module paths with scope filtering and smart suggestions  
+✅ **LOAD Keyword & Manager** - Provider-aware configuration loader with built-in ENV, JSON, and YAML support plus caching  
+✅ **VM + Bytecode Support** - FIND/LOAD now compile to bytecode with helper bridges so scripts run identically in the VM and interpreter  
+✅ **Targeted Test Coverage** - Added regression tests that exercise both interpreter and VM paths for FIND/LOAD workflows  
+
+### Previous Features (v1.6.3)
 
 ✅ **Complete Database Ecosystem** - Production-ready database drivers  
 ✅ **4 Database Drivers** - SQLite, PostgreSQL, MySQL, MongoDB fully tested  

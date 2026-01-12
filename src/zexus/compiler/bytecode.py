@@ -23,7 +23,9 @@ from .zexus_ast import (
     Program, LetStatement, ExpressionStatement, PrintStatement, ReturnStatement,
     IfStatement, WhileStatement, Identifier, IntegerLiteral, StringLiteral,
     Boolean as AST_Boolean, InfixExpression, PrefixExpression, CallExpression,
-    ActionStatement, BlockStatement, MapLiteral, ListLiteral, AwaitExpression
+    ActionStatement, BlockStatement, MapLiteral, ListLiteral, AwaitExpression,
+    EnumDeclaration, ImportStatement, EventDeclaration, ProtocolDeclaration,
+    EmitStatement
 )
 
 # --- Bytecode representation ---
@@ -49,13 +51,62 @@ class BytecodeGenerator:
         self.bytecode = Bytecode()
         statements = list(getattr(program, "statements", []) or [])
         total = len(statements)
-        for index, stmt in enumerate(statements):
+        index = 0
+        while index < total:
+            stmt = statements[index]
+
+            # Pattern-match legacy import syntax: import "module" [as alias]
+            if (
+                isinstance(stmt, ExpressionStatement)
+                and isinstance(stmt.expression, Identifier)
+                and stmt.expression.value == "import"
+            ):
+                module_value = None
+                alias_value = None
+                consumed = 1
+
+                if index + 1 < total:
+                    module_stmt = statements[index + 1]
+                    if isinstance(module_stmt, ExpressionStatement):
+                        module_expr = getattr(module_stmt, "expression", None)
+                        if isinstance(module_expr, StringLiteral):
+                            module_value = module_expr.value
+                            consumed = 2
+                        elif isinstance(module_expr, Identifier):
+                            module_value = module_expr.value
+                            consumed = 2
+
+                if module_value is not None and index + consumed < total:
+                    next_stmt = statements[index + consumed]
+                    if (
+                        isinstance(next_stmt, ExpressionStatement)
+                        and isinstance(next_stmt.expression, Identifier)
+                        and next_stmt.expression.value == "as"
+                        and index + consumed + 1 < total
+                    ):
+                        alias_stmt = statements[index + consumed + 1]
+                        if isinstance(alias_stmt, ExpressionStatement) and isinstance(alias_stmt.expression, Identifier):
+                            alias_value = alias_stmt.expression.value
+                            consumed += 2
+
+                if module_value is not None:
+                    import_node = ImportStatement(module_path=module_value, alias=alias_value)
+                    self._emit_statement(
+                        import_node,
+                        self.bytecode,
+                        is_top_level=True,
+                        is_last=(index + consumed - 1 == total - 1),
+                    )
+                    index += consumed
+                    continue
+
             self._emit_statement(
                 stmt,
                 self.bytecode,
                 is_top_level=True,
                 is_last=(index == total - 1),
             )
+            index += 1
         return self.bytecode
 
     # Statement lowering
@@ -132,7 +183,61 @@ class BytecodeGenerator:
             bc.instructions[jump_pos] = ("JUMP_IF_FALSE", end_pos)
             return
 
-        # Event/emit/enum/import handled at higher-level generator earlier; treat as NOP here
+        if t == "EnumDeclaration":
+            enum_name = getattr(stmt.name, "value", stmt.name)
+            members = getattr(stmt, "members", {}) or {}
+            resolved_members = {}
+            next_auto = 0
+            for key, explicit in members.items():
+                value = explicit if explicit is not None else next_auto
+                resolved_members[key] = value
+                next_auto = (value + 1) if explicit is not None else (next_auto + 1)
+
+            name_idx = bc.add_constant(enum_name)
+            members_idx = bc.add_constant(resolved_members)
+            bc.add_instruction("DEFINE_ENUM", (name_idx, members_idx))
+            return
+
+        if t == "ImportStatement":
+            module_idx = bc.add_constant(getattr(stmt, "module_path", None))
+            alias = getattr(stmt, "alias", None)
+            if alias is not None:
+                alias_idx = bc.add_constant(alias)
+                bc.add_instruction("IMPORT", (module_idx, alias_idx))
+            else:
+                bc.add_instruction("IMPORT", (module_idx,))
+            return
+
+        if t == "EventDeclaration":
+            event_name = getattr(stmt.name, "value", stmt.name)
+            name_idx = bc.add_constant(event_name)
+            bc.add_instruction("REGISTER_EVENT", name_idx)
+            return
+
+        if t == "ProtocolDeclaration":
+            proto_name = getattr(stmt.name, "value", stmt.name)
+            spec = getattr(stmt, "spec", {}) or {}
+            name_idx = bc.add_constant(proto_name)
+            spec_idx = bc.add_constant(spec)
+            bc.add_instruction("DEFINE_PROTOCOL", (name_idx, spec_idx))
+            return
+
+        if t == "EmitStatement":
+            event_name = getattr(stmt.name, "value", stmt.name)
+            name_idx = bc.add_constant(event_name)
+            if getattr(stmt, "payload", None) is not None:
+                self._emit_expression(stmt.payload, bc)
+            bc.add_instruction("EMIT_EVENT", (name_idx,))
+            return
+
+        if t == "StreamStatement":
+            # Streams are currently handled at runtime only; compiler no-op.
+            return
+
+        if t == "WatchStatement":
+            # Watch statements are runtime constructs; compiler emits no bytecode.
+            return
+
         return
 
     # Expression lowering

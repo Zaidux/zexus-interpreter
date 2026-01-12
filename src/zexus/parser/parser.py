@@ -86,6 +86,8 @@ class UltimateParser:
             ASYNC: self.parse_async_expression,  # Support async <expression>
             AWAIT: self.parse_await_expression,  # Support await <expression>
             SANITIZE: self.parse_sanitize_expression,  # FIX #4: Support sanitize as expression
+            FIND: self.parse_find_expression,
+            LOAD: self.parse_load_expression,
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -531,6 +533,16 @@ class UltimateParser:
                 node = self.parse_for_each_statement()
             elif self.cur_token_is(SCREEN):
                 node = self.parse_screen_statement()
+            elif self.cur_token_is(COLOR):
+                node = self.parse_color_statement()
+            elif self.cur_token_is(CANVAS):
+                node = self.parse_canvas_statement()
+            elif self.cur_token_is(GRAPHICS):
+                node = self.parse_graphics_statement()
+            elif self.cur_token_is(ANIMATION):
+                node = self.parse_animation_statement()
+            elif self.cur_token_is(CLOCK):
+                node = self.parse_clock_statement()
             elif self.cur_token_is(ACTION):
                 node = self.parse_action_statement()
             elif self.cur_token_is(FUNCTION):
@@ -2417,10 +2429,20 @@ class UltimateParser:
             return None
 
         # Expect event variable name
-        if not self.expect_peek(IDENT):
+        if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
+            self.next_token()
+        else:
             self.errors.append(f"Line {token.line}:{token.column} - Expected event variable name")
             return None
-        event_var = Identifier(self.cur_token.literal)
+
+        event_literal = (
+            self.cur_token.literal
+            if hasattr(self.cur_token, "literal") and self.cur_token.literal is not None
+            else getattr(self.cur_token, "value", None)
+        )
+        if not event_literal:
+            event_literal = str(self.cur_token.type).lower()
+        event_var = Identifier(event_literal)
 
         # Expect '=>'
         if not self.expect_peek(LAMBDA):
@@ -2460,7 +2482,12 @@ class UltimateParser:
 
         # Parse watched expression
         self.next_token()
-        watched_expr = self.parse_expression(LOWEST)
+        lambda_infix = self.infix_parse_fns.pop(LAMBDA, None)
+        try:
+            watched_expr = self.parse_expression(LOWEST)
+        finally:
+            if lambda_infix is not None:
+                self.infix_parse_fns[LAMBDA] = lambda_infix
 
         if watched_expr is None:
             self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'watch'")
@@ -2477,7 +2504,13 @@ class UltimateParser:
             reaction = self.parse_block("watch")
         else:
             self.next_token()
-            reaction = self.parse_expression(LOWEST)
+            reaction_block = BlockStatement()
+            stmt = self.parse_statement()
+            if stmt is None:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
+                return None
+            reaction_block.statements.append(stmt)
+            reaction = reaction_block
 
         if reaction is None:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
@@ -2794,6 +2827,132 @@ class UltimateParser:
         stmt.body = self.parse_block_statement()
         return stmt
 
+    def parse_color_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected color name after 'color'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+        value = None
+
+        if self.peek_token_is(ASSIGN):
+            self.next_token()  # move to '='
+            self.next_token()  # move to expression start
+            value = self.parse_expression(LOWEST)
+        elif self.peek_token_is(LBRACE):
+            self.next_token()  # consume '{'
+            value = self.parse_block_statement()
+        else:
+            self.errors.append("Expected '=' or '{' after color name")
+            return None
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return ColorStatement(name, value)
+
+    def parse_canvas_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected canvas name after 'canvas'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+        properties = None
+        body = None
+
+        if self.peek_token_is(ASSIGN):
+            self.next_token()
+            self.next_token()
+            properties = self.parse_expression(LOWEST)
+        elif self.peek_token_is(LPAREN):
+            self.next_token()  # consume '('
+            properties = self.parse_expression_list(RPAREN)
+
+        if self.peek_token_is(LBRACE):
+            self.next_token()
+            body = self.parse_block_statement()
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return CanvasStatement(name, properties=properties, body=body)
+
+    def parse_graphics_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected graphics name after 'graphics'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+        body = None
+        if self.peek_token_is(ASSIGN):
+            self.next_token()
+            self.next_token()
+            expr = self.parse_expression(LOWEST)
+            body = BlockStatement()
+            stmt = ExpressionStatement(expression=expr)
+            body.statements.append(stmt)
+        elif self.peek_token_is(LBRACE):
+            self.next_token()
+            body = self.parse_block_statement()
+        else:
+            self.errors.append("Expected '=' or '{' after graphics name")
+            return None
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return GraphicsStatement(name, body=body)
+
+    def parse_animation_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected animation name after 'animation'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+        properties = None
+        body = None
+
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            properties = self.parse_expression_list(RPAREN)
+        elif self.peek_token_is(ASSIGN):
+            self.next_token()
+            self.next_token()
+            properties = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(LBRACE):
+            self.next_token()
+            body = self.parse_block_statement()
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return AnimationStatement(name, body=body, properties=properties)
+
+    def parse_clock_statement(self):
+        if not self.expect_peek(IDENT):
+            self.errors.append("Expected clock name after 'clock'")
+            return None
+
+        name = Identifier(self.cur_token.literal)
+        properties = None
+
+        if self.peek_token_is(LPAREN):
+            self.next_token()
+            properties = self.parse_expression_list(RPAREN)
+        elif self.peek_token_is(ASSIGN):
+            self.next_token()
+            self.next_token()
+            properties = self.parse_expression(LOWEST)
+        elif self.peek_token_is(LBRACE):
+            self.next_token()
+            properties = self.parse_block_statement()
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return ClockStatement(name, properties=properties)
+
     def parse_return_statement(self):
         stmt = ReturnStatement(return_value=None)
         self.next_token()
@@ -3053,6 +3212,40 @@ class UltimateParser:
         self.next_token()  # consume 'await'
         awaited = self.parse_expression(PREFIX)
         return AwaitExpression(expression=awaited)
+
+    def parse_find_expression(self):
+        from ..zexus_ast import FindExpression
+
+        token = self.cur_token
+        self.next_token()
+        target = self.parse_expression(LOWEST)
+
+        scope = None
+        if self.peek_token_is(IN):
+            self.next_token()  # move to IN
+            self.next_token()  # move to first token of scope expression
+            scope = self.parse_expression(LOWEST)
+
+        expr = FindExpression(target=target, scope=scope)
+        setattr(expr, 'token', token)
+        return expr
+
+    def parse_load_expression(self):
+        from ..zexus_ast import LoadExpression
+
+        token = self.cur_token
+        self.next_token()
+        target = self.parse_expression(LOWEST)
+
+        source = None
+        if (self.peek_token_is(IDENT) and self.peek_token.literal == "from"):
+            self.next_token()  # move to 'from'
+            self.next_token()  # move to start of source expression
+            source = self.parse_expression(LOWEST)
+
+        expr = LoadExpression(target=target, source=source)
+        setattr(expr, 'token', token)
+        return expr
 
     def parse_infix_expression(self, left):
         expression = InfixExpression(left=left, operator=self.cur_token.literal, right=None)

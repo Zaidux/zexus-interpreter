@@ -38,7 +38,8 @@ class StructuralAnalyzer:
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
               LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL,
-              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
+              SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+              EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
@@ -1110,7 +1111,8 @@ class StructuralAnalyzer:
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
               LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL, 
-              SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
+              SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+              EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,

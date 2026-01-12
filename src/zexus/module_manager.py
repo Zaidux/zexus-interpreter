@@ -13,6 +13,7 @@ class ModuleManager:
             self.base_path / "lib"
         ]
         self._debug = False
+        self._max_find_results = 50
 
     def normalize_path(self, path):
         """Normalize a module path"""
@@ -87,6 +88,129 @@ class ModuleManager:
         """Disable debug logging"""
         self._debug = False
 
+    def find_files(self, pattern, current_dir=None, scope=None, max_results=None):
+        """Search for files matching pattern within known search paths.
+
+        Args:
+            pattern: File name or relative pattern to search for.
+            current_dir: Directory of the importing file (for relative priority).
+            scope: Optional directory hint (absolute or relative) to limit search.
+            max_results: Maximum matches to return (defaults to manager limit).
+
+        Returns:
+            List of normalized absolute paths matching the pattern.
+        """
+        max_results = max_results or self._max_find_results
+
+        if not pattern:
+            return []
+
+        # Absolute pattern short-circuit
+        try:
+            pattern_path = Path(pattern)
+        except TypeError:
+            return []
+
+        if pattern_path.is_absolute():
+            if pattern_path.exists():
+                return [self.normalize_path(pattern_path)]
+            # Try with known extensions
+            for ext in (".zx", ".zexus"):
+                candidate = pattern_path.with_suffix(ext)
+                if candidate.exists():
+                    return [self.normalize_path(candidate)]
+            return []
+
+        roots = []
+
+        def _append_root(path_candidate):
+            if not path_candidate:
+                return
+            try:
+                resolved = Path(path_candidate).resolve()
+            except (OSError, RuntimeError):
+                return
+            if resolved not in roots and resolved.exists():
+                roots.append(resolved)
+
+        # Scope hint first (if provided)
+        if scope:
+            scope_path = Path(scope)
+            if not scope_path.is_absolute() and current_dir:
+                _append_root(Path(current_dir) / scope_path)
+            _append_root(self.base_path / scope_path)
+            if scope_path.is_absolute():
+                _append_root(scope_path)
+
+        # Current file directory has highest priority after scope
+        if current_dir:
+            _append_root(current_dir)
+
+        # Standard search paths (project root, modules, lib, etc.)
+        for search_path in self.search_paths:
+            _append_root(search_path)
+
+        # Deduplicate while preserving order
+        seen = set()
+        ordered_roots = []
+        for root in roots:
+            if root in seen:
+                continue
+            seen.add(root)
+            ordered_roots.append(root)
+
+        matches = []
+        match_set = set()
+
+        def _record(path_obj):
+            normalized = self.normalize_path(path_obj)
+            if normalized not in match_set:
+                match_set.add(normalized)
+                matches.append(normalized)
+
+        # Exact relative matches via direct join first
+        for root in ordered_roots:
+            candidate = root / pattern_path
+            if candidate.exists() and candidate.is_file():
+                _record(candidate)
+                if len(matches) >= max_results:
+                    return matches
+            else:
+                for ext in (".zx", ".zexus"):
+                    candidate_ext = candidate.with_suffix(ext)
+                    if candidate_ext.exists() and candidate_ext.is_file():
+                        _record(candidate_ext)
+                        if len(matches) >= max_results:
+                            return matches
+
+        # Fallback to glob search across roots
+        if pattern_path.name:
+            search_pattern = str(pattern_path)
+            basename_pattern = pattern_path.name
+        else:
+            search_pattern = pattern
+            basename_pattern = pattern
+
+        for root in ordered_roots:
+            if len(matches) >= max_results:
+                break
+            try:
+                iterator = root.rglob(search_pattern)
+            except (ValueError, OSError):
+                try:
+                    iterator = root.rglob(basename_pattern)
+                except (ValueError, OSError):
+                    continue
+
+            for found in iterator:
+                if not found.is_file():
+                    continue
+                _record(found)
+                if len(matches) >= max_results:
+                    break
+
+        return matches
+
 # Create a default instance for backwards compatibility
 _default_manager = ModuleManager()
 
@@ -105,3 +229,7 @@ def cache_module(path, module_env):
 
 def clear_cache():
     return _default_manager.clear_cache()
+
+
+def find_files(pattern, current_dir=None, scope=None, max_results=None):
+    return _default_manager.find_files(pattern, current_dir=current_dir, scope=scope, max_results=max_results)

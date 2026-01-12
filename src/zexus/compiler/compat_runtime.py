@@ -182,8 +182,12 @@ except Exception as e:
     def unwrap_return_value(obj):
         return obj
 
-    # Minimal renderer fallback
-    RENDER_REGISTRY = {'screens': {}, 'components': {}, 'themes': {}, 'canvases': {}, 'current_theme': None}
+    # Minimal renderer fallback (used when the real backend is unavailable)
+    try:
+        from ..renderer import backend as _BACKEND
+        RENDER_REGISTRY = _BACKEND.inspect_registry()
+    except Exception:
+        RENDER_REGISTRY = {'screens': {}, 'components': {}, 'themes': {}, 'canvases': {}, 'current_theme': None}
 
     # Try to create small wrappers for builtin functions by reading from object.File when present
     try:

@@ -15,7 +15,7 @@ sys.path.insert(0, SRC)
 from zexus.lexer import Lexer
 from zexus.parser import Parser as IntParser
 from zexus.evaluator import evaluate, builtins as evaluator_builtins
-from zexus.object import Environment
+from zexus.object import Environment, EvaluationError
 from zexus.compiler import ZexusCompiler, BUILTINS as COMPILER_BUILTINS
 
 # Helper: run interpreter and return a normalized Python value
@@ -27,29 +27,69 @@ def run_interpreter_and_get_result(src):
 		raise AssertionError(f"Interpreter parse errors: {parser.errors}")
 	env = Environment()
 	res = evaluate(prog, env, debug_mode=False)
-	# If evaluate returned an error string, raise
-	if isinstance(res, str) and res.startswith("❌"):
-		# return the error string for diagnostics
+
+	def _drain_coroutine(coro, limit=10000):
+		pending = None
+		for _ in range(limit):
+			done, value = coro.resume(pending)
+			if done:
+				error = getattr(coro, "error", None)
+				if error is not None:
+					return error
+				if value is not None:
+					return value
+				return getattr(coro, "result", None)
+			pending = None
+		return coro
+
+	def _normalize(value):
+		visited = 0
+		while True:
+			if value is None:
+				return None
+			if isinstance(value, EvaluationError):
+				return value
+			if isinstance(value, str) and value.startswith("❌"):
+				return value
+			value_type = value.type() if hasattr(value, "type") else None
+			if value_type == "COROUTINE":
+				value = _drain_coroutine(value)
+				visited += 1
+				if visited > 100:
+					return value
+				continue
+			if value_type == "PROMISE":
+				if getattr(value, "is_resolved", lambda: False)():
+					try:
+						value = value.get_value()
+						visited += 1
+						if visited > 100:
+							return value
+						continue
+					except Exception as exc:
+						return f"Promise rejected: {exc}"
+				return value
+			if hasattr(value, "value"):
+				return value.value
+			if hasattr(value, "inspect"):
+				return value.inspect()
+			return value
+
+	if isinstance(res, EvaluationError):
 		return res
-	# If interpreter stored results in environment (e.g. last expr stored as variable), try to probe common symbol 'r'
+	if isinstance(res, str) and res.startswith("❌"):
+		return res
+
 	try:
 		val = env.get("r")
 		if val is not None:
-			# Try to unwrap objects with 'value' attribute
-			if hasattr(val, "value"):
-				return val.value
-			if hasattr(val, "inspect"):
-				return val.inspect()
-			return val
+			normalized = _normalize(val)
+			if normalized is not None:
+				return normalized
 	except Exception:
 		pass
-	# If result is an object with .value
-	if hasattr(res, "value"):
-		return res.value
-	# If result has inspect()
-	if hasattr(res, "inspect"):
-		return res.inspect()
-	return res
+
+	return _normalize(res)
 
 # Helper: run compiler pipeline and return normalized result
 def run_compiler_and_get_result(src):

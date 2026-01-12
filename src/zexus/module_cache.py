@@ -62,6 +62,8 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
             importer_dir = os.path.dirname(importer_file)
             resolved_path = os.path.join(importer_dir, file_path[2:])  # Remove './'
             candidates.append(resolved_path)
+            # Also consider project-root relative paths like "./tests/..."
+            candidates.append(os.path.join(os.getcwd(), file_path[2:]))
         elif importer_file and file_path.startswith('../'):
             # Parent directory relative to importing file
             importer_dir = os.path.dirname(importer_file)

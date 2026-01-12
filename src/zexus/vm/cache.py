@@ -530,3 +530,7 @@ class BytecodeCache:
         return (f"BytecodeCache(size={len(self._cache)}/{self.max_size}, "
                 f"memory={self.memory_usage_mb():.2f}MB, "
                 f"hit_rate={self.stats.hit_rate:.1f}%)")
+
+    def __bool__(self) -> bool:
+        """Ensure the cache instance is truthy even when empty."""
+        return True

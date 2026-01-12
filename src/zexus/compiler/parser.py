@@ -119,6 +119,10 @@ class ProductionParser:
                 return self.parse_protocol_declaration()
             elif self.cur_token_is(IMPORT):
                 return self.parse_import_statement()
+            elif self.cur_token_is(STREAM):
+                return self.parse_stream_statement()
+            elif self.cur_token_is(WATCH):
+                return self.parse_watch_statement()
             else:
                 return self.parse_expression_statement()
         except Exception as e:
@@ -666,8 +670,32 @@ class ProductionParser:
         if not self.expect_peek(IDENT):
             return None
         name = Identifier(self.cur_token.literal)
-        body = self.parse_block()
-        return EventDeclaration(name=name, properties=body)
+        if not self.expect_peek(LBRACE):
+            return None
+
+        properties = {}
+        self.next_token()
+        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+            if self.cur_token_is(IDENT) or self.cur_token_is(STRING):
+                key = self.cur_token.literal
+                value = None
+                if self.peek_token_is(COLON):
+                    self.next_token()
+                    self.next_token()
+                    value = self.parse_expression(LOWEST)
+                properties[key] = value
+
+            if self.peek_token_is(COMMA):
+                self.next_token()
+                self.next_token()
+                continue
+            self.next_token()
+
+        if not self.cur_token_is(RBRACE):
+            self.errors.append("Unclosed event declaration")
+            return None
+
+        return EventDeclaration(name=name, properties=properties)
 
     def parse_emit_statement(self):
         if not self.expect_peek(IDENT):
@@ -740,14 +768,87 @@ class ProductionParser:
     def parse_import_statement(self):
         if not self.expect_peek(STRING):
             return None
+
         module_path = self.cur_token.literal
         alias = None
-        if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
-            self.next_token()
-            self.next_token()
-            if self.cur_token_is(IDENT):
-                alias = self.cur_token.literal
+
+        if self.peek_token_is(AS) or (self.peek_token_is(IDENT) and self.peek_token.literal == "as"):
+            self.next_token()  # advance to 'as'
+
+            if not self.expect_peek(IDENT):
+                self.errors.append(f"Line {self.cur_token.line}: Expected identifier after 'as' in import statement")
+                return None
+
+            alias = self.cur_token.literal
+
         return ImportStatement(module_path=module_path, alias=alias)
+
+    def parse_stream_statement(self):
+        token = self.cur_token
+
+        if not self.expect_peek(IDENT):
+            return None
+        stream_name = self.cur_token.literal
+
+        if not self.expect_peek(AS):
+            return None
+
+        if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
+            self.next_token()
+        else:
+            self.errors.append(f"Line {getattr(token, 'line', 'unknown')}: Expected event identifier after 'as'")
+            return None
+
+        event_token = self.cur_token
+        event_literal = getattr(event_token, 'literal', None) or getattr(event_token, 'value', None)
+        if not event_literal:
+            event_literal = event_token.type.lower()
+        event_var = Identifier(event_literal)
+
+        if not self.expect_peek(LAMBDA):
+            return None
+
+        self.next_token()
+
+        if self.cur_token_is(LBRACE):
+            handler = self.parse_block()
+        else:
+            handler_expr = self.parse_expression(LOWEST)
+            if handler_expr is None:
+                return None
+            handler = BlockStatement()
+            handler.statements.append(ExpressionStatement(handler_expr))
+
+        return StreamStatement(stream_name=stream_name, event_var=event_var, handler=handler)
+
+    def parse_watch_statement(self):
+        self.next_token()
+
+        lambda_handler = self.infix_parse_fns.pop(LAMBDA, None)
+        try:
+            watched_expr = self.parse_expression(LOWEST)
+        finally:
+            if lambda_handler is not None:
+                self.infix_parse_fns[LAMBDA] = lambda_handler
+
+        if watched_expr is None:
+            return None
+
+        if not self.expect_peek(LAMBDA):
+            return None
+
+        self.next_token()
+
+        if self.cur_token_is(LBRACE):
+            reaction = self.parse_block()
+        else:
+            reaction = BlockStatement()
+            stmt = self.parse_statement()
+            if stmt is None:
+                return None
+            reaction.statements.append(stmt)
+
+        return WatchStatement(watched_expr=watched_expr, reaction=reaction)
 
     # Token utilities
     def next_token(self):

@@ -78,6 +78,8 @@ CLOCK = "CLOCK"
 MAP = "MAP"
 WHILE = "WHILE"
 USE = "USE"
+FIND = "FIND"
+LOAD = "LOAD"
 EXACTLY = "EXACTLY"
 EMBEDDED = "EMBEDDED"
 EXPORT = "EXPORT"
@@ -90,6 +92,7 @@ BREAK = "BREAK"      # NEW: Break loop statement
 THROW = "THROW"      # NEW: Throw error statement
 EXTERNAL = "EXTERNAL" # NEW: From token
 FROM = "FROM"        # NEW: From token
+AS = "AS"
 
 # ASYNC / AWAIT / MODULE / EVENT / ENUM / PROTOCOL tokens
 ASYNC = "ASYNC"

@@ -179,7 +179,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 **Status:** NOT IMPLEMENTED - Keyword not in lexer  
 **Tests:** Not tested
 
-**Note:** COLOR keyword not found in lexer. Color system exists in `renderer/color_system.py` with RGBColor class and mixing capabilities, but no keyword integration.
+**Note:** COLOR keyword not found in lexer. Color system exists in `src/zexus/renderer/color_system.py` with RGBColor class and mixing capabilities, but no keyword integration.
 
 **Recommendation:** Add COLOR keyword to lexer and create evaluator for color definitions.
 
@@ -191,7 +191,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 **Status:** NOT IMPLEMENTED - No parser/evaluator  
 **Tests:** Not tested
 
-**Note:** GRAPHICS keyword registered in lexer (line 389) but no parser or evaluator implementation found. Graphics module exists at `renderer/graphics.py` with Clock and animation classes.
+**Note:** GRAPHICS keyword registered in lexer (line 389) but no parser or evaluator implementation found. Graphics module exists at `src/zexus/renderer/graphics.py` with Clock and animation classes.
 
 **Recommendation:** Implement parse_graphics and eval_graphics for graphics operations.
 
@@ -203,7 +203,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 **Status:** NOT IMPLEMENTED - No parser/evaluator  
 **Tests:** Not tested
 
-**Note:** CANVAS keyword registered in lexer (line 388) but no parser or evaluator implementation. Canvas system fully implemented in `renderer/canvas.py` with Point, Canvas classes and drawing methods.
+**Note:** CANVAS keyword registered in lexer (line 388) but no parser or evaluator implementation. Canvas system fully implemented in `src/zexus/renderer/canvas.py` with Point, Canvas classes and drawing methods.
 
 **Recommendation:** Implement parse_canvas and eval_canvas for canvas operations.
 
@@ -227,7 +227,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 **Status:** NOT IMPLEMENTED - No parser/evaluator  
 **Tests:** Not tested
 
-**Note:** CLOCK keyword registered in lexer (line 391) but no parser or evaluator implementation. Clock class fully implemented in `renderer/graphics.py` with analog clock drawing capabilities.
+**Note:** CLOCK keyword registered in lexer (line 391) but no parser or evaluator implementation. Clock class fully implemented in `src/zexus/renderer/graphics.py` with analog clock drawing capabilities.
 
 **Recommendation:** Implement parse_clock and eval_clock for clock component usage.
 
@@ -265,20 +265,20 @@ def eval_theme_statement(self, node, env, stack_trace):
 7. **CLOCK** - Registered in lexer, no parser/evaluator
 
 ### Not Registered (1/8):
-8. **COLOR** - Not in lexer (but RGBColor system exists in renderer/)
+8. **COLOR** - Not in lexer (but RGBColor system exists in src/zexus/renderer/)
 
 ---
 
 ## Renderer System Architecture
 
 ### Backend Modules (Fully Implemented):
-- **`renderer/color_system.py`** - RGBColor, ColorPalette, HSV conversion, color mixing
-- **`renderer/canvas.py`** - Canvas, Point, drawing primitives (lines, circles, rectangles)
-- **`renderer/graphics.py`** - Clock component, animations, visualizations
-- **`renderer/layout.py`** - Layout management
-- **`renderer/painter.py`** - Rendering engine
-- **`renderer/backend.py`** - Backend abstraction
-- **`renderer/main_renderer.py`** - Main renderer coordination
+- **`src/zexus/renderer/color_system.py`** - RGBColor, ColorPalette, HSV conversion, color mixing
+- **`src/zexus/renderer/canvas.py`** - Canvas, Point, drawing primitives (lines, circles, rectangles)
+- **`src/zexus/renderer/graphics.py`** - Clock component, animations, visualizations
+- **`src/zexus/renderer/layout.py`** - Layout management
+- **`src/zexus/renderer/painter.py`** - Rendering engine
+- **`src/zexus/renderer/backend.py`** - Backend abstraction
+- **`src/zexus/renderer/main_renderer.py`** - Main renderer coordination
 
 ### Language Integration (Partial):
 - **Lexer:** SCREEN, COMPONENT, THEME, GRAPHICS, CANVAS, ANIMATION, CLOCK registered
@@ -301,7 +301,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 - **Lexer:** `src/zexus/lexer.py` lines 385-391 (SCREEN, COMPONENT, THEME, CANVAS, GRAPHICS, ANIMATION, CLOCK)
 - **Parser:** `src/zexus/parser/parser.py` lines 2012-2028 (parse_screen_statement only)
 - **Evaluator:** `src/zexus/evaluator/statements.py` lines 1163-1195 (SCREEN, COMPONENT, THEME)
-- **Renderer Backend:** `renderer/` directory (complete implementation)
+- **Renderer Backend:** `src/zexus/renderer/` package (complete implementation)
 
 ---
 
@@ -313,18 +313,18 @@ def eval_theme_statement(self, node, env, stack_trace):
    - Add to lexer keyword map
    - Implement parse_color_statement
    - Implement eval_color_statement
-   - Integrate with renderer/color_system.py RGBColor
+    - Integrate with src/zexus/renderer/color_system.py RGBColor
 
 2. **Implement CANVAS Keyword** (HIGH PRIORITY)
    - Implement parse_canvas_statement
    - Implement eval_canvas_statement
-   - Connect to renderer/canvas.py Canvas class
+    - Connect to src/zexus/renderer/canvas.py Canvas class
    - Enable canvas drawing operations
 
 3. **Implement GRAPHICS Keyword** (MEDIUM PRIORITY)
    - Implement parse_graphics_statement
    - Implement eval_graphics_statement
-   - Connect to renderer/graphics.py
+    - Connect to src/zexus/renderer/graphics.py
    - Enable graphics operations
 
 4. **Implement ANIMATION Keyword** (MEDIUM PRIORITY)
@@ -336,7 +336,7 @@ def eval_theme_statement(self, node, env, stack_trace):
 5. **Implement CLOCK Keyword** (LOW PRIORITY)
    - Implement parse_clock_statement
    - Implement eval_clock_statement
-   - Connect to renderer/graphics.py Clock class
+    - Connect to src/zexus/renderer/graphics.py Clock class
    - Enable clock component usage
 
 ### Design Considerations:
@@ -422,7 +422,7 @@ let darker = mix("blue", "black", 0.3);
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 885-910
-- Backend: `renderer/backend.py` uses `ColorPalette.mix()`
+- Backend: `src/zexus/renderer/backend.py` uses `ColorPalette.mix()`
 - Returns: RGBColor object string representation
 - Parameters: color_a (string), color_b (string), ratio (float 0.0-1.0)
 
@@ -458,7 +458,7 @@ let hdCanvas = create_canvas(1920, 1080);
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 1023-1045
-- Backend: `renderer/backend.py` creates canvas in registry
+- Backend: `src/zexus/renderer/backend.py` creates canvas in registry
 - Returns: Canvas ID string (e.g., "canvas_1")
 - Parameters: width (integer), height (integer)
 
@@ -490,7 +490,7 @@ draw_line(canvas, 0, 0, 100, 100);
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 1047-1069
-- Backend: `renderer/backend.py` stores in draw_ops list
+- Backend: `src/zexus/renderer/backend.py` stores in draw_ops list
 - Returns: NULL
 - Parameters: canvas_id (string), x1, y1, x2, y2 (integers)
 
@@ -524,7 +524,7 @@ draw_text(canvas, 100, 100, "Label");
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 1072-1093
-- Backend: `renderer/backend.py` stores in draw_ops list
+- Backend: `src/zexus/renderer/backend.py` stores in draw_ops list
 - Returns: NULL
 - Parameters: canvas_id (string), x, y (integers), text (string)
 
@@ -561,7 +561,7 @@ set_theme("MainScreen", "CustomTheme");
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 989-1020
-- Backend: `renderer/backend.py` updates registry
+- Backend: `src/zexus/renderer/backend.py` updates registry
 - Returns: NULL
 - Parameters: theme_name (string) OR target, theme_name (strings)
 
@@ -590,7 +590,7 @@ let output = render_screen("MainScreen");
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 968-986
-- Backend: `renderer/backend.py` renders screen with components
+- Backend: `src/zexus/renderer/backend.py` renders screen with components
 - Returns: String representation of rendered screen
 
 **Note:** Function exists and is registered but was not included in Phase 10.3 test suite.
@@ -609,7 +609,7 @@ add_to_screen("MainScreen", "ButtonComponent");
 ```
 
 **Implementation:** `src/zexus/evaluator/functions.py` lines 947-965
-- Backend: `renderer/backend.py` adds to screen's component list
+- Backend: `src/zexus/renderer/backend.py` adds to screen's component list
 - Returns: NULL
 
 **Note:** Function exists and is registered but was not included in Phase 10.3 test suite.

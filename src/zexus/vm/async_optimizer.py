@@ -97,7 +97,7 @@ class FastFuture:
         """Make it awaitable - fast path, no event loop"""
         if self._exception:
             raise self._exception
-        yield from [].__iter__()  # Make it a generator
+        yield from ()
         return self._value
 
 
@@ -143,6 +143,10 @@ class CoroutinePool:
         Args:
             wrapper: Wrapper to release
         """
+        # Make sure underlying coroutine isn't left pending
+        if hasattr(wrapper, "_dispose_coroutine"):
+            wrapper._dispose_coroutine()
+
         if len(self.pool) < self.max_size:
             self.pool.append(wrapper)
     
@@ -169,15 +173,72 @@ class PooledCoroutineWrapper:
         return self._coro.send(value)
     
     def throw(self, typ, val=None, tb=None):
-        """Forward throw"""
-        return self._coro.throw(typ, val, tb)
+        """Forward throw while supporting modern coroutine semantics."""
+        coro_throw = getattr(self._coro, "throw", None)
+        if coro_throw is None:
+            raise AttributeError("Wrapped coroutine does not support throw()")
+
+        # Normalize exception according to modern coroutine API expectations
+        if tb is None and val is None:
+            return coro_throw(typ)
+
+        if tb is None and isinstance(typ, BaseException) and val is None:
+            return coro_throw(typ)
+
+        if isinstance(typ, BaseException):
+            exc = typ
+            if val is not None and val is not exc:
+                exc.args = exc.args or ()
+                exc.args += (val,)
+        elif isinstance(typ, type) and issubclass(typ, BaseException):
+            if isinstance(val, typ):
+                exc = val
+            elif val is None:
+                exc = typ()
+            else:
+                exc = typ(val)
+        else:
+            # Fall back to legacy behaviour for non-exception inputs
+            if tb is not None:
+                return coro_throw(typ, val, tb)
+            if val is not None:
+                return coro_throw(typ, val)
+            return coro_throw(typ)
+
+        if tb is not None and hasattr(exc, "with_traceback"):
+            exc = exc.with_traceback(tb)
+
+        return coro_throw(exc)
     
     def close(self):
         """Close and return to pool"""
+        self._dispose_coroutine()
+        self._pool.release_wrapper(self)
+
+    # Internal helpers -------------------------------------------------
+
+    def _dispose_coroutine(self):
+        coro = getattr(self, "_coro", None)
+        if coro is None:
+            return
+
         try:
-            self._coro.close()
+            close = getattr(coro, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except RuntimeError:
+                    # Coroutine already completed or running elsewhere
+                    pass
         finally:
-            self._pool.release_wrapper(self)
+            self._coro = None
+
+    def __del__(self):
+        try:
+            self._dispose_coroutine()
+        except Exception:
+            # Destructors must never raise
+            pass
 
 
 class BatchAwaitDetector:

@@ -1,14 +1,17 @@
 # src/zexus/evaluator/expressions.py
+import os
+
 from ..zexus_ast import (
-    IntegerLiteral, FloatLiteral, StringLiteral, ListLiteral, MapLiteral, 
-    Identifier, PrefixExpression, InfixExpression, IfExpression, 
-    Boolean as AST_Boolean, EmbeddedLiteral, ActionLiteral, LambdaExpression
+    IntegerLiteral, FloatLiteral, StringLiteral, ListLiteral, MapLiteral,
+    Identifier, PrefixExpression, InfixExpression, IfExpression,
+    Boolean as AST_Boolean, EmbeddedLiteral, ActionLiteral, LambdaExpression,
+    PropertyAccessExpression,
 )
 from ..object import (
     Integer, Float, String, List, Map,
     EvaluationError, Builtin, DateTime
 )
-from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy
+from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy, _python_to_zexus
 
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
@@ -508,6 +511,215 @@ class ExpressionEvaluatorMixin:
             return self.eval_node(node.right, env, stack_trace)
         
         return left
+
+    def _current_directory_from_env(self, env):
+        if not env or not hasattr(env, 'get'):
+            return None
+        try:
+            file_obj = env.get("__file__")
+        except Exception:
+            file_obj = None
+        if not file_obj:
+            return None
+        path = file_obj.value if hasattr(file_obj, 'value') else str(file_obj)
+        if not path:
+            return None
+        return os.path.dirname(path)
+
+    def _evaluate_expression_to_string(self, expr, env, stack_trace, literal_identifiers=False):
+        if literal_identifiers and isinstance(expr, Identifier):
+            return expr.value, None
+        if isinstance(expr, StringLiteral):
+            return expr.value, None
+        if isinstance(expr, IntegerLiteral):
+            return str(expr.value), None
+        if isinstance(expr, FloatLiteral):
+            return str(expr.value), None
+        if isinstance(expr, AST_Boolean):
+            return "true" if expr.value else "false", None
+
+        value = self.eval_node(expr, env, stack_trace)
+        if is_error(value):
+            return None, value
+
+        if hasattr(value, 'value'):
+            return str(value.value), None
+        return str(value), None
+
+    def _flatten_property_chain(self, expr, env, stack_trace):
+        segments = []
+        current = expr
+        while isinstance(current, PropertyAccessExpression):
+            literal_mode = not getattr(current, 'computed', False)
+            segment, error = self._evaluate_expression_to_string(
+                current.property,
+                env,
+                stack_trace,
+                literal_identifiers=literal_mode,
+            )
+            if error:
+                return None, error
+            segments.insert(0, segment)
+            current = current.object
+
+        segment, error = self._evaluate_expression_to_string(
+            current,
+            env,
+            stack_trace,
+            literal_identifiers=True,
+        )
+        if error:
+            return None, error
+        segments.insert(0, segment)
+        return segments, None
+
+    def eval_find_expression(self, node, env, stack_trace):
+        debug_log("eval_find_expression", "find keyword")
+
+        pattern, error = self._evaluate_expression_to_string(
+            node.target,
+            env,
+            stack_trace,
+            literal_identifiers=True,
+        )
+        if error:
+            return error
+
+        if pattern is None or not str(pattern).strip():
+            return EvaluationError("find requires a target path")
+
+        pattern = str(pattern).strip()
+
+        scope = None
+        if getattr(node, 'scope', None) is not None:
+            scope, error = self._evaluate_expression_to_string(
+                node.scope,
+                env,
+                stack_trace,
+                literal_identifiers=True,
+            )
+            if error:
+                return error
+            scope = str(scope).strip() if scope else None
+
+        current_dir = self._current_directory_from_env(env)
+
+        from .. import module_manager
+
+        matches = module_manager.find_files(
+            pattern,
+            current_dir=current_dir,
+            scope=scope,
+        )
+
+        if not matches:
+            suggestion = "Verify the file exists or adjust the scope provided to find."
+            return EvaluationError(
+                f"find could not locate '{pattern}'",
+                suggestion=suggestion,
+            )
+
+        if len(matches) > 1:
+            preview = ", ".join(matches[:3])
+            suggestion = "Provide a more specific path or scope to disambiguate the match."
+            return EvaluationError(
+                f"find found multiple matches for '{pattern}': {preview}",
+                suggestion=suggestion,
+            )
+
+        return String(matches[0], is_trusted=True)
+
+    def eval_load_expression(self, node, env, stack_trace):
+        debug_log("eval_load_expression", "load keyword")
+
+        from ..runtime import get_load_manager
+
+        provider_hint = getattr(node, 'provider_hint', None)
+        provider = provider_hint.lower() if isinstance(provider_hint, str) else None
+
+        segments = None
+        if isinstance(node.target, PropertyAccessExpression):
+            segments, error = self._flatten_property_chain(node.target, env, stack_trace)
+            if error:
+                return error
+
+        manager = get_load_manager()
+
+        key = None
+        if segments:
+            candidate = (segments[0] or "").lower()
+            if provider is None and manager.is_provider_registered(candidate):
+                provider = candidate
+                remainder = [seg for seg in segments[1:] if seg is not None]
+                key = ".".join(remainder)
+            else:
+                key = ".".join(seg for seg in segments if seg is not None)
+
+        if key is None:
+            key, error = self._evaluate_expression_to_string(
+                node.target,
+                env,
+                stack_trace,
+                literal_identifiers=True,
+            )
+            if error:
+                return error
+
+        if isinstance(key, str):
+            key = key.strip()
+
+        if provider:
+            provider = provider.strip().lower()
+
+        if provider and not key:
+            return EvaluationError(
+                "load requires a key when a provider is specified",
+                suggestion="Append the key after the provider, for example load env.API_KEY.",
+            )
+
+        source = None
+        if getattr(node, 'source', None) is not None:
+            source, error = self._evaluate_expression_to_string(
+                node.source,
+                env,
+                stack_trace,
+            )
+            if error:
+                return error
+            if isinstance(source, str):
+                source = source.strip()
+
+        current_dir = self._current_directory_from_env(env)
+
+        if provider and not manager.is_provider_registered(provider):
+            return EvaluationError(
+                f"Unknown load provider '{provider}'",
+                suggestion="Register a provider before using it or choose a supported provider.",
+            )
+
+        try:
+            value = manager.load(
+                key,
+                provider=provider,
+                source=source,
+                current_dir=current_dir,
+            )
+        except FileNotFoundError as exc:
+            suggestion = "Check the referenced file path or provide an absolute path."
+            return EvaluationError(str(exc), suggestion=suggestion)
+        except KeyError:
+            missing = key or "<empty>"
+            message = f"load could not resolve '{missing}'"
+            if provider:
+                message += f" via provider '{provider}'"
+            if source:
+                message += f" from '{source}'"
+            suggestion = "Ensure the value exists or configure a fallback source."
+            return EvaluationError(message, suggestion=suggestion)
+        except Exception as exc:
+            return EvaluationError(f"load failed: {exc}")
+
+        return _python_to_zexus(value, mark_untrusted=True)
 
     def eval_await_expression(self, node, env, stack_trace):
         """Evaluate await expression: await <expression>

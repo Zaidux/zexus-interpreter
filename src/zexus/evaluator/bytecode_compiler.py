@@ -660,6 +660,21 @@ class EvaluatorBytecodeCompiler:
         # Push lambda descriptor as constant
         self.builder.emit_constant(lambda_desc)
         self.builder.emit("BUILD_LAMBDA")
+
+    def _compile_FindExpression(self, node: zexus_ast.FindExpression):
+        """Compile find keyword expression by deferring to evaluator helper"""
+        if self.builder is None:
+            return
+        # Store AST node as constant so VM builtin can reuse evaluator implementation
+        self.builder.emit_constant(node)
+        self.builder.emit_call("__keyword_find__", 1)
+
+    def _compile_LoadExpression(self, node: zexus_ast.LoadExpression):
+        """Compile load keyword expression by deferring to evaluator helper"""
+        if self.builder is None:
+            return
+        self.builder.emit_constant(node)
+        self.builder.emit_call("__keyword_load__", 1)
     
     # === Optimization ===
     
@@ -902,6 +917,7 @@ class EvaluatorBytecodeCompiler:
             'InfixExpression', 'PrefixExpression', 'CallExpression',
             'AwaitExpression', 'SpawnExpression', 'AssignmentExpression', 'IndexExpression',
             'PropertyAccessExpression', 'LambdaExpression',
+            'FindExpression', 'LoadExpression',
             # Blockchain nodes
             'TxStatement', 'RevertStatement', 'RequireStatement',
             'StateAccessExpression', 'LedgerAppendStatement', 'GasChargeStatement'

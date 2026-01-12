@@ -279,6 +279,53 @@ class ThemeStatement(Statement):
     def __repr__(self):
         return f"ThemeStatement(name={self.name}, properties={self.properties})"
 
+
+class ColorStatement(Statement):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value  # Expression describing the colour
+
+    def __repr__(self):
+        return f"ColorStatement(name={self.name}, value={self.value})"
+
+
+class CanvasStatement(Statement):
+    def __init__(self, name, properties=None, body=None):
+        self.name = name
+        self.properties = properties  # Optional expression (MapLiteral or Identifier)
+        self.body = body              # Optional BlockStatement with drawing directives
+
+    def __repr__(self):
+        return f"CanvasStatement(name={self.name}, properties={self.properties}, body={self.body})"
+
+
+class GraphicsStatement(Statement):
+    def __init__(self, name, body=None):
+        self.name = name
+        self.body = body  # Optional BlockStatement defining layers/operations
+
+    def __repr__(self):
+        return f"GraphicsStatement(name={self.name}, body={self.body})"
+
+
+class AnimationStatement(Statement):
+    def __init__(self, name, body=None, properties=None):
+        self.name = name
+        self.body = body            # Optional BlockStatement for frame definitions
+        self.properties = properties  # Optional expression (e.g. map literal)
+
+    def __repr__(self):
+        return f"AnimationStatement(name={self.name}, properties={self.properties}, body={self.body})"
+
+
+class ClockStatement(Statement):
+    def __init__(self, name, properties=None):
+        self.name = name
+        self.properties = properties  # Optional expression (map literal or string)
+
+    def __repr__(self):
+        return f"ClockStatement(name={self.name}, properties={self.properties})"
+
 class ActionStatement(Statement):
     def __init__(self, name, parameters, body, is_async=False, return_type=None):
         self.name = name
@@ -620,6 +667,33 @@ class AwaitExpression(Expression):
 
     def __repr__(self):
         return f"AwaitExpression(expression={self.expression})"
+
+
+class FindExpression(Expression):
+    def __init__(self, target, scope=None):
+        self.target = target
+        self.scope = scope
+
+    def __repr__(self):
+        parts = [f"target={self.target}"]
+        if self.scope is not None:
+            parts.append(f"scope={self.scope}")
+        return f"FindExpression({', '.join(parts)})"
+
+
+class LoadExpression(Expression):
+    def __init__(self, target, source=None, provider_hint=None):
+        self.target = target
+        self.source = source
+        self.provider_hint = provider_hint
+
+    def __repr__(self):
+        parts = [f"target={self.target}"]
+        if self.source is not None:
+            parts.append(f"source={self.source}")
+        if self.provider_hint:
+            parts.append(f"provider_hint={self.provider_hint}")
+        return f"LoadExpression({', '.join(parts)})"
 
 class FileImportExpression(Expression):
     """File import expression for << operator

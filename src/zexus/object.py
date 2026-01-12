@@ -860,6 +860,18 @@ class Environment:
         self.store[name] = val
         self.notify_watchers(name, val)
         return val
+
+    def clone_for_closure(self):
+        """Create a shallow copy of the environment for closure capture."""
+        cloned = Environment(outer=self.outer, persistence_scope=self.persistence_scope)
+        cloned.store = dict(self.store)
+        cloned.const_vars = set(self.const_vars)
+        cloned.exports = dict(self.exports)
+        cloned.watchers = {k: list(v) for k, v in self.watchers.items()}
+        cloned.debug_mode = self.debug_mode
+        cloned._persistent_storage = self._persistent_storage
+        cloned._memory_tracker = self._memory_tracker
+        return cloned
     
     def assign(self, name, val):
         """Assign to an existing variable in the scope chain, or create in current if not found."""

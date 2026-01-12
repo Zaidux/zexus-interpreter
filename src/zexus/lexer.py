@@ -463,7 +463,7 @@ class Lexer:
             'if', 'elif', 'else', 'while', 'for', 'each', 'in',
             'return', 'break', 'continue', 'throw', 'try', 'catch',
             'await', 'async', 'spawn', 'let', 'const', 'print',
-            'use', 'export', 'import', 'debug', 'match', 'lambda'
+            'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda'
         }
         
         # If this is a strict keyword, always treat as keyword
@@ -569,6 +569,8 @@ class Lexer:
             "function": FUNCTION,
             "while": WHILE,
             "use": USE,
+            "find": FIND,
+            "load": LOAD,
             "exactly": EXACTLY,
             "embedded": EMBEDDED,
             "export": EXPORT,
@@ -584,6 +586,7 @@ class Lexer:
             "screen": SCREEN,         # NEW: renderer keyword
             "component": COMPONENT,   # NEW: renderer keyword
             "theme": THEME,           # NEW: renderer keyword
+            "color": COLOR,           # NEW: renderer keyword
             "canvas": CANVAS,         # NEW (optional recognition)
             "graphics": GRAPHICS,     # NEW (optional recognition)
             "animation": ANIMATION,   # NEW (optional recognition)
@@ -615,6 +618,7 @@ class Lexer:
             "protect": PROTECT,
             "implements": IMPLEMENTS,
             "this": THIS,
+            "as": AS,
             "interface": INTERFACE,
             "capability": CAPABILITY,  # NEW: Capability keyword for security
             "grant": GRANT,             # NEW: Grant keyword for capability grants

@@ -8,7 +8,12 @@ from .async_runtime import (
     Task,
     get_event_loop,
     set_event_loop,
-    new_event_loop
+    new_event_loop,
+)
+from .load_manager import (
+    get_load_manager,
+    register_provider,
+    clear_load_caches,
 )
 
 __all__ = [
@@ -16,5 +21,8 @@ __all__ = [
     'Task',
     'get_event_loop',
     'set_event_loop',
-    'new_event_loop'
+    'new_event_loop',
+    'get_load_manager',
+    'register_provider',
+    'clear_load_caches',
 ]

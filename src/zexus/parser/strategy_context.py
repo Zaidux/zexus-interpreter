@@ -59,6 +59,11 @@ class ContextStackParser:
             'paren_block': self._parse_paren_block_context,
             'statement_block': self._parse_statement_block_context,
             'bracket_block': self._parse_brace_block_context,
+            'color_statement': self._parse_color_statement,
+            'canvas_statement': self._parse_canvas_statement,
+            'graphics_statement': self._parse_graphics_statement,
+            'animation_statement': self._parse_animation_statement,
+            'clock_statement': self._parse_clock_statement,
             # DIRECT handlers for specific statement types
             IF: self._parse_statement_block_context,
             FOR: self._parse_statement_block_context,
@@ -127,6 +132,11 @@ class ContextStackParser:
             INJECT: self._parse_inject_statement,
             VALIDATE: self._parse_validate_statement,
             SANITIZE: self._parse_sanitize_statement,
+            COLOR: self._parse_color_statement,
+            CANVAS: self._parse_canvas_statement,
+            GRAPHICS: self._parse_graphics_statement,
+            ANIMATION: self._parse_animation_statement,
+            CLOCK: self._parse_clock_statement,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -387,7 +397,9 @@ class ContextStackParser:
                 
                 # Check for statement starters that should break
                 # Context-sensitive: IF followed by THEN is an expression, not a statement
-                if t.type in {LET, PRINT, FOR, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                if t.type in {LET, PRINT, FOR, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL,
+                              SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+                              EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
                     # Allow if part of method chain OR if DEBUG followed by ( (function call)
                     allow_method_chain = prev and prev.type == DOT
@@ -527,7 +539,9 @@ class ContextStackParser:
                     j += 1  # Skip the semicolon
                     break
                 # Allow method chains but stop at other statement starters
-                if t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG}:
+                if t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL,
+                              SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+                              EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
                     if not (prev and prev.type == DOT):  # Allow if part of method chain
                         break
@@ -1165,7 +1179,14 @@ class ContextStackParser:
         # Track nesting depth to avoid stopping on braces inside nested structures
         value_tokens = []
         stop_types = {SEMICOLON}  # RBRACE removed - handle with nesting instead
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {
+            LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL,
+            SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+            EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE,
+            BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT,
+            REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
+            PACKAGE, USING
+        }
         j = assign_idx + 1
         nesting_depth = 0
         while j < len(tokens):
@@ -2213,7 +2234,15 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION, TRY, EXTERNAL, SCREEN, EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT, STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE}
+        statement_starters = {
+            LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION,
+            TRY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+            EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
+            STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
+            SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
+            REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
+            PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE
+        }
         
         # Safety: track loop iterations to prevent infinite loops
         max_iterations = len(tokens) * 10  # Very generous limit
@@ -4007,7 +4036,13 @@ class ContextStackParser:
         # Collect tokens up to a statement boundary
         inner_tokens = []
         statement_terminators = {SEMICOLON, RBRACE}
-        statement_starters = {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING}
+        statement_starters = {
+            LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, AUDIT,
+            RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD, DEFER, PATTERN,
+            ENUM, STREAM, WATCH, CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE,
+            IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
+            SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK
+        }
         nesting_level = 0
 
         for token in tokens[1:]:  # Skip the PRINT token
@@ -4299,6 +4334,10 @@ class ContextStackParser:
             return self._parse_sanitize_expression(tokens)
         if tokens[0].type == AWAIT:
             return self._parse_await_expression(tokens)
+        if tokens[0].type == FIND:
+            return self._parse_find_keyword_expression(tokens)
+        if tokens[0].type == LOAD:
+            return self._parse_load_keyword_expression(tokens)
 
         # Main expression parser with chaining
         i = 0
@@ -4715,6 +4754,29 @@ class ContextStackParser:
             i += 1
 
         return nested_tokens
+
+    def _collect_enclosed_tokens(self, tokens, start_index, open_type, close_type):
+        """Collect tokens enclosed by matching delimiters starting at start_index."""
+        if start_index >= len(tokens) or tokens[start_index].type != open_type:
+            return [], start_index
+
+        inner_tokens = []
+        depth = 1
+        i = start_index + 1
+
+        while i < len(tokens) and depth > 0:
+            token = tokens[i]
+            if token.type == open_type:
+                depth += 1
+            elif token.type == close_type:
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                inner_tokens.append(token)
+            i += 1
+
+        return inner_tokens, i
 
     def _parse_list_literal(self, tokens):
         """Parse a list literal [a, b, c] from a token list"""
@@ -5203,6 +5265,69 @@ class ContextStackParser:
         
         return AwaitExpression(expression)
 
+    def _parse_find_keyword_expression(self, tokens):
+        """Parse find expression tokens produced by advanced strategies."""
+        if not tokens or tokens[0].type != FIND:
+            return None
+
+        # Separate target and optional scope after IN (at top level)
+        scope_index = -1
+        nesting = 0
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif tok.type == IN and nesting == 0:
+                scope_index = idx
+                break
+
+        target_tokens = tokens[1:scope_index] if scope_index != -1 else tokens[1:]
+        scope_tokens = tokens[scope_index + 1:] if scope_index != -1 else []
+
+        target_expr = self._parse_expression(target_tokens) if target_tokens else None
+        scope_expr = self._parse_expression(scope_tokens) if scope_tokens else None
+
+        if target_expr is None:
+            target_expr = StringLiteral("")
+
+        expr = FindExpression(target=target_expr, scope=scope_expr)
+        if tokens:
+            setattr(expr, 'token', tokens[0])
+        return expr
+
+    def _parse_load_keyword_expression(self, tokens):
+        """Parse load expression tokens produced by advanced strategies."""
+        if not tokens or tokens[0].type != LOAD:
+            return None
+
+        from_index = -1
+        nesting = 0
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif tok.type == IDENT and tok.literal == "from" and nesting == 0:
+                from_index = idx
+                break
+
+        target_tokens = tokens[1:from_index] if from_index != -1 else tokens[1:]
+        source_tokens = tokens[from_index + 1:] if from_index != -1 else []
+
+        target_expr = self._parse_expression(target_tokens) if target_tokens else None
+        source_expr = self._parse_expression(source_tokens) if source_tokens else None
+
+        if target_expr is None:
+            target_expr = StringLiteral("")
+
+        expr = LoadExpression(target=target_expr, source=source_expr)
+        if tokens:
+            setattr(expr, 'token', tokens[0])
+        return expr
+
     def _parse_argument_list(self, tokens):
         """Parse comma-separated argument list with improved nesting support"""
         parser_debug("  🔍 Parsing argument list")
@@ -5276,6 +5401,237 @@ class ContextStackParser:
             name=Identifier(block_info.get('name', 'anonymous')),
             body=BlockStatement()
         )
+
+    def _parse_color_statement(self, block_info, all_tokens):
+        """Parse COLOR statement into ColorStatement AST."""
+        tokens = block_info.get('tokens', []) or []
+        if len(tokens) < 2:
+            return None
+
+        name = None
+        name_index = None
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type == IDENT:
+                name = Identifier(tok.literal)
+                name_index = idx
+                break
+
+        if name is None:
+            return None
+
+        value = None
+        i = name_index + 1
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == ASSIGN:
+                value_tokens = tokens[i + 1:]
+                if value_tokens and value_tokens[-1].type == SEMICOLON:
+                    value_tokens = value_tokens[:-1]
+                value = self._parse_expression(value_tokens) if value_tokens else None
+                break
+            elif tok.type == LBRACE:
+                inner, close_idx = self._collect_enclosed_tokens(tokens, i, LBRACE, RBRACE)
+                block = BlockStatement()
+                block.statements = self._parse_block_statements(inner)
+                value = block
+                i = close_idx
+                break
+            elif tok.type == SEMICOLON:
+                break
+            i += 1
+
+        if value is None:
+            value = NullLiteral()
+
+        return ColorStatement(name, value)
+
+    def _parse_canvas_statement(self, block_info, all_tokens):
+        """Parse CANVAS statement supporting dimensions and drawing body."""
+        tokens = block_info.get('tokens', []) or []
+        if len(tokens) < 2:
+            return None
+
+        name = None
+        name_index = None
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type == IDENT:
+                name = Identifier(tok.literal)
+                name_index = idx
+                break
+
+        if name is None:
+            return None
+
+        properties = None
+        body = None
+        i = name_index + 1
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == LPAREN:
+                inner, close_idx = self._collect_enclosed_tokens(tokens, i, LPAREN, RPAREN)
+                properties = self._parse_argument_list(inner)
+                i = close_idx + 1
+                continue
+            if tok.type == ASSIGN:
+                value_tokens = tokens[i + 1:]
+                if value_tokens and value_tokens[-1].type == SEMICOLON:
+                    value_tokens = value_tokens[:-1]
+                properties = self._parse_expression(value_tokens)
+                break
+            if tok.type == LBRACE:
+                inner, close_idx = self._collect_enclosed_tokens(tokens, i, LBRACE, RBRACE)
+                body_block = BlockStatement()
+                body_block.statements = self._parse_block_statements(inner)
+                body = body_block
+                break
+            if tok.type == SEMICOLON:
+                break
+            i += 1
+
+        return CanvasStatement(name, properties=properties, body=body)
+
+    def _parse_graphics_statement(self, block_info, all_tokens):
+        """Parse GRAPHICS statement for renderer overlays."""
+        tokens = block_info.get('tokens', []) or []
+        if len(tokens) < 2:
+            return None
+
+        name = None
+        name_index = None
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type == IDENT:
+                name = Identifier(tok.literal)
+                name_index = idx
+                break
+
+        if name is None:
+            return None
+
+        body = None
+        i = name_index + 1
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == ASSIGN:
+                value_tokens = tokens[i + 1:]
+                if value_tokens and value_tokens[-1].type == SEMICOLON:
+                    value_tokens = value_tokens[:-1]
+                expr = self._parse_expression(value_tokens)
+                block = BlockStatement()
+                if expr is not None:
+                    block.statements = [ExpressionStatement(expr)]
+                body = block
+                break
+            if tok.type == LBRACE:
+                inner, _ = self._collect_enclosed_tokens(tokens, i, LBRACE, RBRACE)
+                block = BlockStatement()
+                block.statements = self._parse_block_statements(inner)
+                body = block
+                break
+            if tok.type == SEMICOLON:
+                break
+            i += 1
+
+        if body is None:
+            body = BlockStatement()
+
+        return GraphicsStatement(name, body=body)
+
+    def _parse_animation_statement(self, block_info, all_tokens):
+        """Parse ANIMATION statement including properties and frames body."""
+        tokens = block_info.get('tokens', []) or []
+        if len(tokens) < 2:
+            return None
+
+        name = None
+        name_index = None
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type == IDENT:
+                name = Identifier(tok.literal)
+                name_index = idx
+                break
+
+        if name is None:
+            return None
+
+        properties = None
+        body = None
+        i = name_index + 1
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == LPAREN:
+                inner, close_idx = self._collect_enclosed_tokens(tokens, i, LPAREN, RPAREN)
+                properties = self._parse_argument_list(inner)
+                i = close_idx + 1
+                continue
+            if tok.type == ASSIGN:
+                value_tokens = tokens[i + 1:]
+                if value_tokens and value_tokens[-1].type == SEMICOLON:
+                    value_tokens = value_tokens[:-1]
+                properties = self._parse_expression(value_tokens)
+                break
+            if tok.type == LBRACE:
+                inner, _ = self._collect_enclosed_tokens(tokens, i, LBRACE, RBRACE)
+                block = BlockStatement()
+                block.statements = self._parse_block_statements(inner)
+                body = block
+                break
+            if tok.type == SEMICOLON:
+                break
+            i += 1
+
+        if body is None:
+            body = BlockStatement()
+
+        return AnimationStatement(name, body=body, properties=properties)
+
+    def _parse_clock_statement(self, block_info, all_tokens):
+        """Parse CLOCK statement mapping configuration expressions."""
+        tokens = block_info.get('tokens', []) or []
+        if len(tokens) < 2:
+            return None
+
+        name = None
+        name_index = None
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type == IDENT:
+                name = Identifier(tok.literal)
+                name_index = idx
+                break
+
+        if name is None:
+            return None
+
+        config = None
+        i = name_index + 1
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == LPAREN:
+                inner, close_idx = self._collect_enclosed_tokens(tokens, i, LPAREN, RPAREN)
+                config = self._parse_argument_list(inner)
+                i = close_idx + 1
+                continue
+            if tok.type == ASSIGN:
+                value_tokens = tokens[i + 1:]
+                if value_tokens and value_tokens[-1].type == SEMICOLON:
+                    value_tokens = value_tokens[:-1]
+                config = self._parse_expression(value_tokens)
+                break
+            if tok.type == LBRACE:
+                inner, _ = self._collect_enclosed_tokens(tokens, i, LBRACE, RBRACE)
+                block = BlockStatement()
+                block.statements = self._parse_block_statements(inner)
+                config = block
+                break
+            if tok.type == SEMICOLON:
+                break
+            i += 1
+
+        return ClockStatement(name, properties=config)
 
     def _parse_try_catch_context(self, block_info, all_tokens):
         """Parse try-catch block with full context awareness"""

@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 from .. import zexus_ast
-from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue
+from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue, Builtin
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
 from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
@@ -367,6 +367,26 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             elif isinstance(node, zexus_ast.EmbeddedCodeStatement):
                 debug_log("  EmbeddedCodeStatement node", node.name.value)
                 return self.eval_embedded_code_statement(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.ColorStatement):
+                debug_log("  ColorStatement node", node.name.value)
+                return self.eval_color_statement(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.CanvasStatement):
+                debug_log("  CanvasStatement node", node.name.value)
+                return self.eval_canvas_statement(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.GraphicsStatement):
+                debug_log("  GraphicsStatement node", node.name.value)
+                return self.eval_graphics_statement(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.AnimationStatement):
+                debug_log("  AnimationStatement node", node.name.value)
+                return self.eval_animation_statement(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.ClockStatement):
+                debug_log("  ClockStatement node", node.name.value)
+                return self.eval_clock_statement(node, env, stack_trace)
             
             elif isinstance(node, zexus_ast.ComponentStatement):
                 debug_log("  ComponentStatement node", node.name.value)
@@ -622,6 +642,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 debug_log("  AwaitExpression node")
                 return self.eval_await_expression(node, env, stack_trace)
             
+            elif isinstance(node, zexus_ast.FindExpression):
+                debug_log("  FindExpression node")
+                return self.eval_find_expression(node, env, stack_trace)
+
+            elif isinstance(node, zexus_ast.LoadExpression):
+                debug_log("  LoadExpression node")
+                return self.eval_load_expression(node, env, stack_trace)
+
             elif isinstance(node, zexus_ast.FileImportExpression):
                 debug_log("  FileImportExpression node", "<< file import")
                 return self.eval_file_import_expression(node, env, stack_trace)
@@ -917,6 +945,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             vm_builtins = {}
             if hasattr(self, 'builtins') and self.builtins:
                 vm_builtins = {k: v for k, v in self.builtins.items()}
+
+            vm_builtins.update(self._create_vm_keyword_builtins(env))
             
             # Use shared VM instance (has JIT, optimizer, etc.)
             if not self.vm_instance:
@@ -948,6 +978,19 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             self.vm_stats['vm_fallbacks'] += 1
             return None  # Signal fallback
     
+    def _create_vm_keyword_builtins(self, env):
+        """Expose keyword helpers to the VM so bytecode can reuse evaluator logic"""
+        def _vm_find(node_ref):
+            return self.eval_find_expression(node_ref, env, stack_trace=[])
+
+        def _vm_load(node_ref):
+            return self.eval_load_expression(node_ref, env, stack_trace=[])
+
+        return {
+            "__keyword_find__": Builtin(_vm_find, "__keyword_find__"),
+            "__keyword_load__": Builtin(_vm_load, "__keyword_load__"),
+        }
+
     def _env_to_dict(self, env):
         """Convert Environment object to dict for VM"""
         result = {}

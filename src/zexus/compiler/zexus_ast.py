@@ -452,3 +452,28 @@ class ImportStatement(Statement):
 
     def __repr__(self):
         return f"ImportStatement({self.module_path} as {self.alias})"
+
+
+class StreamStatement(Statement):
+    def __init__(self, stream_name, event_var, handler):
+        self.stream_name = stream_name
+        self.event_var = event_var
+        self.handler = handler
+
+    def token_literal(self):
+        return "stream"
+
+    def __repr__(self):
+        return f"StreamStatement({self.stream_name})"
+
+
+class WatchStatement(Statement):
+    def __init__(self, watched_expr, reaction):
+        self.watched_expr = watched_expr
+        self.reaction = reaction
+
+    def token_literal(self):
+        return "watch"
+
+    def __repr__(self):
+        return f"WatchStatement({self.watched_expr})"

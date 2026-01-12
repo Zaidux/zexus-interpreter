@@ -5,7 +5,8 @@ Implements fine-grained access control through capability tokens.
 Plugins declare required capabilities, and the evaluator enforces access.
 """
 
-from typing import Set, Dict, List, Callable, Optional, Tuple
+from typing import Set, Dict, List, Callable, Optional, Tuple, Any
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 import time
@@ -173,6 +174,8 @@ class CapabilityManager:
         self.audit_log = CapabilityAuditLog()
         self.granted_capabilities: Dict[str, Set[str]] = {}  # requester -> capabilities
         self.required_capabilities: Dict[str, Set[str]] = {}  # requester -> required caps
+        self._contexts: Dict[str, "CapabilityContext"] = {}
+        self._context_counter = 0
         
         # Initialize with base capabilities
         for cap in self.BASE_CAPABILITIES:
@@ -197,6 +200,19 @@ class CapabilityManager:
         for cap in capabilities:
             self.grant_capability(requester, cap)
     
+    def revoke_capability(self, requester: str, capability: str):
+        """Revoke a specific capability from a requester."""
+        caps = self.granted_capabilities.get(requester)
+        if not caps:
+            return
+        caps.discard(capability)
+        if not caps:
+            self.granted_capabilities.pop(requester, None)
+
+    def revoke_all_capabilities(self, requester: str):
+        """Remove all capabilities granted to a requester."""
+        self.granted_capabilities.pop(requester, None)
+
     def check_capability(self, requester: str, capability: str, 
                         context: Optional[Dict] = None) -> Tuple[bool, str]:
         """
@@ -210,29 +226,49 @@ class CapabilityManager:
             requester=requester,
             context=context or {}
         )
-        
-        # 1. Check if policy allows all (AllowAllPolicy)
+
+        context_obj = self._contexts.get(requester)
+
+        # 1. Context-specific policy enforcement (takes precedence)
+        if context_obj and context_obj.policy:
+            policy_level = context_obj.policy.check(capability)
+            if policy_level in (CapabilityLevel.ALLOWED, CapabilityLevel.UNRESTRICTED, CapabilityLevel.RESTRICTED):
+                reason = (
+                    f"Capability {capability} allowed by context policy "
+                    f"'{context_obj.policy.name}'"
+                )
+                self.audit_log.log_request(request, True, reason)
+                return True, reason
+            if policy_level == CapabilityLevel.DENY:
+                reason = (
+                    f"Capability {capability} denied by context policy "
+                    f"'{context_obj.policy.name}'"
+                )
+                self.audit_log.log_request(request, False, reason)
+                return False, reason
+
+        # 2. Check if policy allows all (AllowAllPolicy)
         if isinstance(self.policy, AllowAllPolicy):
             reason = f"Capability {capability} allowed by policy (allow-all)"
             self.audit_log.log_request(request, True, reason)
             return True, reason
-        
-        # 2. Check if capability is base capability (always available)
+
+        # 3. Check if capability is base capability (always available)
         if capability in self.BASE_CAPABILITIES:
             reason = f"Base capability {capability} available"
             self.audit_log.log_request(request, True, reason)
             return True, reason
-        
-        # 3. Check if requester has been explicitly granted this capability
+
+        # 4. Check if requester has been explicitly granted this capability
         if requester in self.granted_capabilities:
             if capability in self.granted_capabilities[requester]:
                 reason = f"Capability {capability} granted to {requester}"
                 self.audit_log.log_request(request, True, reason)
                 return True, reason
         
-        # 4. Check if capability is allowed by policy
+        # 5. Check if capability is allowed by policy
         policy_level = self.policy.check(capability)
-        if policy_level == CapabilityLevel.ALLOWED:
+        if policy_level in (CapabilityLevel.ALLOWED, CapabilityLevel.UNRESTRICTED, CapabilityLevel.RESTRICTED):
             reason = f"Capability {capability} allowed by policy"
             self.audit_log.log_request(request, True, reason)
             return True, reason
@@ -290,6 +326,97 @@ class CapabilityManager:
     def get_audit_statistics(self) -> Dict[str, int]:
         """Get audit statistics."""
         return self.audit_log.get_statistics()
+
+    def create_context(
+        self,
+        *,
+        capabilities: Optional[List[str]] = None,
+        policy: Optional[CapabilityPolicy] = None,
+        name: Optional[str] = None,
+        inherit_base: bool = True,
+    ) -> "CapabilityContext":
+        """Create a scoped capability context."""
+        self._context_counter += 1
+        context_name = name or f"context::{self._context_counter}:{uuid.uuid4().hex[:8]}"
+        context = CapabilityContext(
+            manager=self,
+            name=context_name,
+            capabilities=capabilities or [],
+            policy=policy,
+            inherit_base=inherit_base,
+        )
+        self._contexts[context.name] = context
+        return context
+
+    def destroy_context(self, name: str) -> Optional["CapabilityContext"]:
+        """Destroy a previously created context and revoke its grants."""
+        context = self._contexts.pop(name, None)
+        if context:
+            context.destroy()
+        return context
+
+    def get_context(self, name: str) -> Optional["CapabilityContext"]:
+        """Retrieve a context by name, if it exists."""
+        return self._contexts.get(name)
+
+
+class CapabilityContext:
+    """Lightweight wrapper for scoped capability enforcement."""
+
+    def __init__(
+        self,
+        *,
+        manager: CapabilityManager,
+        name: str,
+        capabilities: Optional[List[str]] = None,
+        policy: Optional[CapabilityPolicy] = None,
+        inherit_base: bool = True,
+    ) -> None:
+        self.manager = manager
+        self.name = name
+        self.policy = policy or SelectivePolicy(capabilities or [])
+        self.capabilities: Set[str] = set(capabilities or [])
+        self.inherit_base = inherit_base
+        self.created_at = time.time()
+
+        if self.capabilities:
+            self.manager.grant_capabilities(self.name, list(self.capabilities))
+        elif inherit_base:
+            # Ensure entry exists so future grants can be tracked cleanly
+            self.manager.granted_capabilities.setdefault(self.name, set())
+
+    def grant(self, capability: str) -> None:
+        """Grant an additional capability to this context."""
+        self.manager.grant_capability(self.name, capability)
+        self.capabilities.add(capability)
+
+    def revoke(self, capability: str) -> None:
+        """Revoke a capability from this context."""
+        self.manager.revoke_capability(self.name, capability)
+        self.capabilities.discard(capability)
+
+    def check(self, capability: str, *, context: Optional[Dict] = None) -> bool:
+        """Check if the context can access a capability."""
+        allowed, _ = self.manager.check_capability(self.name, capability, context)
+        return allowed
+
+    def require(self, capability: str, *, context: Optional[Dict] = None) -> bool:
+        """Require a capability, raising if unavailable."""
+        self.manager.require_capability(self.name, capability, context)
+        return True
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Return a serializable snapshot of the context state."""
+        return {
+            "name": self.name,
+            "capabilities": self.manager.get_granted_capabilities(self.name),
+            "policy": getattr(self.policy, "name", None),
+            "created_at": self.created_at,
+        }
+
+    def destroy(self) -> None:
+        """Revoke all privileges associated with this context."""
+        self.manager.revoke_all_capabilities(self.name)
 
 
 class CapabilityError(Exception):
@@ -370,3 +497,51 @@ CAPABILITY_SETS = {
         "description": "Full system access (privileged code)"
     }
 }
+
+
+_DEFAULT_MANAGER: CapabilityManager = CapabilityManager()
+
+
+def get_capability_manager() -> CapabilityManager:
+    """Return the global capability manager singleton."""
+    return _DEFAULT_MANAGER
+
+
+def set_capability_manager(manager: CapabilityManager) -> None:
+    """Replace the global capability manager (primarily for tests)."""
+    global _DEFAULT_MANAGER
+    _DEFAULT_MANAGER = manager
+
+
+def reset_capability_manager(policy: Optional[CapabilityPolicy] = None) -> CapabilityManager:
+    """Reset the global capability manager to a fresh instance."""
+    manager = CapabilityManager(default_policy=policy)
+    set_capability_manager(manager)
+    return manager
+
+
+def check_capability(capability: str, requester: str, *, context: Optional[Dict] = None) -> bool:
+    """Convenience wrapper around the global manager's check."""
+    manager = get_capability_manager()
+    allowed, _ = manager.check_capability(requester, capability, context)
+    return allowed
+
+
+__all__ = [
+    "Capability",
+    "CapabilityLevel",
+    "CapabilityPolicy",
+    "CapabilityManager",
+    "CapabilityContext",
+    "CapabilityError",
+    "AllowAllPolicy",
+    "DenyAllPolicy",
+    "SelectivePolicy",
+    "CapabilityAuditLog",
+    "CapabilityRequest",
+    "CAPABILITY_SETS",
+    "get_capability_manager",
+    "set_capability_manager",
+    "reset_capability_manager",
+    "check_capability",
+]

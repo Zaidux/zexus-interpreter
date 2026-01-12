@@ -8,7 +8,8 @@ from ..zexus_ast import (
     TryCatchStatement, UseStatement, FromStatement, ExportStatement,
     ContractStatement, EntityStatement, VerifyStatement, ProtectStatement,
     SealStatement, MiddlewareStatement, AuthStatement, ThrottleStatement, CacheStatement,
-    ComponentStatement, ThemeStatement, DebugStatement, ExternalDeclaration, AssignmentExpression,
+    ComponentStatement, ThemeStatement, ColorStatement, CanvasStatement, GraphicsStatement,
+    AnimationStatement, ClockStatement, DebugStatement, ExternalDeclaration, AssignmentExpression,
     PrintStatement, ScreenStatement, EmbeddedCodeStatement, ExactlyStatement,
     Identifier, PropertyAccessExpression, RestrictStatement, SandboxStatement, TrailStatement,
     NativeStatement, GCStatement, InlineStatement, BufferStatement, SIMDStatement,
@@ -30,6 +31,23 @@ from ..security import (
     ProtectionPolicy, Middleware, AuthConfig, RateLimiter, CachePolicy
 )
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL, TRUE, FALSE, _resolve_awaitable, _zexus_to_python, _python_to_zexus, is_truthy
+
+try:
+    from ..renderer import (
+        create_named_canvas as renderer_create_named_canvas,
+        define_color as renderer_define_color,
+        register_animation as renderer_register_animation,
+        register_clock as renderer_register_clock,
+        register_graphics as renderer_register_graphics,
+    )
+    _RENDERER_AVAILABLE = True
+except Exception:  # pragma: no cover - renderer optional during bootstrap
+    renderer_create_named_canvas = None
+    renderer_define_color = None
+    renderer_register_animation = None
+    renderer_register_clock = None
+    renderer_register_graphics = None
+    _RENDERER_AVAILABLE = False
 
 # Break exception for loop control flow
 class BreakException:
@@ -142,7 +160,56 @@ class StatementEvaluatorMixin:
             self._execute_deferred_cleanup(env, stack_trace)
             # Restore stdout to previous state (scope-aware)
             self._restore_stdout(env)
-    
+
+    # ------------------------------------------------------------------
+    # Renderer helpers
+    # ------------------------------------------------------------------
+    def _evaluate_renderer_block(self, block, env, stack_trace):
+        local_env = Environment(outer=env)
+        result = self.eval_block_statement(block, local_env, list(stack_trace) if stack_trace else [])
+
+        if isinstance(result, ReturnValue):
+            result = result.value
+        if is_error(result):
+            return result
+
+        collected = {}
+        for key, value in local_env.store.items():
+            if key.startswith("__"):
+                continue
+            collected[key] = value
+        return collected
+
+    def _evaluate_renderer_properties(self, prop_node, env, stack_trace):
+        if prop_node is None:
+            return None
+
+        if isinstance(prop_node, list):
+            values = []
+            for expr in prop_node:
+                val = self.eval_node(expr, env, stack_trace)
+                val = _resolve_awaitable(val)
+                if isinstance(val, ReturnValue):
+                    val = val.value
+                if is_error(val):
+                    return val
+                values.append(_zexus_to_python(val))
+            return values
+
+        if isinstance(prop_node, BlockStatement):
+            bindings = self._evaluate_renderer_block(prop_node, env, stack_trace)
+            if is_error(bindings):
+                return bindings
+            return {key: _zexus_to_python(val) for key, val in bindings.items()}
+
+        val = self.eval_node(prop_node, env, stack_trace)
+        val = _resolve_awaitable(val)
+        if isinstance(val, ReturnValue):
+            val = val.value
+        if is_error(val):
+            return val
+        return _zexus_to_python(val)
+
     def eval_expression_statement(self, node, env, stack_trace):
         # Debug: Check if expression is being evaluated
         if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
@@ -2525,6 +2592,174 @@ class StatementEvaluatorMixin:
         obj = EmbeddedCode(node.name.value, node.language, node.code)
         env.set(node.name.value, obj)
         return NULL
+
+    def eval_color_statement(self, node, env, stack_trace):
+        if node.value is None:
+            return EvaluationError(f"color {node.name.value}: missing definition")
+
+        if isinstance(node.value, BlockStatement):
+            bindings = self._evaluate_renderer_block(node.value, env, stack_trace)
+            if is_error(bindings):
+                return bindings
+            python_spec = {key: _zexus_to_python(val) for key, val in bindings.items()}
+        else:
+            spec_val = self.eval_node(node.value, env, stack_trace)
+            spec_val = _resolve_awaitable(spec_val)
+            if isinstance(spec_val, ReturnValue):
+                spec_val = spec_val.value
+            if is_error(spec_val):
+                return spec_val
+            python_spec = _zexus_to_python(spec_val)
+
+        colour_repr = python_spec
+        if _RENDERER_AVAILABLE and renderer_define_color:
+            try:
+                colour_obj = renderer_define_color(node.name.value, python_spec)
+                colour_repr = str(colour_obj)
+            except Exception as exc:
+                return EvaluationError(f"color {node.name.value}: {exc}")
+        else:
+            registry = getattr(self, 'render_registry', None)
+            if isinstance(registry, dict):
+                registry.setdefault('colours', {})[node.name.value] = python_spec
+
+        env.set(node.name.value, _python_to_zexus(colour_repr))
+        return NULL
+
+    def eval_canvas_statement(self, node, env, stack_trace):
+        prop_data = self._evaluate_renderer_properties(node.properties, env, stack_trace)
+        if is_error(prop_data):
+            return prop_data
+
+        width = 80
+        height = 24
+
+        if isinstance(prop_data, list):
+            if len(prop_data) > 0:
+                width = prop_data[0]
+            if len(prop_data) > 1:
+                height = prop_data[1]
+        elif isinstance(prop_data, dict):
+            width = prop_data.get('width', prop_data.get('w', width))
+            height = prop_data.get('height', prop_data.get('h', height))
+        elif prop_data is not None:
+            width = prop_data
+
+        try:
+            width = int(width)
+            height = int(height)
+        except (ValueError, TypeError):
+            return EvaluationError(f"canvas {node.name.value}: width/height must be numeric")
+
+        canvas_id = None
+        if _RENDERER_AVAILABLE and renderer_create_named_canvas:
+            try:
+                canvas_id = renderer_create_named_canvas(node.name.value, width, height)
+            except Exception as exc:
+                return EvaluationError(f"canvas {node.name.value}: {exc}")
+        else:
+            registry = getattr(self, 'render_registry', None)
+            if isinstance(registry, dict):
+                canvases = registry.setdefault('canvases', {})
+                alias_map = registry.setdefault('canvas_aliases', {})
+                canvas_id = f"canvas_{len(canvases) + 1}"
+                canvases[canvas_id] = {
+                    'width': width,
+                    'height': height,
+                    'draw_ops': [],
+                }
+                alias_map[node.name.value] = canvas_id
+            else:
+                canvas_id = f"{node.name.value}_canvas"
+
+        canvas_obj = _python_to_zexus(canvas_id)
+        env.set(node.name.value, canvas_obj)
+
+        if node.body:
+            local_env = Environment(outer=env)
+            local_env.set(node.name.value, canvas_obj)
+            local_env.set('canvas', canvas_obj)
+            result = self.eval_block_statement(node.body, local_env, stack_trace)
+            if isinstance(result, ReturnValue):
+                return result
+            if is_error(result):
+                return result
+
+        return NULL
+
+    def eval_graphics_statement(self, node, env, stack_trace):
+        payload = {}
+        if node.body:
+            bindings = self._evaluate_renderer_block(node.body, env, stack_trace)
+            if is_error(bindings):
+                return bindings
+            payload = {key: _zexus_to_python(val) for key, val in bindings.items()}
+
+        if _RENDERER_AVAILABLE and renderer_register_graphics:
+            try:
+                renderer_register_graphics(node.name.value, payload)
+            except Exception as exc:
+                return EvaluationError(f"graphics {node.name.value}: {exc}")
+        else:
+            registry = getattr(self, 'render_registry', None)
+            if isinstance(registry, dict):
+                registry.setdefault('graphics', {})[node.name.value] = payload
+
+        env.set(node.name.value, _python_to_zexus(payload))
+        return NULL
+
+    def eval_animation_statement(self, node, env, stack_trace):
+        animation_data = {}
+
+        props = self._evaluate_renderer_properties(node.properties, env, stack_trace)
+        if is_error(props):
+            return props
+        if props is not None:
+            animation_data['properties'] = props
+
+        if node.body:
+            bindings = self._evaluate_renderer_block(node.body, env, stack_trace)
+            if is_error(bindings):
+                return bindings
+            animation_data.update({key: _zexus_to_python(val) for key, val in bindings.items()})
+
+        if _RENDERER_AVAILABLE and renderer_register_animation:
+            try:
+                renderer_register_animation(node.name.value, animation_data)
+            except Exception as exc:
+                return EvaluationError(f"animation {node.name.value}: {exc}")
+        else:
+            registry = getattr(self, 'render_registry', None)
+            if isinstance(registry, dict):
+                registry.setdefault('animations', {})[node.name.value] = animation_data
+
+        env.set(node.name.value, _python_to_zexus(animation_data))
+        return NULL
+
+    def eval_clock_statement(self, node, env, stack_trace):
+        config = self._evaluate_renderer_properties(node.properties, env, stack_trace)
+        if is_error(config):
+            return config
+
+        if isinstance(config, dict):
+            clock_data = dict(config)
+        elif config is None:
+            clock_data = {}
+        else:
+            clock_data = {'value': config}
+
+        if _RENDERER_AVAILABLE and renderer_register_clock:
+            try:
+                renderer_register_clock(node.name.value, clock_data)
+            except Exception as exc:
+                return EvaluationError(f"clock {node.name.value}: {exc}")
+        else:
+            registry = getattr(self, 'render_registry', None)
+            if isinstance(registry, dict):
+                registry.setdefault('clocks', {})[node.name.value] = clock_data
+
+        env.set(node.name.value, _python_to_zexus(clock_data))
+        return NULL
     
     def eval_component_statement(self, node, env, stack_trace):
         props = None
@@ -2611,7 +2846,15 @@ class StatementEvaluatorMixin:
         return self.eval_node(node.body, env, stack_trace)
     
     def eval_action_statement(self, node, env, stack_trace):
-        action = Action(node.parameters, node.body, env)
+        capture_env = env.clone_for_closure() if hasattr(env, "clone_for_closure") else env
+        action = Action(node.parameters, node.body, capture_env)
+
+        # Ensure recursive references resolve within closures
+        try:
+            if capture_env is not env and hasattr(capture_env, "set"):
+                capture_env.set(node.name.value, action)
+        except Exception:
+            pass
         
         # Check for direct is_async attribute (from UltimateParser)
         if hasattr(node, 'is_async') and node.is_async:
@@ -2645,7 +2888,13 @@ class StatementEvaluatorMixin:
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
         print(f"[EVAL_FUNC] Starting eval_function_statement for: {node.name.value}", flush=True)
-        action = Action(node.parameters, node.body, env)
+        capture_env = env.clone_for_closure() if hasattr(env, "clone_for_closure") else env
+        action = Action(node.parameters, node.body, capture_env)
+        try:
+            if capture_env is not env and hasattr(capture_env, "set"):
+                capture_env.set(node.name.value, action)
+        except Exception:
+            pass
         print(f"[EVAL_FUNC] Created Action object", flush=True)
         
         # Apply modifiers if present

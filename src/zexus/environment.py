@@ -1,4 +1,30 @@
-# environment.py
+"""Environment helpers with export-aware values access."""
+
+
+class _EnvironmentValuesProxy:
+    """Proxy that behaves like both callable view and export lookup."""
+
+    def __init__(self, env):
+        self._env = env
+
+    def __contains__(self, name):
+        return name in self._env.exports
+
+    def __iter__(self):
+        return iter(self._env.exports)
+
+    def __len__(self):
+        return len(self._env.exports)
+
+    def __call__(self):
+        return self._env.store.values()
+
+    def keys(self):
+        return self._env.exports.keys()
+
+    def items(self):
+        return self._env.exports.items()
+
 
 class Environment:
     def __init__(self, outer=None):
@@ -7,6 +33,7 @@ class Environment:
         self.exports = {}
         self.modules = {}
         self._debug = False
+        self._values_proxy = _EnvironmentValuesProxy(self)
 
     # ---- Mapping protocol helpers -------------------------------------------------
 
@@ -45,8 +72,9 @@ class Environment:
     def items(self):
         return self.store.items()
 
+    @property
     def values(self):
-        return self.store.values()
+        return self._values_proxy
 
     def copy(self):
         return dict(self.store)

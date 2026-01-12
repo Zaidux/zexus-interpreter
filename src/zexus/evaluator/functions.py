@@ -13,7 +13,7 @@ from .utils import is_error, debug_log, NULL, TRUE, FALSE, _resolve_awaitable, _
 
 # Try to import backend, handle failure gracefully (as per your original code)
 try:
-    from renderer import backend as _BACKEND
+    from ..renderer import backend as _BACKEND
     _BACKEND_AVAILABLE = True
 except Exception:
     _BACKEND_AVAILABLE = False
@@ -33,6 +33,11 @@ class FunctionEvaluatorMixin:
             'components': {},
             'themes': {},
             'canvases': {},
+            'canvas_aliases': {},
+            'colours': {},
+            'graphics': {},
+            'animations': {},
+            'clocks': {},
             'current_theme': None
         }
         
@@ -123,7 +128,20 @@ class FunctionEvaluatorMixin:
         if isinstance(fn, SmartContract):
             return fn.instantiate(args)
         
-        return self.apply_function(fn, args, env)
+        should_allow_coroutine = (
+            isinstance(fn, (Action, LambdaFunction))
+            and getattr(fn, "is_async", False)
+        )
+
+        previous_allow = getattr(self, "_allow_coroutine_result", False)
+        if should_allow_coroutine:
+            self._allow_coroutine_result = True
+
+        try:
+            return self.apply_function(fn, args, env)
+        finally:
+            if should_allow_coroutine:
+                self._allow_coroutine_result = previous_allow
     
     def _create_specialized_generic_constructor(self, template, type_args, env, stack_trace):
         """Create a specialized constructor for a generic type with concrete type arguments

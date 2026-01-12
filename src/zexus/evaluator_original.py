@@ -864,7 +864,7 @@ except NameError:
 # --- RENDERER REGISTRY & HELPERS ---------------------------------------
 # Try to use the real renderer backend if available, otherwise keep a safe registry.
 try:
-        from renderer import backend as _BACKEND
+        from ..renderer import backend as _BACKEND
         _BACKEND_AVAILABLE = True
 except Exception:
         _BACKEND_AVAILABLE = False

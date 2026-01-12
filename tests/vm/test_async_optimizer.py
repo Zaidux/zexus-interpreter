@@ -192,6 +192,9 @@ class TestBatchAwaitDetector(unittest.TestCase):
         batch = detector.add_await(dummy(2))
         self.assertIsNotNone(batch)
         self.assertEqual(len(batch), 2)
+
+        for coro in batch:
+            coro.close()
     
     def test_flush(self):
         """Test flushing pending awaits"""
@@ -205,6 +208,9 @@ class TestBatchAwaitDetector(unittest.TestCase):
         batch = detector.flush()
         self.assertEqual(len(batch), 1)
         self.assertEqual(len(detector.pending_awaits), 0)
+
+        for coro in batch:
+            coro.close()
 
 
 class TestAsyncOptimizer(unittest.TestCase):

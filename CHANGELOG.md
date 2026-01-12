@@ -5,6 +5,19 @@ All notable changes to the Zexus programming language will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [1.7.1] - 2026-01-07
+
+### ✨ Features
+- Added bytecode compiler handlers for `FindExpression` and `LoadExpression`, enabling VM execution of the new FIND/LOAD keywords without leaving the evaluator path (`src/zexus/evaluator/bytecode_compiler.py`).
+- Injected VM keyword bridges so compiled bytecode can reuse evaluator semantics, ensuring identical behavior across interpreter and VM modes (`src/zexus/evaluator/core.py`).
+
+### 🧪 Testing
+- Introduced VM-focused regression tests that exercise FIND and LOAD in both interpreter and VM execution modes (`tests/unit/test_find_load_keywords.py`).
+
+### 📚 Documentation
+- Updated README highlights for v1.7.1, covering the FIND/LOAD keywords, provider-aware LoadManager, and VM parity improvements.
+
 ---
 
 ## [1.6.8] - 2026-01-06
@@ -452,6 +465,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.7.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.8...v1.7.1
 [1.6.8]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.6...v1.6.7
 [1.6.6]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.5...v1.6.6

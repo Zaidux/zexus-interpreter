@@ -3,10 +3,66 @@ import click
 import sys
 import os
 from pathlib import Path
-from rich.console import Console
-from rich.syntax import Syntax
-from rich.panel import Panel
-from rich.table import Table
+
+try:  # Optional rich dependency for colorful CLI output
+    from rich.console import Console
+    from rich.syntax import Syntax
+    from rich.panel import Panel
+    from rich.table import Table
+    _RICH_AVAILABLE = True
+except ModuleNotFoundError:  # Fallback to minimal console utilities when rich is missing
+    _RICH_AVAILABLE = False
+
+    class Console:  # pragma: no cover - straightforward fallback
+        def print(self, *args, **kwargs):
+            sep = kwargs.get("sep", " ")
+            end = kwargs.get("end", "\n")
+            text = sep.join(str(arg) for arg in args)
+            sys.stdout.write(text)
+            if end is not None:
+                sys.stdout.write(end)
+
+        def rule(self, title=""):
+            line = "-" * 40
+            if title:
+                line = f"{line} {title} {line}"
+            self.print(line)
+
+    class Syntax:  # pragma: no cover - fallback keeps interface compatible
+        def __init__(self, code, *_args, **_kwargs):
+            self.code = code
+
+        def __str__(self):
+            return self.code
+
+    class Panel:  # pragma: no cover
+        def __init__(self, renderable, title=None):
+            self.renderable = renderable
+            self.title = title
+
+        def __str__(self):
+            if self.title:
+                return f"[{self.title}] {self.renderable}"
+            return str(self.renderable)
+
+    class Table:  # pragma: no cover
+        def __init__(self, **_kwargs):
+            self.columns = []
+            self.rows = []
+
+        def add_column(self, header, **_kwargs):
+            self.columns.append(header)
+
+        def add_row(self, *columns):
+            self.rows.append(columns)
+
+        def __str__(self):
+            lines = []
+            if self.columns:
+                lines.append(" | ".join(self.columns))
+            for row in self.rows:
+                lines.append(" | ".join(str(col) for col in row))
+            return "\n".join(lines)
 
 # Import your existing modules - UPDATED IMPORTS
 from ..lexer import Lexer
@@ -94,7 +150,7 @@ def show_all_commands():
     console.print("\n[bold green]💡 Tip:[/bold green] Use 'zx <command> --help' for detailed command options\n")
 
 @click.group(invoke_without_command=True)
-@click.version_option(version="1.6.8", prog_name="Zexus")
+@click.version_option(version="1.7.1", prog_name="Zexus")
 @click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']),
               default='auto', help='Syntax style to use (universal=strict, tolerable=flexible)')
 @click.option('--advanced-parsing', is_flag=True, default=True,

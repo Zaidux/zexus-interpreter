@@ -29,6 +29,7 @@ from ..object import (
     List as ZList,
     Map as ZMap,
     Null as ZNull,
+    EvaluationError as ZEvaluationError,
 )
 
 # ==================== Backend / Optional Imports ====================
@@ -112,7 +113,7 @@ except ImportError:
 
 # Renderer Backend
 try:
-    from renderer import backend as _BACKEND
+    from ..renderer import backend as _BACKEND
     _BACKEND_AVAILABLE = True
 except Exception:
     _BACKEND_AVAILABLE = False
@@ -145,6 +146,130 @@ class Cell:
     
     def __repr__(self):
         return f"<Cell {self.value!r}>"
+
+
+def _to_string_value(arg):
+    if isinstance(arg, ZString):
+        return arg.value
+    if isinstance(arg, ZInteger):
+        return str(arg.value)
+    if isinstance(arg, ZFloat):
+        return str(arg.value)
+    if isinstance(arg, ZBoolean):
+        return "true" if getattr(arg, "value", False) else "false"
+    if isinstance(arg, ZList):
+        try:
+            return arg.inspect()
+        except Exception:
+            return str(arg)
+    if isinstance(arg, ZMap):
+        try:
+            return arg.inspect()
+        except Exception:
+            return str(arg)
+    if arg is None or isinstance(arg, ZNull):
+        return "null"
+    if isinstance(arg, bool):
+        return "true" if arg else "false"
+    if isinstance(arg, (int, float)):
+        return str(arg)
+    if hasattr(arg, "inspect") and callable(getattr(arg, "inspect")):
+        try:
+            return arg.inspect()
+        except Exception:
+            return str(arg)
+    return str(arg)
+
+
+def _fallback_string(args):
+    if len(args) != 1:
+        return ZEvaluationError("string() takes exactly 1 argument")
+    return ZString(_to_string_value(args[0]))
+
+
+def _fallback_int(args):
+    if len(args) != 1:
+        return ZEvaluationError("int() takes exactly 1 argument")
+    value = args[0]
+    if isinstance(value, ZInteger):
+        return value
+    if isinstance(value, ZFloat):
+        return ZInteger(int(value.value))
+    if isinstance(value, ZString):
+        try:
+            return ZInteger(int(value.value))
+        except ValueError:
+            return ZEvaluationError(f"Cannot convert '{value.value}' to integer")
+    if isinstance(value, (int, float)):
+        return ZInteger(int(value))
+    return ZEvaluationError(f"int() not supported for type {type(value).__name__}")
+
+
+def _fallback_float(args):
+    if len(args) != 1:
+        return ZEvaluationError("float() takes exactly 1 argument")
+    value = args[0]
+    if isinstance(value, ZFloat):
+        return value
+    if isinstance(value, ZInteger):
+        return ZFloat(float(value.value))
+    if isinstance(value, ZString):
+        try:
+            return ZFloat(float(value.value))
+        except ValueError:
+            return ZEvaluationError(f"Cannot convert '{value.value}' to float")
+    if isinstance(value, (int, float)):
+        return ZFloat(float(value))
+    return ZEvaluationError(f"float() not supported for type {type(value).__name__}")
+
+
+def _fallback_len(args):
+    if len(args) != 1:
+        return ZEvaluationError("len() takes exactly 1 argument")
+    value = args[0]
+    if isinstance(value, ZString):
+        return ZInteger(len(value.value))
+    if isinstance(value, ZList):
+        return ZInteger(len(getattr(value, "elements", [])))
+    if isinstance(value, ZMap):
+        return ZInteger(len(getattr(value, "pairs", {})))
+    if isinstance(value, str):
+        return ZInteger(len(value))
+    if isinstance(value, list):
+        return ZInteger(len(value))
+    if isinstance(value, dict):
+        return ZInteger(len(value))
+    return ZEvaluationError(f"len() not supported for type {type(value).__name__}")
+
+
+def _fallback_type(args):
+    if len(args) != 1:
+        return ZEvaluationError("type() takes exactly 1 argument")
+    value = args[0]
+    if isinstance(value, ZInteger):
+        return ZString("Integer")
+    if isinstance(value, ZFloat):
+        return ZString("Float")
+    if isinstance(value, ZString):
+        return ZString("String")
+    if isinstance(value, ZBoolean):
+        return ZString("Boolean")
+    if isinstance(value, ZList):
+        return ZString("List")
+    if isinstance(value, ZMap):
+        return ZString("Map")
+    if value is None or isinstance(value, ZNull):
+        return ZString("Null")
+    return ZString(type(value).__name__)
+
+
+_FALLBACK_BUILTINS = {
+    "string": _fallback_string,
+    "int": _fallback_int,
+    "float": _fallback_float,
+    "len": _fallback_len,
+    "type": _fallback_type,
+}
 
 
 class VM:
@@ -936,6 +1061,10 @@ class VM:
             func_name = const(name_idx)
             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
             fn = _resolve(func_name) or self.builtins.get(func_name)
+            if fn is None:
+                fallback_res = self._call_fallback_builtin(func_name, args)
+                stack.append(fallback_res)
+                return
             res = await self._invoke_callable_or_funcdesc(fn, args)
             stack.append(res)
 
@@ -1186,6 +1315,18 @@ class VM:
                 func_desc = const(func_idx)
                 # Create func descriptor, capturing current VM as parent
                 func_desc_copy = dict(func_desc) if isinstance(func_desc, dict) else {"bytecode": func_desc}
+                closure_snapshot = {}
+                # Snapshot current environment (excluding internal keys)
+                for key, value in self.env.items():
+                    if isinstance(key, str) and key.startswith("_"):
+                        continue
+                    closure_snapshot[key] = value
+                # Include existing closure cells if present
+                for key, cell in self._closure_cells.items():
+                    if key not in closure_snapshot:
+                        closure_snapshot[key] = cell.value
+                if closure_snapshot:
+                    func_desc_copy["closure_snapshot"] = closure_snapshot
                 func_desc_copy["parent_vm"] = self
                 self.env[name] = func_desc_copy
             
@@ -1194,7 +1335,10 @@ class VM:
                 func_name = const(name_idx)
                 args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
                 fn = _resolve(func_name) or self.builtins.get(func_name)
-                res = await self._invoke_callable_or_funcdesc(fn, args)
+                if fn is None:
+                    res = self._call_fallback_builtin(func_name, args)
+                else:
+                    res = await self._invoke_callable_or_funcdesc(fn, args)
                 stack.append(res)
             
             elif op_name == "CALL_TOP":
@@ -1565,6 +1709,10 @@ class VM:
                 use_jit=self.use_jit,
                 use_memory_manager=self.use_memory_manager
             )
+            snapshot = fn.get("closure_snapshot")
+            if snapshot:
+                for key, value in snapshot.items():
+                    inner_vm._closure_cells[key] = Cell(value)
             return await inner_vm._run_stack_bytecode(func_bc, debug=False)
         
         # 2. Python Callable / Builtin Wrapper
@@ -1578,7 +1726,10 @@ class VM:
             fn = getattr(_BACKEND, name)
             if asyncio.iscoroutinefunction(fn): return await fn(*args)
             return fn(*args)
-            
+        
+        if target is None:
+            return self._call_fallback_builtin(name, args)
+
         return await self._call_builtin_async_obj(target, args, wrap_args=wrap_args)
 
     async def _call_builtin_async_obj(self, fn_obj, args: List[Any], wrap_args: bool = True):
@@ -1613,6 +1764,17 @@ class VM:
             if callable(fn): return fn(*args)
             return None
         return _wrap()
+
+    def _call_fallback_builtin(self, name: str, args: List[Any]):
+        func = _FALLBACK_BUILTINS.get(name)
+        if not func:
+            return None
+        try:
+            return func(args)
+        except Exception as exc:
+            if self.debug:
+                print(f"[VM] fallback builtin '{name}' failed: {exc}")
+            return ZEvaluationError(f"Builtin '{name}' failed: {exc}")
 
     def profile_execution(self, bytecode, iterations: int = 1000) -> Dict[str, Any]:
         """Profile execution performance across available modes"""

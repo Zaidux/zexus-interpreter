@@ -94,7 +94,7 @@ class SemanticAnalyzer:
 
 				if isinstance(node, EventDeclaration):
 					props = getattr(node, "properties", None)
-					if not isinstance(props, (MapLiteral, BlockStatement)):
+					if not isinstance(props, (MapLiteral, BlockStatement, dict)):
 						errors.append(f"Event '{node.name.value}' properties should be a map or block")
 					return
 
