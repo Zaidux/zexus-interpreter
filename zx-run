@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from zexus.lexer import Lexer
 from zexus.parser.parser import UltimateParser
 from zexus.evaluator.core import Evaluator
-from zexus.object import Environment
+from zexus.object import Environment, String, List
 from zexus import config
 
 def run_zexus_file(filename, debug_level='none', use_vm=False):
@@ -95,6 +95,26 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
             # Standard Evaluator Path (Stable - Lower Performance)
             evaluator = Evaluator()
             env = Environment()
+            # Establish module context so relative imports resolve correctly
+            abs_file = os.path.abspath(filename)
+            env.set("__file__", String(abs_file))
+            env.set("__FILE__", String(abs_file))
+            env.set("__MODULE__", String("__main__"))
+            env.set("__DIR__", String(os.path.dirname(abs_file)))
+
+            empty_args = List([])
+            env.set("__ARGS__", empty_args)
+            env.set("__ARGV__", empty_args)
+
+            try:
+                rel_path = os.path.relpath(abs_file)
+                if os.sep in rel_path:
+                    package_name = rel_path.replace(os.sep, "/").split("/")[0]
+                else:
+                    package_name = ""
+            except (OSError, ValueError):
+                package_name = ""
+            env.set("__PACKAGE__", String(package_name))
             result = evaluator.eval_node(ast, env)
         
         # Check if result is an error

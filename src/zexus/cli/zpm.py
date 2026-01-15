@@ -18,7 +18,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="1.7.1", prog_name="ZPM")
+@click.version_option(version="1.7.2", prog_name="ZPM")
 def cli():
     """ZPM - Zexus Package Manager
     

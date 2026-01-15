@@ -315,6 +315,19 @@ class PersistentStorage:
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM variables')
             self.conn.commit()
+
+    def _key_to_str(self, key):
+        """Convert a Zexus object key to a Python string for JSON serialization."""
+        if isinstance(key, String):
+            return key.value
+        if isinstance(key, Integer):
+            return str(key.value)
+        if isinstance(key, Float):
+            return str(key.value)
+        if isinstance(key, BooleanObj):
+            return str(key.value)
+        # Fallback for other types
+        return str(key)
     
     def _serialize(self, obj: Object) -> Dict[str, str]:
         """Serialize Zexus object to JSON"""
@@ -330,7 +343,8 @@ class PersistentStorage:
             serialized = [self._serialize(e) for e in obj.elements]
             return {'type': 'list', 'value': json.dumps(serialized)}
         elif isinstance(obj, Map):
-            serialized = {k: self._serialize(v) for k, v in obj.pairs.items()}
+            # Convert Zexus String keys to Python strings for JSON compatibility
+            serialized = {self._key_to_str(k): self._serialize(v) for k, v in obj.pairs.items()}
             return {'type': 'map', 'value': json.dumps(serialized)}
         elif obj is Null or obj is NULL:
             return {'type': 'null', 'value': json.dumps(None)}

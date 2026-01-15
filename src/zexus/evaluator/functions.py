@@ -26,6 +26,8 @@ class FunctionEvaluatorMixin:
         # Initialize registries
         self.builtins = {}
         self._allow_coroutine_result = False
+        self._pending_revert_signature = None
+        self._tolerant_skip_counts = {}
         
         # Renderer Registry (moved from global scope to instance scope)
         self.render_registry = {
@@ -62,9 +64,44 @@ class FunctionEvaluatorMixin:
 
         return EvaluationError("Coroutine did not complete within step limit")
 
+    def _compute_revert_signature(self, reason_node):
+        if reason_node is None:
+            return ("none",)
+
+        try:
+            from .. import zexus_ast
+            if isinstance(reason_node, zexus_ast.StringLiteral):
+                return ("string", getattr(reason_node, "value", None))
+            if isinstance(reason_node, zexus_ast.Identifier):
+                return ("identifier", getattr(reason_node, "value", None))
+        except Exception:
+            pass
+
+        return ("expr", repr(reason_node))
+
     def eval_call_expression(self, node, env, stack_trace):
         debug_log("🚀 CallExpression node", f"Calling {node.function}")
         
+        if (
+            isinstance(node.function, zexus_ast.Identifier)
+            and getattr(node.function, "value", None) == "revert"
+        ):
+            if len(node.arguments) > 1:
+                return EvaluationError(
+                    "revert() accepts at most one argument",
+                    stack_trace=stack_trace,
+                )
+
+            debug_log(
+                "eval_call_expression",
+                "Treating call expression as revert statement",
+            )
+
+            reason_expr = node.arguments[0] if node.arguments else None
+            result = self._perform_revert(reason_expr, env, stack_trace)
+            self._pending_revert_signature = self._compute_revert_signature(reason_expr)
+            return result
+
         fn = self.eval_node(node.function, env, stack_trace)
         if is_error(fn):
             return fn
@@ -88,7 +125,6 @@ class FunctionEvaluatorMixin:
         
         # Check if arguments contain keyword arguments (AssignmentExpression nodes)
         # This handles syntax like: Person(name="Bob", age=25)
-        from .. import zexus_ast
         has_keyword_args = any(isinstance(arg, zexus_ast.AssignmentExpression) for arg in node.arguments)
         
         if has_keyword_args:
@@ -149,7 +185,6 @@ class FunctionEvaluatorMixin:
         Example: Box<number> creates a specialized Box constructor with T = number
         """
         from ..object import EvaluationError, String, Map
-        from .. import zexus_ast
         
         debug_log("_create_specialized_generic_constructor", f"Specializing with types: {type_args}")
         
@@ -332,6 +367,7 @@ class FunctionEvaluatorMixin:
                 except Exception:
                     pass
                 
+                result = None
                 try:
                     res = self.eval_node(fn.body, new_env)
                     res = _resolve_awaitable(res)
@@ -345,6 +381,10 @@ class FunctionEvaluatorMixin:
                     return result
                 except Exception as e:
                     # Store result for after-call hook
+                    result = EvaluationError(str(e))
+                    raise
+                except BaseException as e:
+                    # Ensure result is set even for interrupts/SystemExit
                     result = EvaluationError(str(e))
                     raise
                 finally:
@@ -466,7 +506,9 @@ class FunctionEvaluatorMixin:
     def eval_method_call_expression(self, node, env, stack_trace):
         debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
         
+        debug_log("DEBUG evaluating method call object", node.object)
         obj = self.eval_node(node.object, env, stack_trace)
+        debug_log("DEBUG object evaluated to", obj)
         if is_error(obj): 
             return obj
         
@@ -625,6 +667,32 @@ class FunctionEvaluatorMixin:
             if is_error(args): 
                 return args
             result = obj.call_method(method_name, args)
+            
+            # CRITICAL: Sync state variables back to caller's environment after internal call
+            # This ensures that when action A calls this.actionB(), any state changes made
+            # by actionB are visible to actionA's local environment
+            # OPTIMIZATION: Only sync for 'this' calls (internal calls within same contract)
+            from ..security import SmartContract
+            if isinstance(obj, SmartContract):
+                # Check if this is a 'this.method()' call by checking the caller's env
+                this_ref = env.get('this')
+                if this_ref is obj and hasattr(obj, 'storage_vars'):
+                    # This is an internal call - sync state variables
+                    for var_node in obj.storage_vars:
+                        var_name = None
+                        if hasattr(var_node, 'name'):
+                            var_name = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+                        elif isinstance(var_node, dict):
+                            var_name = var_node.get("name")
+                        elif isinstance(var_node, str):
+                            var_name = var_node
+                        
+                        if var_name:
+                            # Read the updated value from storage and refresh the caller's env
+                            updated_value = obj.storage.get(var_name)
+                            if updated_value is not None:
+                                env.set(var_name, updated_value)
+            
             # Unwrap ReturnValue if needed
             from ..object import ReturnValue
             if isinstance(result, ReturnValue):
@@ -655,6 +723,7 @@ class FunctionEvaluatorMixin:
             return self.apply_function(method_value, args, env)
         
         obj_type = obj.type() if hasattr(obj, 'type') and callable(obj.type) else type(obj).__name__
+        debug_log("DEBUG method dispatch failure", f"method={method_name}, obj={obj}, obj_type={obj_type}")
         return EvaluationError(f"Method '{method_name}' not supported for {obj_type}")
     
     # --- Array Helpers (Internal) ---
@@ -2136,6 +2205,106 @@ class FunctionEvaluatorMixin:
             a[0].extend(a[1])
             return a[0]
         
+        def _sort(*a):
+            """Sort a list: sort(list) or sort(list, key_field) for maps
+            
+            - sort([3, 1, 2]) -> [1, 2, 3]
+            - sort([{fee: 5}, {fee: 3}], "fee") -> [{fee: 3}, {fee: 5}]
+            - sort(list, "fee", true) -> descending order
+            """
+            if len(a) < 1:
+                return EvaluationError("sort() takes 1-3 arguments: sort(list, [key], [descending])")
+            if not isinstance(a[0], List):
+                return EvaluationError("sort() first argument must be a list")
+            
+            lst = a[0]
+            key_field = None
+            descending = False
+            
+            if len(a) >= 2:
+                if isinstance(a[1], String):
+                    key_field = a[1].value
+                elif isinstance(a[1], BooleanObj):
+                    descending = a[1].value
+                else:
+                    return EvaluationError("sort() second argument must be a key string or boolean for descending")
+            
+            if len(a) >= 3:
+                if isinstance(a[2], BooleanObj):
+                    descending = a[2].value
+                else:
+                    return EvaluationError("sort() third argument must be a boolean for descending order")
+            
+            try:
+                # Make a copy of elements for non-destructive sort
+                elements = list(lst.elements)
+                
+                def get_sort_key(elem):
+                    if key_field is not None:
+                        # Sort by field in map
+                        if isinstance(elem, Map):
+                            # Try string key first
+                            val = elem.pairs.get(String(key_field))
+                            if val is None:
+                                # Try with key_field as-is (for internal dict keys)
+                                val = elem.pairs.get(key_field)
+                            if val is None:
+                                return 0  # Default for missing key
+                            if isinstance(val, (Integer, Float)):
+                                return val.value
+                            if isinstance(val, String):
+                                return val.value
+                            return 0
+                        elif isinstance(elem, dict):
+                            val = elem.get(key_field, 0)
+                            if hasattr(val, 'value'):
+                                return val.value
+                            return val
+                        return 0
+                    else:
+                        # Direct sort
+                        if isinstance(elem, (Integer, Float)):
+                            return elem.value
+                        if isinstance(elem, String):
+                            return elem.value
+                        return 0
+                
+                elements.sort(key=get_sort_key, reverse=descending)
+                return List(elements)
+            except Exception as e:
+                return EvaluationError(f"sort() error: {str(e)}")
+        
+        def _slice(*a):
+            """Get a slice of a list: slice(list, start, end?) -> list
+            
+            - slice([1, 2, 3, 4], 1) -> [2, 3, 4]  (from index 1 to end)
+            - slice([1, 2, 3, 4], 1, 3) -> [2, 3]  (from index 1 to 3, exclusive)
+            - slice([1, 2, 3, 4], 0, 2) -> [1, 2]  (first 2 elements)
+            """
+            if len(a) < 2:
+                return EvaluationError("slice() takes 2-3 arguments: slice(list, start, [end])")
+            if not isinstance(a[0], List):
+                return EvaluationError("slice() first argument must be a list")
+            if not isinstance(a[1], Integer):
+                return EvaluationError("slice() start must be an integer")
+            
+            lst = a[0]
+            start = a[1].value
+            end = len(lst.elements)  # Default: to the end
+            
+            if len(a) >= 3:
+                if not isinstance(a[2], Integer):
+                    return EvaluationError("slice() end must be an integer")
+                end = a[2].value
+            
+            # Handle negative indices
+            if start < 0:
+                start = max(0, len(lst.elements) + start)
+            if end < 0:
+                end = max(0, len(lst.elements) + end)
+            
+            return List(lst.elements[start:end])
+        
         def _reduce(*a):
             if len(a) < 2: 
                 return EvaluationError("reduce(arr, fn, [init])")
@@ -2472,6 +2641,8 @@ class FunctionEvaluatorMixin:
             "push": Builtin(_push, "push"),
             "append": Builtin(_append, "append"),  # Mutating list append
             "extend": Builtin(_extend, "extend"),  # Mutating list extend
+            "sort": Builtin(_sort, "sort"),        # Sort list or list of maps by key
+            "slice": Builtin(_slice, "slice"),     # Get list slice: slice(list, start, end?)
             "reduce": Builtin(_reduce, "reduce"),
             "map": Builtin(_map, "map"),
             "filter": Builtin(_filter, "filter"),

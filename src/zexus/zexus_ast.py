@@ -1574,12 +1574,13 @@ class StateStatement(Statement):
     state owner = TX.caller;
     state locked = false;
     """
-    def __init__(self, name, initial_value=None):
+    def __init__(self, name, initial_value=None, modifiers=None):
         self.name = name  # Identifier: state variable name
         self.initial_value = initial_value  # Optional Expression: initial value
+        self.modifiers = modifiers or []  # List[str]: modifiers (private, public, etc.)
 
     def __repr__(self):
-        return f"StateStatement(name={self.name}, initial={self.initial_value})"
+        return f"StateStatement(name={self.name}, initial={self.initial_value}, modifiers={self.modifiers})"
 
 
 class ContractStatement(Statement):

@@ -1,0 +1,174 @@
+// Zexus performance benchmark: 10k transactions sequential vs bulk
+
+use "./full_network_chain/full_network_blockchain.zx"
+
+const PERF_TRANSACTION_COUNT = 10000
+
+const PERF_GENESIS = [
+    {"address": "VAL_ALPHA", "balance": 5000000},
+    {"address": "VAL_BETA", "balance": 5000000},
+    {"address": "VAL_GAMMA", "balance": 5000000},
+    {"address": "VAL_DELTA", "balance": 5000000},
+    {"address": "WALLET_1", "balance": 3500000},
+    {"address": "WALLET_2", "balance": 3500000},
+    {"address": "WALLET_3", "balance": 3500000},
+    {"address": "WALLET_4", "balance": 3500000},
+    {"address": "WALLET_5", "balance": 3500000},
+    {"address": "WALLET_6", "balance": 3500000}
+]
+
+const PERF_VALIDATORS = [
+    {"address": "VAL_ALPHA", "stake": 400000, "pubkey": "PUB_VAL_ALPHA"},
+    {"address": "VAL_BETA", "stake": 400000, "pubkey": "PUB_VAL_BETA"},
+    {"address": "VAL_GAMMA", "stake": 350000, "pubkey": "PUB_VAL_GAMMA"},
+    {"address": "VAL_DELTA", "stake": 350000, "pubkey": "PUB_VAL_DELTA"}
+]
+
+const PERF_WALLETS = ["WALLET_1", "WALLET_2", "WALLET_3", "WALLET_4", "WALLET_5", "WALLET_6"]
+
+function create_performance_blockchain(max_block_txs, logging) {
+    let overrides = {
+        "max_block_txs": max_block_txs,
+        "base_reward": 75,
+        "min_stake": 300000
+    }
+    return create_full_network_blockchain(overrides, PERF_GENESIS, PERF_VALIDATORS, logging)
+}
+
+function next_nonce(nonce_tracker, blockchain, address) {
+    let candidate = nonce_tracker[address]
+    if candidate == null {
+        candidate = blockchain.compute_next_nonce(address)
+    }
+    return candidate
+}
+
+function select_recipient(index, sender_offset) {
+    let target = PERF_WALLETS[(index + sender_offset) % len(PERF_WALLETS)]
+    return target
+}
+
+function run_sequential_test() {
+    print("\n=== Sequential 10k Transaction Benchmark ===")
+    let blockchain = create_performance_blockchain(1, false)
+    let nonce_tracker = {}
+    let i = 0
+    let processed_blocks = 0
+    let start_time = time()
+
+    while i < PERF_TRANSACTION_COUNT {
+        let sender = PERF_WALLETS[i % len(PERF_WALLETS)]
+        let recipient = select_recipient(i, 1)
+        if sender == recipient {
+            recipient = select_recipient(i, 2)
+        }
+
+        let amount = 50 + (i % 250)
+        let fee = 5 + ((i * 3) % 25)
+        let payload = "seq::" + string(i) + "::" + sender + "->" + recipient
+
+        let nonce = next_nonce(nonce_tracker, blockchain, sender)
+        blockchain.submit_transaction(sender, recipient, amount, fee, nonce, payload)
+        nonce_tracker[sender] = nonce + 1
+
+        let result = blockchain.produce_block()
+        if result != false {
+            processed_blocks = processed_blocks + 1
+        }
+
+        i = i + 1
+    }
+
+    let duration = time() - start_time
+    let metrics = blockchain.get_chain_info()
+
+    print("Total processing time: " + string(duration) + " ms")
+    print("Blocks produced: " + string(processed_blocks))
+    print("Average block time: " + string(metrics.avg_block_ms) + " ms")
+    print("Pending transactions: " + string(metrics.pending_tx))
+
+    return {
+        "duration": duration,
+        "blocks": processed_blocks,
+        "metrics": metrics,
+        "blockchain": blockchain
+    }
+}
+
+function run_bulk_test() {
+    print("\n=== Bulk 10k Transaction Benchmark ===")
+    let blockchain = create_performance_blockchain(75, false)
+    let nonce_tracker = {}
+    let i = 0
+    let start_submission = time()
+
+    while i < PERF_TRANSACTION_COUNT {
+        let sender = PERF_WALLETS[i % len(PERF_WALLETS)]
+        let recipient = select_recipient(i, 3)
+        if sender == recipient {
+            recipient = select_recipient(i, 4)
+        }
+
+        let amount = 80 + ((i * 7) % 300)
+        let fee = 9 + ((i * 5) % 35)
+        let payload = "bulk::" + string(i) + "::" + string(amount) + "::" + sender
+
+        let nonce = next_nonce(nonce_tracker, blockchain, sender)
+        blockchain.submit_transaction(sender, recipient, amount, fee, nonce, payload)
+        nonce_tracker[sender] = nonce + 1
+
+        i = i + 1
+    }
+
+    let submission_time = time() - start_submission
+
+    let start_production = time()
+    let produced_blocks = 0
+
+    while true {
+        let info = blockchain.get_chain_info()
+        if info.pending_tx == 0 {
+            break
+        }
+
+        let result = blockchain.produce_block()
+        if result == false {
+            break
+        }
+        produced_blocks = produced_blocks + 1
+    }
+
+    let production_time = time() - start_production
+    let metrics = blockchain.get_chain_info()
+    let total_blocks = produced_blocks
+
+    print("Submission time: " + string(submission_time) + " ms")
+    print("Block production time: " + string(production_time) + " ms")
+    print("Blocks produced: " + string(total_blocks))
+    print("Average block time: " + string(metrics.avg_block_ms) + " ms")
+    print("Pending transactions: " + string(metrics.pending_tx))
+
+    return {
+        "submission_time": submission_time,
+        "production_time": production_time,
+        "blocks": total_blocks,
+        "metrics": metrics,
+        "blockchain": blockchain
+    }
+}
+
+print("\n===============================================")
+print("ZEXUS FULL NETWORK PERFORMANCE: 10K SCENARIOS")
+print("===============================================")
+
+let sequential_result = run_sequential_test()
+let bulk_result = run_bulk_test()
+
+print("\n=== Performance Summary ===")
+print("Sequential duration: " + string(sequential_result["duration"]) + " ms")
+print("Sequential blocks: " + string(sequential_result["blocks"]))
+print("Bulk submission time: " + string(bulk_result["submission_time"]) + " ms")
+print("Bulk production time: " + string(bulk_result["production_time"]) + " ms")
+print("Bulk blocks: " + string(bulk_result["blocks"]))
+
+print("\nPerformance benchmarking complete")

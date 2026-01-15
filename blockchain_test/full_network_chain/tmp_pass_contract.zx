@@ -1,0 +1,16 @@
+contract Worker {
+    action ping() {
+        return 7
+    }
+}
+
+contract Manager {
+    action use(worker) {
+        return worker.ping()
+    }
+}
+
+let mgr = Manager()
+let w = Worker()
+let value = mgr.use(w)
+print "Value: " + string(value)

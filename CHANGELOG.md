@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.7.2] - 2026-01-14
+
+### ⚡ Performance
+- **Major Interpreter Speed Improvements**: Eliminated debug logging overhead in hot paths (eval_node, eval_identifier)
+- **Smart Storage for Lists**: Implemented StorageList with dirty-tracking to avoid O(N²) serialization bottleneck
+- **Optimized Stack Traces**: Deferred string formatting until errors occur, storing lightweight tuples instead
+- **Debug Config Caching**: Added fast_debug_enabled boolean cache to eliminate dictionary lookups
+- **Blockchain Performance**: 10,000 transaction test now completes in ~2 minutes (previously timed out)
+
+### 🔧 Fixes
+- Fixed performance regression affecting blockchain contract state persistence
+- Resolved exponential slowdown in chain growth scenarios
+
+---
+
 ## [1.7.1] - 2026-01-07
 
 ### ✨ Features
@@ -465,6 +480,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.7.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.8...v1.7.1
 [1.6.8]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.7...v1.6.8
 [1.6.7]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.6...v1.6.7

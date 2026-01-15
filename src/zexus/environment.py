@@ -1,5 +1,7 @@
 """Environment helpers with export-aware values access."""
 
+from .config import config as zexus_config
+
 
 class _EnvironmentValuesProxy:
     """Proxy that behaves like both callable view and export lookup."""
@@ -114,7 +116,10 @@ class Environment:
         if self.outer:
             getter = getattr(self.outer, 'get', None)
             if callable(getter):
-                return getter(name, default)
+                try:
+                    return getter(name, default)
+                except TypeError:
+                    return getter(name)
             try:
                 return self.outer[name]
             except (KeyError, TypeError, AttributeError):
@@ -135,6 +140,8 @@ class Environment:
                 module.set(var_name, value)
                 self.modules[module_name] = module
         else:
+            if name == 'tx' and zexus_config.should_log('debug'):
+                print(f"DEBUG env.set tx -> {value}")
             self.store[name] = value
     
     def assign(self, name, value):
@@ -146,6 +153,8 @@ class Environment:
         """
         # Check if variable exists in current scope
         if name in self.store:
+            if name == 'tx' and zexus_config.should_log('debug'):
+                print(f"DEBUG env.assign tx -> {value}")
             self.store[name] = value
             return
         

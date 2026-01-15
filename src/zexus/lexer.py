@@ -18,6 +18,11 @@ class Lexer:
         self._next_paren_has_lambda = False
         # Track last token type to enable context-aware keyword handling
         self.last_token_type = None
+        # Track statement boundaries and nesting depth to disambiguate keywords vs identifiers
+        self.at_statement_boundary = True
+        self.paren_depth = 0
+        self.bracket_depth = 0
+        self.brace_depth = 0
         
         # Register source with error reporter
         self.error_reporter = get_error_reporter()
@@ -310,7 +315,7 @@ class Lexer:
                 tok = Token(token_type, literal)
                 tok.line = current_line
                 tok.column = current_column
-                self.last_token_type = tok.type
+                self._finalize_token(tok)
                 return tok
             elif self.is_digit(self.ch):
                 num_literal = self.read_number()
@@ -320,7 +325,7 @@ class Lexer:
                     tok = Token(INT, num_literal)
                 tok.line = current_line
                 tok.column = current_column
-                self.last_token_type = tok.type
+                self._finalize_token(tok)
                 return tok
             else:
                 if self.ch in ['\n', '\r']:
@@ -332,7 +337,7 @@ class Lexer:
                     tok = Token(IDENT, literal)
                     tok.line = current_line
                     tok.column = current_column
-                    self.last_token_type = tok.type
+                    self._finalize_token(tok)
                     return tok
                 # Unknown character - report helpful error
                 char_desc = f"'{self.ch}'" if self.ch.isprintable() else f"'\\x{ord(self.ch):02x}'"
@@ -347,9 +352,47 @@ class Lexer:
                 raise error
 
         self.read_char()
-        # Track the token type for context-aware keyword handling
-        self.last_token_type = tok.type
+        self._finalize_token(tok)
         return tok
+
+    def _finalize_token(self, tok):
+        """Update lexer state after producing a token."""
+        if tok is None:
+            return
+
+        token_type = tok.type
+
+        # Maintain nesting depth for parentheses and brackets to help newline handling
+        if token_type == LPAREN:
+            self.paren_depth += 1
+        elif token_type == RPAREN:
+            if self.paren_depth > 0:
+                self.paren_depth -= 1
+        elif token_type == LBRACKET:
+            self.bracket_depth += 1
+        elif token_type == RBRACKET:
+            if self.bracket_depth > 0:
+                self.bracket_depth -= 1
+        elif token_type == LBRACE:
+            self.brace_depth += 1
+        elif token_type == RBRACE:
+            if self.brace_depth > 0:
+                self.brace_depth -= 1
+
+        # Update last token type for context-aware keyword handling
+        self.last_token_type = token_type
+
+        # Determine whether the next non-whitespace token is at a statement boundary
+        if token_type in {SEMICOLON, RBRACE, LBRACE, EOF}:
+            self.at_statement_boundary = True
+        elif token_type in {COMMA, DOT, ASSIGN, COLON, LPAREN, LBRACKET, AT}:
+            self.at_statement_boundary = False
+        elif token_type in {LET, CONST}:
+            # Declarations expect an identifier next
+            self.at_statement_boundary = False
+        else:
+            # Default: remain in the current statement
+            self.at_statement_boundary = False
 
     def read_embedded_char(self):
         """Read a single character as identifier for embedded code compatibility"""
@@ -471,25 +514,24 @@ class Lexer:
             # Fall through to normal keyword lookup at the end
             pass
         else:
-            # Context-aware keyword recognition: allow non-strict keywords as identifiers in certain contexts
-            # These contexts are where variable names are expected:
-            # - After LET, CONST (variable declarations)
-            # - After DOT (property/method names)
-            # - After COMMA (function parameters, after first param)
-            # - After LBRACKET (map keys when used as identifiers)
-            # - After ASSIGN (right-hand side can use keywords as identifiers: x = data)
-            # - After COLON (map keys, type annotations)
-            #
-            # Note: LPAREN removed - it was causing keywords after '(' to become identifiers
-            # even at the start of new statements. Instead, keywords as param names will
-            # work after the first parameter (via COMMA).
-            contexts_allowing_keywords_as_idents = {
-                LET, CONST, DOT, COMMA, LBRACKET, COLON, ASSIGN
-            }
-            
-            if self.last_token_type in contexts_allowing_keywords_as_idents:
-                # In these contexts, treat non-strict keywords as identifiers
-                return IDENT
+            # Only allow relaxed keyword-as-identifier handling when we are not at a statement boundary
+            if not self.at_statement_boundary:
+                # Context-aware keyword recognition: allow non-strict keywords as identifiers in certain contexts
+                # These contexts are where variable names are expected:
+                # - After LET, CONST (variable declarations)
+                # - After DOT (property/method names)
+                # - After COMMA (function parameters, after first param)
+                # - After LBRACKET (map keys when used as identifiers)
+                # - After ASSIGN (right-hand side can use keywords as identifiers: x = data)
+                # - After COLON (map keys, type annotations)
+                contexts_allowing_keywords_as_idents = {
+                    LET, CONST, DOT, COMMA, LBRACKET, COLON, ASSIGN
+                }
+
+                if self.last_token_type in contexts_allowing_keywords_as_idents:
+                    # In these contexts, treat non-strict keywords as identifiers
+                    if ident not in {"function", "action"}:
+                        return IDENT
         
         # Special case: ACTION and FUNCTION keywords should only be recognized
         # when they actually start a definition, not when used as variable names in expressions
@@ -505,6 +547,7 @@ class Lexer:
                 SEMICOLON,
                 LBRACE,
                 RBRACE,
+                RBRACKET,
                 INT,
                 STRING,
                 FLOAT,
@@ -513,6 +556,7 @@ class Lexer:
                 FALSE,
                 NULL,
                 RETURN,
+                ASSIGN,
                 ASYNC,
                 EXPORT,
                 PUBLIC,
@@ -540,7 +584,25 @@ class Lexer:
             # Safe contexts for DATA keyword: after statement boundaries and value literals in contracts
             # This includes: LBRACE (contract start), RBRACE (after Map {}), RBRACKET (after List []),
             # STRING, INT, FLOAT, TRUE, FALSE (after literal values), SEMICOLON
-            contract_contexts = {SEMICOLON, LBRACE, RBRACE, RBRACKET, STRING, INT, FLOAT, TRUE, FALSE, NULL}
+            contract_contexts = {
+                SEMICOLON,
+                LBRACE,
+                RBRACE,
+                RBRACKET,
+                STRING,
+                INT,
+                FLOAT,
+                TRUE,
+                FALSE,
+                NULL,
+                PRIVATE,
+                PUBLIC,
+                SEALED,
+                SECURE,
+                PURE,
+                VIEW,
+                PAYABLE,
+            }
             if self.last_token_type in contract_contexts:
                 # Might be a data declaration in contract, allow as keyword
                 pass  # Fall through to keyword lookup
@@ -679,4 +741,8 @@ class Lexer:
 
     def skip_whitespace(self):
         while self.ch in [' ', '\t', '\n', '\r']:
+            if self.ch in ['\n', '\r']:
+                # Treat newline as potential statement boundary when not inside paren/bracket expressions
+                if self.paren_depth == 0 and self.bracket_depth == 0:
+                    self.at_statement_boundary = True
             self.read_char()

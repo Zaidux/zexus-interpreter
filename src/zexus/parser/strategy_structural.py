@@ -28,6 +28,8 @@ class StructuralAnalyzer:
         block_id = 0
         n = len(tokens)
 
+        debug_enabled = zexus_config.enable_debug_logs
+
         # helper sets for stopping heuristics (mirrors context parser)
         stop_types = {SEMICOLON, RBRACE}
         
@@ -135,13 +137,44 @@ class StructuralAnalyzer:
                     declaration_type = tokens[i].type
                     export_tokens.append(tokens[i])
                     i += 1
-                    # Now collect the rest of the declaration (NAME = VALUE)
-                    while i < n and tokens[i].type not in stop_types:
-                        # Stop if we see another statement starter (but not CONST/LET since we just saw it)
-                        if tokens[i].type in statement_starters and tokens[i].type not in [CONST, LET]:
-                            break
-                        export_tokens.append(tokens[i])
+
+                    # Track nesting counts so that braces/parentheses inside the value don't prematurely terminate the statement
+                    paren_depth = 0
+                    brace_depth = 0
+                    bracket_depth = 0
+
+                    while i < n:
+                        current = tokens[i]
+
+                        # Update nesting counters before applying boundary heuristics
+                        if current.type == LPAREN:
+                            paren_depth += 1
+                        elif current.type == RPAREN:
+                            paren_depth = max(paren_depth - 1, 0)
+                        elif current.type == LBRACE:
+                            brace_depth += 1
+                        elif current.type == RBRACE:
+                            brace_depth = max(brace_depth - 1, 0)
+                        elif current.type == LBRACKET:
+                            bracket_depth += 1
+                        elif current.type == RBRACKET:
+                            bracket_depth = max(bracket_depth - 1, 0)
+
+                        export_tokens.append(current)
                         i += 1
+
+                        in_nested_structure = (paren_depth > 0 or brace_depth > 0 or bracket_depth > 0)
+
+                        # Stop if we reach a clear boundary at top level (first semicolon or closing brace outside of literal)
+                        if not in_nested_structure and current.type in stop_types:
+                            break
+
+                        # Stop if we see another statement starter at top level (but not CONST/LET since we just saw it)
+                        if not in_nested_structure and current.type in statement_starters and current.type not in [CONST, LET]:
+                            # Remove the boundary token so the next statement sees it
+                            export_tokens.pop()
+                            i -= 1
+                            break
                 elif i < n and tokens[i].type == CONTRACT:
                     # export contract Name { ... } - collect entire contract
                     export_tokens.append(tokens[i])
@@ -164,6 +197,30 @@ class StructuralAnalyzer:
                         i += 1
                     
                     # Now collect until matching closing brace
+                    while i < n and brace_count > 0:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count += 1
+                        elif tokens[i].type == RBRACE:
+                            brace_count -= 1
+                        i += 1
+                elif i < n and tokens[i].type == DATA:
+                    # export data Name { ... } - collect entire data declaration
+                    export_tokens.append(tokens[i])
+                    i += 1
+
+                    brace_count = 0
+
+                    # Collect modifiers, type params, and until first brace
+                    while i < n:
+                        export_tokens.append(tokens[i])
+                        if tokens[i].type == LBRACE:
+                            brace_count = 1
+                            i += 1
+                            break
+                        i += 1
+
+                    # Collect body until matching closing brace
                     while i < n and brace_count > 0:
                         export_tokens.append(tokens[i])
                         if tokens[i].type == LBRACE:
@@ -796,6 +853,12 @@ class StructuralAnalyzer:
                                 # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
                                 # Also allow IF when followed by THEN (if-then-else expression)
                                 allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
+                                if in_assignment and allow_in_assignment and stmt_tokens:
+                                    prev_token = stmt_tokens[-1]
+                                    prev_line = getattr(prev_token, 'line', None)
+                                    current_line = getattr(tj, 'line', None)
+                                    if prev_line is not None and current_line is not None and current_line > prev_line:
+                                        allow_in_assignment = False
                                 allow_debug_call = tj.type == DEBUG and j + 1 < n and tokens[j + 1].type == LPAREN
                                 allow_if_then_else = False
                                 if tj.type == IF:
@@ -965,10 +1028,12 @@ class StructuralAnalyzer:
                                     # CRITICAL FIX: Don't break if the previous token was ASSIGN
                                     # This means the IDENT is the RHS value, not a new statement
                                     prev_tok = run_tokens[-1] if run_tokens else None
-                                    print(f"      prev_tok={prev_tok.literal if prev_tok else None}, type={prev_tok.type if prev_tok else None}")
+                                    if debug_enabled:
+                                        print(f"      prev_tok={prev_tok.literal if prev_tok else None}, type={prev_tok.type if prev_tok else None}")
                                     if prev_tok and prev_tok.type == ASSIGN:
                                         # This IDENT is the RHS of the assignment, not a new statement
-                                        print(f"      -> Continuing (RHS of assignment)")
+                                        if debug_enabled:
+                                            print("      -> Continuing (RHS of assignment)")
                                         pass  # Don't break, continue collecting
                                     else:
                                         # This is likely a new statement on a new line
@@ -1169,7 +1234,8 @@ class StructuralAnalyzer:
 
             # Export statement detection - collect export keyword + following declaration
             if t.type == EXPORT:
-                print(f"[DEBUG STRUCT] Found EXPORT token at index {i}")
+                if debug_enabled:
+                    print(f"[DEBUG STRUCT] Found EXPORT token at index {i}")
                 if cur:
                     results.append(cur)
                     cur = []
@@ -1179,9 +1245,11 @@ class StructuralAnalyzer:
                 i += 1
 
                 # Check if followed by const/let declaration (export const X = value)
-                print(f"[DEBUG STRUCT] Next token at {i}: {tokens[i].type if i < n else 'EOF'}, CONST={CONST}, LET={LET}")
+                if debug_enabled:
+                    print(f"[DEBUG STRUCT] Next token at {i}: {tokens[i].type if i < n else 'EOF'}, CONST={CONST}, LET={LET}")
                 if i < n and tokens[i].type in [CONST, LET]:
-                    print(f"[DEBUG STRUCT] Export followed by CONST/LET, collecting declaration")
+                    if debug_enabled:
+                        print(f"[DEBUG STRUCT] Export followed by CONST/LET, collecting declaration")
                     # Collect the entire declaration
                     while i < n and tokens[i].type not in stop_types:
                         export_tokens.append(tokens[i])

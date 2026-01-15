@@ -11,16 +11,19 @@ from ..object import (
     Integer, Float, String, List, Map,
     EvaluationError, Builtin, DateTime
 )
+from ..config import config as zexus_config
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy, _python_to_zexus
 
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
     
     def eval_identifier(self, node, env):
-        debug_log("eval_identifier", f"Looking up: {node.value}")
+        name = node.value
+        if zexus_config.fast_debug_enabled:
+            debug_log("eval_identifier", f"Looking up: {name}")
         
         # Special case: 'this' keyword should be treated like ThisExpression
-        if node.value == "this":
+        if name == "this":
             # Look for contract instance first
             contract_instance = env.get("__contract_instance__")
             if contract_instance is not None:
@@ -32,21 +35,23 @@ class ExpressionEvaluatorMixin:
                 return data_instance
         
         # First, check environment for user-defined variables (including DATA dataclasses)
-        val = env.get(node.value)
+        val = env.get(name)
         if val:
-            debug_log("  Found in environment", f"{node.value} = {val}")
+            if zexus_config.fast_debug_enabled:
+                 debug_log("  Found in environment", f"{name} = {val}")
             return val
         
         # Check builtins (self.builtins should be defined in FunctionEvaluatorMixin)
         if hasattr(self, 'builtins'):
-            builtin = self.builtins.get(node.value)
+            builtin = self.builtins.get(name)
             if builtin:
-                debug_log("  Found builtin", f"{node.value} = {builtin}")
+                if zexus_config.fast_debug_enabled:
+                    debug_log("  Found builtin", f"{name} = {builtin}")
                 return builtin
         
         # Special handling for TX - ONLY if not already defined by user
         # This provides blockchain transaction context when TX is not a user dataclass
-        if node.value == "TX":
+        if name == "TX":
             from ..blockchain.transaction import get_current_tx, create_tx_context
             tx = get_current_tx()
             if tx is None:

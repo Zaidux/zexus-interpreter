@@ -1,0 +1,34 @@
+contract AccountLedger {
+    data balances = {}
+    data nonces = {}
+    data stakes = {}
+    data total_supply = 0
+    data history = []
+
+    action initialize(genesis_alloc) {
+        balances = {}
+        nonces = {}
+        stakes = {}
+        total_supply = 0
+        history = []
+
+        let i = 0
+        while i < len(genesis_alloc) {
+            let alloc = genesis_alloc[i]
+            let address = alloc["address"]
+            let balance = alloc["balance"]
+            balances[address] = balance
+            nonces[address] = 0
+            stakes[address] = 0
+            total_supply = total_supply + balance
+
+            history = append(history, {
+                "type": "GENESIS",
+                "address": address,
+                "balance": balance,
+                "timestamp": time()
+            })
+            i = i + 1
+        }
+    }
+}

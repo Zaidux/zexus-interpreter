@@ -1,0 +1,133 @@
+[CEVAL_DEBUG] statements type: <class 'list'>
+[CEVAL_DEBUG] statements len: 38
+  [0] UseStatement
+  [1] LetStatement
+  [2] FunctionStatement
+  [3] FunctionStatement
+  [4] PrintStatement
+  [5] PrintStatement
+  [6] PrintStatement
+  [7] LetStatement
+  [8] LetStatement
+  [9] PrintStatement
+  [10] LetStatement
+  [11] LetStatement
+  [12] ExpressionStatement
+  [13] LetStatement
+  [14] TryCatchStatement
+  [15] PrintStatement
+  [16] LetStatement
+  [17] LetStatement
+  [18] LetStatement
+  [19] IfStatement
+  [20] PrintStatement
+  [21] TryCatchStatement
+  [22] PrintStatement
+  [23] FunctionStatement
+  [24] ExpressionStatement
+  [25] PrintStatement
+  [26] LetStatement
+  [27] LetStatement
+  [28] LetStatement
+  [29] LetStatement
+  [30] TryCatchStatement
+  [31] IfStatement
+  [32] PrintStatement
+  [33] PrintStatement
+  [34] PrintStatement
+  [35] PrintStatement
+  [36] IfStatement
+  [37] PrintStatement
+[CEVAL_DEBUG] statements type: <class 'list'>
+[CEVAL_DEBUG] statements len: 17
+  [0] ContractStatement
+  [1] ExportStatement
+  [2] ContractStatement
+  [3] ExportStatement
+  [4] ContractStatement
+  [5] ExportStatement
+  [6] ConstStatement
+  [7] ExportStatement
+  [8] ConstStatement
+  [9] ExportStatement
+  [10] ConstStatement
+  [11] ExportStatement
+  [12] FunctionStatement
+  [13] ExportStatement
+  [14] ActionStatement
+  [15] ExportStatement
+  [16] IfStatement
+============================================================
+  FULL NETWORK BLOCKCHAIN SECURITY / EXPLOIT PROBE
+============================================================
+
+[Attack 1] Insufficient Balance Double Spend
+Loaded 5 genesis accounts
+Mining block 1 with 3 transactions
+Block 1 sealed at nonce 0
+Mining block 2 with 3 transactions
+Block 2 sealed at nonce 0
+Mining block 3 with 4 transactions
+Block 3 sealed at nonce 0
+[TRY_CATCH_DEBUG] executing try_catch
+[TRY_CATCH] caught error: ERROR: ZexusError
+  → <runtime>
+
+  Requirement failed: Insufficient balance
+
+Stack trace:
+  at RequireStatement
+  at InfixExpression
+  at Identifier
+  at Identifier
+  at StringLiteral
+
+  ✅ Blocked: ERROR: ZexusError
+  → <runtime>
+
+  Requirement failed: Insufficient balance
+
+Stack trace:
+  at RequireStatement
+  at InfixExpression
+  at Identifier
+  at Identifier
+  at StringLiteral
+
+[TOLERANT] enqueue 3 statements -> {'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT] enqueue 2 statements -> {'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=PrintStatement Sig=PrintStatement(values=[StringLiteral('
+[Attack 2] Nonce Replay on ALICE_NODE')]) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+
+[Attack 2] Nonce Replay on ALICE_NODE
+[TOLERANT_CHECK] Stmt=LetStatement Sig=LetStatement(name=chain2, value=CallExpression(function=createSandboxChain, arguments=1)) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=LetStatement Sig=LetStatement(name=next_nonce, value=MethodCallExpression(object=chain2, method=compute_next_nonce)) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=LetStatement Sig=LetStatement(name=replay_nonce, value=InfixExpression(left=next_nonce, operator='-', right=IntegerLiteral(1))) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=IfStatement Sig=IfStatement(condition=InfixExpression(left=replay_nonce, operator='<', right=IntegerLiteral(0)), elif_parts=0) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=PrintStatement Sig=PrintStatement(values=[InfixExpression(left=InfixExpression(left=InfixExpression(left=  Next nonce: , operator='+', right=CallExpression(function=string, arguments=1)), operator='+', right= | replaying with ), operator='+', right=CallExpression(function=string, arguments=1))]) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+  Next nonce: 1 | replaying with 0
+[TOLERANT_CHECK] Stmt=TryCatchStatement Sig=TryCatchStatement(error_var=error) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain1, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Balance validation failed')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TRY_CATCH_DEBUG] executing try_catch
+[TRY_CATCH] caught error: ERROR: ZexusError
+  → <runtime>
+
+  Requirement failed: Nonce mismatch
+
+Stack trace:
+  at RequireStatement
+  at InfixExpression
+  at Identifier
+  at Identifier
+  at StringLiteral
+
+[TOLERANT] skipping block stmt PrintStatement sig=PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))]) remaining=1
+[TOLERANT] skipping block stmt ExpressionStatement sig=ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1)))) remaining=1
+[TOLERANT] enqueue 3 statements -> {'ExpressionStatement(expression=MethodCallExpression(object=chain2, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Nonce replay accepted')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT] enqueue 2 statements -> {'ExpressionStatement(expression=MethodCallExpression(object=chain2, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Nonce replay accepted')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=PrintStatement Sig=PrintStatement(values=[StringLiteral('
+[Attack 3] Duplicate Validator Registration')]) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain2, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Nonce replay accepted')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+
+[Attack 3] Duplicate Validator Registration
+❌ Runtime Error: Transaction reverted: Validator already registered
+[TOLERANT_CHECK] Stmt=FunctionStatement Sig=FunctionStatement(name=attack3, parameters=0) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain2, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Nonce replay accepted')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}
+[TOLERANT_CHECK] Stmt=ExpressionStatement Sig=ExpressionStatement(expression=CallExpression(function=attack3, arguments=0)) Counts={'ExpressionStatement(expression=MethodCallExpression(object=chain2, method=submit_transaction))': 1, "PrintStatement(values=[StringLiteral('  ❌ Attack succeeded: Nonce replay accepted')])": 1, "ExpressionStatement(expression=AssignmentExpression(name=confirmed_findings, value=InfixExpression(left=confirmed_findings, operator='+', right=IntegerLiteral(1))))": 1, "PrintStatement(values=[InfixExpression(left=  ✅ Blocked: , operator='+', right=CallExpression(function=string, arguments=1))])": 1, "ExpressionStatement(expression=AssignmentExpression(name=blocked_attacks, value=InfixExpression(left=blocked_attacks, operator='+', right=IntegerLiteral(1))))": 1}

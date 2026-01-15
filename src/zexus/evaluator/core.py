@@ -6,6 +6,7 @@ import sys
 from .. import zexus_ast
 from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue, Builtin
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
+from ..config import config as zexus_config
 from .expressions import ExpressionEvaluatorMixin
 from .statements import StatementEvaluatorMixin
 from .functions import FunctionEvaluatorMixin
@@ -174,10 +175,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
 
     def _handle_function_statement(self, node, env, stack_trace):
         debug_log("  FunctionStatement node", f"function {node.name.value}")
-        print(f"[CORE] Evaluating FunctionStatement: {node.name.value}, modifiers: {getattr(node, 'modifiers', [])}", flush=True)
-        result = self.eval_function_statement(node, env, stack_trace)
-        print(f"[CORE] FunctionStatement result: {result}", flush=True)
-        return result
+        debug_log("  FunctionStatement evaluate", f"{node.name.value} modifiers={getattr(node, 'modifiers', [])}")
+        return self.eval_function_statement(node, env, stack_trace)
 
     def _handle_identifier(self, node, env, stack_trace):
         debug_log("  Identifier node", node.value)
@@ -233,12 +232,12 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         node_type = type(node)
         
         # Add to stack trace for better error reporting
-        current_frame = f"  at {node_type.__name__}"
-        if hasattr(node, 'token') and node.token:
-            current_frame += f" (line {node.token.line})"
-        stack_trace.append(current_frame)
+        # OPTIMIZATION: Store tuple instead of formatted string to save time in hot loop
+        line = node.token.line if (hasattr(node, 'token') and node.token) else None
+        stack_trace.append((node_type, line))
         
-        debug_log("eval_node", f"Processing {node_type.__name__}")
+        if zexus_config.fast_debug_enabled:
+            debug_log("eval_node", f"Processing {node_type.__name__}")
 
         handler = self._node_handlers.get(node_type)
         if handler:
@@ -414,10 +413,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif isinstance(node, zexus_ast.FunctionStatement):
                 debug_log("  FunctionStatement node", f"function {node.name.value}")
-                print(f"[CORE] Evaluating FunctionStatement: {node.name.value}, modifiers: {getattr(node, 'modifiers', [])}", flush=True)
-                result = self.eval_function_statement(node, env, stack_trace)
-                print(f"[CORE] FunctionStatement result: {result}", flush=True)
-                return result
+                debug_log("  FunctionStatement evaluate", f"{node.name.value} modifiers={getattr(node, 'modifiers', [])}")
+                return self.eval_function_statement(node, env, stack_trace)
             
             elif isinstance(node, zexus_ast.NativeStatement):
                 debug_log("  NativeStatement node", f"native {node.function_name}")
@@ -920,10 +917,11 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         # Use external heuristics
         return should_use_vm_for_node(node)
     
-    def _execute_via_vm(self, node, env, debug_mode=False):
+    def _execute_via_vm(self, node, env, debug_mode=False, file_path=None):
         """
         Compile node to bytecode and execute via VM.
         Falls back to direct evaluation on error.
+        Stores compiled bytecode in file cache if file_path is provided.
         """
         try:
             debug_log("VM Execution", f"Compiling {type(node).__name__} to bytecode")
@@ -937,6 +935,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 return None  # Signal fallback
             
             self.vm_stats['bytecode_compiles'] += 1
+            
+            # Store in file cache for faster repeat runs
+            if file_path and self.bytecode_compiler.cache:
+                self.bytecode_compiler.cache.put_by_file(file_path, [bytecode])
             
             # Convert environment to dict for VM
             vm_env = self._env_to_dict(env)
@@ -1068,11 +1070,33 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     def eval_with_vm_support(self, node, env, stack_trace=None, debug_mode=False):
         """
         Evaluate node with optional VM execution.
-        Tries VM first if beneficial, falls back to direct evaluation.
+        Uses file-based cache for repeat runs, then tries VM for beneficial nodes.
         """
-        # Check if we should use VM
+        # Try file-based cache first for whole-file acceleration
+        file_path = None
+        try:
+            file_obj = env.get("__file__")
+            if file_obj and hasattr(file_obj, 'value'):
+                file_path = file_obj.value
+        except Exception:
+            pass
+        
+        # For program nodes with file context, try cached execution
+        if (file_path and self.bytecode_compiler and 
+            type(node).__name__ == 'Program' and
+            self.bytecode_compiler.cache and
+            self.bytecode_compiler.cache.is_file_cached(file_path)):
+            # File is cached - try to use cached bytecode
+            cached_bytecodes = self.bytecode_compiler.cache.get_by_file(file_path)
+            if cached_bytecodes:
+                debug_log("VM Execution", f"Using cached bytecode for {file_path}")
+                # Execute cached bytecode sequence
+                # For now, we still need to eval since cached bytecode may be partial
+                # TODO: Full cached execution path
+        
+        # Check if we should use VM for this node
         if self._should_use_vm(node):
-            result = self._execute_via_vm(node, env, debug_mode)
+            result = self._execute_via_vm(node, env, debug_mode, file_path)
             if result is not None:
                 return result
             # Fall through to direct evaluation

@@ -1,0 +1,2212 @@
+// ZEXUS FULL NETWORK SCENARIO
+// Comprehensive validator and fee testing for the Zexus interpreter
+
+inline function optimized_basis_points(amount, rate_bp) {
+    if rate_bp <= 0 {
+        return 0
+    }
+    if rate_bp > 10000 {
+        rate_bp = 10000
+    }
+    return (amount * rate_bp) / 10000
+}
+
+inline function clamp_non_negative(value) {
+    if value < 0 {
+        return 0
+    }
+    return value
+}
+
+// ==================== BLOCK STRUCTURE ====================
+
+export contract Block {
+    data index = 0
+    data timestamp = 0
+    data transactions = []
+    data previous_hash = ""
+    data nonce = 0
+    data hash = ""
+    data difficulty = 0
+    data proposer = ""
+    data selected_count = 0
+    data applied_count = 0
+    data skipped_count = 0
+    data total_fees = 0
+    data execution_ms = 0
+    data logging_enabled = true
+
+    action initialize(idx, txs, prev_hash, diff) {
+        index = idx
+        timestamp = time()
+        transactions = txs
+        previous_hash = prev_hash
+        difficulty = diff
+        nonce = 0
+        hash = ""
+        proposer = ""
+        selected_count = len(txs)
+        applied_count = len(txs)
+        skipped_count = 0
+        total_fees = 0
+        execution_ms = 0
+        logging_enabled = true
+    }
+
+    action calculate_hash() {
+        let payload = string(index) + string(timestamp) + previous_hash + string(nonce)
+        let i = 0
+        while i < len(transactions) {
+            let entry = transactions[i]
+            payload = payload + string(entry)
+            i = i + 1
+        }
+        hash = payload
+        return hash
+    }
+
+    action mine_block() {
+        if logging_enabled {
+            print("Mining block " + string(index) + " with " + string(len(transactions)) + " transactions")
+        }
+        let start_time = time()
+        let attempts = 0
+
+        while true {
+            this.calculate_hash()
+            attempts = attempts + 1
+
+            if nonce % 1000 == 0 {
+                break
+            }
+
+            nonce = nonce + 1
+            if attempts > 75000 {
+                break
+            }
+        }
+
+        let elapsed_ms = time() - start_time
+        if logging_enabled {
+            print("Block " + string(index) + " sealed at nonce " + string(nonce))
+        }
+
+        return {
+            hash: hash,
+            nonce: nonce,
+            attempts: attempts,
+            elapsed_ms: elapsed_ms
+        }
+    }
+
+    action set_logging(enabled) {
+        logging_enabled = enabled
+        return logging_enabled
+    }
+
+    action get_info() {
+        return {
+            index: index,
+            hash: hash,
+            previous_hash: previous_hash,
+            timestamp: timestamp,
+            nonce: nonce,
+            tx_count: len(transactions),
+            difficulty: difficulty,
+            proposer: proposer,
+            selected: selected_count,
+            applied: applied_count,
+            skipped: skipped_count,
+            fees: total_fees,
+            elapsed_ms: execution_ms
+        }
+    }
+
+    action set_metadata(proposer_addr, selected_val, applied_val, skipped_val, fees_val, elapsed_val) {
+        proposer = proposer_addr
+        selected_count = selected_val
+        applied_count = applied_val
+        skipped_count = skipped_val
+        total_fees = fees_val
+        execution_ms = elapsed_val
+        return true
+    }
+}
+
+// ==================== TRANSACTION MODEL ====================
+
+export contract Transaction {
+    data from_address = ""
+    data to_address = ""
+    data amount = 0
+    data fee = 0
+    data nonce = 0
+    data timestamp = 0
+    data payload = ""
+    data tx_hash = ""
+    data status = "pending"
+
+    action initialize(from_addr, to_addr, amt, fee_value, nonce_value, payload_value) {
+        require(from_addr != "", "Sender required")
+        require(to_addr != "", "Recipient required")
+        require(amt > 0, "Amount must be positive")
+        require(fee_value >= 0, "Fee must be non-negative")
+        require(nonce_value >= 0, "Nonce must be non-negative")
+        require(from_addr != to_addr, "Sender and recipient must differ")
+
+        from_address = from_addr
+        to_address = to_addr
+        amount = amt
+        fee = fee_value
+        nonce = nonce_value
+        payload = payload_value
+        timestamp = time()
+        status = "pending"
+
+        let fingerprint = from_addr + to_addr + string(amt) + string(fee_value) + string(nonce_value) + string(timestamp) + string(payload_value)
+        tx_hash = fingerprint
+    }
+
+    action validate_transaction() {
+        require(amount > 0, "Invalid amount")
+        require(fee >= 0, "Invalid fee")
+        require(from_address != to_address, "Invalid routing")
+        return true
+    }
+
+    action mark_status(new_status) {
+        status = new_status
+        return status
+    }
+
+    action get_info() {
+        return {
+            from: from_address,
+            to: to_address,
+            amount: amount,
+            fee: fee,
+            nonce: nonce,
+            timestamp: timestamp,
+            payload: payload,
+            hash: tx_hash,
+            status: status
+        }
+    }
+}
+
+// ==================== BLOCKCHAIN ENGINE ====================
+
+export contract Blockchain {
+    data chain = []
+    data difficulty = 2
+    data pending_transactions = []
+    data mining_reward = 40
+    private data _balances = {}
+    private data _stakes = {}
+    private data _nonces = {}
+    private data _pending_nonces = {}  // Track highest pending nonce per address for O(1) lookup
+    private data account_index = []
+    data validators = []
+    data events = []
+    data finalized_height = 0
+    data round_number = 0
+    data config = {}
+    data block_timings = []
+    data logging_enabled = true
+    data events_enabled = true
+    data consensus_history = []
+    data treasury_account = "network.treasury"
+    data treasury_balance = 0
+    data storage_roots = []
+    data storage_journal = []
+    data audit_stats = {
+        "consensus_failures": 0,
+        "reverted_blocks": 0,
+        "slashed_validators": 0,
+        "storage_alerts": 0,
+        "storage_rollbacks": 0,
+        "treasury_accruals": 0,
+        "slash_events": 0,
+        "participant_rewards": 0,
+        "fee_accumulator": 0
+    }
+    private data balances_integrity = ""
+
+    action initialize() {
+        this.reset_state()
+        return true
+    }
+
+    action reset_state() {
+        if logging_enabled {
+            print("Bootstrapping Zexus full network scenario")
+        }
+        // Rebuild state via temporaries to avoid literal assignment issues
+        let fresh_chain = [];
+        chain = fresh_chain;
+        let empty_pending = [];
+        pending_transactions = empty_pending;
+        let empty_balances = {};
+        _balances = empty_balances;
+        let empty_stakes = {};
+        _stakes = empty_stakes;
+        let empty_nonces = {};
+        _nonces = empty_nonces;
+        let empty_pending_nonces = {};
+        _pending_nonces = empty_pending_nonces;
+        let empty_account_index = [];
+        account_index = empty_account_index;
+        let empty_validators = [];
+        validators = empty_validators;
+        print("[TRACE] reset_state validators_len=" + string(len(validators)))
+        let empty_events = [];
+        events = empty_events;
+        events_enabled = true
+        finalized_height = 0
+        round_number = 0
+
+        let new_config = {
+            "max_block_txs": 4,
+            "base_reward": 40,
+            "min_stake": 20000,
+            "events_enabled": true,
+            "consensus_threshold_bp": 6700,
+            "consensus_max_missed": 3,
+            "treasury_rate_bp": 800,
+            "proposer_commission_bp": 8200,
+            "participation_rate_bp": 1000,
+            "validator_slash_penalty_bp": 200,
+            "storage_root_limit": 128
+        };
+        config = new_config;
+        let empty_timings = [];
+        block_timings = empty_timings;
+        consensus_history = [];
+        audit_stats = {
+            "consensus_failures": 0,
+            "reverted_blocks": 0,
+            "slashed_validators": 0,
+            "storage_alerts": 0,
+            "storage_rollbacks": 0,
+            "treasury_accruals": 0,
+            "slash_events": 0,
+            "participant_rewards": 0,
+            "fee_accumulator": 0
+        };
+        storage_roots = [];
+        storage_journal = [];
+        treasury_balance = 0
+
+        let treasury = treasury_account
+        _balances[treasury] = 0
+        _stakes[treasury] = 0
+        _nonces[treasury] = 0
+        this._register_account(treasury)
+
+        let genesis = Block()
+        genesis.initialize(0, [], "0", difficulty)
+        chain = append(chain, genesis)
+        if logging_enabled {
+            print("Genesis block committed at height 0")
+        }
+        this._refresh_balances_integrity()
+        this._record_storage_checkpoint("reset", 0, {
+            "reason": "genesis"
+        })
+        return true
+    }
+
+    private action _compute_balances_checksum() {
+        let summary = ""
+        let i = 0
+        while i < len(account_index) {
+            let addr = account_index[i]
+            let value = _balances[addr]
+            if value == null {
+                value = 0
+            }
+            summary = summary + addr + ":" + string(value) + ";"
+            i = i + 1
+        }
+        if summary == "" {
+            summary = "<empty-ledger>"
+        }
+        return hash(summary, "SHA256")
+    }
+
+    private action _refresh_balances_integrity() {
+        balances_integrity = this._compute_balances_checksum()
+        return balances_integrity
+    }
+
+    private action _assert_balances_integrity() {
+        let expected = balances_integrity
+        let current = this._compute_balances_checksum()
+        if expected == "" {
+            balances_integrity = current
+            return true
+        }
+        require(current == expected, "Ledger integrity violation detected")
+        return true
+    }
+
+    private action _register_account(address) {
+        let idx = 0
+        while idx < len(account_index) {
+            if account_index[idx] == address {
+                return false
+            }
+            idx = idx + 1
+        }
+        account_index = append(account_index, address)
+        return true
+    }
+
+    private action _ensure_account_unsafe(address) {
+        if address == null {
+            return false
+        }
+        if _balances[address] == null {
+            _balances[address] = 0
+            this._register_account(address)
+        }
+        if _stakes[address] == null {
+            _stakes[address] = 0
+        }
+        if _nonces[address] == null {
+            _nonces[address] = 0
+        }
+        return true
+    }
+
+    action set_logging(enabled) {
+        logging_enabled = enabled
+        return logging_enabled
+    }
+
+    action set_events(enabled) {
+        events_enabled = enabled
+        return events_enabled
+    }
+
+    action configure(settings) {
+        if settings != null {
+            let max_txs = settings["max_block_txs"]
+            if max_txs != null {
+                config["max_block_txs"] = max_txs
+            }
+
+            let reward = settings["base_reward"]
+            if reward != null {
+                mining_reward = reward
+                config["base_reward"] = reward
+            }
+
+            let min_stake = settings["min_stake"]
+            if min_stake != null {
+                config["min_stake"] = min_stake
+            }
+
+            let events_flag = settings["events_enabled"]
+            if events_flag != null {
+                events_enabled = events_flag
+                config["events_enabled"] = events_flag
+            }
+
+            let threshold_bp = settings["consensus_threshold_bp"]
+            if threshold_bp != null {
+                config["consensus_threshold_bp"] = threshold_bp
+            }
+
+            let max_missed = settings["consensus_max_missed"]
+            if max_missed != null {
+                config["consensus_max_missed"] = max_missed
+            }
+
+            let treasury_rate_bp = settings["treasury_rate_bp"]
+            if treasury_rate_bp != null {
+                config["treasury_rate_bp"] = treasury_rate_bp
+            }
+
+            let proposer_commission_bp = settings["proposer_commission_bp"]
+            if proposer_commission_bp != null {
+                config["proposer_commission_bp"] = proposer_commission_bp
+            }
+
+            let participation_rate_bp = settings["participation_rate_bp"]
+            if participation_rate_bp != null {
+                config["participation_rate_bp"] = participation_rate_bp
+            }
+
+            let slash_penalty_bp = settings["validator_slash_penalty_bp"]
+            if slash_penalty_bp != null {
+                config["validator_slash_penalty_bp"] = slash_penalty_bp
+            }
+
+            let storage_limit = settings["storage_root_limit"]
+            if storage_limit != null {
+                config["storage_root_limit"] = storage_limit
+            }
+        }
+        return config
+    }
+
+    action bootstrap(genesis_alloc) {
+        this._assert_balances_integrity()
+        let i = 0
+        while i < len(genesis_alloc) {
+            let entry = genesis_alloc[i]
+            let address = entry["address"]
+            let balance = entry["balance"]
+            _balances[address] = balance
+            _stakes[address] = 0
+            _nonces[address] = 0
+            this._register_account(address)
+            i = i + 1
+        }
+        if events_enabled {
+            events = append(events, {
+                "type": "GENESIS_LOADED",
+                "accounts": len(genesis_alloc),
+                "timestamp": time()
+            })
+        }
+
+        print("Loaded " + string(len(genesis_alloc)) + " genesis accounts")
+        this._refresh_balances_integrity()
+        this._record_storage_checkpoint("bootstrap", finalized_height, {
+            "accounts": len(genesis_alloc)
+        })
+    }
+
+    action ensure_account(address) {
+        this._assert_balances_integrity()
+        let ledger_updated = false
+        let bal = _balances[address]
+        if bal == null {
+            _balances[address] = 0
+            this._register_account(address)
+            ledger_updated = true
+        }
+
+        let stake_val = _stakes[address]
+        if stake_val == null {
+            _stakes[address] = 0
+        }
+
+        let nonce_val = _nonces[address]
+        if nonce_val == null {
+            _nonces[address] = 0
+        }
+
+        if ledger_updated {
+            this._refresh_balances_integrity()
+        }
+    }
+
+    action get_balance(address) {
+        this._assert_balances_integrity()
+        let balance = _balances[address]
+        if balance == null {
+            balance = 0
+        }
+        return balance
+    }
+
+    action get_stake(address) {
+        let stake_amount = _stakes[address]
+        if stake_amount == null {
+            stake_amount = 0
+        }
+        return stake_amount
+    }
+
+    private action _create_validator_entry(address, stake_value, pubkey, active_flag, missed_count, produced_count, votes_count) {
+        let stake_final = stake_value
+        if stake_final == null {
+            stake_final = 0
+        }
+        let missed_final = missed_count
+        if missed_final == null {
+            missed_final = 0
+        }
+        let produced_final = produced_count
+        if produced_final == null {
+            produced_final = 0
+        }
+        let votes_final = votes_count
+        if votes_final == null {
+            votes_final = 0
+        }
+        return {
+            "address": address,
+            "stake": stake_final,
+            "pubkey": pubkey,
+            "active": active_flag,
+            "missed": missed_final,
+            "produced": produced_final,
+            "votes": votes_final
+        }
+    }
+
+    private action _set_validator_entry(index, entry) {
+        if index >= 0 && index < len(validators) {
+            let applied = false
+            try {
+                validators.set(index, entry)
+                applied = true
+            } catch error {}
+            if applied == false {
+                validators[index] = entry
+            }
+        }
+    }
+
+    action register_validator(address, stake_amount, pubkey) {
+        this._assert_balances_integrity()
+        this.ensure_account(address)
+        let idx = 0
+        while idx < len(validators) {
+            let existing = validators[idx]
+            print("[TRACE] register scan idx=" + string(idx) + " target=" + address + " existing=" + string(existing["address"]) + " active=" + string(existing["active"]))
+            if existing["address"] == address && existing["active"] == true {
+                revert("Validator already registered")
+            }
+            idx = idx + 1
+        }
+        require(stake_amount >= config["min_stake"], "Stake below minimum")
+
+        let balance = _balances[address]
+        require(balance >= stake_amount, "Insufficient balance to stake")
+
+        _balances[address] = balance - stake_amount
+        let existing_stake = _stakes[address]
+        _stakes[address] = existing_stake + stake_amount
+        this._refresh_balances_integrity()
+
+        let validator = this._create_validator_entry(address, _stakes[address], pubkey, true, 0, 0, 0)
+        validators = append(validators, validator)
+
+        if events_enabled {
+            events = append(events, {
+                "type": "VALIDATOR_REGISTERED",
+                "address": address,
+                "stake": _stakes[address],
+                "timestamp": time()
+            })
+        }
+
+        return validator
+    }
+
+    action record_vote(address, participated) {
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            if validator["address"] == address {
+                print("[TRACE] record_vote target=" + string(address) + " participated=" + string(participated))
+                let votes_value = validator["votes"]
+                if votes_value == null {
+                    votes_value = 0
+                }
+                let missed_value = validator["missed"]
+                if missed_value == null {
+                    missed_value = 0
+                }
+                let new_votes = votes_value
+                let new_missed = missed_value
+                if participated == true {
+                    new_votes = votes_value + 1
+                    new_missed = 0
+                } else {
+                    new_missed = missed_value + 1
+                }
+                let updated_entry = this._create_validator_entry(
+                    validator["address"],
+                    validator["stake"],
+                    validator["pubkey"],
+                    validator["active"],
+                    new_missed,
+                    validator["produced"],
+                    new_votes
+                )
+                this._set_validator_entry(i, updated_entry)
+                print("[TRACE] record_vote updated votes=" + string(new_votes) + " missed=" + string(new_missed))
+                return
+            }
+            i = i + 1
+        }
+    }
+
+    action mark_validator_proposed(address) {
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            if validator["address"] == address {
+                let produced_value = validator["produced"]
+                if produced_value == null {
+                    produced_value = 0
+                }
+                let updated_entry = this._create_validator_entry(
+                    validator["address"],
+                    validator["stake"],
+                    validator["pubkey"],
+                    validator["active"],
+                    validator["missed"],
+                    produced_value + 1,
+                    validator["votes"]
+                )
+                this._set_validator_entry(i, updated_entry)
+                return
+            }
+            i = i + 1
+        }
+    }
+
+    action select_proposer() {
+        if len(validators) == 0 {
+            this.ensure_account("community.miner")
+            return {
+                "address": "community.miner",
+                "stake": 0,
+                "active": true,
+                "missed": 0,
+                "produced": 0,
+                "votes": 0
+            }
+        }
+
+        let active = []
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            if validator["active"] == true {
+                active = append(active, validator)
+            }
+            i = i + 1
+        }
+
+        if len(active) == 0 {
+            this.ensure_account("community.miner")
+            return {
+                "address": "community.miner",
+                "stake": 0,
+                "active": true,
+                "missed": 0,
+                "produced": 0,
+                "votes": 0
+            }
+        }
+
+        let index = round_number % len(active)
+        return active[index]
+    }
+
+    // O(1) nonce computation using pending_nonces cache
+    action compute_next_nonce(address) {
+        // Check pending_nonces first (O(1))
+        let pending_highest = _pending_nonces[address]
+        if pending_highest != null {
+            return pending_highest + 1
+        }
+        // Fall back to committed nonce
+        let committed = _nonces[address]
+        if committed == null {
+            return 0
+        }
+        return committed
+    }
+
+    // Legacy O(n) nonce computation - kept for compatibility
+    action compute_next_nonce_slow(address) {
+        let committed = _nonces[address]
+        if committed == null {
+            committed = 0
+        }
+        let highest = committed - 1
+        let i = 0
+        while i < len(pending_transactions) {
+            let tx = pending_transactions[i]
+            if tx["from"] == address {
+                let candidate = tx["nonce"]
+                if candidate > highest {
+                    highest = candidate
+                }
+            }
+            i = i + 1
+        }
+        return highest + 1
+    }
+
+    action submit_transaction(from_addr, to_addr, amount, fee_value, nonce_value, payload) limit 15000 {
+        this._assert_balances_integrity()
+        this.ensure_account(from_addr)
+        this.ensure_account(to_addr)
+
+        require(amount > 0, "Amount must be positive")
+        require(fee_value >= 0, "Fee must be non-negative")
+
+        let required_amount = amount + fee_value
+        let sender_balance = _balances[from_addr]
+        require(sender_balance >= required_amount, "Insufficient balance")
+
+        let required_nonce = this.compute_next_nonce(from_addr)
+        require(nonce_value == required_nonce, "Nonce mismatch")
+
+        let tx = Transaction()
+        tx.initialize(from_addr, to_addr, amount, fee_value, nonce_value, payload)
+        let is_valid = tx.validate_transaction()
+        require(is_valid == true, "Transaction validation failed")
+        let info = tx.get_info()
+        pending_transactions = append(pending_transactions, info)
+        
+        // Update pending_nonces cache for O(1) next lookup
+        let current_pending_nonce = _pending_nonces[from_addr]
+        if current_pending_nonce == null {
+            _pending_nonces[from_addr] = nonce_value
+        } else {
+            if nonce_value > current_pending_nonce {
+                _pending_nonces[from_addr] = nonce_value
+            }
+        }
+
+        if events_enabled {
+            events = append(events, {
+                "type": "TX_ACCEPTED",
+                "from": from_addr,
+                "to": to_addr,
+                "amount": amount,
+                "fee": fee_value,
+                "nonce": nonce_value,
+                "timestamp": time()
+            })
+        }
+
+        return info
+    }
+
+    // Fast path for bulk transactions - skips Transaction contract overhead
+    action submit_transaction_fast(from_addr, to_addr, amount, fee_value, nonce_value, payload) limit 15000 {
+        this._assert_balances_integrity()
+        // Inline ensure_account logic with integrity tracking
+        let ledger_was_updated = false
+        if _balances[from_addr] == null {
+            _balances[from_addr] = 0
+            _stakes[from_addr] = 0
+            _nonces[from_addr] = 0
+            this._register_account(from_addr)
+            ledger_was_updated = true
+        }
+        if _balances[to_addr] == null {
+            _balances[to_addr] = 0
+            _stakes[to_addr] = 0
+            _nonces[to_addr] = 0
+            this._register_account(to_addr)
+            ledger_was_updated = true
+        }
+
+        require(amount > 0, "Amount must be positive")
+        require(fee_value >= 0, "Fee must be non-negative")
+        require(from_addr != to_addr, "Sender and recipient must differ")
+
+        let required_amount = amount + fee_value
+        let sender_balance = _balances[from_addr]
+        require(sender_balance >= required_amount, "Insufficient balance")
+
+        // Use compute_next_nonce for correctness (scans pending)
+        let required_nonce = this.compute_next_nonce(from_addr)
+        require(nonce_value == required_nonce, "Nonce mismatch")
+
+        // Create transaction info directly without Transaction contract
+        let ts = time()
+        let info = {
+            "from": from_addr,
+            "to": to_addr,
+            "amount": amount,
+            "fee": fee_value,
+            "nonce": nonce_value,
+            "timestamp": ts,
+            "payload": payload,
+            "hash": from_addr + to_addr + string(amount) + string(fee_value) + string(nonce_value) + string(ts),
+            "status": "pending"
+        }
+        pending_transactions = append(pending_transactions, info)
+        
+        // Update pending_nonces cache for O(1) next lookup
+        let current_pending_nonce_fast = _pending_nonces[from_addr]
+        if current_pending_nonce_fast == null {
+            _pending_nonces[from_addr] = nonce_value
+        } else {
+            if nonce_value > current_pending_nonce_fast {
+                _pending_nonces[from_addr] = nonce_value
+            }
+        }
+
+        if events_enabled {
+            events = append(events, {
+                "type": "TX_ACCEPTED",
+                "from": from_addr,
+                "to": to_addr,
+                "amount": amount,
+                "fee": fee_value,
+                "nonce": nonce_value,
+                "timestamp": ts
+            })
+        }
+
+        if ledger_was_updated {
+            this._refresh_balances_integrity()
+        }
+
+        return info
+    }
+
+    action select_transactions(max_items) limit 40000 {
+        // O(n log n) sort by fee descending, then take first max_items
+        let sorted_txs = sort(pending_transactions, "fee", true)
+        let count = len(sorted_txs)
+        if count > max_items {
+            count = max_items
+        }
+        let selected = slice(sorted_txs, 0, count)
+        pending_transactions = slice(sorted_txs, count, len(sorted_txs))
+        
+        // Rebuild pending_nonces cache for remaining transactions
+        let fresh_pending_nonces = {}
+        let i = 0
+        while i < len(pending_transactions) {
+            let tx = pending_transactions[i]
+            let addr = tx["from"]
+            let n = tx["nonce"]
+            if n != null {
+                let current = fresh_pending_nonces[addr]
+                if current == null {
+                    fresh_pending_nonces[addr] = n
+                } else {
+                    if n > current {
+                        fresh_pending_nonces[addr] = n
+                    }
+                }
+            }
+            i = i + 1
+        }
+        _pending_nonces = fresh_pending_nonces
+        
+        return selected
+    }
+
+    private action _total_active_stake() {
+        let total = 0
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            if validator["active"] == true {
+                total = total + validator["stake"]
+            }
+            i = i + 1
+        }
+        return total
+    }
+
+    private action _compute_storage_root() {
+        let ledger_buffer = ""
+        let i = 0
+        while i < len(account_index) {
+            let addr = account_index[i]
+            let bal = _balances[addr]
+            if bal == null {
+                bal = 0
+            }
+            let stake_val = _stakes[addr]
+            if stake_val == null {
+                stake_val = 0
+            }
+            let nonce_val = _nonces[addr]
+            if nonce_val == null {
+                nonce_val = 0
+            }
+            ledger_buffer = ledger_buffer + addr + ":" + string(bal) + ":" + string(stake_val) + ":" + string(nonce_val) + ";"
+            i = i + 1
+        }
+
+        ledger_buffer = ledger_buffer + "|pending:"
+        i = 0
+        while i < len(pending_transactions) {
+            let tx = pending_transactions[i]
+            ledger_buffer = ledger_buffer + tx["hash"] + "#" + string(tx["nonce"]) + ";"
+            i = i + 1
+        }
+
+        ledger_buffer = ledger_buffer + "|validators:"
+        i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            let stake_value = validator["stake"]
+            if stake_value == null {
+                stake_value = 0
+            }
+            let missed_value = validator["missed"]
+            if missed_value == null {
+                missed_value = 0
+            }
+            ledger_buffer = ledger_buffer + validator["address"] + ":" + string(stake_value) + ":" + string(missed_value) + ";"
+            i = i + 1
+        }
+
+        let treasury_val = _balances[treasury_account]
+        if treasury_val == null {
+            treasury_val = 0
+        }
+        treasury_balance = treasury_val
+        ledger_buffer = ledger_buffer + "|treasury:" + treasury_account + ":" + string(treasury_val)
+        ledger_buffer = ledger_buffer + "|integrity:" + balances_integrity
+
+        return hash(ledger_buffer, "SHA256")
+    }
+
+    private action _record_storage_checkpoint(trigger, height, metadata) {
+        let entry_metadata = metadata
+        if entry_metadata == null {
+            entry_metadata = {}
+        }
+        let root = this._compute_storage_root()
+        let entry = {
+            "height": height,
+            "trigger": trigger,
+            "root": root,
+            "timestamp": time(),
+            "metadata": entry_metadata
+        }
+        storage_roots = append(storage_roots, root)
+        storage_journal = append(storage_journal, entry)
+
+        let limit = config["storage_root_limit"]
+        if limit == null {
+            limit = 128
+        }
+        if limit > 0 {
+            if len(storage_roots) > limit {
+                let start_roots = len(storage_roots) - limit
+                storage_roots = slice(storage_roots, start_roots, len(storage_roots))
+            }
+            if len(storage_journal) > limit {
+                let start_entries = len(storage_journal) - limit
+                storage_journal = slice(storage_journal, start_entries, len(storage_journal))
+            }
+        }
+
+        return entry
+    }
+
+    private action _snapshot_state() {
+        let ledger = []
+        let i = 0
+        while i < len(account_index) {
+            let addr = account_index[i]
+            ledger = append(ledger, {
+                "address": addr,
+                "balance": _balances[addr],
+                "stake": _stakes[addr],
+                "nonce": _nonces[addr]
+            })
+            i = i + 1
+        }
+
+        let pending_copy = []
+        i = 0
+        while i < len(pending_transactions) {
+            let tx = pending_transactions[i]
+            pending_copy = append(pending_copy, {
+                "from": tx["from"],
+                "to": tx["to"],
+                "amount": tx["amount"],
+                "fee": tx["fee"],
+                "nonce": tx["nonce"],
+                "timestamp": tx["timestamp"],
+                "payload": tx["payload"],
+                "hash": tx["hash"],
+                "status": tx["status"]
+            })
+            i = i + 1
+        }
+
+        let pending_nonce_copy = {}
+        i = 0
+        while i < len(ledger) {
+            let entry = ledger[i]
+            let addr = entry["address"]
+            let pn = _pending_nonces[addr]
+            if pn != null {
+                pending_nonce_copy[addr] = pn
+            }
+            i = i + 1
+        }
+
+        let index_copy = []
+        i = 0
+        while i < len(account_index) {
+            index_copy = append(index_copy, account_index[i])
+            i = i + 1
+        }
+
+        let treasury_snapshot = _balances[treasury_account]
+        if treasury_snapshot == null {
+            treasury_snapshot = 0
+        }
+
+        let storage_root = this._compute_storage_root()
+
+        return {
+            "ledger": ledger,
+            "pending": pending_copy,
+            "pending_nonces": pending_nonce_copy,
+            "account_index": index_copy,
+            "finalized_height": finalized_height,
+            "round_number": round_number,
+            "treasury_balance": treasury_snapshot,
+            "storage_root": storage_root
+        }
+    }
+
+    private action _restore_state(snapshot) {
+        if snapshot == null {
+            return
+        }
+
+        let ledger = snapshot["ledger"]
+        let rebuilt_balances = {}
+        let rebuilt_stakes = {}
+        let rebuilt_nonces = {}
+        let rebuilt_index = []
+        let i = 0
+        while i < len(ledger) {
+            let entry = ledger[i]
+            let addr = entry["address"]
+            rebuilt_balances[addr] = entry["balance"]
+            rebuilt_stakes[addr] = entry["stake"]
+            rebuilt_nonces[addr] = entry["nonce"]
+            rebuilt_index = append(rebuilt_index, addr)
+            i = i + 1
+        }
+        _balances = rebuilt_balances
+        _stakes = rebuilt_stakes
+        _nonces = rebuilt_nonces
+        account_index = rebuilt_index
+
+        let pending_source = snapshot["pending"]
+        let restored_pending = []
+        i = 0
+        while i < len(pending_source) {
+            let tx = pending_source[i]
+            let clone = {
+                "from": tx["from"],
+                "to": tx["to"],
+                "amount": tx["amount"],
+                "fee": tx["fee"],
+                "nonce": tx["nonce"],
+                "timestamp": tx["timestamp"],
+                "payload": tx["payload"],
+                "hash": tx["hash"],
+                "status": tx["status"]
+            }
+            restored_pending = append(restored_pending, clone)
+            i = i + 1
+        }
+        pending_transactions = restored_pending
+
+        let pending_nonce_source = snapshot["pending_nonces"]
+        let restored_pending_nonce = {}
+        i = 0
+        while i < len(rebuilt_index) {
+            let addr = rebuilt_index[i]
+            let pn = pending_nonce_source[addr]
+            if pn != null {
+                restored_pending_nonce[addr] = pn
+            }
+            i = i + 1
+        }
+        _pending_nonces = restored_pending_nonce
+
+        finalized_height = snapshot["finalized_height"]
+        round_number = snapshot["round_number"]
+        let treasury_value = snapshot["treasury_balance"]
+        if treasury_value == null {
+            treasury_value = 0
+        }
+        treasury_balance = treasury_value
+        _balances[treasury_account] = treasury_value
+
+        this._refresh_balances_integrity()
+        let expected_root = snapshot["storage_root"]
+        let actual_root = this._compute_storage_root()
+        if expected_root != null && actual_root != expected_root {
+            audit_stats["storage_alerts"] = audit_stats["storage_alerts"] + 1
+            return {
+                "restored": true,
+                "storage_integrity_ok": false,
+                "expected": expected_root,
+                "actual": actual_root
+            }
+        }
+
+        return {
+            "restored": true,
+            "storage_integrity_ok": true,
+            "expected": expected_root,
+            "actual": actual_root
+        }
+    }
+
+    private action _validator_cast_vote(validator, block, applied_transactions, total_fees) {
+        let approval = true
+        let reason = "ok"
+
+        if validator["stake"] == null || validator["stake"] <= 0 {
+            approval = false
+            reason = "no-stake"
+        }
+
+        if validator["active"] != true {
+            approval = false
+            reason = "inactive"
+        }
+
+        let info = block.get_info()
+        if info == null {
+            approval = false
+            reason = "missing-info"
+        } else {
+            if len(applied_transactions) != info.applied {
+                approval = false
+                reason = "tx-mismatch"
+            }
+            if info.hash == "" {
+                approval = false
+                reason = "missing-hash"
+            }
+            if total_fees < 0 {
+                approval = false
+                reason = "fee-negative"
+            }
+        }
+
+        let stake_weight = validator["stake"]
+        if stake_weight == null {
+            stake_weight = 0
+        }
+
+        return {
+            "address": validator["address"],
+            "approval": approval,
+            "reason": reason,
+            "stake": stake_weight
+        }
+    }
+
+    private action _run_consensus(block, proposer, applied_transactions, total_fees) {
+        let threshold_bp = config["consensus_threshold_bp"]
+        if threshold_bp == null {
+            threshold_bp = 6700
+        }
+        if threshold_bp < 0 {
+            threshold_bp = 0
+        }
+        if threshold_bp > 20000 {
+            threshold_bp = 20000
+        }
+
+        let total_stake = this._total_active_stake()
+        let yes_stake = 0
+        let votes = []
+
+        if total_stake == 0 {
+            return {
+                "committed": true,
+                "ratio_bp": 10000,
+                "threshold_bp": threshold_bp,
+                "yes_stake": 0,
+                "total_stake": 0,
+                "votes": votes
+            }
+        }
+
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            if validator["active"] != true {
+                i = i + 1
+                continue
+            }
+            let vote = this._validator_cast_vote(validator, block, applied_transactions, total_fees)
+            votes = append(votes, vote)
+            this.record_vote(validator["address"], vote["approval"])
+            if vote["approval"] == true {
+                yes_stake = yes_stake + validator["stake"]
+            }
+            i = i + 1
+        }
+
+        let ratio_bp = (yes_stake * 10000) / total_stake
+        if ratio_bp > 10000 {
+            ratio_bp = 10000
+        }
+        let committed = ratio_bp >= threshold_bp
+
+        return {
+            "committed": committed,
+            "ratio_bp": ratio_bp,
+            "threshold_bp": threshold_bp,
+            "yes_stake": yes_stake,
+            "total_stake": total_stake,
+            "votes": votes
+        }
+    }
+
+    private action _slash_validator(address, reason, height) {
+        if address == null {
+            return {
+                "address": address,
+                "amount": 0,
+                "reason": reason,
+                "height": height
+            }
+        }
+
+        let penalty_bp = config["validator_slash_penalty_bp"]
+        if penalty_bp == null {
+            penalty_bp = 200
+        }
+        if penalty_bp < 0 {
+            penalty_bp = 0
+        }
+        if penalty_bp > 10000 {
+            penalty_bp = 10000
+        }
+
+        let slash_amount = 0
+        let stake_after = 0
+        let idx = 0
+        while idx < len(validators) {
+            let validator = validators[idx]
+            if validator["address"] == address {
+                let stake_value = validator["stake"]
+                if stake_value == null {
+                    stake_value = 0
+                }
+                slash_amount = optimized_basis_points(stake_value, penalty_bp)
+                if slash_amount > stake_value {
+                    slash_amount = stake_value
+                }
+                slash_amount = clamp_non_negative(slash_amount)
+                let new_stake = clamp_non_negative(stake_value - slash_amount)
+                let new_missed = validator["missed"]
+                if new_missed == null {
+                    new_missed = 0
+                }
+                if slash_amount > 0 {
+                    new_missed = 0
+                }
+                validator["stake"] = new_stake
+                validator["missed"] = new_missed
+                this._set_validator_entry(idx, validator)
+                let check_entry = validators[idx]
+                print("[TRACE] slashing_update address=" + address + " pre=" + string(stake_value) + " post=" + string(check_entry["stake"]))
+                _stakes[address] = new_stake
+                stake_after = new_stake
+                if slash_amount > 0 {
+                    let treasury_val = _balances[treasury_account]
+                    if treasury_val == null {
+                        treasury_val = 0
+                    }
+                    _balances[treasury_account] = treasury_val + slash_amount
+                    treasury_balance = _balances[treasury_account]
+                    audit_stats["slashed_validators"] = audit_stats["slashed_validators"] + 1
+                    audit_stats["slash_events"] = audit_stats["slash_events"] + 1
+                    audit_stats["treasury_accruals"] = audit_stats["treasury_accruals"] + slash_amount
+                }
+                break
+            }
+            idx = idx + 1
+        }
+
+        return {
+            "address": address,
+            "amount": slash_amount,
+            "reason": reason,
+            "height": height,
+            "stake_after": stake_after
+        }
+    }
+
+    private action _distribute_rewards(proposer_address, total_fees, consensus_result) {
+        let total_reward = mining_reward + total_fees
+        if total_reward <= 0 {
+            return {
+                "total_reward": 0,
+                "proposer_reward": 0,
+                "participant_paid": 0,
+                "treasury_accrual": 0,
+                "votes_considered": 0
+            }
+        }
+
+        let treasury_bp = config["treasury_rate_bp"]
+        if treasury_bp == null {
+            treasury_bp = 800
+        }
+        if treasury_bp < 0 {
+            treasury_bp = 0
+        }
+        if treasury_bp > 10000 {
+            treasury_bp = 10000
+        }
+
+        let proposer_bp = config["proposer_commission_bp"]
+        if proposer_bp == null {
+            proposer_bp = 8200
+        }
+        if proposer_bp < 0 {
+            proposer_bp = 0
+        }
+
+        let participation_bp = config["participation_rate_bp"]
+        if participation_bp == null {
+            participation_bp = 1000
+        }
+        if participation_bp < 0 {
+            participation_bp = 0
+        }
+
+        let treasury_cut = optimized_basis_points(total_reward, treasury_bp)
+        if treasury_cut > total_reward {
+            treasury_cut = total_reward
+        }
+        let base_pool = clamp_non_negative(total_reward - treasury_cut)
+
+        let rate_total_bp = proposer_bp + participation_bp
+        if rate_total_bp <= 0 {
+            proposer_bp = 10000
+            participation_bp = 0
+            rate_total_bp = 10000
+        }
+
+        let proposer_reward = (base_pool * proposer_bp) / rate_total_bp
+        proposer_reward = clamp_non_negative(proposer_reward)
+        let participant_pool = clamp_non_negative(base_pool - proposer_reward)
+
+        this._ensure_account_unsafe(proposer_address)
+        let proposer_balance = _balances[proposer_address]
+        if proposer_balance == null {
+            proposer_balance = 0
+        }
+        _balances[proposer_address] = proposer_balance + proposer_reward
+
+        let treasury_val = _balances[treasury_account]
+        if treasury_val == null {
+            treasury_val = 0
+        }
+        _balances[treasury_account] = treasury_val + treasury_cut
+        treasury_balance = _balances[treasury_account]
+        let treasury_added = treasury_cut
+
+        let votes = consensus_result["votes"]
+        if votes == null {
+            votes = []
+        }
+
+        let total_yes_weight = 0
+        let idx = 0
+        while idx < len(votes) {
+            let vote = votes[idx]
+            if vote["approval"] == true {
+                total_yes_weight = total_yes_weight + vote["stake"]
+            }
+            idx = idx + 1
+        }
+
+        let participant_paid = 0
+        let remaining_pool = participant_pool
+        if participant_pool > 0 && total_yes_weight > 0 {
+            idx = 0
+            while idx < len(votes) {
+                let vote = votes[idx]
+                if vote["approval"] == true {
+                    let bonus = (participant_pool * vote["stake"]) / total_yes_weight
+                    if bonus > remaining_pool {
+                        bonus = remaining_pool
+                    }
+                    if bonus > 0 {
+                        let addr = vote["address"]
+                        this._ensure_account_unsafe(addr)
+                        let bal = _balances[addr]
+                        if bal == null {
+                            bal = 0
+                        }
+                        _balances[addr] = bal + bonus
+                        participant_paid = participant_paid + bonus
+                        remaining_pool = remaining_pool - bonus
+                        if remaining_pool < 0 {
+                            remaining_pool = 0
+                        }
+                    }
+                }
+                idx = idx + 1
+            }
+        }
+
+        if participant_paid > 0 {
+            audit_stats["participant_rewards"] = audit_stats["participant_rewards"] + participant_paid
+        }
+
+        if remaining_pool > 0 {
+            let treasury_after_votes = _balances[treasury_account]
+            _balances[treasury_account] = treasury_after_votes + remaining_pool
+            treasury_balance = _balances[treasury_account]
+            treasury_added = treasury_added + remaining_pool
+            remaining_pool = 0
+        }
+
+        audit_stats["treasury_accruals"] = audit_stats["treasury_accruals"] + treasury_added
+
+        return {
+            "total_reward": total_reward,
+            "proposer_reward": proposer_reward,
+            "participant_paid": participant_paid,
+            "treasury_accrual": treasury_added,
+            "votes_considered": len(votes)
+        }
+    }
+
+    private action _apply_validator_health_rules(height) {
+        let events_local = []
+        let max_missed = config["consensus_max_missed"]
+        if max_missed == null {
+            max_missed = 3
+        }
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            let active_flag = validator["active"]
+            let missed_value = validator["missed"]
+            if missed_value == null {
+                missed_value = 0
+            }
+            if active_flag == true && missed_value >= max_missed {
+                let missed_before = missed_value
+                let slash_report = this._slash_validator(validator["address"], "missed_threshold", height)
+                let post_slash = validators[i]
+                if post_slash == null {
+                    post_slash = validator
+                }
+                let updated_entry = this._create_validator_entry(
+                    post_slash["address"],
+                    post_slash["stake"],
+                    post_slash["pubkey"],
+                    false,
+                    0,
+                    post_slash["produced"],
+                    post_slash["votes"]
+                )
+                this._set_validator_entry(i, updated_entry)
+                events_local = append(events_local, {
+                    "type": "VALIDATOR_SUSPENDED",
+                    "address": post_slash["address"],
+                    "missed": missed_before,
+                    "slash_amount": slash_report["amount"],
+                    "timestamp": time(),
+                    "height": height
+                })
+            } else {
+                let stable_entry = this._create_validator_entry(
+                    validator["address"],
+                    validator["stake"],
+                    validator["pubkey"],
+                    validator["active"],
+                    validator["missed"],
+                    validator["produced"],
+                    validator["votes"]
+                )
+                this._set_validator_entry(i, stable_entry)
+            }
+            i = i + 1
+        }
+        return events_local
+    }
+
+    action produce_block() limit 60000 {
+        this._assert_balances_integrity()
+        gc "pause"
+        defer {
+            gc "resume"
+            gc "collect"
+        }
+        let batch_size = config["max_block_txs"]
+        if batch_size == null {
+            batch_size = 4
+        }
+
+        if len(pending_transactions) == 0 {
+            if logging_enabled {
+                print("No pending transactions available")
+            }
+            return false
+        }
+
+        let state_snapshot = this._snapshot_state()
+        let event_marker = len(events)
+        let timing_marker = len(block_timings)
+
+        let proposer = this.select_proposer()
+        let proposer_address = proposer["address"]
+        this.ensure_account(proposer_address)
+
+        let selected = this.select_transactions(batch_size)
+
+        if len(chain) == 0 {
+            let repaired_genesis = Block()
+            repaired_genesis.initialize(0, [], "0", difficulty)
+            chain = append(chain, repaired_genesis)
+        }
+
+        let latest_index = len(chain) - 1
+        let latest_block = chain[latest_index]
+        if latest_block == null {
+            let replacement = Block()
+            replacement.initialize(latest_index, [], "0", difficulty)
+            chain[latest_index] = replacement
+            latest_block = replacement
+        }
+
+        let latest_info = latest_block.get_info()
+        if latest_info == null {
+            latest_block.initialize(latest_index, [], "0", difficulty)
+            latest_info = latest_block.get_info()
+        }
+
+        let new_height = latest_info.index + 1
+
+        let total_fees = 0
+        let applied = []
+        let requeue = []
+        let i = 0
+        while i < len(selected) {
+            let tx = selected[i]
+            let from_addr = tx["from"]
+            let to_addr = tx["to"]
+            let amount = tx["amount"]
+            let fee_value = tx["fee"]
+            let nonce_value = tx["nonce"]
+
+            let sender_balance = _balances[from_addr]
+            let required_budget = amount + fee_value
+            let expected_nonce = _nonces[from_addr]
+            if expected_nonce == null {
+                expected_nonce = 0
+            }
+
+            if sender_balance < required_budget {
+                if events_enabled {
+                    events = append(events, {
+                        "type": "TX_SKIPPED",
+                        "reason": "Insufficient balance",
+                        "from": from_addr,
+                        "amount": amount,
+                        "fee": fee_value,
+                        "height": new_height,
+                        "timestamp": time()
+                    })
+                }
+                requeue = append(requeue, tx)
+            } else if expected_nonce != nonce_value {
+                if events_enabled {
+                    events = append(events, {
+                        "type": "TX_SKIPPED",
+                        "reason": "Nonce mismatch",
+                        "from": from_addr,
+                        "expected": expected_nonce,
+                        "provided": nonce_value,
+                        "height": new_height,
+                        "timestamp": time()
+                    })
+                }
+                requeue = append(requeue, tx)
+            } else {
+                _balances[from_addr] = sender_balance - required_budget
+                let recipient_balance = _balances[to_addr]
+                _balances[to_addr] = recipient_balance + amount
+                total_fees = total_fees + fee_value
+                _nonces[from_addr] = expected_nonce + 1
+                applied = append(applied, tx)
+
+                if events_enabled {
+                    events = append(events, {
+                        "type": "TX_APPLIED",
+                        "from": from_addr,
+                        "to": to_addr,
+                        "amount": amount,
+                        "fee": fee_value,
+                        "height": new_height,
+                        "timestamp": time()
+                    })
+                }
+            }
+
+            i = i + 1
+        }
+
+        let k = 0
+        while k < len(requeue) {
+            pending_transactions = append(pending_transactions, requeue[k])
+            k = k + 1
+        }
+
+        // Refresh pending nonce cache after processing this block
+        let refreshed_pending = {}
+        let r = 0
+        while r < len(pending_transactions) {
+            let tx = pending_transactions[r]
+            let addr = tx["from"]
+            let n = tx["nonce"]
+            if n != null {
+                let current = refreshed_pending[addr]
+                if current == null {
+                    refreshed_pending[addr] = n
+                } else {
+                    if n > current {
+                        refreshed_pending[addr] = n
+                    }
+                }
+            }
+            r = r + 1
+        }
+        _pending_nonces = refreshed_pending
+
+        let block = Block()
+        block.initialize(new_height, applied, latest_info.hash, difficulty)
+        block.set_logging(logging_enabled)
+        let mining_result = block.mine_block()
+        let elapsed_ms = mining_result["elapsed_ms"]
+        block.set_metadata(proposer_address, len(selected), len(applied), len(requeue), total_fees, elapsed_ms)
+
+        let consensus_result = this._run_consensus(block, proposer, applied, total_fees)
+
+        if consensus_result["committed"] != true {
+            audit_stats["consensus_failures"] = audit_stats["consensus_failures"] + 1
+            audit_stats["reverted_blocks"] = audit_stats["reverted_blocks"] + 1
+
+            let restore_report = this._restore_state(state_snapshot)
+            audit_stats["storage_rollbacks"] = audit_stats["storage_rollbacks"] + 1
+            if restore_report["storage_integrity_ok"] != true {
+                audit_stats["storage_alerts"] = audit_stats["storage_alerts"] + 1
+            }
+
+            if len(block_timings) > timing_marker {
+                block_timings = slice(block_timings, 0, timing_marker)
+            }
+            if len(events) > event_marker {
+                events = slice(events, 0, event_marker)
+            }
+
+            let health_events = this._apply_validator_health_rules(new_height)
+            let slash_report = this._slash_validator(proposer_address, "consensus_reject", new_height)
+            this._refresh_balances_integrity()
+            let rollback_entry = this._record_storage_checkpoint("rollback", finalized_height, {
+                "reason": "consensus_reject",
+                "attempt_height": new_height
+            })
+
+            let consensus_entry = {
+                "height": new_height,
+                "proposer": proposer_address,
+                "ratio_bp": consensus_result["ratio_bp"],
+                "threshold_bp": consensus_result["threshold_bp"],
+                "votes": len(consensus_result["votes"]),
+                "committed": false,
+                "timestamp": time(),
+                "fees": total_fees,
+                "storage_ok": restore_report["storage_integrity_ok"],
+                "slash_amount": slash_report["amount"]
+            }
+            consensus_history = append(consensus_history, consensus_entry)
+
+            if events_enabled {
+                let idx = 0
+                while idx < len(health_events) {
+                    events = append(events, health_events[idx])
+                    idx = idx + 1
+                }
+                if slash_report["amount"] > 0 {
+                    events = append(events, {
+                        "type": "VALIDATOR_SLASHED",
+                        "address": proposer_address,
+                        "amount": slash_report["amount"],
+                        "reason": slash_report["reason"],
+                        "height": new_height,
+                        "timestamp": time()
+                    })
+                }
+                events = append(events, {
+                    "type": "STORAGE_ROLLBACK",
+                    "height": rollback_entry["height"],
+                    "root": rollback_entry["root"],
+                    "storage_ok": restore_report["storage_integrity_ok"],
+                    "timestamp": rollback_entry["timestamp"]
+                })
+                events = append(events, {
+                    "type": "BLOCK_REJECTED",
+                    "height": new_height,
+                    "proposer": proposer_address,
+                    "reason": "consensus_reject",
+                    "consensus_ratio_bp": consensus_result["ratio_bp"],
+                    "threshold_bp": consensus_result["threshold_bp"],
+                    "votes": len(consensus_result["votes"]),
+                    "slash_amount": slash_report["amount"],
+                    "timestamp": time()
+                })
+            }
+
+            return {
+                "height": new_height,
+                "proposer": proposer_address,
+                "tx_included": len(applied),
+                "reward": 0,
+                "skipped": len(requeue),
+                "elapsed_ms": elapsed_ms,
+                "consensus": "rejected",
+                "consensus_ratio_bp": consensus_result["ratio_bp"],
+                "threshold_bp": consensus_result["threshold_bp"],
+                "slash_amount": slash_report["amount"],
+                "storage_ok": restore_report["storage_integrity_ok"]
+            }
+        }
+
+        chain = append(chain, block)
+        finalized_height = new_height
+        round_number = round_number + 1
+
+        this.mark_validator_proposed(proposer_address)
+
+        let reward_report = this._distribute_rewards(proposer_address, total_fees, consensus_result)
+        let health_events = this._apply_validator_health_rules(new_height)
+
+        this._refresh_balances_integrity()
+        audit_stats["fee_accumulator"] = audit_stats["fee_accumulator"] + total_fees
+
+        block_timings = append(block_timings, {
+            "height": new_height,
+            "elapsed_ms": elapsed_ms
+        })
+
+        let storage_entry = this._record_storage_checkpoint("block_commit", new_height, {
+            "proposer": proposer_address,
+            "fees": total_fees,
+            "ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "treasury_accrual": reward_report["treasury_accrual"]
+        })
+
+        let consensus_entry = {
+            "height": new_height,
+            "proposer": proposer_address,
+            "ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "votes": len(consensus_result["votes"]),
+            "committed": true,
+            "timestamp": time(),
+            "fees": total_fees,
+            "treasury_accrual": reward_report["treasury_accrual"],
+            "participant_paid": reward_report["participant_paid"],
+            "proposer_reward": reward_report["proposer_reward"]
+        }
+        consensus_history = append(consensus_history, consensus_entry)
+
+        if events_enabled {
+            let idx = 0
+            while idx < len(health_events) {
+                events = append(events, health_events[idx])
+                idx = idx + 1
+            }
+            events = append(events, {
+                "type": "REWARD_DISTRIBUTED",
+                "height": new_height,
+                "proposer": proposer_address,
+                "total_reward": reward_report["total_reward"],
+                "proposer_reward": reward_report["proposer_reward"],
+                "participant_paid": reward_report["participant_paid"],
+                "treasury_accrual": reward_report["treasury_accrual"],
+                "timestamp": time()
+            })
+            events = append(events, {
+                "type": "STORAGE_COMMIT",
+                "height": storage_entry["height"],
+                "root": storage_entry["root"],
+                "timestamp": storage_entry["timestamp"]
+            })
+            events = append(events, {
+                "type": "BLOCK_COMMITTED",
+                "height": new_height,
+                "proposer": proposer_address,
+                "tx_applied": len(applied),
+                "tx_attempted": len(selected),
+                "skipped": len(requeue),
+                "fees": total_fees,
+                "elapsed_ms": elapsed_ms,
+                "consensus_ratio_bp": consensus_result["ratio_bp"],
+                "threshold_bp": consensus_result["threshold_bp"],
+                "votes": len(consensus_result["votes"]),
+                "timestamp": time()
+            })
+        }
+
+        return {
+            "height": new_height,
+            "proposer": proposer_address,
+            "tx_included": len(applied),
+            "reward": reward_report["total_reward"],
+            "skipped": len(requeue),
+            "elapsed_ms": elapsed_ms,
+            "consensus": "committed",
+            "consensus_ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "proposer_reward": reward_report["proposer_reward"],
+            "participant_paid": reward_report["participant_paid"],
+            "treasury_accrual": reward_report["treasury_accrual"]
+        }
+    }
+
+    action is_chain_valid() {
+        let i = 1
+        while i < len(chain) {
+            let current_block = chain[i]
+            let previous_block = chain[i - 1]
+            let current_info = current_block.get_info()
+            let previous_info = previous_block.get_info()
+
+            if current_info.previous_hash != previous_info.hash {
+                print("Chain invalid at height " + string(current_info.index))
+                return false
+            }
+
+            i = i + 1
+        }
+
+        if finalized_height != len(chain) - 1 {
+            print("Warning: finalized height mismatch")
+        }
+
+        return true
+    }
+
+    action get_chain_info() {
+        let total_ms = 0
+        let i = 0
+        while i < len(block_timings) {
+            let timing = block_timings[i]
+            total_ms = total_ms + timing["elapsed_ms"]
+            i = i + 1
+        }
+
+        let average_ms = 0
+        if len(block_timings) > 0 {
+            average_ms = total_ms / len(block_timings)
+        }
+
+        return {
+            length: len(chain),
+            pending_tx: len(pending_transactions),
+            difficulty: difficulty,
+            base_reward: mining_reward,
+            finalized_height: finalized_height,
+            round_number: round_number,
+            validators: len(validators),
+            avg_block_ms: average_ms,
+            treasury_balance: treasury_balance,
+            storage_checkpoints: len(storage_journal),
+            audit: audit_stats
+        }
+    }
+
+    action get_storage_commitments(max_entries) {
+        let total = len(storage_journal)
+        let count = total
+        if max_entries != null {
+            if max_entries < total {
+                count = max_entries
+            }
+        }
+        let start = total - count
+        if start < 0 {
+            start = 0
+        }
+
+        let history = []
+        let index = start
+        while index < total {
+            history = append(history, storage_journal[index])
+            index = index + 1
+        }
+        return history
+    }
+
+    action print_chain() {
+        print("\n--- Chain Snapshot ---")
+        print("Height: " + string(len(chain) - 1) + " | Finalized: " + string(finalized_height))
+
+        let i = 0
+        while i < len(chain) {
+            let block = chain[i]
+            let info = block.get_info()
+            print("  Block " + string(info.index) + " | proposer=" + string(info.proposer) + " | applied=" + string(info.applied) + "/" + string(info.selected) + " | skipped=" + string(info.skipped) + " | ms=" + string(info.elapsed_ms))
+            i = i + 1
+        }
+
+        if len(block_timings) > 0 {
+            let metrics = this.get_chain_info()
+            print("  Average block time: " + string(metrics.avg_block_ms) + " ms across " + string(len(block_timings)) + " blocks")
+        }
+    }
+
+    action print_validators() {
+        print("\n--- Validator Set ---")
+        if len(validators) == 0 {
+            print("  (no validators registered)")
+            return
+        }
+        let i = 0
+        while i < len(validators) {
+            let validator = validators[i]
+            print("  " + validator["address"] + " | stake=" + string(validator["stake"]) + " | produced=" + string(validator["produced"]) + " | votes=" + string(validator["votes"]) + " | missed=" + string(validator["missed"]))
+            i = i + 1
+        }
+    }
+
+    action print_events(max_entries) {
+        print("\n--- Recent Events ---")
+        let total = len(events)
+        if total == 0 {
+            print("  (no events)")
+            return
+        }
+
+        let count = max_entries
+        if count > total {
+            count = total
+        }
+
+        let start = total - count
+        let index = start
+        while index < total {
+            let event = events[index]
+            let height_value = event["height"]
+            let height_info = ""
+            if height_value != null {
+                height_info = " height=" + string(height_value)
+            }
+            print("  [" + event["type"] + "]" + height_info + " info=" + string(event))
+            index = index + 1
+        }
+    }
+}
+
+// ==================== EXPORTABLE HELPERS ====================
+
+export const DEFAULT_FULL_NETWORK_CONFIG = {
+    "max_block_txs": 5,
+    "base_reward": 55,
+    "min_stake": 25000,
+    "events_enabled": true,
+    "consensus_threshold_bp": 6700,
+    "consensus_max_missed": 3,
+    "treasury_rate_bp": 800,
+    "proposer_commission_bp": 8200,
+    "participation_rate_bp": 1000,
+    "validator_slash_penalty_bp": 200,
+    "storage_root_limit": 128
+}
+
+export const DEFAULT_FULL_NETWORK_GENESIS = [
+    {"address": "ALICE_NODE", "balance": 140000},
+    {"address": "BOB_NODE", "balance": 120000},
+    {"address": "CHARLIE_NODE", "balance": 100000},
+    {"address": "DARIA_NODE", "balance": 95000},
+    {"address": "ELLA_NODE", "balance": 90000}
+]
+
+export const DEFAULT_FULL_NETWORK_VALIDATORS = [
+    {"address": "ALICE_NODE", "stake": 30000, "pubkey": "PUB_ALICE_01"},
+    {"address": "BOB_NODE", "stake": 30000, "pubkey": "PUB_BOB_01"},
+    {"address": "DARIA_NODE", "stake": 25000, "pubkey": "PUB_DARIA_01"}
+]
+
+export function create_full_network_blockchain(custom_config, genesis_allocations, validator_specs, enable_logging) {
+    let blockchain = Blockchain()
+
+    if enable_logging == null {
+        enable_logging = true
+    }
+
+    blockchain.set_logging(enable_logging)
+    blockchain.reset_state()
+
+    blockchain.configure(DEFAULT_FULL_NETWORK_CONFIG)
+    if custom_config != null {
+        blockchain.configure(custom_config)
+    }
+
+    let accounts = DEFAULT_FULL_NETWORK_GENESIS
+    if genesis_allocations != null {
+        accounts = genesis_allocations
+    }
+    blockchain.bootstrap(accounts)
+
+    let validators = DEFAULT_FULL_NETWORK_VALIDATORS
+    if validator_specs != null {
+        validators = validator_specs
+    }
+
+    let v_index = 0
+    while v_index < len(validators) {
+        let spec = validators[v_index]
+        blockchain.register_validator(spec["address"], spec["stake"], spec["pubkey"])
+        v_index = v_index + 1
+    }
+
+    return blockchain
+}
+
+// ==================== NETWORK SCENARIO HELPERS ====================
+
+export action run_full_network_demo(enable_logging) {
+    let logging = enable_logging
+    if logging == null {
+        logging = true
+    }
+
+    if logging {
+        print("=" * 90)
+        print("ZEXUS FULL NETWORK VALIDATION")
+        print("=" * 90)
+        print("")
+    }
+
+    let blockchain = Blockchain()
+    blockchain.set_logging(logging)
+    blockchain.reset_state()
+
+    let applied_config = blockchain.configure(DEFAULT_FULL_NETWORK_CONFIG)
+    if logging {
+        print("Configured max_block_txs=" + string(applied_config["max_block_txs"]) + " base_reward=" + string(applied_config["base_reward"]) + " min_stake=" + string(applied_config["min_stake"]))
+    }
+
+    blockchain.bootstrap(DEFAULT_FULL_NETWORK_GENESIS)
+
+    let validator_index = 0
+    while validator_index < len(DEFAULT_FULL_NETWORK_VALIDATORS) {
+        let validator = DEFAULT_FULL_NETWORK_VALIDATORS[validator_index]
+        blockchain.register_validator(validator["address"], validator["stake"], validator["pubkey"])
+        validator_index = validator_index + 1
+    }
+    if logging {
+        blockchain.print_validators()
+    }
+
+    let observed_accounts = ["ALICE_NODE", "BOB_NODE", "CHARLIE_NODE", "DARIA_NODE", "ELLA_NODE"]
+    if logging {
+        print("\n--- Balances after staking ---")
+        let bal_index = 0
+        while bal_index < len(observed_accounts) {
+            let account = observed_accounts[bal_index]
+            print("  " + account + " -> " + string(blockchain.get_balance(account)))
+            bal_index = bal_index + 1
+        }
+    }
+
+    if logging {
+        print("\n--- Round 1: Initial transfers ---")
+    }
+    let alice_nonce_round1 = blockchain.compute_next_nonce("ALICE_NODE")
+    blockchain.submit_transaction("ALICE_NODE", "CHARLIE_NODE", 2400, 35, alice_nonce_round1, "supply:alpha")
+    let bob_nonce_round1 = blockchain.compute_next_nonce("BOB_NODE")
+    blockchain.submit_transaction("BOB_NODE", "ELLA_NODE", 1800, 25, bob_nonce_round1, "invoice:q1")
+    let charlie_nonce_round1 = blockchain.compute_next_nonce("CHARLIE_NODE")
+    blockchain.submit_transaction("CHARLIE_NODE", "DARIA_NODE", 1500, 20, charlie_nonce_round1, "channel:settlement")
+    let block_one = blockchain.produce_block()
+    if logging and block_one != false {
+        print("Block " + string(block_one["height"]) + " proposer=" + string(block_one["proposer"]) + " tx=" + string(block_one["tx_included"]) + " reward=" + string(block_one["reward"]) + " skipped=" + string(block_one["skipped"]))
+    }
+
+    if logging {
+        print("\n--- Round 2: Network adjustments ---")
+    }
+    let alice_nonce_round2 = blockchain.compute_next_nonce("ALICE_NODE")
+    blockchain.submit_transaction("ALICE_NODE", "ELLA_NODE", 3200, 45, alice_nonce_round2, "escrow:release")
+    let daria_nonce_round2 = blockchain.compute_next_nonce("DARIA_NODE")
+    blockchain.submit_transaction("DARIA_NODE", "CHARLIE_NODE", 2100, 40, daria_nonce_round2, "settlement:batch2")
+    let ella_nonce_round2 = blockchain.compute_next_nonce("ELLA_NODE")
+    blockchain.submit_transaction("ELLA_NODE", "ALICE_NODE", 900, 5, ella_nonce_round2, "refund:partial")
+    let block_two = blockchain.produce_block()
+    if logging and block_two != false {
+        print("Block " + string(block_two["height"]) + " proposer=" + string(block_two["proposer"]) + " tx=" + string(block_two["tx_included"]) + " reward=" + string(block_two["reward"]) + " skipped=" + string(block_two["skipped"]))
+    }
+
+    if logging {
+        print("\n--- Round 3: High fee competition ---")
+    }
+    let bob_nonce_round3 = blockchain.compute_next_nonce("BOB_NODE")
+    blockchain.submit_transaction("BOB_NODE", "CHARLIE_NODE", 2000, 60, bob_nonce_round3, "priority:liquidity")
+    let charlie_nonce_round3 = blockchain.compute_next_nonce("CHARLIE_NODE")
+    blockchain.submit_transaction("CHARLIE_NODE", "ALICE_NODE", 1100, 15, charlie_nonce_round3, "inventory:return")
+    let daria_nonce_round3 = blockchain.compute_next_nonce("DARIA_NODE")
+    blockchain.submit_transaction("DARIA_NODE", "BOB_NODE", 3000, 55, daria_nonce_round3, "fx:settlement")
+    let ella_nonce_round3 = blockchain.compute_next_nonce("ELLA_NODE")
+    blockchain.submit_transaction("ELLA_NODE", "DARIA_NODE", 750, 10, ella_nonce_round3, "ops:credit")
+    let block_three = blockchain.produce_block()
+    if logging and block_three != false {
+        print("Block " + string(block_three["height"]) + " proposer=" + string(block_three["proposer"]) + " tx=" + string(block_three["tx_included"]) + " reward=" + string(block_three["reward"]) + " skipped=" + string(block_three["skipped"]))
+    }
+
+    let chain_ok = blockchain.is_chain_valid()
+    if logging {
+        if chain_ok {
+            print("Chain valid after simulation")
+        } else {
+            print("Chain validation failed")
+        }
+        blockchain.print_chain()
+        blockchain.print_validators()
+        blockchain.print_events(15)
+    }
+
+    if logging {
+        print("\n--- Final balances ---")
+    }
+
+    let final_balances = {}
+    let final_index = 0
+    while final_index < len(observed_accounts) {
+        let account = observed_accounts[final_index]
+        let balance_value = blockchain.get_balance(account)
+        final_balances[account] = balance_value
+        if logging {
+            print("  " + account + " -> " + string(balance_value))
+        }
+        final_index = final_index + 1
+    }
+
+    let final_info = blockchain.get_chain_info()
+    if logging {
+        print("\nFinal chain length=" + string(final_info.length) + " pending_tx=" + string(final_info.pending_tx) + " round=" + string(final_info.round_number) + " avg_block_ms=" + string(final_info.avg_block_ms))
+        print("Scenario complete")
+    }
+
+    return {
+        "blockchain": blockchain,
+        "final_info": final_info,
+        "final_balances": final_balances,
+        "chain_valid": chain_ok
+    }
+}
+
+if __MODULE__ == "__main__" {
+    run_full_network_demo(true)
+}

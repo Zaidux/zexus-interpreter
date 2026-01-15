@@ -137,6 +137,7 @@ class ContextStackParser:
             GRAPHICS: self._parse_graphics_statement,
             ANIMATION: self._parse_animation_statement,
             CLOCK: self._parse_clock_statement,
+            GC: self._parse_gc_statement_block,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -2010,6 +2011,23 @@ class ContextStackParser:
             result.statements = [contract_stmt, export_stmt]
             return result
         
+        # Check if this is "export data Name {...}" syntax
+        if len(tokens) >= 3 and tokens[0].type == EXPORT and tokens[1].type == DATA:
+            parser_debug("    🎯 Handling 'export data' statement")
+
+            data_tokens = tokens[1:]
+            data_stmt = self._parse_data_statement(data_tokens)
+
+            if data_stmt is None:
+                return None
+
+            data_name = data_stmt.name.value if hasattr(data_stmt.name, 'value') else str(data_stmt.name)
+
+            export_stmt = ExportStatement(names=[Identifier(data_name)])
+            result = BlockStatement()
+            result.statements = [data_stmt, export_stmt]
+            return result
+
         # Check if this is "export function name(...) {...}" syntax
         if len(tokens) >= 3 and tokens[0].type == EXPORT and tokens[1].type == FUNCTION:
             parser_debug("    🎯 Handling 'export function' statement")
@@ -7210,6 +7228,24 @@ class ContextStackParser:
         
         parser_debug("  ✅ Limit statement")
         return LimitStatement(amount=gas_limit)
+
+    def _parse_gc_statement_block(self, block_info, all_tokens):
+        """Parse gc "action" statements."""
+        parser_debug("🔧 [Context] Parsing gc statement")
+        tokens = block_info.get('tokens', [])
+
+        if not tokens or tokens[0].type != GC:
+            parser_debug("  ❌ Expected GC keyword")
+            return None
+
+        if len(tokens) < 2 or tokens[1].type != STRING:
+            parser_debug("  ⚠️ GC statement missing string literal action")
+            expr = self._parse_expression(tokens)
+            return ExpressionStatement(expr) if expr else None
+
+        action = tokens[1].literal
+        parser_debug(f"  ✅ GC statement action='{action}'")
+        return GCStatement(action)
 
     def _parse_stream_statement(self, block_info, all_tokens):
         """Parse stream statement.

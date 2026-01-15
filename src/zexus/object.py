@@ -1113,14 +1113,39 @@ class EvaluationError(Object):
             
             # Add stack trace if available
             if self.stack_trace:
-                trace = "\n".join(self.stack_trace[-5:])
+                formatted_trace = []
+                for frame in self.stack_trace[-5:]:
+                    if isinstance(frame, str):
+                        formatted_trace.append(frame)
+                    elif isinstance(frame, tuple) and len(frame) == 2:
+                        node_type, line = frame
+                        item = f"  at {node_type.__name__}"
+                        if line:
+                            item += f" (line {line})"
+                        formatted_trace.append(item)
+                
+                trace = "\n".join(formatted_trace)
                 temp_error.message += f"\n\nStack trace:\n{trace}"
             
             return temp_error.format_error()
         except Exception:
             # Fallback to simple format if error reporter not available
             location = f"Line {self.line}:{self.column}" if self.line and self.column else "Unknown location"
-            trace = "\n".join(self.stack_trace[-3:]) if self.stack_trace else ""
+            
+            # Format simple trace
+            formatted_trace = []
+            if self.stack_trace:
+                for frame in self.stack_trace[-3:]:
+                    if isinstance(frame, str):
+                        formatted_trace.append(frame)
+                    elif isinstance(frame, tuple) and len(frame) == 2:
+                        node_type, line = frame
+                        item = f"  at {node_type.__name__}"
+                        if line:
+                            item += f" (line {line})"
+                        formatted_trace.append(item)
+            
+            trace = "\n".join(formatted_trace)
             trace_section = f"\n   Stack:\n{trace}" if trace else ""
             suggestion_section = f"\n   💡 Suggestion: {self.suggestion}" if self.suggestion else ""
             return f"❌ Runtime Error at {location}\n   {self.message}{suggestion_section}{trace_section}"

@@ -40,8 +40,15 @@ class Config:
     def __init__(self):
         self.config_dir = Path.home() / ".zexus"
         self.config_file = self.config_dir / "config.json"
+        
+        # Fast caching attribute for hot paths
+        self.fast_debug_enabled = False
+        
         self._data = DEFAULT_CONFIG.copy()
         self._ensure_loaded()
+        
+        # Update cache from initial loaded data
+        self.fast_debug_enabled = (self.debug_level != 'none')
 
         # ensure runtime defaults exist for backward compatibility
         self._data.setdefault('runtime', {})
@@ -93,6 +100,7 @@ class Config:
             raise ValueError('Invalid debug level')
         self._data.setdefault('debug', {})['level'] = value
         self._data['debug']['enabled'] = (value != 'none')
+        self.fast_debug_enabled = (value != 'none')
         self._write()
 
     def enable_debug(self, level='full'):

@@ -31,6 +31,7 @@ from ..security import (
     ProtectionPolicy, Middleware, AuthConfig, RateLimiter, CachePolicy
 )
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL, TRUE, FALSE, _resolve_awaitable, _zexus_to_python, _python_to_zexus, is_truthy
+from ..config import config as zexus_config
 
 try:
     from ..renderer import (
@@ -58,6 +59,43 @@ class BreakException:
 class StatementEvaluatorMixin:
     """Handles evaluation of statements, flow control, module loading, and security features."""
     
+    def _statement_signature(self, stmt):
+        try:
+            return str(stmt)
+        except Exception:
+            return f"{type(stmt).__name__}@{id(stmt)}"
+
+    def _enqueue_tolerant_duplicates(self, statements):
+        if not statements:
+            return
+
+        counts = getattr(self, "_tolerant_skip_counts", None)
+        if counts is None:
+            counts = {}
+            self._tolerant_skip_counts = counts
+
+        local_counts = {}
+        for stmt in statements:
+            if isinstance(stmt, ExpressionStatement):
+                expr = getattr(stmt, "expression", None)
+                func = getattr(expr, "function", None)
+                if (
+                    isinstance(func, Identifier)
+                    and getattr(func, "value", None) == "revert"
+                ):
+                    continue
+            sig = self._statement_signature(stmt)
+            local_counts[sig] = local_counts.get(sig, 0) + 1
+
+        duplicates_added = 0
+        for sig, occurrence in local_counts.items():
+            if occurrence > 1:
+                counts[sig] = counts.get(sig, 0) + (occurrence - 1)
+                duplicates_added += occurrence - 1
+
+        if duplicates_added:
+            print(f"[TOLERANT] enqueue {duplicates_added} duplicate statements")
+
     def ceval_program(self, statements, env):
         debug_log("eval_program", f"Processing {len(statements)} statements")
         
@@ -73,6 +111,22 @@ class StatementEvaluatorMixin:
         try:
             for i, stmt in enumerate(statements):
                 debug_log(f"  Statement {i+1}", type(stmt).__name__)
+                counts = getattr(self, "_tolerant_skip_counts", None)
+                if counts:
+                    signature = self._statement_signature(stmt)
+                    remaining = counts.get(signature, 0)
+                    if remaining > 0:
+                        print(f"[TOLERANT] skipping program stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
+                        if remaining == 1:
+                            counts.pop(signature, None)
+                        else:
+                            counts[signature] = remaining - 1
+                        continue
+                if (
+                    getattr(self, "_pending_revert_signature", None) is not None
+                    and not isinstance(stmt, RevertStatement)
+                ):
+                    self._pending_revert_signature = None
                 res = self.eval_node(stmt, env)
                 res = _resolve_awaitable(res)
                 EVAL_SUMMARY['evaluated_statements'] += 1
@@ -124,6 +178,17 @@ class StatementEvaluatorMixin:
         result = NULL
         try:
             for stmt in block.statements:
+                counts = getattr(self, "_tolerant_skip_counts", None)
+                if counts:
+                    signature = self._statement_signature(stmt)
+                    remaining = counts.get(signature, 0)
+                    if remaining > 0:
+                        print(f"[TOLERANT] skipping block stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
+                        if remaining == 1:
+                            counts.pop(signature, None)
+                        else:
+                            counts[signature] = remaining - 1
+                        continue
                 res = self.eval_node(stmt, env, stack_trace)
                 res = _resolve_awaitable(res)
                 EVAL_SUMMARY['evaluated_statements'] += 1
@@ -215,12 +280,12 @@ class StatementEvaluatorMixin:
         if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
             func_name = node.expression.function.value
             if func_name in ['persist_set', 'persist_get']:
-                print(f"[EVAL_EXPR_STMT] Evaluating {func_name} call", flush=True)
+                debug_log("eval_expression_statement", f"Evaluating {func_name} call", level='info')
         result = self.eval_node(node.expression, env, stack_trace)
         if hasattr(node.expression, 'function') and hasattr(node.expression.function, 'value'):
             func_name = node.expression.function.value
             if func_name in ['persist_set', 'persist_get']:
-                print(f"[EVAL_EXPR_STMT] Result from {func_name}: {result}", flush=True)
+                debug_log("eval_expression_statement", f"Result from {func_name}: {result}", level='info')
         return result
     
     # === VARIABLE & CONTROL FLOW ===
@@ -909,9 +974,11 @@ class StatementEvaluatorMixin:
                     obj.set(prop_key, value)
                     return value
             except Exception as e:
-                return EvaluationError(str(e))
+                obj_type = type(obj).__name__
+                return EvaluationError(f"Assignment to property failed for {prop_key} on {obj_type}: {e}")
 
-            return EvaluationError('Assignment to property failed')
+            obj_type = type(obj).__name__
+            return EvaluationError(f"Assignment to property failed for {prop_key} on {obj_type}")
 
         # Otherwise it's an identifier assignment
         if isinstance(node.name, Identifier):
@@ -938,19 +1005,35 @@ class StatementEvaluatorMixin:
     def eval_try_catch_statement(self, node, env, stack_trace):
         debug_log("eval_try_catch", f"error_var: {node.error_variable.value if node.error_variable else 'error'}")
         
+        # Clear any pending tolerant skips when entering a try/catch, 
+        # as the protected block defines a new execution context
+        self._tolerant_skip_counts = {}
+
         try:
             result = self.eval_node(node.try_block, env, stack_trace)
             if is_error(result):
                 catch_env = Environment(outer=env)
                 var_name = node.error_variable.value if node.error_variable else "error"
                 catch_env.set(var_name, String(str(result)))
-                return self.eval_node(node.catch_block, catch_env, stack_trace)
+                print(f"[TRY_CATCH] caught error: {result}")
+                catch_result = self.eval_node(node.catch_block, catch_env, stack_trace)
+                self._tolerant_skip_counts = {}
+                self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
+                self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
+                return catch_result
+            self._tolerant_skip_counts = {}
+            self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
+            self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
             return result
         except Exception as e:
             catch_env = Environment(outer=env)
             var_name = node.error_variable.value if node.error_variable else "error"
             catch_env.set(var_name, String(str(e)))
-            return self.eval_node(node.catch_block, catch_env, stack_trace)
+            catch_result = self.eval_node(node.catch_block, catch_env, stack_trace)
+            self._tolerant_skip_counts = {}
+            self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
+            self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
+            return catch_result
     
     def eval_if_statement(self, node, env, stack_trace):
         cond = self.eval_node(node.condition, env, stack_trace)
@@ -1198,6 +1281,7 @@ class StatementEvaluatorMixin:
         if not file_path: 
             return EvaluationError("use: missing file path")
         
+        debug_enabled = zexus_config.enable_debug_logs
         debug_log("  UseStatement loading", file_path)
         
         # 1a. Check if this is a stdlib module (fs, http, json, datetime, crypto, blockchain)
@@ -1370,7 +1454,8 @@ class StatementEvaluatorMixin:
             # Handle: use "./file.zx" (import all exports)
             try:
                 exports = module_env.get_exports()
-                print(f"[DEBUG USE] Importing from module, exports: {list(exports.keys())}")
+                if debug_enabled:
+                    print(f"[DEBUG USE] Importing from module, exports: {list(exports.keys())}")
                 __file_obj = env.get("__file__")
                 importer_file = None
                 if __file_obj:
@@ -1380,10 +1465,12 @@ class StatementEvaluatorMixin:
                     if importer_file:
                         if not self._check_import_permission(value, importer_file):
                             return EvaluationError(f"Permission denied for export {name}")
-                    print(f"[DEBUG USE] Setting {name} = {value}")
+                    if debug_enabled:
+                        print(f"[DEBUG USE] Setting {name} = {value}")
                     env.set(name, value)
             except Exception as e:
-                print(f"[DEBUG USE] Exception during export import: {e}")
+                if debug_enabled:
+                    print(f"[DEBUG USE] Exception during export import: {e}")
                 # Fallback: expose module as filename object
                 module_name = os.path.basename(file_path)
                 env.set(module_name, module_env)
@@ -2887,7 +2974,7 @@ class StatementEvaluatorMixin:
     
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
-        print(f"[EVAL_FUNC] Starting eval_function_statement for: {node.name.value}", flush=True)
+        debug_log("eval_function_statement", f"Start {node.name.value}")
         capture_env = env.clone_for_closure() if hasattr(env, "clone_for_closure") else env
         action = Action(node.parameters, node.body, capture_env)
         try:
@@ -2895,18 +2982,18 @@ class StatementEvaluatorMixin:
                 capture_env.set(node.name.value, action)
         except Exception:
             pass
-        print(f"[EVAL_FUNC] Created Action object", flush=True)
+        debug_log("eval_function_statement", "Created Action object")
         
         # Apply modifiers if present
         modifiers = getattr(node, 'modifiers', [])
-        print(f"[EVAL_FUNC] Modifiers: {modifiers}", flush=True)
+        debug_log("eval_function_statement", f"Modifiers: {modifiers}")
         if modifiers:
             # Set modifier flags on the action object
             if 'inline' in modifiers:
                 action.is_inlined = True
             if 'async' in modifiers:
                 action.is_async = True
-                print(f"[EVAL_FUNC] Set is_async=True", flush=True)
+                debug_log("eval_function_statement", "Set is_async=True")
             if 'secure' in modifiers:
                 action.is_secure = True
             if 'pure' in modifiers:
@@ -2921,9 +3008,9 @@ class StatementEvaluatorMixin:
                 except Exception:
                     pass
         
-        print(f"[EVAL_FUNC] About to set in environment: {node.name.value}", flush=True)
+        debug_log("eval_function_statement", f"Binding {node.name.value}")
         env.set(node.name.value, action)
-        print(f"[EVAL_FUNC] Successfully set in environment", flush=True)
+        debug_log("eval_function_statement", "Binding complete")
         return NULL
     
     # === PERFORMANCE OPTIMIZATION STATEMENTS ===
@@ -4151,25 +4238,32 @@ class StatementEvaluatorMixin:
         debug_log("_eval_require_resource", f"{req_type} requirement satisfied")
         return NULL
     
-    def eval_revert_statement(self, node, env, stack_trace):
-        """Evaluate revert statement - rollback transaction.
-        
-        revert();
-        revert("Unauthorized");
-        """
+    def _perform_revert(self, reason_expr, env, stack_trace):
         debug_log("eval_revert_statement", "Reverting transaction")
-        
-        # Evaluate revert reason if provided
+
         reason = "Transaction reverted"
-        if node.reason:
-            reason_val = self.eval_node(node.reason, env, stack_trace)
+        if reason_expr:
+            reason_val = self.eval_node(reason_expr, env, stack_trace)
             if isinstance(reason_val, String):
                 reason = reason_val.value
             elif not is_error(reason_val):
                 reason = str(reason_val.inspect() if hasattr(reason_val, 'inspect') else reason_val)
-        
+
         debug_log("eval_revert_statement", f"REVERT: {reason}")
         return EvaluationError(f"Transaction reverted: {reason}", stack_trace=stack_trace)
+
+    def eval_revert_statement(self, node, env, stack_trace):
+        """Evaluate revert statement - rollback transaction."""
+
+        signature = self._compute_revert_signature(getattr(node, "reason", None))
+        pending = getattr(self, "_pending_revert_signature", None)
+        if pending is not None and pending == signature:
+            debug_log("eval_revert_statement", "Skipping duplicate revert statement")
+            self._pending_revert_signature = None
+            return NULL
+
+        self._pending_revert_signature = None
+        return self._perform_revert(getattr(node, "reason", None), env, stack_trace)
     
     def eval_limit_statement(self, node, env, stack_trace):
         """Evaluate limit statement - set gas limit.

@@ -13,6 +13,8 @@ import uuid
 import sqlite3
 import time
 import hashlib
+import threading
+from zexus.config import config as zexus_config
 
 # Try importing advanced database drivers
 try:
@@ -27,15 +29,41 @@ try:
 except ImportError:
     _ROCKSDB_AVAILABLE = False
 
-from .object import (
+from zexus.object import (
     Environment, Map, String, Integer, Float, Boolean as BooleanObj,
     Builtin, List, Null, EvaluationError as ObjectEvaluationError, NULL
 )
 
 try:
-    from .object import ContractReference
+    from zexus.object import ContractReference
 except ImportError:  # Fallback if optional type missing
     ContractReference = None
+
+# =============================================
+# Shared Evaluator Cache for Performance
+# =============================================
+# Creating a new Evaluator() for every contract method call is expensive
+# This cache provides thread-local evaluators that can be reused
+
+_evaluator_cache = threading.local()
+
+def _get_cached_evaluator():
+    """Get a cached evaluator instance for the current thread.
+    
+    This significantly improves performance for contract method calls
+    by avoiding repeated Evaluator() initialization overhead.
+    """
+    if not hasattr(_evaluator_cache, 'evaluator'):
+        from zexus.evaluator.core import Evaluator
+        _evaluator_cache.evaluator = Evaluator()
+    return _evaluator_cache.evaluator
+
+def _clear_evaluator_cache():
+    """Clear the evaluator cache (useful for testing)."""
+    if hasattr(_evaluator_cache, 'evaluator'):
+        del _evaluator_cache.evaluator
+
+# =============================================
 
 # Ensure storage directory exists
 STORAGE_DIR = "chain_data"
@@ -664,10 +692,8 @@ class EntityInstance:
                         param_name = str(param)
                     method_env.set(param_name, args[i])
         
-        # Import evaluator to execute the method body
-        # Avoid circular import by importing here
-        from zexus.evaluator.core import Evaluator
-        evaluator = Evaluator()
+        # Use cached evaluator for performance (avoids repeated Evaluator() initialization)
+        evaluator = _get_cached_evaluator()
         
         # Execute the method body with stack trace
         result = evaluator.eval_node(method.body, method_env, stack_trace=[])
@@ -881,6 +907,66 @@ class RocksDBBackend(StorageBackend):
 # CONTRACT SYSTEM - Blockchain State & Logic
 # ===============================================
 
+class TrackingList(list):
+    def __init__(self, owner, iterable=None):
+        super().__init__(iterable or [])
+        self.owner = owner
+        
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.owner.mark_dirty(key)
+        
+    def append(self, item):
+        idx = len(self)
+        super().append(item)
+        self.owner.mark_dirty(idx)
+        
+    def extend(self, iterable):
+        start_idx = len(self)
+        super().extend(iterable)
+        end_idx = len(self)
+        for i in range(start_idx, end_idx):
+            self.owner.mark_dirty(i)
+
+class StorageList(List):
+    """List wrapper for persistent storage"""
+    __slots__ = ('_dirty_indices', '_var_name', '_orig_elements')
+    
+    def __init__(self, elements, var_name):
+        # We wrap elements in TrackingList
+        tracked = TrackingList(self, elements)
+        super().__init__(tracked)
+        self._dirty_indices = set()
+        self._var_name = var_name
+        
+    def mark_dirty(self, index):
+        self._dirty_indices.add(index)
+        
+    def mark_all_dirty(self):
+        # Mark all current indices as dirty
+        self._dirty_indices = set(range(len(self.elements)))
+        
+    def mark_clean(self):
+        self._dirty_indices.clear()
+        
+    @property
+    def dirty_indices(self):
+        return self._dirty_indices
+
+    def set(self, index, value):
+        """Set value at index, mirroring list item assignment."""
+        try:
+            idx = index.value if hasattr(index, 'value') else int(index)
+        except Exception:
+            raise ObjectEvaluationError(f"Invalid index for assignment: {index}")
+
+        if idx < 0 or idx >= len(self.elements):
+            raise ObjectEvaluationError(f"Index out of range: {idx}")
+
+        self.elements[idx] = value
+        self.mark_dirty(idx)
+        return value
+
 class StorageMap(Map):
     """Map wrapper that tracks dirty entries for persistent storage"""
 
@@ -924,25 +1010,39 @@ class StorageMap(Map):
         return self._var_name
 
 class ContractStorage:
-    """Persistent storage for contract state with DB selection"""
+    """Persistent storage for contract state with DB selection
+    
+    Storage Engine Priority:
+    1. Explicit db_type parameter
+    2. ZEXUS_STORAGE_ENGINE environment variable
+    3. Default: 'memory' for maximum performance
+    
+    Set ZEXUS_STORAGE_ENGINE=sqlite for persistence in production.
+    """
 
-    def __init__(self, contract_id, db_type="sqlite"):
+    def __init__(self, contract_id, db_type=None):
         self.transaction_log = []
+        
+        # Determine storage type: explicit > env var > default (memory)
+        if db_type is None:
+            db_type = os.environ.get("ZEXUS_STORAGE_ENGINE", "memory")
         self.db_type = db_type
         self._map_meta_cache = {}
         
         # Determine strict path
         base_path = os.path.join(STORAGE_DIR, f"{contract_id}")
         
-        # Initialize Backend
-        if db_type == "leveldb" and _LEVELDB_AVAILABLE:
+        # Initialize Backend - memory is now first for performance
+        if db_type == "memory":
+            self.backend = InMemoryBackend()
+        elif db_type == "leveldb" and _LEVELDB_AVAILABLE:
             self.backend = LevelDBBackend(base_path)
         elif db_type == "rocksdb" and _ROCKSDB_AVAILABLE:
             self.backend = RocksDBBackend(f"{base_path}.rdb")
         elif db_type == "sqlite":
             self.backend = SQLiteBackend(f"{base_path}.sqlite")
         else:
-            print(f"   ⚠️ Storage Warning: '{db_type}' unavailable or unknown. Falling back to In-Memory.")
+            # Unknown type, fall back to memory
             self.backend = InMemoryBackend()
 
         self._cache_enabled = False
@@ -983,6 +1083,36 @@ class ContractStorage:
                     self._action_cache[key] = storage_map
                 self._persistent_cache[key] = storage_map
                 return storage_map
+
+            if isinstance(meta, dict) and meta.get("__kind") == "list":
+                entries = self.backend.scan(self._list_entry_prefix(key))
+                items = {}
+                max_idx = -1
+                prefix_len = len(self._list_entry_prefix(key))
+                
+                for entry_key, payload in entries:
+                    idx_str = entry_key[prefix_len:]
+                    try:
+                        idx = int(idx_str)
+                        val = self._deserialize_recursive(json.loads(payload))
+                        items[idx] = val
+                        if idx > max_idx: max_idx = idx
+                    except ValueError:
+                        continue
+                
+                length = meta.get("length", max_idx + 1)
+                final_list = []
+                for i in range(length):
+                    # We use NULL for missing items (should not happen in valid state)
+                    final_list.append(items.get(i, NULL))
+                
+                storage_list = StorageList(final_list, key)
+                storage_list.mark_clean()
+                
+                if self._cache_enabled and self._action_cache is not None:
+                    self._action_cache[key] = storage_list
+                self._persistent_cache[key] = storage_list
+                return storage_list
         except json.JSONDecodeError:
             pass
 
@@ -1009,6 +1139,19 @@ class ContractStorage:
                 self._action_cache[key] = storage_map
             self._persistent_cache[key] = storage_map
             self._store_map(key, storage_map)
+            return
+
+        if isinstance(value, List):
+            if isinstance(value, StorageList):
+                storage_list = value
+            else:
+                storage_list = StorageList(value.elements, key)
+                storage_list.mark_all_dirty()
+            
+            if self._cache_enabled and self._action_cache is not None:
+                self._action_cache[key] = storage_list
+            self._persistent_cache[key] = storage_list
+            self._store_list(key, storage_list)
             return
 
         serialized = self._serialize(value)
@@ -1102,6 +1245,39 @@ class ContractStorage:
         if isinstance(map_obj, StorageMap):
             map_obj.mark_clean()
 
+    def _list_entry_prefix(self, storage_key):
+        return f"{storage_key}:L:"
+        
+    def _list_entry_key(self, storage_key, index):
+        return f"{self._list_entry_prefix(storage_key)}{index}"
+        
+    def _store_list(self, storage_key, list_obj):
+        meta = {"__kind": "list", "version": 1, "length": len(list_obj.elements)}
+        self.backend.set(storage_key, json.dumps(meta))
+        
+        is_storage_list = isinstance(list_obj, StorageList)
+        
+        if is_storage_list:
+            indices_to_write = list_obj.dirty_indices
+        else:
+            # Full rewrite
+            self._delete_list_entries(storage_key)
+            indices_to_write = range(len(list_obj.elements))
+            
+        for i in indices_to_write:
+            if i < len(list_obj.elements):
+                val = list_obj.elements[i]
+                entry_payload = json.dumps(self._serialize_val_recursive(val))
+                entry_key = self._list_entry_key(storage_key, i)
+                self.backend.set(entry_key, entry_payload)
+            
+        if is_storage_list:
+            list_obj.mark_clean()
+
+    def _delete_list_entries(self, storage_key):
+        for entry_key, _ in self.backend.scan(self._list_entry_prefix(storage_key)):
+            self.backend.delete(entry_key)
+
         summary = {
             "dirty": len(dirty_keys),
             "deleted": len(deleted_keys)
@@ -1111,6 +1287,19 @@ class ContractStorage:
     def _delete_map_entries(self, storage_key):
         for entry_key, _ in self.backend.scan(self._map_entry_prefix(storage_key)):
             self.backend.delete(entry_key)
+
+    def _key_to_str(self, key):
+        """Convert a Zexus object key to a Python string for JSON serialization."""
+        if key.__class__ is String:
+            return key.value
+        if key.__class__ is Integer:
+            return str(key.value)
+        if key.__class__ is Float:
+            return str(key.value)
+        if key.__class__ is BooleanObj:
+            return str(key.value)
+        # Fallback for other types
+        return str(key)
 
     def _serialize(self, obj):
         """Convert Zexus Object -> JSON String"""
@@ -1134,7 +1323,8 @@ class ContractStorage:
             serialized_list = [self._serialize_val_recursive(e) for e in obj.elements]
             return json.dumps({"type": "list", "val": serialized_list})
         if cls is Map or cls is StorageMap:
-            serialized_map = {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}
+            # Convert Zexus String keys to Python strings for JSON compatibility
+            serialized_map = {self._key_to_str(k): self._serialize_val_recursive(v) for k, v in obj.pairs.items()}
             return json.dumps({"type": "map", "val": serialized_map})
 
         if obj is NULL or obj is None:
@@ -1161,7 +1351,8 @@ class ContractStorage:
         if cls is List:
             return {"type": "list", "val": [self._serialize_val_recursive(e) for e in obj.elements]}
         if cls is Map or cls is StorageMap:
-            return {"type": "map", "val": {k: self._serialize_val_recursive(v) for k, v in obj.pairs.items()}}
+            # Convert Zexus String keys to Python strings for JSON compatibility
+            return {"type": "map", "val": {self._key_to_str(k): self._serialize_val_recursive(v) for k, v in obj.pairs.items()}}
         if obj is NULL:
             return {"type": "null", "val": None}
 
@@ -1262,8 +1453,10 @@ class SmartContract:
         # Generate a unique address/ID for this specific instance if not provided
         self.address = address or str(uuid.uuid4())[:8]
         
-        # Default to SQLite, can be configured via blockchain_config
-        db_pref = (blockchain_config or {}).get("storage_engine", "sqlite")
+        # Storage engine priority: blockchain_config > env var > default (memory)
+        db_pref = (blockchain_config or {}).get("storage_engine")
+        if db_pref is None:
+            db_pref = os.environ.get("ZEXUS_STORAGE_ENGINE", "memory")
         
         # Initialize storage linked to unique address
         # The unique ID ensures multiple "ZiverWallet()" calls don't overwrite each other
@@ -1287,7 +1480,8 @@ class SmartContract:
 
     def instantiate(self, args=None):
         """Create a new instance of this contract when called like ZiverWallet()."""
-        print(f"📄 SmartContract.instantiate() called for: {self.name}")
+        if zexus_config.should_log('debug'):
+            print(f"📄 SmartContract.instantiate() called for: {self.name}")
         
         # Generate new unique address for the instance
         new_address = str(uuid.uuid4())[:16]
@@ -1301,7 +1495,8 @@ class SmartContract:
             address=new_address
         )
         
-        print(f"   🔗 Contract Address: {new_address}")
+        if zexus_config.should_log('debug'):
+            print(f"   🔗 Contract Address: {new_address}")
 
         # Copy initial storage values from the template contract
         # This ensures instances get the evaluated initial values
@@ -1323,7 +1518,6 @@ class SmartContract:
         instance.deploy(evaluated_storage_values=initial_storage)
         instance.parent_contract = self
         
-        print(f"   Available actions: {list(self.actions.keys())}")
         return instance
 
     def __call__(self, *args):
@@ -1401,6 +1595,9 @@ class SmartContract:
                 stored_value = self.storage.get(var_name)
                 if stored_value is not None:
                     action_env.set(var_name, stored_value)
+                else:
+                    # Ensure state variables always exist in the action env
+                    action_env.set(var_name, Null)
         
         # Bind action parameters to arguments
         if hasattr(action, 'parameters'):
@@ -1421,9 +1618,8 @@ class SmartContract:
                     from zexus.object import Null
                     action_env.set(param_name, Null)
         
-        # Execute the action body
-        from zexus.evaluator.core import Evaluator
-        evaluator = Evaluator()
+        # Execute the action body - use cached evaluator for performance
+        evaluator = _get_cached_evaluator()
         
         # Start batching storage writes for performance
         self.storage.begin_batch()
@@ -1450,6 +1646,13 @@ class SmartContract:
                         continue
                     
                     current_value = action_env.get(var_name)
+                    if var_name == 'chain' and zexus_config.should_log('debug'):
+                        size = None
+                        try:
+                            size = len(current_value.elements)
+                        except Exception:
+                            size = 'n/a'
+                        print(f"DEBUG storage sync chain -> {current_value} (len={size})")
                     if current_value is not None:
                         self.storage.set(var_name, current_value)
             
@@ -1502,12 +1705,10 @@ class SmartContract:
             attr = getattr(self, property_name)
             # Wrap primitive Python types
             if isinstance(attr, str):
-                from ..object import String
                 return String(attr)
             return attr
         
         # Return NULL if not found
-        from ..object import NULL
         return NULL
     
     def set(self, property_name, value):

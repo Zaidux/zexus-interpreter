@@ -6,9 +6,17 @@ This system unifies the evaluator and VM, automatically switching based on workl
 - Workloads >= 500: Automatic VM compilation (100x speedup)
 
 NO FLAGS NEEDED - The system automatically chooses the best execution method.
+
+Features:
+- Automatic hot loop detection
+- Seamless VM compilation
+- File-based persistent caching (faster repeat runs)
+- Pattern-based bytecode reuse
+- JIT compilation for ultra-hot paths
+- Parallel execution for suitable workloads
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 import time
 import os
 
@@ -33,14 +41,18 @@ class WorkloadDetector:
         self.function_calls: Dict[str, int] = {}  # func_name -> call count
         self.hot_functions: set = set()
         
-        # Workload classification
-        self.vm_threshold = 500  # Iterations before VM compilation
+        # Workload classification thresholds
+        self.vm_threshold = 500       # Iterations before VM compilation
+        self.jit_threshold = 5000     # Iterations before JIT compilation
+        self.parallel_threshold = 10000  # Iterations before parallel execution
         
         # Statistics
         self.stats = {
             "total_loops": 0,
             "hot_loops": 0,
+            "jit_loops": 0,
             "vm_compilations": 0,
+            "jit_compilations": 0,
             "vm_executions": 0,
             "interpretation_time_ms": 0,
             "vm_time_ms": 0
@@ -48,14 +60,17 @@ class WorkloadDetector:
     
     def track_loop_iteration(self, loop_id: int) -> Dict[str, Any]:
         """
-        Track loop iteration and determine if VM should be used.
+        Track loop iteration and determine optimal execution strategy.
         
         Returns:
             {
-                "should_compile": bool,  # Should compile to VM now
-                "use_vm": bool,          # Should use already-compiled VM
-                "iteration": int,        # Current iteration number
-                "is_hot": bool          # Is this a hot loop
+                "should_compile": bool,      # Should compile to VM now
+                "should_jit": bool,          # Should JIT compile now
+                "use_vm": bool,              # Should use already-compiled VM
+                "use_jit": bool,             # Should use JIT-compiled code
+                "iteration": int,            # Current iteration number
+                "is_hot": bool,              # Is this a hot loop
+                "tier": str                  # Current execution tier
             }
         """
         if loop_id not in self.loop_iterations:
@@ -66,20 +81,33 @@ class WorkloadDetector:
         self.loop_iterations[loop_id] += 1
         iteration = self.loop_iterations[loop_id]
         
-        # Check if we just hit the threshold
+        # Determine execution tier
         should_compile = (iteration == self.vm_threshold)
-        
-        # Check if we're past the threshold (VM should be available)
+        should_jit = (iteration == self.jit_threshold)
         is_hot = (iteration >= self.vm_threshold)
+        is_jit_hot = (iteration >= self.jit_threshold)
         
         if should_compile:
             self.stats["hot_loops"] += 1
+        if should_jit:
+            self.stats["jit_loops"] += 1
+        
+        # Determine tier
+        if is_jit_hot:
+            tier = "jit"
+        elif is_hot:
+            tier = "vm"
+        else:
+            tier = "interpreted"
         
         return {
             "should_compile": should_compile,
-            "use_vm": is_hot,
+            "should_jit": should_jit,
+            "use_vm": is_hot and not is_jit_hot,
+            "use_jit": is_jit_hot,
             "iteration": iteration,
-            "is_hot": is_hot
+            "is_hot": is_hot,
+            "tier": tier
         }
     
     def track_function_call(self, func_name: str) -> bool:
@@ -130,7 +158,8 @@ class WorkloadDetector:
                 (self.stats["vm_time_ms"] / total_time * 100) if total_time > 0 else 0
             ),
             "active_hot_functions": len(self.hot_functions),
-            "threshold": self.vm_threshold
+            "vm_threshold": self.vm_threshold,
+            "jit_threshold": self.jit_threshold
         }
 
 
@@ -141,6 +170,9 @@ class UnifiedExecutor:
     Features:
     - Automatic workload detection
     - Transparent VM compilation
+    - JIT compilation for ultra-hot paths
+    - File-based persistent caching
+    - Pattern-based bytecode reuse
     - Environment synchronization
     - Zero-overhead switching
     """
@@ -157,23 +189,37 @@ class UnifiedExecutor:
         # Workload detector
         self.workload = WorkloadDetector()
         
-        # VM compilation cache
+        # VM compilation cache (uses shared persistent cache)
         self.compiled_loops: Dict[int, Any] = {}  # loop_id -> bytecode
         self.compiled_functions: Dict[str, Any] = {}  # func_name -> bytecode
+        self.jit_compiled: Dict[int, Any] = {}  # loop_id -> native code
         
         # VM instance (lazy init)
         self.vm = None
         self._profile_reported = False
         
+        # JIT compiler (lazy init)
+        self.jit_compiler = None
+        
         # Compilation failures (don't retry)
         self.failed_compilations: set = set()
+        
+        # Get shared cache for persistence
+        self._shared_cache = None
+        try:
+            from .bytecode_compiler import get_shared_cache
+            self._shared_cache = get_shared_cache()
+        except ImportError:
+            pass
         
         # Statistics
         self.stats = {
             "total_executions": 0,
             "vm_hits": 0,
+            "jit_hits": 0,
             "compilation_failures": 0,
-            "environment_syncs": 0
+            "environment_syncs": 0,
+            "cache_hits": 0
         }
     
     def execute_loop(self, loop_id: int, condition_node, body_node, env, stack_trace) -> Any:
@@ -205,6 +251,11 @@ class UnifiedExecutor:
         
         self.stats["total_executions"] += 1
         result = NULL
+
+        # If the loop body contains constructs the VM cannot safely handle yet (e.g.,
+        # method calls on contracts / smart objects), pin this loop to interpreter only.
+        if self.vm_enabled and not self._is_vm_safe_loop(body_node):
+            self.failed_compilations.add(loop_id)
         
         while True:
             # CRITICAL: Resource limit check (prevents infinite loops)
@@ -281,6 +332,9 @@ class UnifiedExecutor:
         Returns:
             True if compilation succeeded
         """
+        # Bail out early for loops marked unsafe
+        if loop_id in self.failed_compilations:
+            return False
         try:
             from ..vm.compiler import BytecodeCompiler
             from ..evaluator.bytecode_compiler import EvaluatorBytecodeCompiler
@@ -325,11 +379,14 @@ class UnifiedExecutor:
         """
         from ..object import NULL, EvaluationError
         
+        profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+        profile_active = profile_flag and profile_flag.lower() not in ("0", "false", "off")
+        
         if loop_id not in self.compiled_loops:
             return EvaluationError("Loop not compiled")
         
         try:
-            # Lazy init VM
+            # Lazy init VM with all standard optimizations enabled
             if self.vm is None:
                 from ..vm.vm import VM, VMMode
                 gas_limit = 10_000_000
@@ -342,12 +399,17 @@ class UnifiedExecutor:
                             gas_limit = 50_000_000
                     else:
                         gas_limit = 50_000_000
+                
+                # Initialize VM with all optimizers enabled as standard
                 self.vm = VM(
                     mode=VMMode.AUTO,
-                    use_jit=True,
+                    use_jit=True,                      # JIT for hot paths
                     max_heap_mb=1024,
                     debug=False,
-                    gas_limit=gas_limit
+                    gas_limit=gas_limit,
+                    enable_peephole_optimizer=True,    # Standard optimization
+                    enable_memory_pool=True,           # Standard memory pooling
+                    enable_async_optimizer=True,       # Standard async optimization
                 )
             
             # Sync environment to VM
@@ -458,6 +520,42 @@ class UnifiedExecutor:
             return Map(pairs)
         else:
             return value
+
+    # --- Safety analysis -------------------------------------------------
+
+    def _is_vm_safe_loop(self, body_node) -> bool:
+        """Heuristic: disallow VM only for transaction statements that mutate control flow.
+        Contract method calls are now handled via post-call state sync.
+        """
+        try:
+            from .. import zexus_ast
+        except Exception:
+            return False
+
+        unsafe_nodes = (zexus_ast.TxStatement,)
+
+        def _walk(node) -> bool:
+            if node is None:
+                return True
+            if isinstance(node, unsafe_nodes):
+                return False
+            for attr in dir(node):
+                if attr.startswith('_'):
+                    continue
+                try:
+                    val = getattr(node, attr)
+                except Exception:
+                    continue
+                if isinstance(val, list):
+                    for item in val:
+                        if not _walk(item):
+                            return False
+                elif hasattr(val, '__dict__'):
+                    if not _walk(val):
+                        return False
+            return True
+
+        return _walk(body_node)
     
     def get_statistics(self) -> Dict:
         """Get comprehensive execution statistics"""

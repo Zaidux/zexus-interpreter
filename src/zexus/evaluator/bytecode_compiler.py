@@ -3,18 +3,54 @@ Bytecode Compiler for Evaluator
 
 This module allows the evaluator to compile AST nodes to bytecode
 for VM execution when performance is critical.
+
+Features:
+- AST to bytecode compilation
+- File-based persistent caching (faster repeat runs)
+- Pattern-based caching (similar code reuse)
+- Multi-pass optimization (peephole, constant folding)
+- Seamless integration with UnifiedExecutor
 """
 import os
 from typing import Dict, List, Optional
 from .. import zexus_ast
 from ..vm.bytecode import Bytecode, BytecodeBuilder
 
-# Try to import cache (optional dependency)
+# Import cache (always available now)
+from ..vm.cache import BytecodeCache
+
+# Import optimizers (standard, not optional)
 try:
-    from ..vm.cache import BytecodeCache
-    CACHE_AVAILABLE = True
+    from ..vm.optimizer import BytecodeOptimizer
+    OPTIMIZER_AVAILABLE = True
 except ImportError:
-    CACHE_AVAILABLE = False
+    BytecodeOptimizer = None
+    OPTIMIZER_AVAILABLE = False
+
+try:
+    from ..vm.peephole_optimizer import PeepholeOptimizer, OptimizationLevel
+    PEEPHOLE_AVAILABLE = True
+except ImportError:
+    PeepholeOptimizer = None
+    OptimizationLevel = None
+    PEEPHOLE_AVAILABLE = False
+
+
+# Global shared cache for cross-compiler persistence
+_SHARED_CACHE: Optional[BytecodeCache] = None
+
+
+def get_shared_cache() -> BytecodeCache:
+    """Get the global shared bytecode cache (persistent across runs)"""
+    global _SHARED_CACHE
+    if _SHARED_CACHE is None:
+        _SHARED_CACHE = BytecodeCache(
+            max_size=2000,
+            max_memory_mb=100,
+            persistent=True,  # Enable disk persistence
+            debug=False
+        )
+    return _SHARED_CACHE
 
 
 class EvaluatorBytecodeCompiler:
@@ -24,8 +60,9 @@ class EvaluatorBytecodeCompiler:
     
     Features:
     - AST to bytecode compilation
-    - Bytecode caching for repeated code
-    - Optimization support
+    - File-based caching for repeat runs
+    - Pattern caching for similar code
+    - Multi-pass optimization
     - Error tracking
     """
     
@@ -35,31 +72,78 @@ class EvaluatorBytecodeCompiler:
         
         Args:
             use_cache: Enable bytecode caching
-            cache_size: Maximum cache entries
+            cache_size: Maximum cache entries (ignored if using shared cache)
         """
         self.builder: Optional[BytecodeBuilder] = None
         self.errors: List[str] = []
         self._loop_stack: List[Dict[str, str]] = []  # Stack of loop labels
         
-        # Bytecode cache
+        # Use shared persistent cache
         self.cache: Optional[BytecodeCache] = None
-        if use_cache and CACHE_AVAILABLE:
-            self.cache = BytecodeCache(
-                max_size=cache_size,
-                max_memory_mb=50,
-                persistent=False,
-                debug=False
+        if use_cache:
+            self.cache = get_shared_cache()
+        
+        # Initialize optimizers (standard, not optional)
+        self.bytecode_optimizer = None
+        self.peephole_optimizer = None
+        
+        if OPTIMIZER_AVAILABLE:
+            self.bytecode_optimizer = BytecodeOptimizer(level=2, debug=False)
+        
+        if PEEPHOLE_AVAILABLE:
+            self.peephole_optimizer = PeepholeOptimizer(
+                level=OptimizationLevel.MODERATE
             )
+    
+    def compile_file(self, file_path: str, ast_root, optimize: bool = True) -> Optional[List[Bytecode]]:
+        """
+        Compile an entire file's AST with file-based caching.
+        
+        This enables faster repeat runs - if the file hasn't changed,
+        we skip compilation entirely and return cached bytecode.
+        
+        Args:
+            file_path: Path to source file
+            ast_root: Parsed AST root
+            optimize: Whether to apply optimizations
+            
+        Returns:
+            List of bytecode objects or None if cached invalid
+        """
+        if self.cache:
+            # Check file-based cache first
+            cached = self.cache.get_by_file(file_path)
+            if cached:
+                return cached
+        
+        # Cache miss - compile
+        bytecodes = []
+        if hasattr(ast_root, 'statements'):
+            for stmt in ast_root.statements:
+                bc = self.compile(stmt, optimize=optimize, use_cache=False)
+                if bc:
+                    bytecodes.append(bc)
+        else:
+            bc = self.compile(ast_root, optimize=optimize, use_cache=False)
+            if bc:
+                bytecodes.append(bc)
+        
+        # Store in file cache
+        if self.cache and bytecodes:
+            self.cache.put_by_file(file_path, bytecodes)
+        
+        return bytecodes if bytecodes else None
     
     def compile(self, node, optimize: bool = True, use_cache: bool = True) -> Optional[Bytecode]:
         """
         Compile an AST node to bytecode.
         
         Process:
-        1. Check cache for existing bytecode
-        2. If cache miss, compile AST to bytecode
-        3. Apply optimizations if requested
-        4. Store in cache for future use
+        1. Check AST cache for existing bytecode
+        2. Check pattern cache for similar code
+        3. If cache miss, compile AST to bytecode
+        4. Apply multi-pass optimizations
+        5. Store in caches for future use
         
         Args:
             node: AST node to compile
@@ -69,11 +153,16 @@ class EvaluatorBytecodeCompiler:
         Returns:
             Bytecode object or None if compilation failed
         """
-        # Check cache first
+        # Check AST cache first
         if use_cache and self.cache:
             cached = self.cache.get(node)
             if cached:
                 return cached
+            
+            # Check pattern cache (similar code structure)
+            pattern_cached = self.cache.get_by_pattern(node)
+            if pattern_cached:
+                return pattern_cached
         
         # Cache miss - compile
         self.builder = BytecodeBuilder()
@@ -92,9 +181,10 @@ class EvaluatorBytecodeCompiler:
             
             bytecode.set_metadata('created_by', 'evaluator')
             
-            # Store in cache
+            # Store in caches
             if use_cache and self.cache:
                 self.cache.put(node, bytecode)
+                self.cache.put_by_pattern(node, bytecode)
             
             return bytecode
             
@@ -680,13 +770,19 @@ class EvaluatorBytecodeCompiler:
     
     def _optimize(self, bytecode: Bytecode) -> Bytecode:
         """
-        Apply peephole optimizations to bytecode.
+        Apply multi-pass optimizations to bytecode.
         
-        Optimizations:
-        - Remove unnecessary POP instructions
+        Optimization pipeline:
+        1. BytecodeOptimizer (if available) - advanced passes
+        2. PeepholeOptimizer (if available) - local patterns
+        3. Built-in optimizations - fallback
+        
+        Optimizations include:
         - Constant folding (compile-time evaluation)
-        - Dead code elimination  
-        - Algebraic simplifications
+        - Dead code elimination
+        - Strength reduction
+        - Instruction fusion
+        - Jump threading
         - Redundant operation removal
         """
         from zexus.vm.bytecode import Bytecode, Opcode
@@ -695,8 +791,33 @@ class EvaluatorBytecodeCompiler:
         if not instructions:
             return bytecode
         
-        # Multiple optimization passes for better results
         optimized = instructions
+        
+        # Pass 1: BytecodeOptimizer (advanced optimizations)
+        if self.bytecode_optimizer:
+            try:
+                optimized = self.bytecode_optimizer.optimize(
+                    optimized, 
+                    bytecode.constants
+                )
+            except Exception:
+                pass  # Fall through to other optimizers
+        
+        # Pass 2: PeepholeOptimizer (local patterns)
+        if self.peephole_optimizer:
+            try:
+                # Convert to format peephole expects
+                from ..vm.peephole_optimizer import Instruction
+                peep_insts = [
+                    Instruction(opcode=inst[0], arg=inst[1] if len(inst) > 1 else None)
+                    for inst in optimized
+                ]
+                peep_result = self.peephole_optimizer.optimize(peep_insts)
+                optimized = [(inst.opcode, inst.arg) for inst in peep_result]
+            except Exception:
+                pass  # Fall through to built-in
+        
+        # Pass 3: Built-in optimizations (always available)
         optimized = self._constant_folding(optimized, bytecode.constants)
         optimized = self._dead_code_elimination(optimized)
         optimized = self._peephole_patterns(optimized)

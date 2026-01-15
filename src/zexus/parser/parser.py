@@ -63,6 +63,7 @@ class UltimateParser:
         # Traditional parser setup (fallback)
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
+            EVENT: self.parse_identifier,
             INT: self.parse_integer_literal,
             FLOAT: self.parse_float_literal,
             STRING: self.parse_string_literal,
@@ -125,6 +126,10 @@ class UltimateParser:
             lex.line,
             lex.column,
             lex.last_token_type,
+            getattr(lex, 'at_statement_boundary', True),
+            getattr(lex, 'paren_depth', 0),
+            getattr(lex, 'bracket_depth', 0),
+            getattr(lex, 'brace_depth', 0),
         )
 
     def _restore_lexer_state(self, snapshot):
@@ -138,7 +143,19 @@ class UltimateParser:
             self.lexer.line,
             self.lexer.column,
             self.lexer.last_token_type,
+            boundary,
+            paren_depth,
+            bracket_depth,
+            brace_depth,
         ) = snapshot
+        if hasattr(self.lexer, 'at_statement_boundary'):
+            self.lexer.at_statement_boundary = boundary
+        if hasattr(self.lexer, 'paren_depth'):
+            self.lexer.paren_depth = paren_depth
+        if hasattr(self.lexer, 'bracket_depth'):
+            self.lexer.bracket_depth = bracket_depth
+        if hasattr(self.lexer, 'brace_depth'):
+            self.lexer.brace_depth = brace_depth
 
     # ------------------------------------------------------------------
     # Legacy compatibility helpers
@@ -387,6 +404,10 @@ class UltimateParser:
         original_line = self.lexer.line
         original_column = self.lexer.column
         original_last_token_type = self.lexer.last_token_type
+        original_boundary = getattr(self.lexer, 'at_statement_boundary', True)
+        original_paren_depth = getattr(self.lexer, 'paren_depth', 0)
+        original_bracket_depth = getattr(self.lexer, 'bracket_depth', 0)
+        original_brace_depth = getattr(self.lexer, 'brace_depth', 0)
         original_cur = self.cur_token
         original_peek = self.peek_token
 
@@ -395,6 +416,14 @@ class UltimateParser:
         self.lexer.read_position = 0
         self.lexer.ch = ''
         self.lexer.last_token_type = None  # ✅ CRITICAL: Reset context-aware state
+        if hasattr(self.lexer, 'at_statement_boundary'):
+            self.lexer.at_statement_boundary = True
+        if hasattr(self.lexer, 'paren_depth'):
+            self.lexer.paren_depth = 0
+        if hasattr(self.lexer, 'bracket_depth'):
+            self.lexer.bracket_depth = 0
+        if hasattr(self.lexer, 'brace_depth'):
+            self.lexer.brace_depth = 0
         self.lexer.read_char()
 
         # OPTIMIZATION: Pre-allocate list with reasonable capacity
@@ -420,6 +449,14 @@ class UltimateParser:
         self.lexer.line = original_line
         self.lexer.column = original_column
         self.lexer.last_token_type = original_last_token_type
+        if hasattr(self.lexer, 'at_statement_boundary'):
+            self.lexer.at_statement_boundary = original_boundary
+        if hasattr(self.lexer, 'paren_depth'):
+            self.lexer.paren_depth = original_paren_depth
+        if hasattr(self.lexer, 'bracket_depth'):
+            self.lexer.bracket_depth = original_bracket_depth
+        if hasattr(self.lexer, 'brace_depth'):
+            self.lexer.brace_depth = original_brace_depth
         self.cur_token = original_cur
         self.peek_token = original_peek
 
@@ -444,11 +481,21 @@ class UltimateParser:
             try:
                 statement = self.context_parser.parse_block(block_info, all_tokens)
                 if statement:
-                    program.statements.append(statement)
-                    parsed_count += 1
-                    if config.enable_debug_logs:  # Only show detailed parsing in verbose mode
-                        stmt_type = type(statement).__name__
-                        self._log(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}", "verbose")
+                    # Unwrap synthetic BlockStatements emitted by context strategies so inner statements flow to the program
+                    from ..zexus_ast import BlockStatement as _BlockStatement
+
+                    if isinstance(statement, _BlockStatement) and getattr(statement, "statements", None):
+                        program.statements.extend(statement.statements)
+                        parsed_count += len(statement.statements)
+                        if config.enable_debug_logs:
+                            stmt_types = ", ".join(type(stmt).__name__ for stmt in statement.statements)
+                            self._log(f"  ✅ Parsed composite block [{stmt_types}] at line {block_info['start_token'].line}", "verbose")
+                    else:
+                        program.statements.append(statement)
+                        parsed_count += 1
+                        if config.enable_debug_logs:  # Only show detailed parsing in verbose mode
+                            stmt_type = type(statement).__name__
+                            self._log(f"  ✅ Parsed: {stmt_type} at line {block_info['start_token'].line}", "verbose")
 
             except Exception as e:
                 error_msg = f"Line {block_info['start_token'].line}: {str(e)}"
@@ -511,8 +558,11 @@ class UltimateParser:
         # Skip stray semicolons that may appear between statements
         if self.cur_token_is(SEMICOLON):
             return None
+        if self.cur_token_is(RBRACE):
+            return None
         try:
             node = None
+            debug_enabled = config.enable_debug_logs
             if self.cur_token_is(LET):
                 node = self.parse_let_statement()
             elif self.cur_token_is(CONST):
@@ -602,81 +652,105 @@ class UltimateParser:
             elif self.cur_token_is(STREAM):
                 node = self.parse_stream_statement()
             elif self.cur_token_is(WATCH):
-                print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
                 node = self.parse_watch_statement()
             elif self.cur_token_is(EMIT):
-                print(f"[PARSE_STMT] Matched EMIT", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched EMIT", file=sys.stderr, flush=True)
                 node = self.parse_emit_statement()
             elif self.cur_token_is(MODIFIER):
-                print(f"[PARSE_STMT] Matched MODIFIER", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched MODIFIER", file=sys.stderr, flush=True)
                 node = self.parse_modifier_declaration()
             # === SECURITY STATEMENT HANDLERS ===
             elif self.cur_token_is(CAPABILITY):
-                print(f"[PARSE_STMT] Matched CAPABILITY", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched CAPABILITY", file=sys.stderr, flush=True)
                 node = self.parse_capability_statement()
             elif self.cur_token_is(GRANT):
-                print(f"[PARSE_STMT] Matched GRANT", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched GRANT", file=sys.stderr, flush=True)
                 node = self.parse_grant_statement()
             elif self.cur_token_is(REVOKE):
-                print(f"[PARSE_STMT] Matched REVOKE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched REVOKE", file=sys.stderr, flush=True)
                 node = self.parse_revoke_statement()
             elif self.cur_token_is(VALIDATE):
-                print(f"[PARSE_STMT] Matched VALIDATE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched VALIDATE", file=sys.stderr, flush=True)
                 node = self.parse_validate_statement()
             elif self.cur_token_is(SANITIZE):
-                print(f"[PARSE_STMT] Matched SANITIZE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched SANITIZE", file=sys.stderr, flush=True)
                 node = self.parse_sanitize_statement()
             elif self.cur_token_is(INJECT):
-                print(f"[PARSE_STMT] Matched INJECT", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched INJECT", file=sys.stderr, flush=True)
                 node = self.parse_inject_statement()
             elif self.cur_token_is(IMMUTABLE):
-                print(f"[PARSE_STMT] Matched IMMUTABLE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched IMMUTABLE", file=sys.stderr, flush=True)
                 node = self.parse_immutable_statement()
             # === COMPLEXITY STATEMENT HANDLERS ===
             elif self.cur_token_is(INTERFACE):
-                print(f"[PARSE_STMT] Matched INTERFACE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched INTERFACE", file=sys.stderr, flush=True)
                 node = self.parse_interface_statement()
             elif self.cur_token_is(TYPE_ALIAS):
-                print(f"[PARSE_STMT] Matched TYPE_ALIAS", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched TYPE_ALIAS", file=sys.stderr, flush=True)
                 node = self.parse_type_alias_statement()
             elif self.cur_token_is(MODULE):
-                print(f"[PARSE_STMT] Matched MODULE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched MODULE", file=sys.stderr, flush=True)
                 node = self.parse_module_statement()
             elif self.cur_token_is(PACKAGE):
-                print(f"[PARSE_STMT] Matched PACKAGE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched PACKAGE", file=sys.stderr, flush=True)
                 node = self.parse_package_statement()
             elif self.cur_token_is(USING):
-                print(f"[PARSE_STMT] Matched USING", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched USING", file=sys.stderr, flush=True)
                 node = self.parse_using_statement()
             elif self.cur_token_is(CHANNEL):
-                print(f"[PARSE_STMT] Matched CHANNEL", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched CHANNEL", file=sys.stderr, flush=True)
                 node = self.parse_channel_statement()
             elif self.cur_token_is(SEND):
-                print(f"[PARSE_STMT] Matched SEND", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched SEND", file=sys.stderr, flush=True)
                 node = self.parse_send_statement()
             elif self.cur_token_is(RECEIVE):
-                print(f"[PARSE_STMT] Matched RECEIVE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched RECEIVE", file=sys.stderr, flush=True)
                 node = self.parse_receive_statement()
             elif self.cur_token_is(ATOMIC):
-                print(f"[PARSE_STMT] Matched ATOMIC", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched ATOMIC", file=sys.stderr, flush=True)
                 node = self.parse_atomic_statement()
             # === BLOCKCHAIN STATEMENT HANDLERS ===
             elif self.cur_token_is(LEDGER):
-                print(f"[PARSE_STMT] Matched LEDGER", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched LEDGER", file=sys.stderr, flush=True)
                 node = self.parse_ledger_statement()
             elif self.cur_token_is(STATE):
-                print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
                 node = self.parse_state_statement()
             elif self.cur_token_is(REQUIRE):
                 node = self.parse_require_statement()
             elif self.cur_token_is(REVERT):
-                print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
                 node = self.parse_revert_statement()
             elif self.cur_token_is(LIMIT):
-                print(f"[PARSE_STMT] Matched LIMIT", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] Matched LIMIT", file=sys.stderr, flush=True)
                 node = self.parse_limit_statement()
             else:
-                print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
+                if debug_enabled:
+                    print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
                 node = self.parse_expression_statement()
 
             if node is not None:
@@ -736,8 +810,13 @@ class UltimateParser:
         """Parse { } block with tolerance for missing closing brace"""
         block = BlockStatement()
         self.next_token()
-        import sys
-        print(f"[BLOCK_START] Entering brace block, first token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
+        debug_enabled = config.enable_debug_logs
+        if debug_enabled:
+            print(
+                f"[BLOCK_START] Entering brace block, first token: {self.cur_token.type}={repr(self.cur_token.literal)}",
+                file=sys.stderr,
+                flush=True,
+            )
 
         brace_count = 1
         stmt_count = 0
@@ -748,19 +827,38 @@ class UltimateParser:
                 brace_count -= 1
                 if brace_count == 0:
                     break
+                # Skip standalone closing braces from nested blocks without parsing a statement
+                self.next_token()
+                continue
 
-            print(f"[BLOCK_STMT] About to parse statement {stmt_count}, token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
+            if debug_enabled:
+                print(
+                    f"[BLOCK_STMT] About to parse statement {stmt_count}, token: {self.cur_token.type}={repr(self.cur_token.literal)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             stmt = self.parse_statement()
-            print(f"[BLOCK_STMT] Parsed statement {stmt_count}: {type(stmt).__name__ if stmt else 'None'}", file=sys.stderr, flush=True)
+            if debug_enabled:
+                print(
+                    f"[BLOCK_STMT] Parsed statement {stmt_count}: {type(stmt).__name__ if stmt else 'None'}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             if stmt is not None:
                 block.statements.append(stmt)
             self.next_token()
             stmt_count += 1
 
-        print(f"[BLOCK_END] Finished block with {len(block.statements)} statements", file=sys.stderr, flush=True)
+        if debug_enabled:
+            print(
+                f"[BLOCK_END] Finished block with {len(block.statements)} statements",
+                file=sys.stderr,
+                flush=True,
+            )
         # TOLERANT: Don't error if we hit EOF without closing brace
         if self.cur_token_is(EOF) and brace_count > 0:
-            self.errors.append(f"Line {self.cur_token.line}: Unclosed block (reached EOF)")
+            # Tolerant mode: allow missing closing braces at EOF without failing hard
+            brace_count = 0
 
         return block
 
@@ -781,8 +879,9 @@ class UltimateParser:
 
     def parse_if_statement(self):
         """Tolerant if statement parser with elif support"""
-        import sys
-        print(f"[PARSE_IF] Starting if statement parsing", file=sys.stderr, flush=True)
+        debug_enabled = config.enable_debug_logs
+        if debug_enabled:
+            print("[PARSE_IF] Starting if statement parsing", file=sys.stderr, flush=True)
         # Skip IF token
         self.next_token()
 
@@ -804,48 +903,99 @@ class UltimateParser:
             )
             raise error
 
-        print(f"[PARSE_IF] Parsed condition, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
+        if debug_enabled:
+            print(
+                f"[PARSE_IF] Parsed condition, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}",
+                file=sys.stderr,
+                flush=True,
+            )
         # Parse consequence (flexible block style)
         consequence = self.parse_block("if")
-        print(f"[PARSE_IF] Parsed consequence block, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}", file=sys.stderr, flush=True)
+        if debug_enabled:
+            print(
+                f"[PARSE_IF] Parsed consequence block, now at token: {self.cur_token.type}={repr(self.cur_token.literal)}",
+                file=sys.stderr,
+                flush=True,
+            )
         if not consequence:
             return None
 
-        # Parse elif clauses
-        elif_parts = []
-        while self.cur_token_is(ELIF):
-            self.next_token()  # Move past elif
-            
-            # Parse elif condition (with or without parentheses)
+        def _parse_conditional_clause(keyword):
+            """Parse an if/elif/else-if condition allowing optional parentheses."""
             if self.cur_token_is(LPAREN):
                 self.next_token()  # Skip (
-                elif_condition = self.parse_expression(LOWEST)
+                clause_condition = self.parse_expression(LOWEST)
                 if not self.expect_peek(RPAREN):
-                    # Expected closing paren after elif condition
                     return None
             else:
-                # No parentheses - parse expression directly
-                elif_condition = self.parse_expression(LOWEST)
-            
-            if not elif_condition:
+                clause_condition = self.parse_expression(LOWEST)
+
+            if not clause_condition:
                 error = self._create_parse_error(
-                    "Expected condition after 'elif'",
-                    suggestion="Add a condition expression: elif (condition) { ... }"
+                    f"Expected condition after '{keyword}'",
+                    suggestion=f"Add a condition expression: {keyword} (condition) {{ ... }}"
                 )
                 raise error
-            
-            # Parse elif consequence block
-            elif_consequence = self.parse_block("elif")
-            if not elif_consequence:
-                return None
-            
-            elif_parts.append((elif_condition, elif_consequence))
 
-        # Parse else clause
+            return clause_condition
+
+        # Parse elif / else-if chains (using lookahead so we keep the closing brace as current token)
+        elif_parts = []
         alternative = None
-        if self.cur_token_is(ELSE):
-            self.next_token()
-            alternative = self.parse_block("else")
+
+        while True:
+            if debug_enabled:
+                print(
+                    f"[PARSE_IF] After consequence, current={self.cur_token.type}, peek={self.peek_token.type if self.peek_token else None}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            if self.peek_token_is(ELIF):
+                self.next_token()  # Move to 'elif'
+                self.next_token()  # Advance to first token of condition
+                if debug_enabled:
+                    print("[PARSE_IF] Detected 'elif' clause", file=sys.stderr, flush=True)
+                clause_condition = _parse_conditional_clause("elif")
+                if clause_condition is None:
+                    return None
+
+                clause_block = self.parse_block("elif")
+                if not clause_block:
+                    return None
+
+                elif_parts.append((clause_condition, clause_block))
+                continue
+
+            if self.peek_token_is(ELSE):
+                self.next_token()  # Move to 'else'
+
+                # Support `else if` by converting it into another elif clause
+                if self.peek_token_is(IF):
+                    self.next_token()  # Move to 'if'
+                    self.next_token()  # Advance to first token of condition
+                    if debug_enabled:
+                        print("[PARSE_IF] Detected 'else if' clause", file=sys.stderr, flush=True)
+                    clause_condition = _parse_conditional_clause("else if")
+                    if clause_condition is None:
+                        return None
+
+                    clause_block = self.parse_block("elif")
+                    if not clause_block:
+                        return None
+
+                    elif_parts.append((clause_condition, clause_block))
+                    if debug_enabled:
+                        print("[PARSE_IF] Completed 'else if' clause", file=sys.stderr, flush=True)
+                    continue
+
+                if debug_enabled:
+                    print("[PARSE_IF] Detected plain 'else' clause", file=sys.stderr, flush=True)
+                alternative = self.parse_block("else")
+                if not alternative:
+                    return None
+                break
+
+            break
 
         return IfStatement(condition=condition, consequence=consequence, elif_parts=elif_parts, alternative=alternative)
 
@@ -955,7 +1105,9 @@ class UltimateParser:
         """Tolerant let statement parser"""
         stmt = LetStatement(name=None, value=None)
 
-        if not self.expect_peek(IDENT):
+        if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
+            self.next_token()
+        else:
             error = self._create_parse_error(
                 "Expected variable name after 'let'",
                 suggestion="Use 'let' to declare a variable: let myVariable = value"
@@ -987,7 +1139,9 @@ class UltimateParser:
         """
         stmt = ConstStatement(name=None, value=None)
 
-        if not self.expect_peek(IDENT):
+        if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
+            self.next_token()
+        else:
             self.errors.append("Expected variable name after 'const'")
             return None
 
@@ -1691,29 +1845,41 @@ class UltimateParser:
     def parse_export_statement(self):
         token = self.cur_token
 
-        # Check for syntactic sugar: export action name() {} or export function name() {}
-        if self.peek_token_is(ACTION) or self.peek_token_is(FUNCTION):
-            self.next_token()  # Move to ACTION/FUNCTION token
-            
-            # Parse the action/function normally
-            if self.cur_token_is(ACTION):
-                func_stmt = self.parse_action_statement()
-            else:  # FUNCTION
-                func_stmt = self.parse_function_statement()
-            
-            if func_stmt is None:
+        keyword_parsers = {
+            ACTION: self.parse_action_statement,
+            FUNCTION: self.parse_function_statement,
+            CONTRACT: self.parse_contract_statement,
+            CONST: self.parse_const_statement,
+            LET: self.parse_let_statement,
+            DATA: self.parse_data_statement,
+        }
+
+        if self.peek_token and self.peek_token.type in keyword_parsers:
+            keyword_type = self.peek_token.type
+            self.next_token()  # Move to the declaration keyword
+            declaration = keyword_parsers[keyword_type]()
+
+            if declaration is None:
                 return None
-            
-            # Extract the function name for export
-            func_name = func_stmt.name.value if hasattr(func_stmt.name, 'value') else str(func_stmt.name)
-            
-            # Create a compound statement: the function definition + export
-            # We'll use a BlockStatement to hold both
-            from ..zexus_ast import BlockStatement, ExportStatement
-            export_stmt = ExportStatement(names=[Identifier(func_name)])
-            
-            # Return a block containing both statements
-            return BlockStatement(statements=[func_stmt, export_stmt])
+
+            decl_name = getattr(declaration, "name", None)
+            export_names = []
+
+            if isinstance(decl_name, Identifier):
+                export_names.append(decl_name)
+            elif decl_name is not None:
+                export_names.append(Identifier(str(decl_name)))
+
+            if not export_names:
+                self.errors.append(
+                    f"Line {token.line}:{token.column} - Unable to determine export name"
+                )
+                return declaration
+
+            export_stmt = ExportStatement(names=export_names)
+            block = BlockStatement()
+            block.statements.extend([declaration, export_stmt])
+            return block
 
         names = []
 
@@ -2955,6 +3121,17 @@ class UltimateParser:
 
     def parse_return_statement(self):
         stmt = ReturnStatement(return_value=None)
+        # Handle bare `return` without value
+        if self.peek_token_is(SEMICOLON):
+            # Advance to semicolon so outer loop can consume it on next iteration
+            self.next_token()
+            return stmt
+
+        if self.peek_token_is(RBRACE) or self.peek_token_is(EOF):
+            # No explicit return value; leave current token on 'return'
+            return stmt
+
+        # Otherwise parse the return value expression
         self.next_token()
         stmt.return_value = self.parse_expression(LOWEST)
         if self.peek_token_is(SEMICOLON):
@@ -3004,6 +3181,8 @@ class UltimateParser:
         if left_exp is None:
             return None
 
+        debug_enabled = config.enable_debug_logs
+
         # Stop parsing when we hit closing delimiters or terminators
         # This prevents the parser from trying to parse beyond expression boundaries
         while (not self.peek_token_is(SEMICOLON) and
@@ -3014,11 +3193,17 @@ class UltimateParser:
                not self.peek_token_is(LBRACE) and
                precedence <= self.peek_precedence()):
 
-            print(f"[EXPR LOOP] cur={self.cur_token.literal}@L{self.cur_token.line}, peek={self.peek_token.literal}@L{self.peek_token.line}, precedence={precedence}, peek_prec={self.peek_precedence()}")
+            if debug_enabled:
+                print(
+                    f"[EXPR LOOP] cur={self.cur_token.literal}@L{self.cur_token.line}, peek={self.peek_token.literal}@L{self.peek_token.line}, precedence={precedence}, peek_prec={self.peek_precedence()}"
+                )
             # CRITICAL FIX: Stop if next token is on a new line and could start a new statement
             # This prevents expressions from spanning multiple logical lines
             if self.cur_token.line < self.peek_token.line:
-                print(f"[NEWLINE CHECK] cur_line={self.cur_token.line}, peek_line={self.peek_token.line}, peek_type={self.peek_token.type}, peek_lit={self.peek_token.literal}")
+                if debug_enabled:
+                    print(
+                        f"[NEWLINE CHECK] cur_line={self.cur_token.line}, peek_line={self.peek_token.line}, peek_type={self.peek_token.type}, peek_lit={self.peek_token.literal}"
+                    )
                 # Next token is on a new line - check if it could start a new statement
                 next_could_be_statement = (
                     self.peek_token.type == IDENT or
@@ -3027,9 +3212,12 @@ class UltimateParser:
                     self.peek_token.type == RETURN or
                     self.peek_token.type == IF or
                     self.peek_token.type == WHILE or
-                    self.peek_token.type == FOR
+                    self.peek_token.type == FOR or
+                    self.peek_token.type == FUNCTION or
+                    self.peek_token.type == ACTION
                 )
-                print(f"[NEWLINE CHECK] next_could_be_statement={next_could_be_statement}")
+                if debug_enabled:
+                    print(f"[NEWLINE CHECK] next_could_be_statement={next_could_be_statement}")
                 if next_could_be_statement:
                     # Additional check: is the next token followed by [ or = ?
                     # This would indicate it's an assignment/index expression starting
@@ -3125,8 +3313,9 @@ class UltimateParser:
     def parse_identifier(self):
         # Allow DEBUG keyword to be used as identifier in expression contexts
         # This enables debug(value) function calls while keeping debug value; statements
-        if self.cur_token.type == DEBUG:
-            return Identifier(value="debug")
+        if self.cur_token.type in {DEBUG, EVENT}:
+            literal = getattr(self.cur_token, 'literal', None)
+            return Identifier(value=literal if literal is not None else self.cur_token.type.lower())
         return Identifier(value=self.cur_token.literal)
 
     def parse_integer_literal(self):
@@ -3150,13 +3339,16 @@ class UltimateParser:
         lit = getattr(self.cur_token, 'literal', '')
         val = True if isinstance(lit, str) and lit.lower() == 'true' else False
         # Transient trace to diagnose boolean parsing
-        try:
-            if lit.lower() == 'false':
-                import traceback as _tb
-                stack = ''.join(_tb.format_stack(limit=4)[-2:])
-                print(f"[PARSE_BOOL_TRACE] false token at position {self.lexer.position}: literal={lit}, val={val}\n{stack}")
-        except Exception:
-            pass
+        if config.enable_debug_logs:
+            try:
+                if lit.lower() == 'false':
+                    import traceback as _tb
+                    stack = ''.join(_tb.format_stack(limit=4)[-2:])
+                    print(
+                        f"[PARSE_BOOL_TRACE] false token at position {self.lexer.position}: literal={lit}, val={val}\n{stack}"
+                    )
+            except Exception:
+                pass
         return Boolean(value=val)
 
     def parse_null(self):
@@ -3563,17 +3755,27 @@ class UltimateParser:
         storage_vars = []
         actions = []
 
-        while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+        while not self.cur_token_is(EOF):
             self.next_token()
+            
+            # Parse modifiers preceding the declaration
+            modifiers = self._parse_modifiers()
 
             if self.cur_token_is(RBRACE):
+                # If more declarations follow, skip this brace (close of inner block)
+                if (self.peek_token_is(ACTION) or self.peek_token_is(STATE) or self.peek_token_is(DATA) or
+                        (self.peek_token_is(IDENT) and getattr(self.peek_token, 'literal', None) == 'persistent')):
+                    continue
                 break
 
             # Check for state variable declaration
             if self.cur_token_is(STATE):
                 state_stmt = self.parse_state_statement()
                 if state_stmt:
+                    # Attach parsed modifiers
+                    state_stmt.modifiers = modifiers
                     storage_vars.append(state_stmt)
+                    print(f"DEBUG: Parsed state {state_stmt.name.value} modifiers={modifiers}")
 
             # Check for data member declaration
             elif self.cur_token_is(DATA):
@@ -3588,12 +3790,12 @@ class UltimateParser:
                     self.next_token()  # Move to value
                     data_value = self.parse_expression(LOWEST)
                     
-                    # Create a let statement for the data member
-                    from ..zexus_ast import LetStatement
-                    data_stmt = LetStatement()
-                    data_stmt.name = Identifier(data_name)
-                    data_stmt.value = data_value
+                    # Treat contract data as state with default value
+                    from ..zexus_ast import StateStatement
+                    # Pass modifiers to constructor
+                    data_stmt = StateStatement(Identifier(data_name), data_value, modifiers=modifiers)
                     storage_vars.append(data_stmt)
+                    print(f"DEBUG: Parsed data {data_name} modifiers={modifiers}")
                     
                     # Consume optional semicolon (same as parse_state_statement)
                     if self.peek_token_is(SEMICOLON):
@@ -3606,21 +3808,31 @@ class UltimateParser:
                     self.next_token()
                     if self.cur_token_is(IDENT):
                         storage_name = self.cur_token.literal
+                        # Note: Persistent storage doesn't support standard modifiers yet
                         storage_vars.append({"name": storage_name})
 
             # Check for action definition
             elif self.cur_token_is(ACTION):
                 action = self.parse_action_statement()
                 if action:
+                    # Attach parsed modifiers
+                    action.modifiers = modifiers
                     actions.append(action)
 
-        self.expect_peek(RBRACE)
+        if not self.cur_token_is(RBRACE):
+            # Tolerant: if the contract body ends at EOF, don't emit a hard error
+            if not self.peek_token_is(EOF):
+                self.expect_peek(RBRACE)
         
         # Create body block with storage vars and actions
         body = BlockStatement()
         body.statements = storage_vars + actions
+
+        contract_node = ContractStatement(contract_name, body, modifiers=[], implements=implements)
+        contract_node.storage_vars = storage_vars
+        contract_node.actions = actions
         
-        return ContractStatement(contract_name, body, modifiers=[], implements=implements)
+        return contract_node
 
     def parse_protect_statement(self):
         """Parse protect statement
@@ -4247,7 +4459,8 @@ class UltimateParser:
         
         Asserts condition, reverts transaction if false.
         """
-        print(f"[DEBUG PARSER] parse_require_statement called", flush=True)
+        if config.enable_debug_logs:
+            print("[DEBUG PARSER] parse_require_statement called", flush=True)
         token = self.cur_token
         
         if not self.expect_peek(LPAREN):
@@ -4271,7 +4484,11 @@ class UltimateParser:
         if self.peek_token_is(SEMICOLON):
             self.next_token()
         
-        print(f"[DEBUG PARSER] Creating RequireStatement with condition={condition}, message={message}", flush=True)
+        if config.enable_debug_logs:
+            print(
+                f"[DEBUG PARSER] Creating RequireStatement with condition={condition}, message={message}",
+                flush=True,
+            )
         return RequireStatement(condition=condition, message=message)
     
     def parse_revert_statement(self):

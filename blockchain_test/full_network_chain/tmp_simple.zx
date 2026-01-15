@@ -1,0 +1,7 @@
+contract Foo {
+    data value = 0
+
+    action set(x) {
+        value = x
+    }
+}

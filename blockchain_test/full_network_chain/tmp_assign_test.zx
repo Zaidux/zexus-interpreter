@@ -1,0 +1,15 @@
+contract Test {
+    data balances = {}
+    data history = []
+
+    action init() {
+        balances = {}
+        history = append(history, {
+            "type": "GENESIS",
+            "timestamp": time()
+        })
+    }
+}
+
+let t = Test()
+t.init()

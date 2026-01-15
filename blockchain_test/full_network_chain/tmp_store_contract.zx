@@ -1,0 +1,32 @@
+contract Child {
+    data value = 0
+
+    action set(v) {
+        value = v
+    }
+
+    action get() {
+        return value
+    }
+}
+
+contract Parent {
+    data child = null
+
+    action init() {
+        child = Child()
+        child.set(42)
+    }
+
+    action read() {
+        if child == null {
+            return -1
+        }
+        return child.get()
+    }
+}
+
+let parent = Parent()
+parent.init()
+let result = parent.read()
+print "Result: " + string(result)
