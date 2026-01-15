@@ -233,6 +233,15 @@ class EvaluatorBytecodeCompiler:
         if hasattr(candidate, 'value'):
             return str(candidate.value)
         return str(candidate)
+
+    def _emit_vm_builtin_call(self, builtin_name: str, payload, discard_result: bool = True):
+        """Helper to push a payload and invoke a VM builtin handler."""
+        if self.builder is None:
+            return
+        self.builder.emit_constant(payload)
+        self.builder.emit_call(builtin_name, 1)
+        if discard_result:
+            self.builder.emit("POP")
     
     # === Statement Compilation ===
     
@@ -497,6 +506,34 @@ class EvaluatorBytecodeCompiler:
         name_idx = self.builder.bytecode.add_constant("__vm_from_module__")
         self.builder.emit("CALL_NAME", (name_idx, 1))
         self.builder.emit("POP")
+
+    def _compile_NativeStatement(self, node: zexus_ast.NativeStatement):
+        """Compile native performance statements via VM builtins."""
+        self._emit_vm_builtin_call("__vm_native_statement__", node, discard_result=False)
+
+    def _compile_GCStatement(self, node: zexus_ast.GCStatement):
+        """Compile garbage collection directives into VM builtins."""
+        self._emit_vm_builtin_call("__vm_gc_statement__", node, discard_result=False)
+
+    def _compile_InlineStatement(self, node: zexus_ast.InlineStatement):
+        """Compile inline optimization directives into VM builtins."""
+        self._emit_vm_builtin_call("__vm_inline_statement__", node, discard_result=False)
+
+    def _compile_BufferStatement(self, node: zexus_ast.BufferStatement):
+        """Compile buffer directives to VM builtins."""
+        self._emit_vm_builtin_call("__vm_buffer_statement__", node, discard_result=False)
+
+    def _compile_SIMDStatement(self, node: zexus_ast.SIMDStatement):
+        """Compile SIMD directives to VM builtins."""
+        self._emit_vm_builtin_call("__vm_simd_statement__", node, discard_result=False)
+
+    def _compile_DeferStatement(self, node: zexus_ast.DeferStatement):
+        """Compile defer cleanup directives to VM builtins."""
+        self._emit_vm_builtin_call("__vm_defer_statement__", node, discard_result=False)
+
+    def _compile_PatternStatement(self, node: zexus_ast.PatternStatement):
+        """Compile pattern matching directives to VM builtins."""
+        self._emit_vm_builtin_call("__vm_pattern_statement__", node, discard_result=False)
     
     # === Blockchain Statement Compilation ===
     
@@ -1111,6 +1148,8 @@ class EvaluatorBytecodeCompiler:
             'PropertyAccessExpression', 'LambdaExpression',
             'FindExpression', 'LoadExpression',
             'UseStatement', 'FromStatement',
+            'NativeStatement', 'GCStatement', 'InlineStatement',
+            'BufferStatement', 'SIMDStatement', 'DeferStatement', 'PatternStatement',
             # Blockchain nodes
             'TxStatement', 'RevertStatement', 'RequireStatement',
             'StateAccessExpression', 'LedgerAppendStatement', 'GasChargeStatement'
