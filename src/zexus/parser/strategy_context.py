@@ -2542,6 +2542,32 @@ class ContextStackParser:
 
                 i = j
 
+            # GC statement heuristic (performance control)
+            elif token.type == GC:
+                j = i + 1
+                action_literal = None
+
+                if j < len(tokens) and tokens[j].type == STRING:
+                    action_literal = tokens[j].literal
+                    j += 1
+
+                # Consume optional semicolon directly following the statement
+                if j < len(tokens) and tokens[j].type == SEMICOLON:
+                    j += 1
+
+                if action_literal is not None:
+                    statements.append(GCStatement(action_literal))
+                    i = j
+                    continue
+
+                # Fallback: parse as expression if tokens are malformed
+                gc_tokens = tokens[i:j]
+                expr = self._parse_expression(gc_tokens)
+                if expr:
+                    statements.append(ExpressionStatement(expr))
+                i = j if j > i else i + 1
+                continue
+
             # DATA statement heuristic (dataclass definition)
             # But not if DATA is used as an identifier (data = ...)
             elif token.type == DATA and i + 1 < len(tokens) and tokens[i + 1].type not in [ASSIGN, LBRACKET, DOT, LPAREN]:
@@ -5834,13 +5860,21 @@ class ContextStackParser:
         if not tokens:
             return None
         
-        # Check if this starts with ASYNC modifier
+        # Check for optional modifiers before the FUNCTION keyword (async, inline, native, etc.)
+        modifier_types = {
+            ASYNC, INLINE, NATIVE, PUBLIC, PRIVATE, SEALED, SECURE, PURE, VIEW, PAYABLE,
+        }
+        modifiers = []
         is_async = False
         start_idx = 0
-        if tokens[0].type == ASYNC:
-            is_async = True
-            start_idx = 1
-        
+
+        while start_idx < len(tokens) and tokens[start_idx].type in modifier_types:
+            modifier_token = tokens[start_idx]
+            modifiers.append(getattr(modifier_token, 'literal', modifier_token.type))
+            if modifier_token.type == ASYNC:
+                is_async = True
+            start_idx += 1
+
         # Now check for FUNCTION keyword
         if start_idx >= len(tokens) or tokens[start_idx].type != FUNCTION:
             return None
@@ -5909,8 +5943,8 @@ class ContextStackParser:
         )
         
         # Set async flag if modifier was present
-        if is_async:
-            func_stmt.modifiers = ['async']
+        if modifiers:
+            func_stmt.modifiers = modifiers
         
         return func_stmt
     
