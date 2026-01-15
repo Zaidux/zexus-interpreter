@@ -49,7 +49,6 @@ function select_recipient(index, sender_offset) {
 }
 
 function run_sequential_test() {
-    print("\n=== Sequential 10k Transaction Benchmark ===")
     let blockchain = create_performance_blockchain(1, false)
     let nonce_tracker = {}
     let i = 0
@@ -68,7 +67,7 @@ function run_sequential_test() {
         let payload = "seq::" + string(i) + "::" + sender + "->" + recipient
 
         let nonce = next_nonce(nonce_tracker, blockchain, sender)
-        blockchain.submit_transaction(sender, recipient, amount, fee, nonce, payload)
+        blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
         nonce_tracker[sender] = nonce + 1
 
         let result = blockchain.produce_block()
@@ -82,11 +81,6 @@ function run_sequential_test() {
     let duration = time() - start_time
     let metrics = blockchain.get_chain_info()
 
-    print("Total processing time: " + string(duration) + " ms")
-    print("Blocks produced: " + string(processed_blocks))
-    print("Average block time: " + string(metrics.avg_block_ms) + " ms")
-    print("Pending transactions: " + string(metrics.pending_tx))
-
     return {
         "duration": duration,
         "blocks": processed_blocks,
@@ -96,7 +90,6 @@ function run_sequential_test() {
 }
 
 function run_bulk_test() {
-    print("\n=== Bulk 10k Transaction Benchmark ===")
     let blockchain = create_performance_blockchain(75, false)
     let nonce_tracker = {}
     let i = 0
@@ -114,7 +107,7 @@ function run_bulk_test() {
         let payload = "bulk::" + string(i) + "::" + string(amount) + "::" + sender
 
         let nonce = next_nonce(nonce_tracker, blockchain, sender)
-        blockchain.submit_transaction(sender, recipient, amount, fee, nonce, payload)
+        blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
         nonce_tracker[sender] = nonce + 1
 
         i = i + 1
@@ -142,12 +135,6 @@ function run_bulk_test() {
     let metrics = blockchain.get_chain_info()
     let total_blocks = produced_blocks
 
-    print("Submission time: " + string(submission_time) + " ms")
-    print("Block production time: " + string(production_time) + " ms")
-    print("Blocks produced: " + string(total_blocks))
-    print("Average block time: " + string(metrics.avg_block_ms) + " ms")
-    print("Pending transactions: " + string(metrics.pending_tx))
-
     return {
         "submission_time": submission_time,
         "production_time": production_time,
@@ -157,18 +144,25 @@ function run_bulk_test() {
     }
 }
 
-print("\n===============================================")
-print("ZEXUS FULL NETWORK PERFORMANCE: 10K SCENARIOS")
-print("===============================================")
-
 let sequential_result = run_sequential_test()
 let bulk_result = run_bulk_test()
 
-print("\n=== Performance Summary ===")
-print("Sequential duration: " + string(sequential_result["duration"]) + " ms")
-print("Sequential blocks: " + string(sequential_result["blocks"]))
-print("Bulk submission time: " + string(bulk_result["submission_time"]) + " ms")
-print("Bulk production time: " + string(bulk_result["production_time"]) + " ms")
-print("Bulk blocks: " + string(bulk_result["blocks"]))
+function compute_tps(total_tx, duration_ms) {
+    if duration_ms <= 0 {
+        return 0
+    }
+    return (total_tx * 1000) / duration_ms
+}
 
-print("\nPerformance benchmarking complete")
+let sequential_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_result["duration"])
+let bulk_total_time = bulk_result["submission_time"] + bulk_result["production_time"]
+let bulk_tps = compute_tps(PERF_TRANSACTION_COUNT, bulk_total_time)
+
+print("\n===============================================")
+print("ZEXUS PERFORMANCE SUMMARY :: 10K TRANSACTIONS")
+print("===============================================")
+print("Sequential total_ms=" + string(sequential_result["duration"]) + " | blocks=" + string(sequential_result["blocks"]) + " | avg_block_ms=" + string(sequential_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_tps))
+print("Bulk submission_ms=" + string(bulk_result["submission_time"]) + " | production_ms=" + string(bulk_result["production_time"]) + " | blocks=" + string(bulk_result["blocks"]) + " | avg_block_ms=" + string(bulk_result["metrics"].avg_block_ms) + " | tps=" + string(bulk_tps))
+print("Pending after sequential=" + string(sequential_result["metrics"].pending_tx) + " | pending after bulk=" + string(bulk_result["metrics"].pending_tx))
+print("Benchmark complete")
+

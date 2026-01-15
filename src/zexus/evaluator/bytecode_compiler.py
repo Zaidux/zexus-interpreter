@@ -82,6 +82,7 @@ class EvaluatorBytecodeCompiler:
         self.cache: Optional[BytecodeCache] = None
         if use_cache:
             self.cache = get_shared_cache()
+            self._cache_stats_baseline = self._snapshot_cache_stats()
         
         # Initialize optimizers (standard, not optional)
         self.bytecode_optimizer = None
@@ -94,6 +95,8 @@ class EvaluatorBytecodeCompiler:
             self.peephole_optimizer = PeepholeOptimizer(
                 level=OptimizationLevel.MODERATE
             )
+        if not use_cache or self.cache is None:
+            self._cache_stats_baseline = {"hits": 0, "misses": 0, "pattern_hits": 0}
     
     def compile_file(self, file_path: str, ast_root, optimize: bool = True) -> Optional[List[Bytecode]]:
         """
@@ -214,6 +217,22 @@ class EvaluatorBytecodeCompiler:
             error_msg = f"Unsupported node type for bytecode: {node_type}"
             self.errors.append(error_msg)
             self.builder.emit_constant(None)
+
+    def _coerce_string(self, candidate) -> str:
+        """Convert literal or identifier nodes into raw string values."""
+        if candidate is None:
+            return ""
+        if hasattr(candidate, 'value'):
+            return str(candidate.value)
+        return str(candidate)
+
+    def _coerce_identifier(self, candidate) -> str:
+        """Extract identifier name as string, handling AST nodes and raw strings."""
+        if candidate is None:
+            return ""
+        if hasattr(candidate, 'value'):
+            return str(candidate.value)
+        return str(candidate)
     
     # === Statement Compilation ===
     
@@ -426,6 +445,58 @@ class EvaluatorBytecodeCompiler:
         
         # Emit PRINT opcode
         self.builder.emit("PRINT")
+
+    def _compile_UseStatement(self, node: zexus_ast.UseStatement):
+        """Compile module use/import statement for VM execution."""
+        module_path = self._coerce_string(getattr(node, 'file_path', None))
+        alias_name = self._coerce_identifier(getattr(node, 'alias', None)) if getattr(node, 'alias', None) else ""
+
+        names_list = []
+        if getattr(node, 'names', None):
+            for entry in node.names:
+                names_list.append(self._coerce_identifier(entry))
+
+        spec = {
+            "file": module_path,
+            "alias": alias_name,
+            "names": names_list,
+            "is_named": bool(getattr(node, 'is_named_import', False)) and len(names_list) > 0,
+        }
+
+        spec_idx = self.builder.bytecode.add_constant(spec)
+        self.builder.emit("LOAD_CONST", spec_idx)
+        name_idx = self.builder.bytecode.add_constant("__vm_use_module__")
+        self.builder.emit("CALL_NAME", (name_idx, 1))
+        self.builder.emit("POP")
+
+    def _compile_FromStatement(self, node: zexus_ast.FromStatement):
+        """Compile from-import statements into VM-friendly builtin calls."""
+        module_path = self._coerce_string(getattr(node, 'file_path', None))
+        entries = []
+
+        for entry in getattr(node, 'imports', []) or []:
+            if isinstance(entry, (list, tuple)):
+                base = entry[0] if len(entry) > 0 else None
+                alias = entry[1] if len(entry) > 1 else None
+            else:
+                base = entry
+                alias = None
+
+            entries.append({
+                "name": self._coerce_identifier(base),
+                "alias": self._coerce_identifier(alias) if alias else "",
+            })
+
+        spec = {
+            "file": module_path,
+            "imports": entries,
+        }
+
+        spec_idx = self.builder.bytecode.add_constant(spec)
+        self.builder.emit("LOAD_CONST", spec_idx)
+        name_idx = self.builder.bytecode.add_constant("__vm_from_module__")
+        self.builder.emit("CALL_NAME", (name_idx, 1))
+        self.builder.emit("POP")
     
     # === Blockchain Statement Compilation ===
     
@@ -1039,6 +1110,7 @@ class EvaluatorBytecodeCompiler:
             'AwaitExpression', 'SpawnExpression', 'AssignmentExpression', 'IndexExpression',
             'PropertyAccessExpression', 'LambdaExpression',
             'FindExpression', 'LoadExpression',
+            'UseStatement', 'FromStatement',
             # Blockchain nodes
             'TxStatement', 'RevertStatement', 'RequireStatement',
             'StateAccessExpression', 'LedgerAppendStatement', 'GasChargeStatement'
@@ -1048,6 +1120,17 @@ class EvaluatorBytecodeCompiler:
     
     # ==================== Cache Management ====================
     
+    def _snapshot_cache_stats(self) -> Dict[str, int]:
+        """Capture current cache stats to use as a baseline."""
+        if not self.cache:
+            return {"hits": 0, "misses": 0, "pattern_hits": 0}
+        stats = self.cache.get_stats() or {}
+        return {
+            "hits": int(stats.get("hits", 0)),
+            "misses": int(stats.get("misses", 0)),
+            "pattern_hits": int(stats.get("pattern_hits", 0)),
+        }
+
     def get_cache_stats(self) -> Optional[Dict]:
         """
         Get cache statistics
@@ -1055,14 +1138,34 @@ class EvaluatorBytecodeCompiler:
         Returns:
             Dictionary with cache stats or None if cache disabled
         """
-        if self.cache:
-            return self.cache.get_stats()
-        return None
+        if not self.cache:
+            return None
+
+        stats = self.cache.get_stats() or {}
+        baseline = getattr(self, "_cache_stats_baseline", {"hits": 0, "misses": 0, "pattern_hits": 0})
+
+        hits = max(0, int(stats.get("hits", 0)) - baseline.get("hits", 0))
+        misses = max(0, int(stats.get("misses", 0)) - baseline.get("misses", 0))
+        pattern_hits = max(0, int(stats.get("pattern_hits", 0)) - baseline.get("pattern_hits", 0))
+
+        total = hits + misses
+        hit_rate = (hits / total * 100.0) if total else 0.0
+
+        adjusted_stats = dict(stats)
+        adjusted_stats.update({
+            "hits": hits,
+            "misses": misses,
+            "pattern_hits": pattern_hits,
+            "total": total,
+            "hit_rate": hit_rate,
+        })
+        return adjusted_stats
     
     def clear_cache(self):
         """Clear bytecode cache"""
         if self.cache:
             self.cache.clear()
+            self._cache_stats_baseline = {"hits": 0, "misses": 0, "pattern_hits": 0}
     
     def invalidate_cache(self, node):
         """Invalidate cached bytecode for a node"""
@@ -1073,6 +1176,7 @@ class EvaluatorBytecodeCompiler:
         """Reset cache statistics"""
         if self.cache:
             self.cache.reset_stats()
+            self._cache_stats_baseline = self._snapshot_cache_stats()
     
     def cache_size(self) -> int:
         """Get current cache size"""

@@ -66,9 +66,6 @@ export contract Block {
     }
 
     action mine_block() {
-        if logging_enabled {
-            print("Mining block " + string(index) + " with " + string(len(transactions)) + " transactions")
-        }
         let start_time = time()
         let attempts = 0
 
@@ -87,9 +84,6 @@ export contract Block {
         }
 
         let elapsed_ms = time() - start_time
-        if logging_enabled {
-            print("Block " + string(index) + " sealed at nonce " + string(nonce))
-        }
 
         return {
             hash: hash,
@@ -258,7 +252,9 @@ export contract Blockchain {
         account_index = empty_account_index;
         let empty_validators = [];
         validators = empty_validators;
-        print("[TRACE] reset_state validators_len=" + string(len(validators)))
+        if logging_enabled {
+            print("[TRACE] reset_state validators_len=" + string(len(validators)))
+        }
         let empty_events = [];
         events = empty_events;
         events_enabled = true
@@ -472,7 +468,9 @@ export contract Blockchain {
             })
         }
 
-        print("Loaded " + string(len(genesis_alloc)) + " genesis accounts")
+        if logging_enabled {
+            print("Loaded " + string(len(genesis_alloc)) + " genesis accounts")
+        }
         this._refresh_balances_integrity()
         this._record_storage_checkpoint("bootstrap", finalized_height, {
             "accounts": len(genesis_alloc)
@@ -568,7 +566,9 @@ export contract Blockchain {
         let idx = 0
         while idx < len(validators) {
             let existing = validators[idx]
-            print("[TRACE] register scan idx=" + string(idx) + " target=" + address + " existing=" + string(existing["address"]) + " active=" + string(existing["active"]))
+            if logging_enabled {
+                print("[TRACE] register scan idx=" + string(idx) + " target=" + address + " existing=" + string(existing["address"]) + " active=" + string(existing["active"]))
+            }
             if existing["address"] == address && existing["active"] == true {
                 revert("Validator already registered")
             }
@@ -604,7 +604,9 @@ export contract Blockchain {
         while i < len(validators) {
             let validator = validators[i]
             if validator["address"] == address {
-                print("[TRACE] record_vote target=" + string(address) + " participated=" + string(participated))
+                if logging_enabled {
+                    print("[TRACE] record_vote target=" + string(address) + " participated=" + string(participated))
+                }
                 let votes_value = validator["votes"]
                 if votes_value == null {
                     votes_value = 0
@@ -631,7 +633,9 @@ export contract Blockchain {
                     new_votes
                 )
                 this._set_validator_entry(i, updated_entry)
-                print("[TRACE] record_vote updated votes=" + string(new_votes) + " missed=" + string(new_missed))
+                if logging_enabled {
+                    print("[TRACE] record_vote updated votes=" + string(new_votes) + " missed=" + string(new_missed))
+                }
                 return
             }
             i = i + 1
@@ -862,20 +866,100 @@ export contract Blockchain {
     }
 
     action select_transactions(max_items) limit 40000 {
-        // O(n log n) sort by fee descending, then take first max_items
-        let sorted_txs = sort(pending_transactions, "fee", true)
-        let count = len(sorted_txs)
-        if count > max_items {
-            count = max_items
+        if max_items == null {
+            max_items = 0
         }
-        let selected = slice(sorted_txs, 0, count)
-        pending_transactions = slice(sorted_txs, count, len(sorted_txs))
-        
-        // Rebuild pending_nonces cache for remaining transactions
-        let fresh_pending_nonces = {}
+
+        let total_pending = len(pending_transactions)
+        if total_pending == 0 {
+            return []
+        }
+
+        if max_items <= 0 {
+            return []
+        }
+
+        if max_items > total_pending {
+            max_items = total_pending
+        }
+
+        let selected = []
+        let remainder = []
         let i = 0
-        while i < len(pending_transactions) {
+        while i < total_pending {
             let tx = pending_transactions[i]
+            let fee_value = tx["fee"]
+            if fee_value == null {
+                fee_value = 0
+            }
+
+            if len(selected) < max_items {
+                selected = append(selected, tx)
+            } else {
+                let min_index = 0
+                let min_fee = selected[0]["fee"]
+                if min_fee == null {
+                    min_fee = 0
+                }
+
+                let j = 1
+                while j < len(selected) {
+                    let candidate_fee = selected[j]["fee"]
+                    if candidate_fee == null {
+                        candidate_fee = 0
+                    }
+                    if candidate_fee < min_fee {
+                        min_fee = candidate_fee
+                        min_index = j
+                    }
+                    j = j + 1
+                }
+
+                if fee_value > min_fee {
+                    remainder = append(remainder, selected[min_index])
+                    selected[min_index] = tx
+                } else {
+                    remainder = append(remainder, tx)
+                }
+            }
+
+            i = i + 1
+        }
+
+        // Insertion sort to keep selection ordered by fee descending
+        let s = 1
+        while s < len(selected) {
+            let current = selected[s]
+            let pos = s - 1
+            let current_fee = current["fee"]
+            if current_fee == null {
+                current_fee = 0
+            }
+
+            while pos >= 0 {
+                let compare = selected[pos]
+                let compare_fee = compare["fee"]
+                if compare_fee == null {
+                    compare_fee = 0
+                }
+                if compare_fee >= current_fee {
+                    break
+                }
+                selected[pos + 1] = selected[pos]
+                pos = pos - 1
+            }
+
+            selected[pos + 1] = current
+            s = s + 1
+        }
+
+        pending_transactions = remainder
+
+        // Rebuild pending nonce cache from remaining transactions
+        let fresh_pending_nonces = {}
+        let r = 0
+        while r < len(remainder) {
+            let tx = remainder[r]
             let addr = tx["from"]
             let n = tx["nonce"]
             if n != null {
@@ -888,10 +972,10 @@ export contract Blockchain {
                     }
                 }
             }
-            i = i + 1
+            r = r + 1
         }
         _pending_nonces = fresh_pending_nonces
-        
+
         return selected
     }
 
@@ -1310,7 +1394,9 @@ export contract Blockchain {
                 validator["missed"] = new_missed
                 this._set_validator_entry(idx, validator)
                 let check_entry = validators[idx]
-                print("[TRACE] slashing_update address=" + address + " pre=" + string(stake_value) + " post=" + string(check_entry["stake"]))
+                if logging_enabled {
+                    print("[TRACE] slashing_update address=" + address + " pre=" + string(stake_value) + " post=" + string(check_entry["stake"]))
+                }
                 _stakes[address] = new_stake
                 stake_after = new_stake
                 if slash_amount > 0 {
@@ -1656,30 +1742,24 @@ export contract Blockchain {
 
         let k = 0
         while k < len(requeue) {
-            pending_transactions = append(pending_transactions, requeue[k])
-            k = k + 1
-        }
+            let tx_requeue = requeue[k]
+            pending_transactions = append(pending_transactions, tx_requeue)
 
-        // Refresh pending nonce cache after processing this block
-        let refreshed_pending = {}
-        let r = 0
-        while r < len(pending_transactions) {
-            let tx = pending_transactions[r]
-            let addr = tx["from"]
-            let n = tx["nonce"]
-            if n != null {
-                let current = refreshed_pending[addr]
-                if current == null {
-                    refreshed_pending[addr] = n
+            let addr_requeue = tx_requeue["from"]
+            let nonce_requeue = tx_requeue["nonce"]
+            if nonce_requeue != null {
+                let cached_nonce = _pending_nonces[addr_requeue]
+                if cached_nonce == null {
+                    _pending_nonces[addr_requeue] = nonce_requeue
                 } else {
-                    if n > current {
-                        refreshed_pending[addr] = n
+                    if nonce_requeue > cached_nonce {
+                        _pending_nonces[addr_requeue] = nonce_requeue
                     }
                 }
             }
-            r = r + 1
+
+            k = k + 1
         }
-        _pending_nonces = refreshed_pending
 
         let block = Block()
         block.initialize(new_height, applied, latest_info.hash, difficulty)

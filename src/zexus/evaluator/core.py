@@ -988,9 +988,70 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         def _vm_load(node_ref):
             return self.eval_load_expression(node_ref, env, stack_trace=[])
 
+        def _vm_use_module(spec):
+            if spec is None:
+                return NULL
+            try:
+                from .. import zexus_ast
+
+                file_path = spec.get("file", "") if isinstance(spec, dict) else ""
+                alias_raw = spec.get("alias") if isinstance(spec, dict) else None
+                names_raw = spec.get("names") if isinstance(spec, dict) else []
+                is_named = bool(spec.get("is_named")) if isinstance(spec, dict) else False
+
+                alias_node = zexus_ast.Identifier(alias_raw) if alias_raw else None
+                name_nodes = []
+                if isinstance(names_raw, list):
+                    for name in names_raw:
+                        if name:
+                            name_nodes.append(zexus_ast.Identifier(name))
+
+                use_node = zexus_ast.UseStatement(
+                    file_path,
+                    alias=alias_node,
+                    names=name_nodes,
+                    is_named_import=is_named
+                )
+                return self.eval_use_statement(use_node, env, stack_trace=[])
+            except Exception as exc:
+                return EvaluationError(str(exc))
+
+        def _vm_from_module(spec):
+            if spec is None:
+                return NULL
+            try:
+                from .. import zexus_ast
+
+                file_path = spec.get("file", "") if isinstance(spec, dict) else ""
+                raw_imports = spec.get("imports") if isinstance(spec, dict) else []
+
+                imports = []
+                if isinstance(raw_imports, list):
+                    for entry in raw_imports:
+                        if isinstance(entry, dict):
+                            name = entry.get("name")
+                            alias = entry.get("alias")
+                        elif isinstance(entry, (list, tuple)):
+                            name = entry[0] if len(entry) > 0 else None
+                            alias = entry[1] if len(entry) > 1 else None
+                        else:
+                            name = entry
+                            alias = None
+
+                        name_node = zexus_ast.Identifier(name) if name else None
+                        alias_node = zexus_ast.Identifier(alias) if alias else None
+                        imports.append((name_node, alias_node))
+
+                from_node = zexus_ast.FromStatement(file_path, imports=imports)
+                return self.eval_from_statement(from_node, env, stack_trace=[])
+            except Exception as exc:
+                return EvaluationError(str(exc))
+
         return {
             "__keyword_find__": Builtin(_vm_find, "__keyword_find__"),
             "__keyword_load__": Builtin(_vm_load, "__keyword_load__"),
+            "__vm_use_module__": Builtin(_vm_use_module, "__vm_use_module__"),
+            "__vm_from_module__": Builtin(_vm_from_module, "__vm_from_module__"),
         }
 
     def _env_to_dict(self, env):

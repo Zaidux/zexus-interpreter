@@ -41,10 +41,10 @@ class WorkloadDetector:
         self.function_calls: Dict[str, int] = {}  # func_name -> call count
         self.hot_functions: set = set()
         
-        # Workload classification thresholds
-        self.vm_threshold = 500       # Iterations before VM compilation
-        self.jit_threshold = 5000     # Iterations before JIT compilation
-        self.parallel_threshold = 10000  # Iterations before parallel execution
+        # Workload classification thresholds (tuned for faster VM promotion)
+        self.vm_threshold = 120       # Iterations before VM compilation
+        self.jit_threshold = 1200     # Iterations before JIT compilation
+        self.parallel_threshold = 6000  # Iterations before parallel execution
         
         # Statistics
         self.stats = {
@@ -193,6 +193,7 @@ class UnifiedExecutor:
         self.compiled_loops: Dict[int, Any] = {}  # loop_id -> bytecode
         self.compiled_functions: Dict[str, Any] = {}  # func_name -> bytecode
         self.jit_compiled: Dict[int, Any] = {}  # loop_id -> native code
+        self._force_vm_loops: set[int] = set()  # loop_ids promoted immediately
         
         # VM instance (lazy init)
         self.vm = None
@@ -256,6 +257,25 @@ class UnifiedExecutor:
         # method calls on contracts / smart objects), pin this loop to interpreter only.
         if self.vm_enabled and not self._is_vm_safe_loop(body_node):
             self.failed_compilations.add(loop_id)
+
+        # Fast-path: promote obviously hot loops before iteration threshold
+        force_vm_loop = loop_id in self._force_vm_loops
+        if (
+            self.vm_enabled
+            and loop_id not in self.failed_compilations
+            and loop_id not in self.compiled_loops
+            and not force_vm_loop
+        ):
+            try:
+                from .bytecode_compiler import should_use_vm_for_node
+
+                if should_use_vm_for_node(body_node):
+                    promoted = self._compile_loop(loop_id, body_node, env)
+                    if promoted:
+                        self._force_vm_loops.add(loop_id)
+                        force_vm_loop = True
+            except ImportError:
+                force_vm_loop = loop_id in self._force_vm_loops
         
         while True:
             # CRITICAL: Resource limit check (prevents infinite loops)
@@ -271,6 +291,7 @@ class UnifiedExecutor:
             
             # Track iteration
             info = self.workload.track_loop_iteration(loop_id)
+            force_vm_loop = loop_id in self._force_vm_loops or force_vm_loop
             
             # Check condition
             cond = self.evaluator.eval_node(condition_node, env, stack_trace)
@@ -283,7 +304,12 @@ class UnifiedExecutor:
                 break
             
             # Decide execution method
-            if info["should_compile"] and self.vm_enabled:
+            if (
+                info["should_compile"]
+                and self.vm_enabled
+                and loop_id not in self.compiled_loops
+                and loop_id not in self.failed_compilations
+            ):
                 # Just hit threshold - compile now
                 success = self._compile_loop(loop_id, body_node, env)
                 
@@ -295,7 +321,13 @@ class UnifiedExecutor:
                     self.failed_compilations.add(loop_id)
             
             # Execute body
-            if info["use_vm"] and loop_id in self.compiled_loops and loop_id not in self.failed_compilations:
+            use_vm_now = (
+                loop_id in self.compiled_loops
+                and loop_id not in self.failed_compilations
+                and (force_vm_loop or info["use_vm"])
+            )
+
+            if use_vm_now:
                 # Use VM
                 result = self._execute_via_vm(loop_id, env)
                 self.stats["vm_hits"] += 1
@@ -344,7 +376,7 @@ class UnifiedExecutor:
             profile_verbose = profile_active and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
             
             # Try evaluator's bytecode compiler first (better integration)
-            compiler = EvaluatorBytecodeCompiler()
+            compiler = EvaluatorBytecodeCompiler(use_cache=False)
             bytecode = compiler.compile(body_node, optimize=True)
             
             if bytecode and not compiler.errors:
