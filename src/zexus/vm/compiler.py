@@ -54,8 +54,25 @@ class BytecodeCompiler:
         
         self._compile_node(node)
         
+        self._resolve_labels()
+        
         return Bytecode(self.instructions, self.constants)
     
+    def _resolve_labels(self):
+        """Resolve label strings to instruction indices"""
+        labels = {}
+        
+        # 1. Map labels
+        for i, (op, operand) in enumerate(self.instructions):
+            if op == Opcode.NOP and isinstance(operand, str) and operand.startswith('L'):
+                labels[operand] = i
+        
+        # 2. Update jumps
+        for i, (op, operand) in enumerate(self.instructions):
+            if op in (Opcode.JUMP, Opcode.JUMP_IF_FALSE, Opcode.JUMP_IF_TRUE):
+                if isinstance(operand, str) and operand in labels:
+                    self.instructions[i] = (op, labels[operand])
+
     def _add_constant(self, value) -> int:
         """Add constant to pool, return index"""
         # Deduplicate constants
@@ -300,6 +317,8 @@ class BytecodeCompiler:
         self._emit(Opcode.NOP)
         self.instructions[-1] = (Opcode.NOP, end_label)
     
+    _compile_IfStatement = _compile_IfExpression
+
     def _compile_WhileStatement(self, node):
         """Compile while loop"""
         start_label = self._make_label()
@@ -423,6 +442,8 @@ class BytecodeCompiler:
         count = len(node.elements)
         self._emit(Opcode.BUILD_LIST, count)
     
+    _compile_ListLiteral = _compile_ArrayLiteral
+
     def _compile_MapLiteral(self, node):
         """Compile map/dictionary literal"""
         # Compile key-value pairs
@@ -448,6 +469,17 @@ class BytecodeCompiler:
         self._compile_node(node.index)
         self._emit(Opcode.INDEX)
 
+    def _compile_PropertyAccessExpression(self, node):
+        """Compile dot notation: obj.prop -> obj['prop']"""
+        self._compile_node(node.object)
+        
+        # Property is usually an Identifier, but for access we want the string name
+        prop_name = node.property.value if hasattr(node.property, 'value') else str(node.property)
+        prop_idx = self._add_constant(prop_name)
+        self._emit(Opcode.LOAD_CONST, prop_idx)
+        
+        self._emit(Opcode.INDEX)
+
     # ==================== Advanced Control Flow & Declarations ====================
 
     def _compile_ActionStatement(self, node):
@@ -464,7 +496,9 @@ class BytecodeCompiler:
         func_compiler._emit(Opcode.RETURN)
         
         # Get bytecode
-        func_bytecode = func_compiler.bytecode
+        from .bytecode import Bytecode
+        func_compiler._resolve_labels()
+        func_bytecode = Bytecode(func_compiler.instructions, func_compiler.constants)
         
         # Prepare function descriptor
         params = [p.value if hasattr(p, 'value') else str(p) for p in node.parameters]
@@ -854,8 +888,12 @@ class BytecodeCompiler:
             # Note: AST might call it 'pattern' or something else depending on Case node type
             pattern_node = getattr(case, 'pattern', None)
             if pattern_node:
-                if hasattr(pattern_node, 'value'): 
-                    self._compile_node(pattern_node)
+                # LiteralPattern holds a literal node in .value
+                if isinstance(pattern_node, zexus_ast.LiteralPattern):
+                    self._compile_node(pattern_node.value)
+                # Wildcard/Variable patterns always match; skip pattern compilation
+                elif isinstance(pattern_node, (zexus_ast.WildcardPattern, zexus_ast.VariablePattern)):
+                    pass
                 else:
                     self._compile_node(pattern_node)
             
@@ -870,8 +908,8 @@ class BytecodeCompiler:
             self._emit(Opcode.POP)
             
             # Execute Action/Consequence
-            # MatchExpression uses 'consequence', PatternStatement uses 'action'
-            body = getattr(case, 'consequence', getattr(case, 'action', None))
+            # MatchExpression uses 'consequence', PatternStatement uses 'action', MatchCase uses 'result'
+            body = getattr(case, 'consequence', getattr(case, 'action', getattr(case, 'result', None)))
             self._compile_node(body)
             self._emit(Opcode.JUMP, end_label)
             

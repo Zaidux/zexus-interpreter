@@ -190,6 +190,8 @@ SIMD = "SIMD"                # Vector operations: simd(operation, vector1, vecto
 DEFER = "DEFER"              # Cleanup code execution: defer cleanup_code;
 PATTERN = "PATTERN"          # Pattern matching: pattern value { case x => ...; }
 MATCH = "MATCH"              # Match expression: match value { Point(x, y) => ... }
+CASE = "CASE"                # Case clause in match/pattern
+DEFAULT = "DEFAULT"          # Default case in match
 
 # ADVANCED FEATURES TOKENS
 ENUM = "ENUM"                # Type-safe enumerations: enum Color { Red, Green, Blue }

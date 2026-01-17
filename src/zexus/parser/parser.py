@@ -89,6 +89,7 @@ class UltimateParser:
             SANITIZE: self.parse_sanitize_expression,  # FIX #4: Support sanitize as expression
             FIND: self.parse_find_expression,
             LOAD: self.parse_load_expression,
+            MATCH: self.parse_match_expression,
         }
         self.infix_parse_fns = {
             PLUS: self.parse_infix_expression,
@@ -3515,6 +3516,65 @@ class UltimateParser:
             i += 1
 
         return None
+
+    def parse_match_expression(self):
+        """Parse match expression: match value { case p: r, ... }"""
+        # MatchExpression in zexus_ast.py takes (value, cases), no token argument
+        print(f"DEBUG: Entering parse_match_expression, cur={self.cur_token}, peek={self.peek_token}")
+        expression = MatchExpression(value=None, cases=[])
+        
+        self.next_token() # Consume MATCH
+        
+        expression.value = self.parse_expression(LOWEST)
+        print(f"DEBUG: Parsed match value: {expression.value}, peek={self.peek_token}")
+        
+        if not self.expect_peek(LBRACE):
+            print("DEBUG: Expected LBRACE failed")
+            return None
+            
+        while not self.peek_token_is(RBRACE) and not self.peek_token_is(EOF):
+            if self.peek_token_is(CASE):
+                self.next_token() # Consume CASE
+
+                # Move to pattern token
+                if not self.peek_token_is(COLON):
+                    self.next_token()
+
+                # Pattern expression (e.g. 1, "text", or _)
+                pattern = self.parse_expression(LOWEST)
+                
+                if not self.expect_peek(COLON):
+                    return None
+                
+                # Result
+                result = None
+                if self.peek_token_is(LBRACE):
+                    if not self.expect_peek(LBRACE):
+                        return None
+                    result = self.parse_block_statement()
+                else:
+                    # Move to result expression
+                    self.next_token()
+                    result = self.parse_expression(LOWEST)
+                    # Optional separator
+                    if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                        self.next_token()
+                
+                # Add case
+                # Note: MatchCase class in AST needs to be instantiated.
+                # Assuming MatchCase is imported from zexus_ast
+                case = MatchCase(pattern=pattern, result=result)
+                expression.cases.append(case)
+            else:
+                # Skip invalid tokens or comments?
+                print(f"DEBUG: Skipping unexpected token inside match: {self.peek_token}")
+                self.next_token()
+        
+        if not self.expect_peek(RBRACE):
+            print("DEBUG: Expected RBRACE failed")
+            return None
+            
+        return expression
 
     def parse_if_expression(self):
         """Parse if expression - handles both statement form and expression form

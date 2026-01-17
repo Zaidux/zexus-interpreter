@@ -4969,14 +4969,81 @@ class ContextStackParser:
         
         # Parse match cases
         cases = []
+
+        # Support case/colon syntax when present
+        if any(t.type in {CASE, DEFAULT} for t in body_tokens):
+            i = 0
+            while i < len(body_tokens):
+                if body_tokens[i].type in {COMMA, SEMICOLON}:
+                    i += 1
+                    continue
+
+                pattern = None
+
+                if body_tokens[i].type == DEFAULT:
+                    pattern = WildcardPattern()
+                    i += 1
+                    if i < len(body_tokens) and body_tokens[i].type == COLON:
+                        i += 1
+                elif body_tokens[i].type == CASE:
+                    i += 1
+                    pattern_start = i
+                    depth = 0
+                    while i < len(body_tokens):
+                        t = body_tokens[i]
+                        if t.type in {LPAREN, LBRACE, LBRACKET}:
+                            depth += 1
+                        elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                            depth -= 1
+                        elif t.type == COLON and depth == 0:
+                            break
+                        i += 1
+
+                    colon_idx = i
+                    pattern_tokens = body_tokens[pattern_start:colon_idx]
+                    pattern = self._parse_pattern(pattern_tokens) if pattern_tokens else None
+
+                    if i < len(body_tokens) and body_tokens[i].type == COLON:
+                        i += 1
+                else:
+                    i += 1
+                    continue
+
+                result_start = i
+                depth = 0
+                while i < len(body_tokens):
+                    t = body_tokens[i]
+                    if t.type in {LPAREN, LBRACE, LBRACKET}:
+                        depth += 1
+                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
+                        depth -= 1
+                    elif depth == 0 and t.type in {CASE, DEFAULT}:
+                        break
+                    elif depth == 0 and t.type in {COMMA, SEMICOLON}:
+                        break
+                    i += 1
+
+                result_tokens = body_tokens[result_start:i]
+                result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
+
+                if pattern:
+                    cases.append(MatchCase(pattern=pattern, result=result_expr))
+                    parser_debug(f"  ✅ Parsed match case: {pattern} : {result_expr}")
+
+                while i < len(body_tokens) and body_tokens[i].type in {COMMA, SEMICOLON}:
+                    i += 1
+
+            parser_debug(f"  ✅ Match expression with {len(cases)} cases")
+            return MatchExpression(value=value_expr, cases=cases)
+
         i = 0
-        
+
         while i < len(body_tokens):
             # Skip commas and semicolons
             if body_tokens[i].type in {COMMA, SEMICOLON}:
                 i += 1
                 continue
-            
+
             # Find the => separator
             arrow_idx = -1
             depth = 0
@@ -4988,25 +5055,25 @@ class ContextStackParser:
                 elif body_tokens[j].type == LAMBDA and depth == 0:  # => is tokenized as LAMBDA
                     arrow_idx = j
                     break
-            
+
             if arrow_idx == -1:
                 # No more cases
                 break
-            
+
             # Parse pattern (from i to arrow_idx)
             pattern_tokens = body_tokens[i:arrow_idx]
             pattern = self._parse_pattern(pattern_tokens)
-            
+
             if not pattern:
                 parser_debug(f"  ❌ Failed to parse pattern: {[t.literal for t in pattern_tokens]}")
                 i = arrow_idx + 1
                 continue
-            
+
             # Find result expression end (comma, semicolon, or next pattern)
             result_start = arrow_idx + 1
             result_end = result_start
             depth = 0
-            
+
             while result_end < len(body_tokens):
                 if body_tokens[result_end].type in {LPAREN, LBRACE, LBRACKET}:
                     depth += 1
@@ -5021,7 +5088,7 @@ class ContextStackParser:
                     # Patterns can start with: INT, STRING, IDENT (for constructor or wildcard)
                     current_tok = body_tokens[result_end]
                     next_tok = body_tokens[result_end + 1]
-                    
+
                     # Pattern: literal => or _  => or Constructor( =>
                     if current_tok.type in {INT, STRING, TRUE, FALSE}:
                         # Look ahead for =>
@@ -5054,18 +5121,18 @@ class ContextStackParser:
                                     lookahead += 1
                                 if lookahead < len(body_tokens) and body_tokens[lookahead].type == LAMBDA:
                                     break  # Start of new constructor pattern
-                
+
                 result_end += 1
-            
+
             # Parse result expression
             result_tokens = body_tokens[result_start:result_end]
             result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
-            
+
             cases.append(MatchCase(pattern=pattern, result=result_expr))
             parser_debug(f"  ✅ Parsed match case: {pattern} => {result_expr}")
-            
+
             i = result_end
-        
+
         parser_debug(f"  ✅ Match expression with {len(cases)} cases")
         return MatchExpression(value=value_expr, cases=cases)
     

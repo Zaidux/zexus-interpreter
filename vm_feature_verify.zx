@@ -1,0 +1,71 @@
+print("--- Starting VM Feature Verification ---")
+
+// 1. Const & Let
+print("\n[1] Testing Declarations")
+let x = 10
+const Y = 20
+print("  x (let):", x)
+print("  Y (const):", Y)
+if (x == 10) { print("  ✅ Let works") }
+if (Y == 20) { print("  ✅ Const works") }
+
+// 2. Functions & Actions
+print("\n[2] Testing Functions")
+action greet(name) {
+    return "Hello " + name
+}
+let greeting = greet("VM")
+print("  Action result:", greeting)
+if (greeting == "Hello VM") { print("  ✅ Action works") }
+
+function add(a, b) {
+    return a + b
+}
+let sum = add(5, 7)
+print("  Function result:", sum)
+if (sum == 12) { print("  ✅ Function works") }
+
+// 3. Control Flow & Continue
+print("\n[3] Testing Loop Continue")
+let i = 0
+let count = 0
+while (i < 5) {
+    i = i + 1
+    if (i == 3) {
+        print("  Skipping 3 via continue")
+        continue
+    }
+    print("  Loop iteration:", i)
+    count = count + 1
+}
+if (count == 4) { print("  ✅ Continue works (skipped 1 iteration)") }
+
+// 4. File Import
+print("\n[4] Testing File Import (<<)")
+// This uses the new Opcode.READ
+let content << "vm_test_data.txt"
+print("  File content read:", content)
+// Note: Opcode.READ implementation in VM is basic, might return raw string including newlines
+if (content) { print("  ✅ File Import works") }
+
+// 5. Advanced Collections
+print("\n[5] Testing Collections")
+let myList = [1, 2, 3]
+let myMap = {"key": "value", "num": 100}
+print("  List:", myList)
+print("  Map:", myMap)
+if (myList[1] == 2) { print("  ✅ List indexing works") }
+if (myMap["key"] == "value") { print("  ✅ Map indexing works") }
+
+// 6. Match (via Equality Pattern)
+print("\n[6] Testing Match")
+let val = 2
+let matchResult = match val {
+    case 1: "one"
+    case 2: "two"
+    case 3: "three"
+}
+print("  Match Result (2):", matchResult)
+if (matchResult == "two") { print("  ✅ Match works") }
+
+print("\n--- Verification Complete ---")

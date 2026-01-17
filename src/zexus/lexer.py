@@ -506,7 +506,8 @@ class Lexer:
             'if', 'elif', 'else', 'while', 'for', 'each', 'in',
             'return', 'break', 'continue', 'throw', 'try', 'catch',
             'await', 'async', 'spawn', 'let', 'const', 'print',
-            'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda'
+            'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda',
+            'case', 'default'
         }
         
         # If this is a strict keyword, always treat as keyword
@@ -723,6 +724,8 @@ class Lexer:
             "defer": DEFER,             # Convenience: cleanup code execution
             "pattern": PATTERN,         # Convenience: pattern matching
             "match": MATCH,             # Match expression for pattern matching
+            "case": CASE,               # Case clause in match/pattern
+            "default": DEFAULT,         # Default case in match
             "enum": ENUM,               # Advanced: type-safe enumerations
             "stream": STREAM,           # Advanced: event streaming
             "watch": WATCH,             # Advanced: reactive state management
