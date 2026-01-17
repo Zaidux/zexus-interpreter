@@ -56,6 +56,12 @@ class BreakException:
     def __repr__(self):
         return "BreakException()"
 
+class ContinueException:
+    """Exception raised when continue statement is encountered in a loop."""
+    def __repr__(self):
+        return "ContinueException()"
+
+
 class StatementEvaluatorMixin:
     """Handles evaluation of statements, flow control, module loading, and security features."""
     
@@ -136,6 +142,14 @@ class StatementEvaluatorMixin:
                     # Execute deferred cleanup before returning
                     self._execute_deferred_cleanup(env, [])
                     return res.value
+                
+                # Check for ContinueException (Top-Level = Enable Error Recovery)
+                if isinstance(res, ContinueException):
+                    self.continue_on_error = True
+                    debug_log("ceval_program", "Enabling error recovery mode via continue")
+                    result = NULL
+                    continue
+
                 if is_error(res):
                     debug_log("  Error encountered", res)
                     try:
@@ -193,7 +207,7 @@ class StatementEvaluatorMixin:
                 res = _resolve_awaitable(res)
                 EVAL_SUMMARY['evaluated_statements'] += 1
                 
-                if isinstance(res, (ReturnValue, BreakException, EvaluationError)):
+                if isinstance(res, (ReturnValue, BreakException, ContinueException, EvaluationError)):
                     debug_log("  Block interrupted", res)
                     if is_error(res):
                         try:
@@ -877,10 +891,9 @@ class StatementEvaluatorMixin:
         return ReturnValue(val)
     
     def eval_continue_statement(self, node, env, stack_trace):
-        """Enable continue-on-error mode for the evaluator."""
-        debug_log("eval_continue_statement", "Enabling error recovery mode")
-        self.continue_on_error = True
-        return NULL
+        """Return ContinueException to signal loop continuation or error recovery."""
+        debug_log("eval_continue_statement", "Signaling continue")
+        return ContinueException()
     
     def eval_break_statement(self, node, env, stack_trace):
         """Return BreakException to signal loop exit."""
@@ -1100,6 +1113,10 @@ class StatementEvaluatorMixin:
             if isinstance(result, BreakException):
                 # Break out of loop, return NULL to continue execution in block
                 return NULL
+            if isinstance(result, ContinueException):
+                # Continue loop iteration
+                result = NULL
+                continue
             if isinstance(result, EvaluationError):
                 return result
     def eval_foreach_statement(self, node, env, stack_trace):
@@ -1129,6 +1146,10 @@ class StatementEvaluatorMixin:
             if isinstance(result, BreakException):
                 # Break out of loop, return NULL to continue execution in block
                 return NULL
+            if isinstance(result, ContinueException):
+                # Continue loop iteration
+                result = NULL
+                continue
             if isinstance(result, EvaluationError):
                 return result
         

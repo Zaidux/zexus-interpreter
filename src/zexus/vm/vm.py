@@ -1187,6 +1187,28 @@ class VM:
             except (TypeError, AttributeError):
                 stack.append(0)
 
+        def _op_read(_):
+            path = stack.pop() if stack else None
+            try:
+                import os
+                if path and os.path.exists(path):
+                    with open(path, 'r') as f:
+                        stack.append(f.read())
+                else:
+                    stack.append(None)
+            except:
+                stack.append(None)
+
+        def _op_import(operand):
+            # Placeholder
+            pass
+
+        def _op_store_func(operand):
+            name_idx, func_idx = operand
+            name = const(name_idx)
+            func = const(func_idx)
+            _store(name, func)
+
         dispatch_table: Dict[str, Callable[[Any], Any]] = {
             "LOAD_CONST": _op_load_const,
             "LOAD_NAME": _op_load_name,
@@ -1217,561 +1239,576 @@ class VM:
             "BUILD_MAP": _op_build_map,
             "INDEX": _op_index,
             "GET_LENGTH": _op_get_length,
+            "READ": _op_read,
+            "IMPORT": _op_import,
+            "STORE_FUNC": _op_store_func,
         }
         async_dispatch_ops = {"CALL_NAME", "CALL_TOP", "CALL_METHOD"}
 
         # 3. Execution Loop
         prev_ip = None
         while running and ip < len(instrs):
-            op, operand = instrs[ip]
-            
-            # Handle Opcode enum: convert to name for comparison
-            if hasattr(op, 'name'):  # Opcode IntEnum
-                op_name = op.name
-            else:  # Already a string
-                op_name = op
-
-            if profile_ops:
-                opcode_counts[op_name] = opcode_counts.get(op_name, 0) + 1
-            
-            if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack.snapshot()}")
-            
-            # Profile instruction (if enabled) - start timing
-            instr_start_time = None
-            if self.enable_profiling and self.profiler and self.profiler.enabled:
-                if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
-                    instr_start_time = time.perf_counter()
-                # Record instruction (count only for BASIC level)
-                self.profiler.record_instruction(ip, op_name, operand, prev_ip, len(stack))
-            
-            prev_ip = ip
-            ip += 1
-
-            # === GAS METERING ===
-            if self.enable_gas_metering and self.gas_metering:
-                # Determine gas cost parameters
-                gas_kwargs = {}
-                if op_name in ("BUILD_LIST", "BUILD_MAP"):
-                    gas_kwargs['count'] = operand if operand is not None else 0
-                elif op_name == "MERKLE_ROOT":
-                    gas_kwargs['leaf_count'] = operand if operand is not None else 0
-                elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD"):
-                    if op_name == "CALL_NAME":
-                        gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
-                    elif op_name == "CALL_TOP":
-                        gas_kwargs['arg_count'] = operand if operand is not None else 0
-                    else:
-                        gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
+            try:
+                op, operand = instrs[ip]
                 
-                # Consume gas for operation
-                if not self.gas_metering.consume(op_name, **gas_kwargs):
-                    # Out of gas!
-                    if self.gas_metering.operation_count > self.gas_metering.max_operations:
-                        raise OperationLimitExceededError(
-                            self.gas_metering.operation_count,
-                            self.gas_metering.max_operations
-                        )
-                    else:
-                        raise OutOfGasError(
-                            self.gas_metering.gas_used,
-                            self.gas_metering.gas_limit,
-                            op_name
-                        )
-
-            handler = dispatch_table.get(op_name)
-            if handler is not None:
-                if op_name in async_dispatch_ops:
-                    await handler(operand)
-                else:
-                    handler(operand)
-                if not running:
-                    break
-                continue
-
-            # --- Basic Stack Ops ---
-            if op_name == "LOAD_CONST":
-                stack.append(const(operand))
-            elif op_name == "LOAD_NAME":
-                name = const(operand)
-                stack.append(_resolve(name))
-            elif op_name == "STORE_NAME":
-                name = const(operand)
-                val = stack.pop() if stack else None
-                _store(name, val)
-                if self.use_memory_manager and val is not None:
-                    self._allocate_managed(val, name=name)
-            elif op_name == "POP":
-                if stack: stack.pop()
-            elif op_name == "DUP":
-                if stack: stack.append(stack[-1])
-            elif op_name == "PRINT":
-                val = stack.pop() if stack else None
-                print(val)
-            
-            # --- Function/Closure Ops ---
-            elif op_name == "STORE_FUNC":
-                name_idx, func_idx = operand
-                name = const(name_idx)
-                func_desc = const(func_idx)
-                # Create func descriptor, capturing current VM as parent
-                func_desc_copy = dict(func_desc) if isinstance(func_desc, dict) else {"bytecode": func_desc}
-                closure_snapshot = {}
-                # Snapshot current environment (excluding internal keys)
-                for key, value in self.env.items():
-                    if isinstance(key, str) and key.startswith("_"):
-                        continue
-                    closure_snapshot[key] = value
-                # Include existing closure cells if present
-                for key, cell in self._closure_cells.items():
-                    if key not in closure_snapshot:
-                        closure_snapshot[key] = cell.value
-                if closure_snapshot:
-                    func_desc_copy["closure_snapshot"] = closure_snapshot
-                func_desc_copy["parent_vm"] = self
-                self.env[name] = func_desc_copy
-            
-            elif op_name == "CALL_NAME":
-                name_idx, arg_count = operand
-                func_name = const(name_idx)
-                args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
-                fn = _resolve(func_name) or self.builtins.get(func_name)
-                if fn is None:
-                    res = self._call_fallback_builtin(func_name, args)
-                else:
-                    res = await self._invoke_callable_or_funcdesc(fn, args)
-                stack.append(res)
-            
-            elif op_name == "CALL_TOP":
-                arg_count = operand
-                args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
-                fn_obj = stack.pop() if stack else None
-                res = await self._invoke_callable_or_funcdesc(fn_obj, args)
-                stack.append(res)
-
-            # --- Arithmetic & Logic ---
-            elif op_name == "ADD":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                # Auto-unwrap evaluator objects
-                if hasattr(a, 'value'): a = a.value
-                if hasattr(b, 'value'): b = b.value
-                stack.append(a + b)
-            elif op_name == "SUB":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                if hasattr(a, 'value'): a = a.value
-                if hasattr(b, 'value'): b = b.value
-                stack.append(a - b)
-            elif op_name == "MUL":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                if hasattr(a, 'value'): a = a.value
-                if hasattr(b, 'value'): b = b.value
-                stack.append(a * b)
-            elif op_name == "DIV":
-                b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
-                if hasattr(a, 'value'): a = a.value
-                if hasattr(b, 'value'): b = b.value
-                stack.append(a / b if b != 0 else 0)
-            elif op_name == "MOD":
-                b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
-                stack.append(a % b if b != 0 else 0)
-            elif op_name == "POW":
-                b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
-                stack.append(a ** b)
-            elif op_name == "NEG":
-                a = stack.pop() if stack else 0
-                stack.append(-a)
-            elif op_name == "EQ":
-                b = stack.pop() if stack else None; a = stack.pop() if stack else None
-                stack.append(a == b)
-            elif op_name == "NEQ":
-                b = stack.pop() if stack else None; a = stack.pop() if stack else None
-                stack.append(a != b)
-            elif op_name == "LT":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                stack.append(a < b)
-            elif op_name == "GT":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                stack.append(a > b)
-            elif op_name == "LTE":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                stack.append(a <= b)
-            elif op_name == "GTE":
-                b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                stack.append(a >= b)
-            elif op_name == "NOT":
-                a = stack.pop() if stack else False
-                stack.append(not a)
-
-            # --- Control Flow ---
-            elif op_name == "JUMP":
-                ip = operand
-            elif op_name == "JUMP_IF_FALSE":
-                cond = stack.pop() if stack else None
-                if not cond: ip = operand
-            elif op_name == "RETURN":
-                return stack.pop() if stack else None
-
-            # --- Collections ---
-            elif op_name == "BUILD_LIST":
-                count = operand if operand is not None else 0
-                elements = [stack.pop() for _ in range(count)][::-1]
-                stack.append(elements)
-            elif op_name == "BUILD_MAP":
-                count = operand if operand is not None else 0
-                result = {}
-                for _ in range(count):
-                    val = stack.pop(); key = stack.pop()
-                    result[key] = val
-                stack.append(result)
-            elif op_name == "INDEX":
-                idx = stack.pop(); obj = stack.pop()
-                try: stack.append(obj[idx] if obj is not None else None)
-                except (IndexError, KeyError, TypeError): stack.append(None)
-            elif op_name == "GET_LENGTH":
-                obj = stack.pop()
-                try:
-                    if obj is None:
-                        stack.append(0)
-                    elif hasattr(obj, '__len__'):
-                        stack.append(len(obj))
-                    else:
-                        stack.append(0)
-                except (TypeError, AttributeError):
-                    stack.append(0)
-
-            # --- Async & Events ---
-            elif op_name == "SPAWN":
-                # operand: tuple ("CALL", func_name, arg_count) OR index
-                task_handle = None
-                if isinstance(operand, tuple) and operand[0] == "CALL":
-                    fn_name = operand[1]; arg_count = operand[2]
-                    args = [stack.pop() for _ in range(arg_count)][::-1]
-                    fn = self.builtins.get(fn_name) or self.env.get(fn_name)
-                    coro = self._to_coro(fn, args)
-                    
-                    # Use async optimizer if available
-                    if self.async_optimizer:
-                        coro = self.async_optimizer.spawn(coro)
-                        task = asyncio.create_task(coro)
-                    else:
-                        task = asyncio.create_task(coro)
-                    
-                    self._task_counter += 1
-                    tid = f"task_{self._task_counter}"
-                    self._tasks[tid] = task
-                    task_handle = tid
-                stack.append(task_handle)
-
-            elif op_name == "AWAIT":
-                # Keep popping until we find a task to await
-                result_found = False
-                temp_stack = self.allocate_list(0)
+                # Handle Opcode enum: convert to name for comparison
+                if hasattr(op, 'name'):  # Opcode IntEnum
+                    op_name = op.name
+                else:  # Already a string
+                    op_name = op
+    
+                if profile_ops:
+                    opcode_counts[op_name] = opcode_counts.get(op_name, 0) + 1
                 
-                while stack and not result_found:
-                    top = stack.pop()
-                    
-                    if isinstance(top, str) and top in self._tasks:
-                        # Use async optimizer if available
-                        if self.async_optimizer:
-                            res = await self.async_optimizer.await_optimized(self._tasks[top])
+                if debug: print(f"[VM SL] ip={ip} op={op} operand={operand} stack={stack.snapshot()}")
+                
+                # Profile instruction (if enabled) - start timing
+                instr_start_time = None
+                if self.enable_profiling and self.profiler and self.profiler.enabled:
+                    if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
+                        instr_start_time = time.perf_counter()
+                    # Record instruction (count only for BASIC level)
+                    self.profiler.record_instruction(ip, op_name, operand, prev_ip, len(stack))
+                
+                prev_ip = ip
+                ip += 1
+    
+                # === GAS METERING ===
+                if self.enable_gas_metering and self.gas_metering:
+                    # Determine gas cost parameters
+                    gas_kwargs = {}
+                    if op_name in ("BUILD_LIST", "BUILD_MAP"):
+                        gas_kwargs['count'] = operand if operand is not None else 0
+                    elif op_name == "MERKLE_ROOT":
+                        gas_kwargs['leaf_count'] = operand if operand is not None else 0
+                    elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD"):
+                        if op_name == "CALL_NAME":
+                            gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
+                        elif op_name == "CALL_TOP":
+                            gas_kwargs['arg_count'] = operand if operand is not None else 0
                         else:
-                            res = await self._tasks[top]
-                        # Push back any non-task values we skipped
-                        for val in reversed(temp_stack):
-                            stack.append(val)
-                        stack.append(res)
-                        result_found = True
-                    elif asyncio.iscoroutine(top) or isinstance(top, asyncio.Future):
-                        # Use async optimizer if available
-                        if self.async_optimizer:
-                            res = await self.async_optimizer.await_optimized(top)
+                            gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
+                    
+                    # Consume gas for operation
+                    if not self.gas_metering.consume(op_name, **gas_kwargs):
+                        # Out of gas!
+                        if self.gas_metering.operation_count > self.gas_metering.max_operations:
+                            raise OperationLimitExceededError(
+                                self.gas_metering.operation_count,
+                                self.gas_metering.max_operations
+                            )
                         else:
-                            res = await top
-                        # Push back any non-task values we skipped
-                        for val in reversed(temp_stack):
-                            stack.append(val)
-                        stack.append(res)
-                        result_found = True
+                            raise OutOfGasError(
+                                self.gas_metering.gas_used,
+                                self.gas_metering.gas_limit,
+                                op_name
+                            )
+    
+                handler = dispatch_table.get(op_name)
+                if handler is not None:
+                    if op_name in async_dispatch_ops:
+                        await handler(operand)
                     else:
-                        # Not a task, save it and keep looking
-                        temp_stack.append(top)
+                        handler(operand)
+                    if not running:
+                        break
+                    continue
+    
+                # --- Basic Stack Ops ---
+                if op_name == "LOAD_CONST":
+                    stack.append(const(operand))
+                elif op_name == "LOAD_NAME":
+                    name = const(operand)
+                    stack.append(_resolve(name))
+                elif op_name == "STORE_NAME":
+                    name = const(operand)
+                    val = stack.pop() if stack else None
+                    _store(name, val)
+                    if self.use_memory_manager and val is not None:
+                        self._allocate_managed(val, name=name)
+                elif op_name == "POP":
+                    if stack: stack.pop()
+                elif op_name == "DUP":
+                    if stack: stack.append(stack[-1])
+                elif op_name == "PRINT":
+                    val = stack.pop() if stack else None
+                    print(val)
                 
-                # If no task was found, put everything back
-                if not result_found:
-                    for val in reversed(temp_stack):
-                        stack.append(val)
-
-                if temp_stack:
-                    temp_stack.clear()
-                self.release_list(temp_stack)
-
-            elif op_name == "REGISTER_EVENT":
-                event_parts = operand if isinstance(operand, (list, tuple)) else (operand,)
-                event_name = const(event_parts[0]) if event_parts else None
-                handler = const(event_parts[1]) if len(event_parts) > 1 else None
-                if event_name is not None:
-                    handlers = self._events.setdefault(event_name, [])
-                    if handler and handler not in handlers:
-                        handlers.append(handler)
-
-            elif op_name == "EMIT_EVENT":
-                event_ref = const(operand[0]) if operand else None
-                payload_ref = None
-                event_name = event_ref
-                if isinstance(event_ref, (list, tuple)) and event_ref:
-                    event_name = event_ref[0]
-                    if len(event_ref) > 1:
-                        payload_ref = event_ref[1]
-
-                payload = None
-                if stack:
-                    payload = stack.pop()
-                elif payload_ref is not None:
-                    payload = const(payload_ref)
-                elif isinstance(operand, (list, tuple)) and len(operand) > 1:
-                    payload = const(operand[1])
-
-                payload = _unwrap(payload)
-
-                handlers = self._events.get(event_name, [])
-                for h in handlers:
-                    fn = self.builtins.get(h) or self.env.get(h)
+                # --- Function/Closure Ops ---
+                elif op_name == "STORE_FUNC":
+                    name_idx, func_idx = operand
+                    name = const(name_idx)
+                    func_desc = const(func_idx)
+                    # Create func descriptor, capturing current VM as parent
+                    func_desc_copy = dict(func_desc) if isinstance(func_desc, dict) else {"bytecode": func_desc}
+                    closure_snapshot = {}
+                    # Snapshot current environment (excluding internal keys)
+                    for key, value in self.env.items():
+                        if isinstance(key, str) and key.startswith("_"):
+                            continue
+                        closure_snapshot[key] = value
+                    # Include existing closure cells if present
+                    for key, cell in self._closure_cells.items():
+                        if key not in closure_snapshot:
+                            closure_snapshot[key] = cell.value
+                    if closure_snapshot:
+                        func_desc_copy["closure_snapshot"] = closure_snapshot
+                    func_desc_copy["parent_vm"] = self
+                    self.env[name] = func_desc_copy
+                
+                elif op_name == "CALL_NAME":
+                    name_idx, arg_count = operand
+                    func_name = const(name_idx)
+                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    fn = _resolve(func_name) or self.builtins.get(func_name)
                     if fn is None:
-                        continue
-                    await self._call_builtin_async_obj(fn, [payload], wrap_args=False)
-
-            elif op_name == "IMPORT":
-                mod_name = const(operand[0])
-                alias = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else None
-                try:
-                    mod = importlib.import_module(mod_name)
-                    self.env[alias or mod_name] = mod
-                except Exception:
-                    self.env[alias or mod_name] = None
-
-            elif op_name == "DEFINE_ENUM":
-                enum_name = _unwrap(const(operand[0]))
-                enum_map = const(operand[1])
-                self.env.setdefault("enums", {})[enum_name] = enum_map
-                self.env[enum_name] = enum_map
-
-            elif op_name == "ASSERT_PROTOCOL":
-                obj_name = const(operand[0])
-                spec = const(operand[1])
-                obj = self.env.get(obj_name)
-                ok = True
-                missing = []
-                for m in spec.get("methods", []):
-                    if not hasattr(obj, m):
-                        ok = False; missing.append(m)
-                stack.append((ok, missing))
-
-            # --- Blockchain Specific Opcodes ---
-            
-            elif op_name == "HASH_BLOCK":
-                block_data = stack.pop() if stack else ""
-                if isinstance(block_data, dict):
-                    import json; block_data = json.dumps(block_data, sort_keys=True)
-                if not isinstance(block_data, (bytes, str)): block_data = str(block_data)
-                if isinstance(block_data, str): block_data = block_data.encode('utf-8')
-                stack.append(hashlib.sha256(block_data).hexdigest())
-
-            elif op_name == "VERIFY_SIGNATURE":
-                if len(stack) >= 3:
-                    pk = stack.pop(); msg = stack.pop(); sig = stack.pop()
-                    verify_fn = self.builtins.get("verify_sig") or self.env.get("verify_sig")
-                    if verify_fn:
-                        res = await self._invoke_callable_or_funcdesc(verify_fn, [sig, msg, pk])
-                        stack.append(res)
+                        res = self._call_fallback_builtin(func_name, args)
                     else:
-                        # Fallback for testing
-                        expected = hashlib.sha256(str(msg).encode()).hexdigest()
-                        stack.append(sig == expected)
-                else:
-                    stack.append(False)
-
-            elif op_name == "MERKLE_ROOT":
-                leaf_count = operand if operand is not None else 0
-                if leaf_count <= 0:
-                    stack.append("")
-                else:
-                    leaves = [stack.pop() for _ in range(leaf_count)][::-1] if len(stack) >= leaf_count else []
-                    hashes = []
-                    for leaf in leaves:
-                        if isinstance(leaf, dict):
-                            import json; leaf = json.dumps(leaf, sort_keys=True)
-                        if not isinstance(leaf, (str, bytes)): leaf = str(leaf)
-                        if isinstance(leaf, str): leaf = leaf.encode('utf-8')
-                        hashes.append(hashlib.sha256(leaf).hexdigest())
-                    
-                    while len(hashes) > 1:
-                        if len(hashes) % 2 != 0: hashes.append(hashes[-1])
-                        new_hashes = []
-                        for i in range(0, len(hashes), 2):
-                            combined = (hashes[i] + hashes[i+1]).encode('utf-8')
-                            new_hashes.append(hashlib.sha256(combined).hexdigest())
-                        hashes = new_hashes
-                    stack.append(hashes[0] if hashes else "")
-
-            elif op_name == "STATE_READ":
-                if operand is None:
-                    key = _unwrap(stack.pop() if stack else None)
-                else:
-                    key = const(operand)
-                stack.append(self.env.setdefault("_blockchain_state", {}).get(key))
-
-            elif op_name == "STATE_WRITE":
-                val = _unwrap(stack.pop() if stack else None)
-                if operand is None:
-                    key = _unwrap(stack.pop() if stack else None)
-                else:
-                    key = const(operand)
-                if self.env.get("_in_transaction", False):
-                    self.env.setdefault("_tx_pending_state", {})[key] = val
-                else:
-                    self.env.setdefault("_blockchain_state", {})[key] = val
-
-            elif op_name == "TX_BEGIN":
-                self.env["_in_transaction"] = True
-                self.env["_tx_pending_state"] = {}
-                self.env["_tx_snapshot"] = dict(self.env.get("_blockchain_state", {}))
-                if self.use_memory_manager: self.env["_tx_memory_snapshot"] = dict(self._managed_objects)
-
-            elif op_name == "TX_COMMIT":
-                if self.env.get("_in_transaction", False):
-                    self.env.setdefault("_blockchain_state", {}).update(self.env.get("_tx_pending_state", {}))
-                    self.env["_in_transaction"] = False
-                    self.env["_tx_pending_state"] = {}
-                    if "_tx_memory_snapshot" in self.env: del self.env["_tx_memory_snapshot"]
-
-            elif op_name == "TX_REVERT":
-                if self.env.get("_in_transaction", False):
-                    self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
-                    self.env["_in_transaction"] = False
-                    self.env["_tx_pending_state"] = {}
-                    if self.use_memory_manager and "_tx_memory_snapshot" in self.env:
-                        self._managed_objects = dict(self.env["_tx_memory_snapshot"])
-
-            elif op_name == "GAS_CHARGE":
-                amount = operand if operand is not None else 0
-                current = self.env.get("_gas_remaining", float('inf'))
-                if current != float('inf'):
-                    new_gas = current - amount
-                    if new_gas < 0:
-                        # Revert if in TX
-                        if self.env.get("_in_transaction", False):
-                            self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
-                            self.env["_in_transaction"] = False
-                        stack.append({"error": "OutOfGas", "required": amount, "remaining": current})
-                        return stack[-1]
-                    self.env["_gas_remaining"] = new_gas
-
-            elif op_name == "REQUIRE":
-                message = stack.pop() if stack else "Requirement failed"
-                if hasattr(message, 'value'): message = message.value
-                condition = stack.pop() if stack else False
-                cond_val = condition.value if hasattr(condition, 'value') else condition
+                        res = await self._invoke_callable_or_funcdesc(fn, args)
+                    stack.append(res)
                 
-                if not cond_val:
+                elif op_name == "CALL_TOP":
+                    arg_count = operand
+                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    fn_obj = stack.pop() if stack else None
+                    res = await self._invoke_callable_or_funcdesc(fn_obj, args)
+                    stack.append(res)
+    
+                # --- Arithmetic & Logic ---
+                elif op_name == "ADD":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    # Auto-unwrap evaluator objects
+                    if hasattr(a, 'value'): a = a.value
+                    if hasattr(b, 'value'): b = b.value
+                    stack.append(a + b)
+                elif op_name == "SUB":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value'): a = a.value
+                    if hasattr(b, 'value'): b = b.value
+                    stack.append(a - b)
+                elif op_name == "MUL":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value'): a = a.value
+                    if hasattr(b, 'value'): b = b.value
+                    stack.append(a * b)
+                elif op_name == "DIV":
+                    b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value'): a = a.value
+                    if hasattr(b, 'value'): b = b.value
+                    stack.append(a / b if b != 0 else 0)
+                elif op_name == "MOD":
+                    b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                    stack.append(a % b if b != 0 else 0)
+                elif op_name == "POW":
+                    b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                    stack.append(a ** b)
+                elif op_name == "NEG":
+                    a = stack.pop() if stack else 0
+                    stack.append(-a)
+                elif op_name == "EQ":
+                    b = stack.pop() if stack else None; a = stack.pop() if stack else None
+                    stack.append(a == b)
+                elif op_name == "NEQ":
+                    b = stack.pop() if stack else None; a = stack.pop() if stack else None
+                    stack.append(a != b)
+                elif op_name == "LT":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    stack.append(a < b)
+                elif op_name == "GT":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    stack.append(a > b)
+                elif op_name == "LTE":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    stack.append(a <= b)
+                elif op_name == "GTE":
+                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    stack.append(a >= b)
+                elif op_name == "NOT":
+                    a = stack.pop() if stack else False
+                    stack.append(not a)
+    
+                # --- Control Flow ---
+                elif op_name == "JUMP":
+                    ip = operand
+                elif op_name == "JUMP_IF_FALSE":
+                    cond = stack.pop() if stack else None
+                    if not cond: ip = operand
+                elif op_name == "RETURN":
+                    return stack.pop() if stack else None
+    
+                # --- Collections ---
+                elif op_name == "BUILD_LIST":
+                    count = operand if operand is not None else 0
+                    elements = [stack.pop() for _ in range(count)][::-1]
+                    stack.append(elements)
+                elif op_name == "BUILD_MAP":
+                    count = operand if operand is not None else 0
+                    result = {}
+                    for _ in range(count):
+                        val = stack.pop(); key = stack.pop()
+                        result[key] = val
+                    stack.append(result)
+                elif op_name == "INDEX":
+                    idx = stack.pop(); obj = stack.pop()
+                    try: stack.append(obj[idx] if obj is not None else None)
+                    except (IndexError, KeyError, TypeError): stack.append(None)
+                elif op_name == "GET_LENGTH":
+                    obj = stack.pop()
+                    try:
+                        if obj is None:
+                            stack.append(0)
+                        elif hasattr(obj, '__len__'):
+                            stack.append(len(obj))
+                        else:
+                            stack.append(0)
+                    except (TypeError, AttributeError):
+                        stack.append(0)
+    
+                # --- Async & Events ---
+                elif op_name == "SPAWN":
+                    # operand: tuple ("CALL", func_name, arg_count) OR index
+                    task_handle = None
+                    if isinstance(operand, tuple) and operand[0] == "CALL":
+                        fn_name = operand[1]; arg_count = operand[2]
+                        args = [stack.pop() for _ in range(arg_count)][::-1]
+                        fn = self.builtins.get(fn_name) or self.env.get(fn_name)
+                        coro = self._to_coro(fn, args)
+                        
+                        # Use async optimizer if available
+                        if self.async_optimizer:
+                            coro = self.async_optimizer.spawn(coro)
+                            task = asyncio.create_task(coro)
+                        else:
+                            task = asyncio.create_task(coro)
+                        
+                        self._task_counter += 1
+                        tid = f"task_{self._task_counter}"
+                        self._tasks[tid] = task
+                        task_handle = tid
+                    stack.append(task_handle)
+    
+                elif op_name == "AWAIT":
+                    # Keep popping until we find a task to await
+                    result_found = False
+                    temp_stack = self.allocate_list(0)
+                    
+                    while stack and not result_found:
+                        top = stack.pop()
+                        
+                        if isinstance(top, str) and top in self._tasks:
+                            # Use async optimizer if available
+                            if self.async_optimizer:
+                                res = await self.async_optimizer.await_optimized(self._tasks[top])
+                            else:
+                                res = await self._tasks[top]
+                            # Push back any non-task values we skipped
+                            for val in reversed(temp_stack):
+                                stack.append(val)
+                            stack.append(res)
+                            result_found = True
+                        elif asyncio.iscoroutine(top) or isinstance(top, asyncio.Future):
+                            # Use async optimizer if available
+                            if self.async_optimizer:
+                                res = await self.async_optimizer.await_optimized(top)
+                            else:
+                                res = await top
+                            # Push back any non-task values we skipped
+                            for val in reversed(temp_stack):
+                                stack.append(val)
+                            stack.append(res)
+                            result_found = True
+                        else:
+                            # Not a task, save it and keep looking
+                            temp_stack.append(top)
+                    
+                    # If no task was found, put everything back
+                    if not result_found:
+                        for val in reversed(temp_stack):
+                            stack.append(val)
+    
+                    if temp_stack:
+                        temp_stack.clear()
+                    self.release_list(temp_stack)
+    
+                elif op_name == "REGISTER_EVENT":
+                    event_parts = operand if isinstance(operand, (list, tuple)) else (operand,)
+                    event_name = const(event_parts[0]) if event_parts else None
+                    handler = const(event_parts[1]) if len(event_parts) > 1 else None
+                    if event_name is not None:
+                        handlers = self._events.setdefault(event_name, [])
+                        if handler and handler not in handlers:
+                            handlers.append(handler)
+    
+                elif op_name == "EMIT_EVENT":
+                    event_ref = const(operand[0]) if operand else None
+                    payload_ref = None
+                    event_name = event_ref
+                    if isinstance(event_ref, (list, tuple)) and event_ref:
+                        event_name = event_ref[0]
+                        if len(event_ref) > 1:
+                            payload_ref = event_ref[1]
+    
+                    payload = None
+                    if stack:
+                        payload = stack.pop()
+                    elif payload_ref is not None:
+                        payload = const(payload_ref)
+                    elif isinstance(operand, (list, tuple)) and len(operand) > 1:
+                        payload = const(operand[1])
+    
+                    payload = _unwrap(payload)
+    
+                    handlers = self._events.get(event_name, [])
+                    for h in handlers:
+                        fn = self.builtins.get(h) or self.env.get(h)
+                        if fn is None:
+                            continue
+                        await self._call_builtin_async_obj(fn, [payload], wrap_args=False)
+    
+                elif op_name == "IMPORT":
+                    mod_name = const(operand[0])
+                    alias = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else None
+                    try:
+                        mod = importlib.import_module(mod_name)
+                        self.env[alias or mod_name] = mod
+                    except Exception:
+                        self.env[alias or mod_name] = None
+    
+                elif op_name == "DEFINE_ENUM":
+                    enum_name = _unwrap(const(operand[0]))
+                    enum_map = const(operand[1])
+                    self.env.setdefault("enums", {})[enum_name] = enum_map
+                    self.env[enum_name] = enum_map
+    
+                elif op_name == "ASSERT_PROTOCOL":
+                    obj_name = const(operand[0])
+                    spec = const(operand[1])
+                    obj = self.env.get(obj_name)
+                    ok = True
+                    missing = []
+                    for m in spec.get("methods", []):
+                        if not hasattr(obj, m):
+                            ok = False; missing.append(m)
+                    stack.append((ok, missing))
+    
+                # --- Blockchain Specific Opcodes ---
+                
+                elif op_name == "HASH_BLOCK":
+                    block_data = stack.pop() if stack else ""
+                    if isinstance(block_data, dict):
+                        import json; block_data = json.dumps(block_data, sort_keys=True)
+                    if not isinstance(block_data, (bytes, str)): block_data = str(block_data)
+                    if isinstance(block_data, str): block_data = block_data.encode('utf-8')
+                    stack.append(hashlib.sha256(block_data).hexdigest())
+    
+                elif op_name == "VERIFY_SIGNATURE":
+                    if len(stack) >= 3:
+                        pk = stack.pop(); msg = stack.pop(); sig = stack.pop()
+                        verify_fn = self.builtins.get("verify_sig") or self.env.get("verify_sig")
+                        if verify_fn:
+                            res = await self._invoke_callable_or_funcdesc(verify_fn, [sig, msg, pk])
+                            stack.append(res)
+                        else:
+                            # Fallback for testing
+                            expected = hashlib.sha256(str(msg).encode()).hexdigest()
+                            stack.append(sig == expected)
+                    else:
+                        stack.append(False)
+    
+                elif op_name == "MERKLE_ROOT":
+                    leaf_count = operand if operand is not None else 0
+                    if leaf_count <= 0:
+                        stack.append("")
+                    else:
+                        leaves = [stack.pop() for _ in range(leaf_count)][::-1] if len(stack) >= leaf_count else []
+                        hashes = []
+                        for leaf in leaves:
+                            if isinstance(leaf, dict):
+                                import json; leaf = json.dumps(leaf, sort_keys=True)
+                            if not isinstance(leaf, (str, bytes)): leaf = str(leaf)
+                            if isinstance(leaf, str): leaf = leaf.encode('utf-8')
+                            hashes.append(hashlib.sha256(leaf).hexdigest())
+                        
+                        while len(hashes) > 1:
+                            if len(hashes) % 2 != 0: hashes.append(hashes[-1])
+                            new_hashes = []
+                            for i in range(0, len(hashes), 2):
+                                combined = (hashes[i] + hashes[i+1]).encode('utf-8')
+                                new_hashes.append(hashlib.sha256(combined).hexdigest())
+                            hashes = new_hashes
+                        stack.append(hashes[0] if hashes else "")
+    
+                elif op_name == "STATE_READ":
+                    if operand is None:
+                        key = _unwrap(stack.pop() if stack else None)
+                    else:
+                        key = const(operand)
+                    stack.append(self.env.setdefault("_blockchain_state", {}).get(key))
+    
+                elif op_name == "STATE_WRITE":
+                    val = _unwrap(stack.pop() if stack else None)
+                    if operand is None:
+                        key = _unwrap(stack.pop() if stack else None)
+                    else:
+                        key = const(operand)
+                    if self.env.get("_in_transaction", False):
+                        self.env.setdefault("_tx_pending_state", {})[key] = val
+                    else:
+                        self.env.setdefault("_blockchain_state", {})[key] = val
+    
+                elif op_name == "TX_BEGIN":
+                    self.env["_in_transaction"] = True
+                    self.env["_tx_pending_state"] = {}
+                    self.env["_tx_snapshot"] = dict(self.env.get("_blockchain_state", {}))
+                    if self.use_memory_manager: self.env["_tx_memory_snapshot"] = dict(self._managed_objects)
+    
+                elif op_name == "TX_COMMIT":
+                    if self.env.get("_in_transaction", False):
+                        self.env.setdefault("_blockchain_state", {}).update(self.env.get("_tx_pending_state", {}))
+                        self.env["_in_transaction"] = False
+                        self.env["_tx_pending_state"] = {}
+                        if "_tx_memory_snapshot" in self.env: del self.env["_tx_memory_snapshot"]
+    
+                elif op_name == "TX_REVERT":
                     if self.env.get("_in_transaction", False):
                         self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
                         self.env["_in_transaction"] = False
                         self.env["_tx_pending_state"] = {}
-                    raise ZEvaluationError(f"Requirement failed: {message}")
-
-            elif op_name == "DEFINE_CONTRACT":
-                member_count = operand
-                members = {}
-                for _ in range(member_count):
-                    key_obj = stack.pop() if stack else None
-                    val_obj = stack.pop() if stack else None
-                    key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
-                    members[key_str] = val_obj
-                
-                name_obj = stack.pop() if stack else None
-                stack.append(ZMap(members))
-
-            elif op_name == "DEFINE_ENTITY":
-                member_count = operand
-                members = {}
-                for _ in range(member_count):
-                    key_obj = stack.pop() if stack else None
-                    val_obj = stack.pop() if stack else None
-                    key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
-                    members[key_str] = val_obj
-                
-                name_obj = stack.pop() if stack else None
-                # Create Entity (using Map for now, can be specialized Entity class later)
-                members['_type'] = 'entity'
-                members['_name'] = name_obj.value if hasattr(name_obj, 'value') else str(name_obj)
-                stack.append(ZMap(members))
-
-            elif op_name == "DEFINE_CAPABILITY":
-                name = stack.pop() if stack else None
-                definition = stack.pop() if stack else {}
-                if hasattr(name, 'value'): name = name.value
-                self.env.setdefault("_capabilities", {})[name] = definition
-
-            elif op_name == "GRANT_CAPABILITY":
-                count = operand
-                caps = [stack.pop() for _ in range(count)][::-1]
-                entity_name = stack.pop() if stack else None
-                if hasattr(entity_name, 'value'): entity_name = entity_name.value
-                
-                grants = self.env.setdefault("_grants", {})
-                entity_grants = grants.setdefault(entity_name, set())
-                
-                for cap in caps:
-                    c_val = cap.value if hasattr(cap, 'value') else str(cap)
-                    entity_grants.add(c_val)
-
-            elif op_name == "REVOKE_CAPABILITY":
-                count = operand
-                caps = [stack.pop() for _ in range(count)][::-1]
-                entity_name = stack.pop() if stack else None
-                if hasattr(entity_name, 'value'): entity_name = entity_name.value
-                
-                if "_grants" in self.env and entity_name in self.env["_grants"]:
-                    entity_grants = self.env["_grants"][entity_name]
+                        if self.use_memory_manager and "_tx_memory_snapshot" in self.env:
+                            self._managed_objects = dict(self.env["_tx_memory_snapshot"])
+    
+                elif op_name == "ENABLE_ERROR_MODE":
+                    self.env["_continue_on_error"] = True
+                    if self.debug: print("[VM] Error Recovery Mode ENABLED")
+    
+                elif op_name == "GAS_CHARGE":
+                    amount = operand if operand is not None else 0
+                    current = self.env.get("_gas_remaining", float('inf'))
+                    if current != float('inf'):
+                        new_gas = current - amount
+                        if new_gas < 0:
+                            # Revert if in TX
+                            if self.env.get("_in_transaction", False):
+                                self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                                self.env["_in_transaction"] = False
+                            stack.append({"error": "OutOfGas", "required": amount, "remaining": current})
+                            return stack[-1]
+                        self.env["_gas_remaining"] = new_gas
+    
+                elif op_name == "REQUIRE":
+                    message = stack.pop() if stack else "Requirement failed"
+                    if hasattr(message, 'value'): message = message.value
+                    condition = stack.pop() if stack else False
+                    cond_val = condition.value if hasattr(condition, 'value') else condition
+                    
+                    if not cond_val:
+                        if self.env.get("_in_transaction", False):
+                            self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                            self.env["_in_transaction"] = False
+                            self.env["_tx_pending_state"] = {}
+                        raise ZEvaluationError(f"Requirement failed: {message}")
+    
+                elif op_name == "DEFINE_CONTRACT":
+                    member_count = operand
+                    members = {}
+                    for _ in range(member_count):
+                        key_obj = stack.pop() if stack else None
+                        val_obj = stack.pop() if stack else None
+                        key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
+                        members[key_str] = val_obj
+                    
+                    name_obj = stack.pop() if stack else None
+                    stack.append(ZMap(members))
+    
+                elif op_name == "DEFINE_ENTITY":
+                    member_count = operand
+                    members = {}
+                    for _ in range(member_count):
+                        key_obj = stack.pop() if stack else None
+                        val_obj = stack.pop() if stack else None
+                        key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
+                        members[key_str] = val_obj
+                    
+                    name_obj = stack.pop() if stack else None
+                    # Create Entity (using Map for now, can be specialized Entity class later)
+                    members['_type'] = 'entity'
+                    members['_name'] = name_obj.value if hasattr(name_obj, 'value') else str(name_obj)
+                    stack.append(ZMap(members))
+    
+                elif op_name == "DEFINE_CAPABILITY":
+                    name = stack.pop() if stack else None
+                    definition = stack.pop() if stack else {}
+                    if hasattr(name, 'value'): name = name.value
+                    self.env.setdefault("_capabilities", {})[name] = definition
+    
+                elif op_name == "GRANT_CAPABILITY":
+                    count = operand
+                    caps = [stack.pop() for _ in range(count)][::-1]
+                    entity_name = stack.pop() if stack else None
+                    if hasattr(entity_name, 'value'): entity_name = entity_name.value
+                    
+                    grants = self.env.setdefault("_grants", {})
+                    entity_grants = grants.setdefault(entity_name, set())
+                    
                     for cap in caps:
                         c_val = cap.value if hasattr(cap, 'value') else str(cap)
-                        if c_val in entity_grants:
-                            entity_grants.remove(c_val)
-
-            elif op_name == "AUDIT_LOG":
-                ts = stack.pop()
-                action = stack.pop()
-                data = stack.pop()
-                # Unwrap
-                ts = ts.value if hasattr(ts, 'value') else ts
-                action = action.value if hasattr(action, 'value') else action
-                data = data.value if hasattr(data, 'value') else data
-                
-                entry = {"timestamp": ts, "action": action, "data": data}
-                self.env.setdefault("_audit_log", []).append(entry)
-                if self.debug: print(f"[AUDIT] {entry}")
-
-            elif op_name == "RESTRICT_ACCESS":
-                restriction = stack.pop()
-                prop = stack.pop()
-                obj = stack.pop()
-                # Just store in a registry for now. 
-                # Real implementation would hook into PropertyAccess/Assign logic.
-                r_key = f"{obj}.{prop}" if prop else str(obj)
-                self.env.setdefault("_restrictions", {})[r_key] = restriction
-
-            elif op_name == "LEDGER_APPEND":
-                entry = stack.pop() if stack else None
-                if isinstance(entry, dict) and "timestamp" not in entry:
-                    entry["timestamp"] = time.time()
-                self.env.setdefault("_ledger", []).append(entry)
-
-            else:
-                if debug: print(f"[VM] Unknown Opcode: {op}")
-
-            # Record instruction timing (if profiling enabled)
-            if instr_start_time is not None and self.profiler:
-                elapsed = time.perf_counter() - instr_start_time
-                self.profiler.measure_instruction(ip, elapsed)
+                        entity_grants.add(c_val)
+    
+                elif op_name == "REVOKE_CAPABILITY":
+                    count = operand
+                    caps = [stack.pop() for _ in range(count)][::-1]
+                    entity_name = stack.pop() if stack else None
+                    if hasattr(entity_name, 'value'): entity_name = entity_name.value
+                    
+                    if "_grants" in self.env and entity_name in self.env["_grants"]:
+                        entity_grants = self.env["_grants"][entity_name]
+                        for cap in caps:
+                            c_val = cap.value if hasattr(cap, 'value') else str(cap)
+                            if c_val in entity_grants:
+                                entity_grants.remove(c_val)
+    
+                elif op_name == "AUDIT_LOG":
+                    ts = stack.pop()
+                    action = stack.pop()
+                    data = stack.pop()
+                    # Unwrap
+                    ts = ts.value if hasattr(ts, 'value') else ts
+                    action = action.value if hasattr(action, 'value') else action
+                    data = data.value if hasattr(data, 'value') else data
+                    
+                    entry = {"timestamp": ts, "action": action, "data": data}
+                    self.env.setdefault("_audit_log", []).append(entry)
+                    if self.debug: print(f"[AUDIT] {entry}")
+    
+                elif op_name == "RESTRICT_ACCESS":
+                    restriction = stack.pop()
+                    prop = stack.pop()
+                    obj = stack.pop()
+                    # Just store in a registry for now. 
+                    # Real implementation would hook into PropertyAccess/Assign logic.
+                    r_key = f"{obj}.{prop}" if prop else str(obj)
+                    self.env.setdefault("_restrictions", {})[r_key] = restriction
+    
+                elif op_name == "LEDGER_APPEND":
+                    entry = stack.pop() if stack else None
+                    if isinstance(entry, dict) and "timestamp" not in entry:
+                        entry["timestamp"] = time.time()
+                    self.env.setdefault("_ledger", []).append(entry)
+    
+                else:
+                    if debug: print(f"[VM] Unknown Opcode: {op}")
+    
+                # Record instruction timing (if profiling enabled)
+                if instr_start_time is not None and self.profiler:
+                    elapsed = time.perf_counter() - instr_start_time
+                    self.profiler.measure_instruction(ip, elapsed)
+            except Exception as e:
+                if self.env.get("_continue_on_error", False):
+                    # Error Recovery Mode
+                    if debug: print(f"[VM ERROR RECOVERY] {e}")
+                    self.env.setdefault("_errors", []).append(str(e))
+                else:
+                    raise
 
         if profile_ops and opcode_counts is not None:
             self._last_opcode_profile = sorted(opcode_counts.items(), key=lambda item: item[1], reverse=True)

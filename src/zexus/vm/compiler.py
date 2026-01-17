@@ -453,7 +453,6 @@ class BytecodeCompiler:
     def _compile_ActionStatement(self, node):
         """Compile action/function definition"""
         # Create a new compiler for the function body
-        # We need a fresh compiler instance to generate independent bytecode
         func_compiler = self.__class__()
         
         # Compile body
@@ -479,10 +478,22 @@ class BytecodeCompiler:
         # Store using STORE_FUNC
         # Operand: (name_idx, func_const_idx)
         func_idx = self._add_constant(func_desc)
-        name = node.name.value if hasattr(node.name, 'value') else str(node.name)
-        name_idx = self._add_constant(name)
+        name_idx = self._add_constant(func_desc["name"])
         
         self._emit(Opcode.STORE_FUNC, (name_idx, func_idx))
+
+    # Aliases for other function types
+    _compile_FunctionStatement = _compile_ActionStatement
+    _compile_PureFunctionStatement = _compile_ActionStatement
+
+    def _compile_ConstStatement(self, node):
+        """Compile const declaration (same as Let for current VM)"""
+        self._compile_LetStatement(node)
+
+    def _compile_FileImportExpression(self, node):
+        """Compile file import expression (<<)"""
+        self._compile_node(node.filepath)
+        self._emit(Opcode.READ)
 
     def _compile_AssignmentExpression(self, node):
         """Compile variable assignment"""
@@ -585,10 +596,18 @@ class BytecodeCompiler:
         self._emit(Opcode.JUMP, self.loop_stack[-1]['end'])
 
     def _compile_ContinueStatement(self, node):
-        """Compile continue statement"""
-        if not self.loop_stack:
-            raise BytecodeCompilationError("Continue statement outside loop")
-        self._emit(Opcode.JUMP, self.loop_stack[-1]['continue'])
+        """Compile continue statement
+        
+        Behavior:
+        - If inside a loop: Jump to loop start (next iteration).
+        - If outside a loop: Enable 'Continue On Error' mode globally.
+        """
+        if self.loop_stack:
+            # Inside loop: Standard control flow
+            self._emit(Opcode.JUMP, self.loop_stack[-1]['continue'])
+        else:
+            # Outside loop: Enable error resilience
+            self._emit(Opcode.ENABLE_ERROR_MODE)
 
     def _compile_RequireStatement(self, node):
         """Compile require(condition, message)"""

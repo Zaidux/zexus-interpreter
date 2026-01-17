@@ -20,6 +20,20 @@ The `CONTINUE` statement is simple and takes no arguments. It can be placed anyw
 
 ## Behavior
 
+### 1. Loop Control (Standard Usage)
+When used inside a loop (`while`, `for`), `continue;` behaves as a standard control flow statement, skipping the rest of the current iteration and proceeding to the next one.
+
+```zexus
+for i in [1, 2, 3] {
+    if (i == 2) { continue; }
+    print i;
+}
+// Output: 1, 3
+```
+
+### 2. Error Recovery Mode (Global Usage)
+If `continue;` is used **outside** of a loop (at the top level or in a block not enclosed by a loop), it enables **Error Recovery Mode**.
+
 ### Without CONTINUE (Default Behavior)
 
 ```zexus

@@ -166,6 +166,12 @@ class Opcode(IntEnum):
     
     # Iteration (150-159)
     FOR_ITER = 150      # Get next item from iterator
+    
+    # System & Modes (160-169)
+    ENABLE_ERROR_MODE = 160 # Enable global continue-on-error mode
+
+    # Register-based operations (200-299) - Phase 5
+    FOR_ITER = 150      # Get next item from iterator
 
     # Special
     NOP = 255           # No operation
