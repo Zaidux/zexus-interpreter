@@ -146,7 +146,27 @@ class Opcode(IntEnum):
     DEFINE_SCREEN = 120
     DEFINE_COMPONENT = 121
     DEFINE_THEME = 122
+
+    # Security & Contracts (130-149)
+    REQUIRE = 130       # require(condition, message)
+    DEFINE_CONTRACT = 131 # Define smart contract
+    DEFINE_ENTITY = 132   # Define entity
+    DEFINE_CAPABILITY = 133 # Define capability
+    GRANT_CAPABILITY = 134  # Grant capability
+    REVOKE_CAPABILITY = 135 # Revoke capability
     
+    # Audit & Access Control (136-139)
+    AUDIT_LOG = 136     # Audit log
+    RESTRICT_ACCESS = 137 # Restrict access
+    
+    # Exception Handling (140-149)
+    SETUP_TRY = 140     # Start try block
+    POP_TRY = 141       # End try block / clean up handler
+    THROW = 142         # Throw exception
+    
+    # Iteration (150-159)
+    FOR_ITER = 150      # Get next item from iterator
+
     # Special
     NOP = 255           # No operation
 

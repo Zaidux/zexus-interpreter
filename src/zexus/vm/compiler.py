@@ -447,7 +447,425 @@ class BytecodeCompiler:
         self._compile_node(node.left)
         self._compile_node(node.index)
         self._emit(Opcode.INDEX)
+
+    # ==================== Advanced Control Flow & Declarations ====================
+
+    def _compile_ActionStatement(self, node):
+        """Compile action/function definition"""
+        # Create a new compiler for the function body
+        # We need a fresh compiler instance to generate independent bytecode
+        func_compiler = self.__class__()
+        
+        # Compile body
+        func_compiler._compile_node(node.body)
+        
+        # Ensure implicit return (null) if execution flows off the end
+        null_idx = func_compiler._add_constant(None)
+        func_compiler._emit(Opcode.LOAD_CONST, null_idx)
+        func_compiler._emit(Opcode.RETURN)
+        
+        # Get bytecode
+        func_bytecode = func_compiler.bytecode
+        
+        # Prepare function descriptor
+        params = [p.value if hasattr(p, 'value') else str(p) for p in node.parameters]
+        func_desc = {
+            "bytecode": func_bytecode,
+            "params": params,
+            "is_async": getattr(node, 'is_async', False),
+            "name": node.name.value if hasattr(node.name, 'value') else str(node.name)
+        }
+        
+        # Store using STORE_FUNC
+        # Operand: (name_idx, func_const_idx)
+        func_idx = self._add_constant(func_desc)
+        name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        name_idx = self._add_constant(name)
+        
+        self._emit(Opcode.STORE_FUNC, (name_idx, func_idx))
+
+    def _compile_AssignmentExpression(self, node):
+        """Compile variable assignment"""
+        # 1. Compile value expression
+        self._compile_node(node.value)
+        
+        # 2. Duplicate value because assignment is an expression that returns the value
+        # AND currently most usage is inside ExpressionStatement which pops it.
+        # But for correctness as an Expression, it must leave value on stack.
+        self._emit(Opcode.DUP)
+        
+        # 3. Store to variable
+        name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        name_idx = self._add_constant(name)
+        self._emit(Opcode.STORE_NAME, name_idx)
+
+    def _compile_UseStatement(self, node):
+        """Compile module import"""
+        # node.file_path is string or StringLiteral
+        path = node.file_path.value if hasattr(node.file_path, 'value') else str(node.file_path)
+        path_idx = self._add_constant(path)
+        
+        # Handle alias
+        alias = node.alias.value if node.alias and hasattr(node.alias, 'value') else (node.alias or path)
+        alias_idx = self._add_constant(alias)
+        
+        # Emit IMPORT (path_idx, alias_idx)
+        self._emit(Opcode.IMPORT, (path_idx, alias_idx))
+
+    def _compile_TxStatement(self, node):
+        """Compile transaction block"""
+        self._emit(Opcode.TX_BEGIN)
+        self._compile_node(node.body)
+        self._emit(Opcode.TX_COMMIT)
+
+    def _compile_GCStatement(self, node):
+        """Compile GC statement"""
+        # Call builtin gc(action)
+        action = node.action.value if hasattr(node.action, 'value') else str(node.action)
+        
+        # Load 'gc' function name
+        gc_idx = self._add_constant("gc")
+        
+        # Load action argument
+        action_idx = self._add_constant(action)
+        self._emit(Opcode.LOAD_CONST, action_idx)
+        
+        # Call gc(action)
+        self._emit(Opcode.CALL_NAME, (gc_idx, 1))
+        self._emit(Opcode.POP)
+
     
+    def _compile_ContractStatement(self, node):
+        """Compile smart contract definition"""
+        contract_name = node.name.value
+        name_idx = self._add_constant(contract_name)
+        
+        # Push contract name onto stack
+        self._emit(Opcode.LOAD_CONST, name_idx)
+        
+        # Compile body members
+        member_count = 0
+        if hasattr(node.body, 'statements'):
+            for stmt in node.body.statements:
+                stmt_type = type(stmt).__name__
+                
+                if stmt_type == 'StateStatement':
+                    # Value
+                    if getattr(stmt, 'initial_value', None):
+                        self._compile_node(stmt.initial_value)
+                    else:
+                        self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+                    
+                    # Name
+                    self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
+                    member_count += 1
+                
+                elif stmt_type == 'ActionStatement':
+                    # Compile action (stores it in current env)
+                    self._compile_node(stmt)
+                    
+                    # Load it back to stack
+                    self._emit(Opcode.LOAD_NAME, self._add_constant(stmt.name.value))
+                    
+                    # Push name
+                    self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
+                    member_count += 1
+
+        # Define Contract (pops name + values/keys * count)
+        # Arg is member_count
+        self._emit(Opcode.DEFINE_CONTRACT, member_count)
+        
+        # Store contract class/object
+        self._emit(Opcode.STORE_NAME, name_idx)
+
+    def _compile_BreakStatement(self, node):
+        """Compile break statement"""
+        if not self.loop_stack:
+            raise BytecodeCompilationError("Break statement outside loop")
+        self._emit(Opcode.JUMP, self.loop_stack[-1]['end'])
+
+    def _compile_ContinueStatement(self, node):
+        """Compile continue statement"""
+        if not self.loop_stack:
+            raise BytecodeCompilationError("Continue statement outside loop")
+        self._emit(Opcode.JUMP, self.loop_stack[-1]['continue'])
+
+    def _compile_RequireStatement(self, node):
+        """Compile require(condition, message)"""
+        self._compile_node(node.condition)
+        
+        if node.message:
+            self._compile_node(node.message)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant("Requirement failed"))
+            
+        self._emit(Opcode.REQUIRE)
+
+    def _compile_RevertStatement(self, node):
+        """Compile revert(reason)"""
+        if node.reason:
+            self._compile_node(node.reason)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant("Transaction reverted"))
+            
+        self._emit(Opcode.TX_REVERT)
+
+    def _compile_TryCatchStatement(self, node):
+        """Compile try-catch block"""
+        catch_label = self._make_label()
+        end_label = self._make_label()
+        
+        # SETUP_TRY catch_label
+        # (Assuming SETUP_TRY takes a jump target)
+        # Note: Opcode must handle jump target resolution. 
+        # Typically JUMP opcodes use labels. Here we treat SETUP_TRY like a jump-setup.
+        self._emit(Opcode.SETUP_TRY, catch_label)
+        
+        self._compile_node(node.try_block)
+        
+        self._emit(Opcode.POP_TRY)
+        self._emit(Opcode.JUMP, end_label)
+        
+        # Catch block
+        self._mark_label(catch_label)
+        
+        # Exception provided on stack?
+        if node.error_variable:
+            self._emit(Opcode.STORE_NAME, self._add_constant(node.error_variable.value))
+        else:
+            self._emit(Opcode.POP)
+            
+        self._compile_node(node.catch_block)
+        
+        self._mark_label(end_label)
+
+    def _unsupported_message(self, node_type):
+        """Helper for unsupported messages"""
+        return f"Node type '{node_type}' is not currently supported by the bytecode compiler."
+
+    def _compile_AwaitExpression(self, node):
+        """Compile await expression"""
+        self._compile_node(node.argument)
+        self._emit(Opcode.AWAIT)
+
+    def _compile_ThisExpression(self, node):
+        """Compile 'this' expression"""
+        # Load 'this' from environment (it's passed as implicit argument in methods)
+        name_idx = self._add_constant("this")
+        self._emit(Opcode.LOAD_NAME, name_idx)
+
+    def _compile_EntityStatement(self, node):
+        """Compile Entity definition"""
+        # Similar to Contract, but uses DEFINE_ENTITY
+        entity_name = node.name.value
+        name_idx = self._add_constant(entity_name)
+        
+        # Push name
+        self._emit(Opcode.LOAD_CONST, name_idx)
+        
+        # Compile body members
+        member_count = 0
+        if hasattr(node.body, 'statements'):
+            for stmt in node.body.statements:
+                stmt_type = type(stmt).__name__
+                # Reuse state/action compilation
+                if stmt_type in ('StateStatement', 'ActionStatement'):
+                    if stmt_type == 'StateStatement':
+                         # Value
+                        if getattr(stmt, 'initial_value', None):
+                            self._compile_node(stmt.initial_value)
+                        else:
+                            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+                        # Name
+                        self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
+                    elif stmt_type == 'ActionStatement':
+                        self._compile_node(stmt)
+                        self._emit(Opcode.LOAD_NAME, self._add_constant(stmt.name.value))
+                        self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
+                    
+                    member_count += 1
+
+        self._emit(Opcode.DEFINE_ENTITY, member_count)
+        self._emit(Opcode.STORE_NAME, name_idx)
+
+    def _compile_DataStatement(self, node):
+        """Compile Data/Dataclass definition"""
+        # Data objects are simpler entities
+        # For now, map to Entity logic or simple Struct
+        # We'll use DEFINE_ENTITY for now to keep it uniform
+        
+        data_name = node.name.value
+        name_idx = self._add_constant(data_name)
+        self._emit(Opcode.LOAD_CONST, name_idx)
+        
+        member_count = 0
+        if node.fields:
+            for field in node.fields:
+                # Default value
+                if field.default_value:
+                    self._compile_node(field.default_value)
+                else:
+                    self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+                
+                # Field name
+                field_name = field.name.value if hasattr(field.name, 'value') else str(field.name)
+                self._emit(Opcode.LOAD_CONST, self._add_constant(field_name))
+                member_count += 1
+                
+        self._emit(Opcode.DEFINE_ENTITY, member_count)
+        self._emit(Opcode.STORE_NAME, name_idx)
+        
+    def _compile_CapabilityStatement(self, node):
+        """Compile capability definition"""
+        # Load definition map
+        if node.definition:
+            self._compile_node(node.definition)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+            
+        # Load name
+        name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(name))
+        
+        self._emit(Opcode.DEFINE_CAPABILITY)
+
+    def _compile_GrantStatement(self, node):
+        """Compile grant capability"""
+        # Logic: Push Entity (or name), Push Caps... Emit GRANT
+        
+        # Push entity name (string)
+        entity = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(entity))
+        
+        # Traverse capabilities
+        count = 0
+        for cap in node.capabilities:
+            cap_name = cap.value if hasattr(cap, 'value') else str(cap)
+            self._emit(Opcode.LOAD_CONST, self._add_constant(cap_name))
+            count += 1
+            
+        self._emit(Opcode.GRANT_CAPABILITY, count)
+
+    def _compile_RevokeStatement(self, node):
+        """Compile revoke capability"""
+        # Push entity name
+        entity = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(entity))
+        
+        # Traverse capabilities
+        count = 0
+        for cap in node.capabilities:
+            cap_name = cap.value if hasattr(cap, 'value') else str(cap)
+            self._emit(Opcode.LOAD_CONST, self._add_constant(cap_name))
+            count += 1
+            
+        self._emit(Opcode.REVOKE_CAPABILITY, count)
+
+    def _compile_AuditStatement(self, node):
+        """Compile audit log"""
+        # AuditStatement(data_name, action_type, timestamp)
+        
+        # Load data name (variable being audited)
+        data_name = node.data_name.value if hasattr(node.data_name, 'value') else str(node.data_name)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(data_name))
+        
+        # Load action type
+        if hasattr(node.action_type, 'value'):
+            self._emit(Opcode.LOAD_CONST, self._add_constant(node.action_type.value))
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(str(node.action_type)))
+            
+        # Load timestamp (if any)
+        if node.timestamp:
+            self._compile_node(node.timestamp)
+        else:
+             self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+             
+        self._emit(Opcode.AUDIT_LOG)
+
+    def _compile_RestrictStatement(self, node):
+        """Compile restrict access"""
+        # RestrictStatement(target, restriction_type)
+        # target is PropertyAccessExpression usually (obj.field) or Identifier
+        
+        if hasattr(node.target, 'object'):
+            # Property access: obj.field
+            self._compile_node(node.target.object) # Push object
+            
+            # Helper to get property name
+            prop_name = node.target.property.value if hasattr(node.target.property, 'value') else str(node.target.property)
+            self._emit(Opcode.LOAD_CONST, self._add_constant(prop_name))
+        else:
+            # Just identifier
+            self._emit(Opcode.LOAD_NAME, self._add_constant(node.target.value))
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None)) # No property
+
+        # Load restriction string
+        res_type = node.restriction_type if isinstance(node.restriction_type, str) else str(node.restriction_type)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(res_type))
+        
+        self._emit(Opcode.RESTRICT_ACCESS)
+
+
+    def _compile_PatternStatement(self, node):
+        """Compile pattern matching (match statement)"""
+        # Logic:
+        # evaluate value -> store in temp
+        # for each case:
+        #   load value
+        #   evaluate pattern
+        #   check match (simulated EQ)
+        #   jump_if_false -> next_case
+        #   execute action
+        #   jump -> end
+        
+        # Evaluate match subject
+        self._compile_node(node.value if hasattr(node, 'value') else node.expression)
+        
+        end_label = self._make_label()
+        
+        # Iterate cases
+        for case in node.cases:
+            next_case_lbl = self._make_label()
+            
+            # Duplicate Subject (Stack: [..., subj, subj])
+            self._emit(Opcode.DUP)
+            
+            # Evaluate Pattern
+            # Note: AST might call it 'pattern' or something else depending on Case node type
+            pattern_node = getattr(case, 'pattern', None)
+            if pattern_node:
+                if hasattr(pattern_node, 'value'): 
+                    self._compile_node(pattern_node)
+                else:
+                    self._compile_node(pattern_node)
+            
+            # Equality check
+            self._emit(Opcode.EQ)
+            
+            # Jump if False
+            self._emit(Opcode.JUMP_IF_FALSE, next_case_lbl)
+            
+            # Match! 
+            # Pop subject
+            self._emit(Opcode.POP)
+            
+            # Execute Action/Consequence
+            # MatchExpression uses 'consequence', PatternStatement uses 'action'
+            body = getattr(case, 'consequence', getattr(case, 'action', None))
+            self._compile_node(body)
+            self._emit(Opcode.JUMP, end_label)
+            
+            # Next Case
+            self._mark_label(next_case_lbl)
+            
+        # No match? Pop subject
+        self._emit(Opcode.POP)
+        self._mark_label(end_label)
+
+    # Alias MatchExpression to logic (it's similar enough for basic cases)
+    _compile_MatchExpression = _compile_PatternStatement
+
     # ==================== Fallback for unsupported nodes ====================
     
     def __getattr__(self, name):

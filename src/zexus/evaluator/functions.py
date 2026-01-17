@@ -2004,6 +2004,22 @@ class FunctionEvaluatorMixin:
             if isinstance(arg, String):
                 return String(arg.value.lower())
             return EvaluationError(f"lowercase() requires a string argument")
+
+        def _split(*a):
+            """Split string by delimiter"""
+            if len(a) != 2:
+                return EvaluationError(f"split() takes 2 args: string, delimiter")
+            
+            str_obj = a[0]
+            delim_obj = a[1]
+            
+            if not isinstance(str_obj, String):
+                return EvaluationError("split() first argument must be a string")
+            if not isinstance(delim_obj, String):
+                return EvaluationError("split() second argument must be a delimiter string")
+                
+            parts = str_obj.value.split(delim_obj.value)
+            return List([String(p) for p in parts])
         
         def _random(*a):
             """Generate random number. random() -> 0-1, random(max) -> 0 to max-1"""
@@ -2630,6 +2646,7 @@ class FunctionEvaluatorMixin:
             "float": Builtin(_float, "float"),
             "uppercase": Builtin(_uppercase, "uppercase"),
             "lowercase": Builtin(_lowercase, "lowercase"),
+            "split": Builtin(_split, "split"),
             "random": Builtin(_random, "random"),
             "persist_set": Builtin(_persist_set, "persist_set"),
             "persist_get": Builtin(_persist_get, "persist_get"),

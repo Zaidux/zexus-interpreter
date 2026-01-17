@@ -1665,6 +1665,100 @@ class VM:
                         return stack[-1]
                     self.env["_gas_remaining"] = new_gas
 
+            elif op_name == "REQUIRE":
+                message = stack.pop() if stack else "Requirement failed"
+                if hasattr(message, 'value'): message = message.value
+                condition = stack.pop() if stack else False
+                cond_val = condition.value if hasattr(condition, 'value') else condition
+                
+                if not cond_val:
+                    if self.env.get("_in_transaction", False):
+                        self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                        self.env["_in_transaction"] = False
+                        self.env["_tx_pending_state"] = {}
+                    raise ZEvaluationError(f"Requirement failed: {message}")
+
+            elif op_name == "DEFINE_CONTRACT":
+                member_count = operand
+                members = {}
+                for _ in range(member_count):
+                    key_obj = stack.pop() if stack else None
+                    val_obj = stack.pop() if stack else None
+                    key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
+                    members[key_str] = val_obj
+                
+                name_obj = stack.pop() if stack else None
+                stack.append(ZMap(members))
+
+            elif op_name == "DEFINE_ENTITY":
+                member_count = operand
+                members = {}
+                for _ in range(member_count):
+                    key_obj = stack.pop() if stack else None
+                    val_obj = stack.pop() if stack else None
+                    key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
+                    members[key_str] = val_obj
+                
+                name_obj = stack.pop() if stack else None
+                # Create Entity (using Map for now, can be specialized Entity class later)
+                members['_type'] = 'entity'
+                members['_name'] = name_obj.value if hasattr(name_obj, 'value') else str(name_obj)
+                stack.append(ZMap(members))
+
+            elif op_name == "DEFINE_CAPABILITY":
+                name = stack.pop() if stack else None
+                definition = stack.pop() if stack else {}
+                if hasattr(name, 'value'): name = name.value
+                self.env.setdefault("_capabilities", {})[name] = definition
+
+            elif op_name == "GRANT_CAPABILITY":
+                count = operand
+                caps = [stack.pop() for _ in range(count)][::-1]
+                entity_name = stack.pop() if stack else None
+                if hasattr(entity_name, 'value'): entity_name = entity_name.value
+                
+                grants = self.env.setdefault("_grants", {})
+                entity_grants = grants.setdefault(entity_name, set())
+                
+                for cap in caps:
+                    c_val = cap.value if hasattr(cap, 'value') else str(cap)
+                    entity_grants.add(c_val)
+
+            elif op_name == "REVOKE_CAPABILITY":
+                count = operand
+                caps = [stack.pop() for _ in range(count)][::-1]
+                entity_name = stack.pop() if stack else None
+                if hasattr(entity_name, 'value'): entity_name = entity_name.value
+                
+                if "_grants" in self.env and entity_name in self.env["_grants"]:
+                    entity_grants = self.env["_grants"][entity_name]
+                    for cap in caps:
+                        c_val = cap.value if hasattr(cap, 'value') else str(cap)
+                        if c_val in entity_grants:
+                            entity_grants.remove(c_val)
+
+            elif op_name == "AUDIT_LOG":
+                ts = stack.pop()
+                action = stack.pop()
+                data = stack.pop()
+                # Unwrap
+                ts = ts.value if hasattr(ts, 'value') else ts
+                action = action.value if hasattr(action, 'value') else action
+                data = data.value if hasattr(data, 'value') else data
+                
+                entry = {"timestamp": ts, "action": action, "data": data}
+                self.env.setdefault("_audit_log", []).append(entry)
+                if self.debug: print(f"[AUDIT] {entry}")
+
+            elif op_name == "RESTRICT_ACCESS":
+                restriction = stack.pop()
+                prop = stack.pop()
+                obj = stack.pop()
+                # Just store in a registry for now. 
+                # Real implementation would hook into PropertyAccess/Assign logic.
+                r_key = f"{obj}.{prop}" if prop else str(obj)
+                self.env.setdefault("_restrictions", {})[r_key] = restriction
+
             elif op_name == "LEDGER_APPEND":
                 entry = stack.pop() if stack else None
                 if isinstance(entry, dict) and "timestamp" not in entry:

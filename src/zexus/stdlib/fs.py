@@ -158,6 +158,27 @@ class FileSystemModule:
         os.remove(validated_path)
 
     @staticmethod
+    def mkdir(path: str, parents: bool = True) -> None:
+        """Create directory."""
+        validated_path = FileSystemModule._validate_path(path, "mkdir")
+        Path(validated_path).mkdir(parents=parents, exist_ok=True)
+
+    @staticmethod
+    def rmdir(path: str, recursive: bool = False) -> None:
+        """Remove directory."""
+        validated_path = FileSystemModule._validate_path(path, "rmdir")
+        if recursive:
+            shutil.rmtree(validated_path)
+        else:
+            os.rmdir(validated_path)
+
+    @staticmethod
+    def remove(path: str) -> None:
+        """Remove file."""
+        validated_path = FileSystemModule._validate_path(path, "remove")
+        os.remove(validated_path)
+
+    @staticmethod
     def rename(old_path: str, new_path: str) -> None:
         """Rename/move file or directory."""
         validated_old = FileSystemModule._validate_path(old_path, "rename_source")
@@ -169,32 +190,21 @@ class FileSystemModule:
         """Copy file."""
         validated_src = FileSystemModule._validate_path(src, "copy_source")
         validated_dst = FileSystemModule._validate_path(dst, "copy_dest")
-        shutil.copy2(validated_src, validated_
-    @staticmethod
-    def remove(path: str) -> None:
-        """Remove file."""
-        os.remove(path)
-
-    @staticmethod
-    def rename(old_path: str, new_path: str) -> None:
-        """Rename/move file or directory."""
-        os.rename(old_path, new_path)
-
-    @staticmethod
-    def copy_file(src: str, dst: str) -> None:
-        """Copy file."""
-        shutil.copy2(src, dst)
+        shutil.copy2(validated_src, validated_dst)
 
     @staticmethod
     def copy_dir(src: str, dst: str) -> None:
         """Copy directory recursively."""
-        validated_path = FileSystemModule._validate_path(path, "list_dir")
-        return os.listdir(validated_c, dst)
+        validated_src = FileSystemModule._validate_path(src, "copy_dir_source")
+        validated_dst = FileSystemModule._validate_path(dst, "copy_dir_dest")
+        shutil.copytree(validated_src, validated_dst, dirs_exist_ok=True)
 
     @staticmethod
     def list_dir(path: str = '.') -> List[str]:
         """List directory contents."""
-        return os.listdir(path)
+        validated_path = FileSystemModule._validate_path(path, "list_dir")
+        return os.listdir(validated_path)
+
 
     @staticmethod
     def walk(path: str) -> List[Dict[str, Any]]:
