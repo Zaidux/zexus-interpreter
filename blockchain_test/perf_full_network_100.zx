@@ -1,8 +1,9 @@
-// Zexus performance benchmark: 10k transactions sequential vs bulk
+// Zexus performance benchmark: 100 transactions sequential vs bulk
+// Lightweight variant of perf_full_network_10k for faster iteration
 
 use "./full_network_chain/full_network_blockchain.zx"
 
-const PERF_TRANSACTION_COUNT = 1000
+const PERF_TRANSACTION_COUNT = 100
 
 const PERF_GENESIS = [
     {"address": "VAL_ALPHA", "balance": 5000000},
@@ -200,10 +201,9 @@ let bulk_total_time = bulk_result["submission_time"] + bulk_result["production_t
 let bulk_tps = compute_tps(PERF_TRANSACTION_COUNT, bulk_total_time)
 
 print("\n===============================================")
-print("ZEXUS PERFORMANCE SUMMARY :: 10K TRANSACTIONS")
+print("ZEXUS PERFORMANCE SUMMARY :: 100 TRANSACTIONS")
 print("===============================================")
 print("Sequential total_ms=" + string(sequential_result["duration"]) + " | blocks=" + string(sequential_result["blocks"]) + " | avg_block_ms=" + string(sequential_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_tps))
 print("Bulk submission_ms=" + string(bulk_result["submission_time"]) + " | production_ms=" + string(bulk_result["production_time"]) + " | blocks=" + string(bulk_result["blocks"]) + " | avg_block_ms=" + string(bulk_result["metrics"].avg_block_ms) + " | tps=" + string(bulk_tps))
 print("Pending after sequential=" + string(sequential_result["metrics"].pending_tx) + " | pending after bulk=" + string(bulk_result["metrics"].pending_tx))
-print("Benchmark complete")
-
+print("Benchmark complete for 100 transactions")

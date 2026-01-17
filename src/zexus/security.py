@@ -1444,6 +1444,66 @@ def lookup_contract(address):
 class SmartContract:
     """Represents a smart contract with persistent storage"""
 
+    @staticmethod
+    def _clone_storage_value(value, var_name=None):
+        """Deep clone storage values to keep instances isolated."""
+        from zexus.object import (
+            Integer as ZInteger,
+            Float as ZFloat,
+            Boolean as ZBoolean,
+            String as ZString,
+            List as ZList,
+            Map as ZMap,
+        )
+
+        if isinstance(value, StorageList):
+            target_name = var_name or getattr(value, "_var_name", "")
+            cloned_elements = [SmartContract._clone_storage_value(item) for item in value.elements]
+            cloned_list = StorageList(cloned_elements, target_name)
+            cloned_list.mark_clean()
+            return cloned_list
+
+        if isinstance(value, ZList):
+            return ZList([SmartContract._clone_storage_value(item) for item in value.elements])
+
+        if isinstance(value, StorageMap):
+            target_name = var_name or getattr(value, "_var_name", "")
+            cloned_pairs = {}
+            for key, stored_val in value.pairs.items():
+                cloned_pairs[key] = SmartContract._clone_storage_value(stored_val)
+            cloned_map = StorageMap(cloned_pairs, target_name)
+            cloned_map.mark_clean()
+            return cloned_map
+
+        if isinstance(value, ZMap):
+            cloned_pairs = {}
+            for key, stored_val in value.pairs.items():
+                cloned_pairs[key] = SmartContract._clone_storage_value(stored_val)
+            return ZMap(cloned_pairs)
+
+        if isinstance(value, ZString):
+            return ZString(value.value, sanitized_for=value.sanitized_for, is_trusted=value.is_trusted)
+
+        if isinstance(value, ZInteger):
+            return ZInteger(value.value)
+
+        if isinstance(value, ZFloat):
+            return ZFloat(value.value)
+
+        if isinstance(value, ZBoolean):
+            return ZBoolean(value.value)
+
+        if isinstance(value, list):
+            return [SmartContract._clone_storage_value(item) for item in value]
+
+        if isinstance(value, tuple):
+            return tuple(SmartContract._clone_storage_value(item) for item in value)
+
+        if isinstance(value, dict):
+            return {key: SmartContract._clone_storage_value(val) for key, val in value.items()}
+
+        return value
+
     def __init__(self, name, storage_vars, actions, blockchain_config=None, address=None):
         self.name = name
         self.storage_vars = storage_vars or []
@@ -1512,7 +1572,7 @@ class SmartContract:
                 # Get the initial value from the template contract's storage
                 value = self.storage.get(var_name)
                 if value is not None:
-                    initial_storage[var_name] = value
+                    initial_storage[var_name] = self._clone_storage_value(value, var_name=var_name)
         
         # Deploy the instance with the copied initial values
         instance.deploy(evaluated_storage_values=initial_storage)
@@ -1537,7 +1597,8 @@ class SmartContract:
         if evaluated_storage_values:
             for var_name, value in evaluated_storage_values.items():
                 if self.storage.get(var_name) is None:
-                    self.storage.set(var_name, value)
+                    cloned_value = self._clone_storage_value(value, var_name=var_name)
+                    self.storage.set(var_name, cloned_value)
         else:
             # Fallback: Initialize storage with NULL for declared variables
             for var_node in self.storage_vars:

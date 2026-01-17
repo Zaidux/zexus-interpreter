@@ -98,6 +98,20 @@ class List(Object):
         except Exception:
             return NULL
     
+    def set(self, index, value):
+        """Set element at index, mirroring array-style assignment."""
+        try:
+            idx = index.value if hasattr(index, 'value') else index
+            idx = int(idx)
+        except Exception as exc:
+            raise EvaluationError(f"Invalid index for assignment: {index}") from exc
+
+        if idx < 0 or idx >= len(self.elements):
+            raise EvaluationError(f"Index out of range for List assignment: {idx}")
+
+        self.elements[idx] = value
+        return value
+
     def append(self, item):
         """Append item to list in-place (mutating operation)"""
         self.elements.append(item)
