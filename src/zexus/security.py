@@ -1682,13 +1682,79 @@ class SmartContract:
         
         # Execute the action body - use cached evaluator for performance
         evaluator = _get_cached_evaluator()
+
+        # Optional: VM cached action execution for performance mode
+        vm_result = None
+        use_vm_actions = False
+        try:
+            if evaluator.unified_executor and evaluator.unified_executor.vm_enabled:
+                if evaluator.unified_executor.vm_config.get("vm_action_cache", False):
+                    use_vm_actions = True
+                else:
+                    perf_mode_flag = action_env.get("performance_mode")
+                    perf_mode = getattr(perf_mode_flag, "value", perf_mode_flag)
+                    config_obj = action_env.get("config")
+                    perf_use_vm_actions = None
+                    if isinstance(config_obj, Map):
+                        key = String("perf_use_vm_actions")
+                        if key in config_obj.pairs:
+                            perf_use_vm_actions = config_obj.pairs.get(key)
+                        elif "perf_use_vm_actions" in config_obj.pairs:
+                            perf_use_vm_actions = config_obj.pairs.get("perf_use_vm_actions")
+                    if isinstance(perf_use_vm_actions, BooleanObj):
+                        perf_use_vm_actions = perf_use_vm_actions.value
+                    if perf_use_vm_actions is True and perf_mode is True:
+                        use_vm_actions = True
+        except Exception:
+            use_vm_actions = False
         
         # Start batching storage writes for performance
         self.storage.begin_batch()
         self.storage.enable_action_cache()
         
         try:
-            result = evaluator.eval_node(action.body, action_env, stack_trace=[])
+            if use_vm_actions:
+                try:
+                    from zexus.evaluator.bytecode_compiler import EvaluatorBytecodeCompiler, should_use_vm_for_node
+                    from zexus.evaluator.utils import is_error
+
+                    if should_use_vm_for_node(action.body):
+                        cache = getattr(self, "_vm_action_cache", None)
+                        if cache is None:
+                            cache = {}
+                            self._vm_action_cache = cache
+
+                        bytecode = cache.get(action_name)
+                        if bytecode is None:
+                            compiler = EvaluatorBytecodeCompiler(use_cache=True)
+                            bytecode = compiler.compile(action.body, optimize=True)
+                            if bytecode and not compiler.errors:
+                                cache[action_name] = bytecode
+                                sync_cache = getattr(self, "_vm_action_sync_keys", None)
+                                if sync_cache is None:
+                                    sync_cache = {}
+                                    self._vm_action_sync_keys = sync_cache
+                                try:
+                                    sync_cache[action_name] = evaluator.unified_executor._collect_assigned_names(action.body)
+                                except Exception:
+                                    sync_cache[action_name] = None
+
+                        if bytecode is not None:
+                            sync_keys = None
+                            try:
+                                sync_keys = self._vm_action_sync_keys.get(action_name)
+                            except Exception:
+                                sync_keys = None
+                            vm_result = evaluator.unified_executor.execute_action_bytecode(bytecode, action_env, sync_keys=sync_keys)
+                            if is_error(vm_result):
+                                vm_result = None
+                except Exception:
+                    vm_result = None
+
+            if vm_result is not None:
+                result = vm_result
+            else:
+                result = evaluator.eval_node(action.body, action_env, stack_trace=[])
             
             # Save any modified state variables back to storage
             # SKIP variables that were set via this.property (direct storage updates)

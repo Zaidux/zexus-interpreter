@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import asyncio
+import threading
 import importlib
 import hashlib
 import types
@@ -326,6 +327,8 @@ class VM:
         enable_register_allocation: bool = False,
         enable_bytecode_converter: bool = False,
         converter_aggressive: bool = False,
+        fast_single_shot: bool = False,
+        single_shot_max_instructions: int = 64,
         num_allocator_registers: int = 16,
         enable_gas_metering: bool = True,
         gas_limit: int = None,
@@ -372,6 +375,8 @@ class VM:
         self._total_execution_time = 0.0
         self._mode_usage = {m.value: 0 for m in VMMode}
         self._last_opcode_profile = None
+        self._call_method_trace_count = 0
+        self._action_evaluator = None
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
@@ -487,6 +492,13 @@ class VM:
         self.register_allocator = None
         self.enable_bytecode_converter = enable_bytecode_converter and _BYTECODE_CONVERTER_AVAILABLE
         self.bytecode_converter = None
+
+        # --- Fast single-shot execution ---
+        self.fast_single_shot = bool(fast_single_shot)
+        try:
+            self.single_shot_max_instructions = int(single_shot_max_instructions)
+        except Exception:
+            self.single_shot_max_instructions = 64
         
         if self.enable_ssa:
             try:
@@ -605,6 +617,37 @@ class VM:
 
     # ==================== Public Execution API ====================
 
+    def _run_coroutine_sync(self, coro):
+        """Run a coroutine from sync code, even if an event loop is already running."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        result_holder: Dict[str, Any] = {}
+        error_holder: Dict[str, Exception] = {}
+
+        def _runner():
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                result_holder["result"] = loop.run_until_complete(coro)
+            except Exception as exc:
+                error_holder["error"] = exc
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join()
+
+        if "error" in error_holder:
+            raise error_holder["error"]
+        return result_holder.get("result")
+
     def execute(self, code: Union[List[Tuple], Any], debug: bool = False) -> Any:
         """
         Execute code (High-level ops or Bytecode) using optimal execution mode.
@@ -619,7 +662,7 @@ class VM:
                 print("[VM] Executing High-Level Ops")
             try:
                 # Run purely async internally, execute blocks
-                return asyncio.run(self._run_high_level_ops(code, debug or self.debug))
+                return self._run_coroutine_sync(self._run_high_level_ops(code, debug or self.debug))
             except Exception as e:
                 if debug or self.debug: print(f"[VM HL Error] {e}")
                 raise e
@@ -642,7 +685,7 @@ class VM:
             
             # 3. Stack Mode (Standard/Fallback + Async Support)
             else:
-                result = asyncio.run(self._execute_stack(code, debug))
+                result = self._run_coroutine_sync(self._execute_stack(code, debug))
             
             # JIT Tracking
             if self.use_jit and hasattr(code, 'instructions'):
@@ -706,7 +749,7 @@ class VM:
             return result
         except Exception as e:
             if debug: print(f"[VM Register] Failed: {e}, falling back to stack")
-            return asyncio.run(self._run_stack_bytecode(bytecode, debug))
+            return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
 
     def _execute_parallel(self, bytecode, debug: bool = False):
         """Execute using parallel VM"""
@@ -722,7 +765,7 @@ class VM:
             )
         except Exception as e:
             if debug: print(f"[VM Parallel] Failed: {e}, falling back to stack")
-            return asyncio.run(self._run_stack_bytecode(bytecode, debug))
+            return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
 
     def _optimize_bytecode_for_parallel(self, bytecode):
         """Apply peephole/SSA optimizations and map opcodes for parallel execution."""
@@ -1066,7 +1109,13 @@ class VM:
         consts = list(getattr(bytecode, "constants", []))
         instrs = list(getattr(bytecode, "instructions", []))
 
-        if self.enable_bytecode_optimizer and self.bytecode_optimizer:
+        fast_single_shot = (
+            self.fast_single_shot
+            and isinstance(self.single_shot_max_instructions, int)
+            and len(instrs) <= self.single_shot_max_instructions
+        )
+
+        if not fast_single_shot and self.enable_bytecode_optimizer and self.bytecode_optimizer:
             try:
                 normalized_for_opt: List[Tuple[Any, Any]] = []
                 for instr in instrs:
@@ -1082,7 +1131,7 @@ class VM:
                 pass
 
         # Peephole optimization with constant pool awareness
-        if self.enable_peephole_optimizer and self.peephole_optimizer:
+        if not fast_single_shot and self.enable_peephole_optimizer and self.peephole_optimizer:
             try:
                 instrs, consts = self.peephole_optimizer.optimize_bytecode(instrs, consts)
             except Exception:
@@ -1101,7 +1150,7 @@ class VM:
 
         instrs = normalized_instrs
 
-        if self.enable_ssa and self.ssa_converter:
+        if not fast_single_shot and self.enable_ssa and self.ssa_converter:
             try:
                 ssa_program = self.ssa_converter.convert_to_ssa(instrs)
                 ssa_instrs = destruct_ssa(ssa_program)
@@ -1249,6 +1298,8 @@ class VM:
             self.env[name] = value
 
         def _unwrap(value):
+            if isinstance(value, ZNull):
+                return None
             return value.value if hasattr(value, 'value') else value
 
         def _binary_op(func):
@@ -1319,6 +1370,18 @@ class VM:
                 return
 
             result = None
+            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+            verbose_active = verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
+            if verbose_active and self._call_method_trace_count < 25:
+                target_type = type(target).__name__
+                preview = []
+                for item in args[:3]:
+                    try:
+                        preview.append(repr(item))
+                    except Exception:
+                        preview.append(f"<{type(item).__name__}>")
+                print(f"[VM TRACE] CALL_METHOD {method_name} target={target_type} args={len(args)} preview={preview}")
+                self._call_method_trace_count += 1
             try:
                 if method_name == "set":
                     if isinstance(target, ZMap):
@@ -1352,6 +1415,8 @@ class VM:
                         result = candidate(*args) if callable(candidate) else candidate
                     else:
                         result = attr
+                if verbose_active and self._call_method_trace_count <= 25:
+                    print(f"[VM TRACE] CALL_METHOD {method_name} result={result}")
             except Exception as exc:
                 if debug:
                     print(f"[VM] CALL_METHOD failed for {method_name}: {exc}")
@@ -2185,6 +2250,19 @@ class VM:
             
             # Extract .fn if it's a wrapper
             real_fn = fn_obj.fn if hasattr(fn_obj, "fn") else fn_obj
+
+            # Execute Zexus Action/LambdaFunction via evaluator
+            try:
+                from ..object import Action as ZAction, LambdaFunction as ZLambda
+                if isinstance(real_fn, (ZAction, ZLambda)):
+                    from ..evaluator.core import Evaluator
+                    if self._action_evaluator is None:
+                        self._action_evaluator = Evaluator(use_vm=False)
+                    call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
+                    result = self._action_evaluator.apply_function(real_fn, call_args)
+                    return self._unwrap_after_builtin(result)
+            except Exception:
+                pass
             
             if not callable(real_fn): return real_fn
             
@@ -2229,7 +2307,7 @@ class VM:
         results = {'iterations': iterations, 'modes': {}}
         
         # Stack
-        def run_stack(): return asyncio.run(self._execute_stack(bytecode))
+        def run_stack(): return self._run_coroutine_sync(self._execute_stack(bytecode))
         t_stack = timeit.timeit(run_stack, number=iterations)
         stack_avg = t_stack / iterations if iterations else 0.0
         results['modes']['stack'] = {'total': t_stack, 'avg': stack_avg}

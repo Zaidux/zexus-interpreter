@@ -1041,6 +1041,41 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             debug_log("VM Execution", f"VM execution error: {e}")
             self.vm_stats['vm_fallbacks'] += 1
             return None  # Signal fallback
+
+    def _execute_bytecode_sequence(self, bytecodes, env, debug_mode=False):
+        """Execute a sequence of bytecode objects in the VM for cached file runs."""
+        try:
+            if not bytecodes:
+                return None
+
+            # Convert environment to dict for VM
+            vm_env = self._env_to_dict(env)
+
+            # Add builtins to VM environment
+            vm_builtins = {}
+            if hasattr(self, 'builtins') and self.builtins:
+                vm_builtins = {k: v for k, v in self.builtins.items()}
+            vm_builtins.update(self._create_vm_keyword_builtins(env))
+
+            if not self.vm_instance:
+                self.vm_instance = VM(use_jit=True, jit_threshold=100)
+
+            self.vm_instance.builtins = vm_builtins
+            self.vm_instance.env = vm_env
+
+            result = None
+            for bc in bytecodes:
+                if bc is None:
+                    continue
+                result = self.vm_instance.execute(bc, debug=debug_mode)
+
+            self.vm_stats['vm_executions'] += 1
+            self._update_env_from_dict(env, self.vm_instance.env)
+            return self._vm_result_to_evaluator(result)
+        except Exception as e:
+            debug_log("VM Execution", f"VM cached execution error: {e}")
+            self.vm_stats['vm_fallbacks'] += 1
+            return None
     
     def _create_vm_keyword_builtins(self, env):
         """Expose keyword helpers to the VM so bytecode can reuse evaluator logic"""
@@ -1292,17 +1327,30 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             pass
         
         # For program nodes with file context, try cached execution
-        if (file_path and self.bytecode_compiler and 
-            type(node).__name__ == 'Program' and
-            self.bytecode_compiler.cache and
-            self.bytecode_compiler.cache.is_file_cached(file_path)):
-            # File is cached - try to use cached bytecode
-            cached_bytecodes = self.bytecode_compiler.cache.get_by_file(file_path)
-            if cached_bytecodes:
-                debug_log("VM Execution", f"Using cached bytecode for {file_path}")
-                # Execute cached bytecode sequence
-                # For now, we still need to eval since cached bytecode may be partial
-                # TODO: Full cached execution path
+        if (
+            self.use_vm
+            and VM_AVAILABLE
+            and file_path
+            and self.bytecode_compiler
+            and type(node).__name__ == 'Program'
+            and self.bytecode_compiler.cache
+        ):
+            cached_bytecodes = None
+            if self.bytecode_compiler.cache.is_file_cached(file_path):
+                cached_bytecodes = self.bytecode_compiler.cache.get_by_file(file_path)
+                if cached_bytecodes:
+                    debug_log("VM Execution", f"Using cached bytecode for {file_path}")
+                    result = self._execute_bytecode_sequence(cached_bytecodes, env, debug_mode)
+                    if result is not None:
+                        return result
+
+            # Cache miss or invalid - compile full file and store
+            compiled = self.bytecode_compiler.compile_file(file_path, node, optimize=True)
+            if compiled:
+                debug_log("VM Execution", f"Cached compilation for {file_path} ({len(compiled)} bytecodes)")
+                result = self._execute_bytecode_sequence(compiled, env, debug_mode)
+                if result is not None:
+                    return result
         
         # Check if we should use VM for this node
         if self._should_use_vm(node):

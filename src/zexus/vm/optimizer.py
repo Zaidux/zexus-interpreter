@@ -70,6 +70,75 @@ class BytecodeOptimizer:
         self.max_passes = max_passes
         self.debug = debug
         self.stats = OptimizationStats()
+        self.min_basic_size = 3
+        self.min_aggressive_size = 12
+        self.min_experimental_size = 20
+        self._control_flow_ops = {
+            "JUMP",
+            "JUMP_IF_FALSE",
+            "JUMP_IF_TRUE",
+            "JUMP_FORWARD",
+            "JUMP_BACKWARD",
+            "LABEL",
+            "JUMP_TARGET",
+        }
+
+    def _has_control_flow(self, instructions: List[Tuple[str, Any]]) -> bool:
+        """Check if instruction stream contains control-flow operations."""
+        for op, _ in instructions:
+            if op in self._control_flow_ops:
+                return True
+        return False
+
+    def _validate_control_flow(self, instructions: List[Tuple[str, Any]]) -> bool:
+        """Validate that jump targets are sane and within bounds."""
+        max_index = len(instructions) - 1
+        for idx, (op, operand) in enumerate(instructions):
+            if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD"):
+                if not isinstance(operand, int):
+                    return False
+                if operand < 0 or operand > max_index:
+                    return False
+                if op == "JUMP" and operand == idx:
+                    return False
+                if op == "JUMP_FORWARD" and operand <= idx:
+                    return False
+                if op == "JUMP_BACKWARD" and operand >= idx:
+                    return False
+        return True
+
+    def _run_pass(
+        self,
+        name: str,
+        instructions: List[Tuple[str, Any]],
+        apply_fn,
+        *,
+        can_change_size: bool = True
+    ) -> List[Tuple[str, Any]]:
+        """Run a pass with logging and control-flow validation."""
+        if can_change_size and self._has_control_flow(instructions):
+            if self.debug:
+                print(f"[Optimizer] {name}: skipped (control flow present)")
+            return instructions
+
+        before_len = len(instructions)
+        try:
+            optimized = apply_fn()
+        except Exception as exc:
+            if self.debug:
+                print(f"[Optimizer] {name}: failed ({exc})")
+            return instructions
+
+        after_len = len(optimized)
+        if self.debug:
+            print(f"[Optimizer] {name}: {before_len} -> {after_len}")
+
+        if not self._validate_control_flow(optimized):
+            if self.debug:
+                print(f"[Optimizer] {name}: invalid control flow detected, reverting")
+            return instructions
+
+        return optimized
     
     def optimize(self, instructions: List[Tuple[str, Any]], constants: List[Any] = None) -> List[Tuple[str, Any]]:
         """
@@ -97,21 +166,75 @@ class BytecodeOptimizer:
             
             # Level 1: Basic optimizations
             if self.level >= 1:
-                optimized = self._constant_folding(optimized, constants)
-                optimized = self._dead_code_elimination(optimized)
-                optimized = self._peephole_optimization(optimized)
+                if len(optimized) >= self.min_basic_size:
+                    optimized = self._run_pass(
+                        "constant_folding",
+                        optimized,
+                        lambda: self._constant_folding(optimized, constants),
+                        can_change_size=True,
+                    )
+                    optimized = self._run_pass(
+                        "dead_code_elimination",
+                        optimized,
+                        lambda: self._dead_code_elimination(optimized),
+                        can_change_size=True,
+                    )
+                    optimized = self._run_pass(
+                        "peephole_optimization",
+                        optimized,
+                        lambda: self._peephole_optimization(optimized),
+                        can_change_size=True,
+                    )
+                elif self.debug:
+                    print("[Optimizer] basic passes skipped (small instruction count)")
             
             # Level 2: Aggressive optimizations
             if self.level >= 2:
-                optimized = self._copy_propagation(optimized)
-                optimized = self._instruction_combining(optimized, constants)
-                optimized = self._jump_threading(optimized)
-                optimized = self._strength_reduction(optimized)
+                if len(optimized) >= self.min_aggressive_size:
+                    optimized = self._run_pass(
+                        "copy_propagation",
+                        optimized,
+                        lambda: self._copy_propagation(optimized),
+                        can_change_size=False,
+                    )
+                    optimized = self._run_pass(
+                        "instruction_combining",
+                        optimized,
+                        lambda: self._instruction_combining(optimized, constants),
+                        can_change_size=True,
+                    )
+                    optimized = self._run_pass(
+                        "jump_threading",
+                        optimized,
+                        lambda: self._jump_threading(optimized),
+                        can_change_size=False,
+                    )
+                    optimized = self._run_pass(
+                        "strength_reduction",
+                        optimized,
+                        lambda: self._strength_reduction(optimized),
+                        can_change_size=False,
+                    )
+                elif self.debug:
+                    print("[Optimizer] aggressive passes skipped (small instruction count)")
             
             # Level 3: Experimental optimizations
             if self.level >= 3:
-                optimized = self._common_subexpression_elimination(optimized)
-                optimized = self._loop_invariant_code_motion(optimized)
+                if len(optimized) >= self.min_experimental_size:
+                    optimized = self._run_pass(
+                        "common_subexpression_elimination",
+                        optimized,
+                        lambda: self._common_subexpression_elimination(optimized),
+                        can_change_size=True,
+                    )
+                    optimized = self._run_pass(
+                        "loop_invariant_code_motion",
+                        optimized,
+                        lambda: self._loop_invariant_code_motion(optimized),
+                        can_change_size=True,
+                    )
+                elif self.debug:
+                    print("[Optimizer] experimental passes skipped (small instruction count)")
             
             self.stats.passes_applied += 1
             
@@ -285,11 +408,17 @@ class BytecodeOptimizer:
         """
         result = []
         in_dead_code = False
+        jump_targets: Set[int] = set()
+
+        for idx, (op, operand) in enumerate(instructions):
+            if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD"):
+                if isinstance(operand, int):
+                    jump_targets.add(operand)
         
-        for op, operand in instructions:
+        for idx, (op, operand) in enumerate(instructions):
             if in_dead_code:
                 # Skip until we hit a jump target or label
-                if op in ("LABEL", "JUMP_TARGET"):
+                if op in ("LABEL", "JUMP_TARGET") or idx in jump_targets:
                     in_dead_code = False
                     result.append((op, operand))
                 else:

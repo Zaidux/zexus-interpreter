@@ -4,7 +4,7 @@ use "./full_network_chain/full_network_blockchain.zx"
 use {enable_vm, set_vm_thresholds, set_vm_config, profile_start, profile_stop, profile_report, vm_stats} from "stdlib/perf"
 use {stringify} from "stdlib/json"
 
-const PERF_TRANSACTION_COUNT = 200
+const PERF_TRANSACTION_COUNT = 2000
 
 const PERF_GENESIS = [
     {"address": "VAL_ALPHA", "balance": 5000000},
@@ -37,9 +37,15 @@ function create_performance_blockchain(max_block_txs, logging) {
         "performance_mode": perf_mode,
         "perf_skip_validation": perf_mode,
         "perf_skip_rewards": perf_mode,
-        "perf_skip_history": perf_mode
+        "perf_skip_history": perf_mode,
+        "perf_micro_batch": perf_mode,
+        "perf_micro_batch_size": 32,
+        "perf_skip_integrity_refresh": perf_mode,
+        "perf_use_vm_actions": perf_mode
     }
+    enable_vm(false)
     let chain = create_full_network_blockchain(overrides, PERF_GENESIS, PERF_VALIDATORS, logging)
+    enable_vm(true)
     print("[perf] created blockchain max_txs=" + string(max_block_txs) + " validators=" + string(len(PERF_VALIDATORS)))
     return chain
 }
@@ -232,17 +238,21 @@ set_vm_config({
     "optimizer_level": 2,
     "enable_memory_pool": true,
     "enable_async_optimizer": true,
-    "enable_ssa": true,
+    "enable_ssa": false,
     "enable_bytecode_converter": true,
-    "enable_profiling": true,
+    "vm_single_shot": true,
+    "vm_single_shot_min_instructions": 24,
+    "fast_single_shot": true,
+    "single_shot_max_instructions": 64,
+    "enable_profiling": false,
     "profiling_level": "DETAILED",
     "profiling_sample_rate": 1.0,
     "profiling_max_samples": 2048,
     "profiling_track_overhead": false,
     "vm_full_loop": true,
     "vm_sync_all": false,
-    "vm_allow_unsafe_loops": true,
-    "vm_dump_bytecode": true,
+    "vm_allow_unsafe_loops": false,
+    "vm_dump_bytecode": false,
     "mode": "stack"
 })
 
@@ -254,8 +264,12 @@ while warmup_i < 6 {
 
 profile_start()
 
-let sequential_single_result = run_sequential_test()
-let sequential_result = run_sequential_batched_test()
+let sequential_single_result = null
+let sequential_result = null
+if PERF_TRANSACTION_COUNT <= 2000 {
+    sequential_single_result = run_sequential_test()
+    sequential_result = run_sequential_batched_test()
+}
 let bulk_result = run_bulk_test()
 
 profile_stop()
@@ -267,21 +281,36 @@ function compute_tps(total_tx, duration_ms) {
     return (total_tx * 1000) / duration_ms
 }
 
-let sequential_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_result["duration"])
-let sequential_single_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_single_result["duration"])
+let sequential_tps = 0
+if sequential_result != null {
+    sequential_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_result["duration"])
+}
+let sequential_single_tps = 0
+if sequential_single_result != null {
+    sequential_single_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_single_result["duration"])
+}
 let bulk_total_time = bulk_result["submission_time"] + bulk_result["production_time"]
 let bulk_tps = compute_tps(PERF_TRANSACTION_COUNT, bulk_total_time)
 
 print("\n===============================================")
 print("ZEXUS PERFORMANCE SUMMARY :: 10K TRANSACTIONS")
 print("===============================================")
-print("Sequential total_ms=" + string(sequential_result["duration"]) + " | blocks=" + string(sequential_result["blocks"]) + " | avg_block_ms=" + string(sequential_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_tps))
-print("Sequential single-block total_ms=" + string(sequential_single_result["duration"]) + " | blocks=" + string(sequential_single_result["blocks"]) + " | avg_block_ms=" + string(sequential_single_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_single_tps))
+if sequential_result != null {
+    print("Sequential total_ms=" + string(sequential_result["duration"]) + " | blocks=" + string(sequential_result["blocks"]) + " | avg_block_ms=" + string(sequential_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_tps))
+} else {
+    print("Sequential batched skipped for PERF_TRANSACTION_COUNT=" + string(PERF_TRANSACTION_COUNT))
+}
+if sequential_single_result != null {
+    print("Sequential single-block total_ms=" + string(sequential_single_result["duration"]) + " | blocks=" + string(sequential_single_result["blocks"]) + " | avg_block_ms=" + string(sequential_single_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_single_tps))
+} else {
+    print("Sequential single-block skipped for PERF_TRANSACTION_COUNT=" + string(PERF_TRANSACTION_COUNT))
+}
 print("Bulk submission_ms=" + string(bulk_result["submission_time"]) + " | production_ms=" + string(bulk_result["production_time"]) + " | blocks=" + string(bulk_result["blocks"]) + " | avg_block_ms=" + string(bulk_result["metrics"].avg_block_ms) + " | tps=" + string(bulk_tps))
-print("Pending after sequential=" + string(sequential_result["metrics"].pending_tx) + " | pending after bulk=" + string(bulk_result["metrics"].pending_tx))
+if sequential_result != null {
+    print("Pending after sequential=" + string(sequential_result["metrics"].pending_tx) + " | pending after bulk=" + string(bulk_result["metrics"].pending_tx))
+} else {
+    print("Pending after bulk=" + string(bulk_result["metrics"].pending_tx))
+}
 print("Benchmark complete")
-print("\n--- VM PROFILING REPORT ---")
-print(profile_report("text", 20))
-print("\n--- VM STATS ---")
-print(stringify(vm_stats()))
+// Profiling output disabled for clarity
 

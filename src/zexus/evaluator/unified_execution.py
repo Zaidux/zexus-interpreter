@@ -198,6 +198,8 @@ class UnifiedExecutor:
         self.force_all_vm_loops = False
         self._compile_errors: Dict[int, Any] = {}
         self._compile_info: Dict[int, Any] = {}
+        self._logged_vm_loops: set[int] = set()
+        self._logged_vm_loop_env: set[int] = set()
         
         # VM instance (lazy init)
         self.vm = None
@@ -230,6 +232,12 @@ class UnifiedExecutor:
             "vm_sync_all": False,
             "vm_allow_unsafe_loops": False,
             "vm_dump_bytecode": False,
+            "vm_single_shot": False,
+            "vm_single_shot_min_instructions": 24,
+            "fast_single_shot": False,
+            "single_shot_max_instructions": 64,
+            "vm_action_cache": False,
+            "vm_action_sync_all": False,
         }
         
         # JIT compiler (lazy init)
@@ -317,6 +325,8 @@ class UnifiedExecutor:
             enable_register_allocation=bool(self.vm_config.get("enable_register_allocation", False)),
             enable_bytecode_converter=bool(self.vm_config.get("enable_bytecode_converter", False)),
             converter_aggressive=bool(self.vm_config.get("converter_aggressive", False)),
+            fast_single_shot=bool(self.vm_config.get("fast_single_shot", False)),
+            single_shot_max_instructions=int(self.vm_config.get("single_shot_max_instructions", 64)),
         )
     
     def execute_loop(self, loop_id: int, condition_node, body_node, env, stack_trace) -> Any:
@@ -389,6 +399,7 @@ class UnifiedExecutor:
             # Track iteration
             info = self.workload.track_loop_iteration(loop_id)
             force_vm_loop = loop_id in self._force_vm_loops or force_vm_loop or self.force_all_vm_loops
+            single_shot_active = False
 
             # Promote to parallel VM mode for very hot loops
             if (
@@ -431,12 +442,36 @@ class UnifiedExecutor:
                     self.failed_compilations.add(loop_id)
                     if loop_id not in self._compile_errors:
                         self._compile_errors[loop_id] = "compile returned false"
+
+            # Single-shot VM: allow VM execution for one-iteration loops
+            if (
+                not info["use_vm"]
+                and self.vm_enabled
+                and bool(self.vm_config.get("vm_single_shot", False))
+                and info["iteration"] == 1
+                and loop_id not in self.compiled_loops
+                and loop_id not in self.failed_compilations
+            ):
+                try:
+                    from .bytecode_compiler import should_use_vm_for_node
+                    if should_use_vm_for_node(body_node):
+                        success = self._compile_loop(loop_id, body_node, env, full_loop=False)
+                        if success:
+                            instr_count = self._compile_info.get(loop_id, {}).get("instructions", 0)
+                            min_instr = int(self.vm_config.get("vm_single_shot_min_instructions", 24))
+                            if instr_count >= min_instr:
+                                single_shot_active = True
+                            else:
+                                # Too small to justify VM overhead
+                                self.compiled_loops.pop(loop_id, None)
+                except Exception:
+                    pass
             
             # Execute body
             use_vm_now = (
                 loop_id in self.compiled_loops
                 and loop_id not in self.failed_compilations
-                and (force_vm_loop or info["use_vm"])
+                and (force_vm_loop or info["use_vm"] or single_shot_active)
             )
 
             if use_vm_now:
@@ -446,6 +481,13 @@ class UnifiedExecutor:
                     if sync_keys is None:
                         sync_keys = self._collect_assigned_names(body_node)
                         self._loop_sync_keys[loop_id] = sync_keys
+                verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+                if verbose_flag and verbose_flag.lower() not in ("0", "false", "off"):
+                    if loop_id not in self._logged_vm_loops:
+                        info = self._compile_info.get(loop_id, {})
+                        instr_count = info.get("instructions", "?")
+                        print(f"[VM TRACE] executing loop_id={loop_id} instr={instr_count}")
+                        self._logged_vm_loops.add(loop_id)
                 entry = self.compiled_loops[loop_id]
                 is_full_loop = isinstance(entry, dict) and entry.get("full_loop") is True
                 # Use VM
@@ -499,7 +541,7 @@ class UnifiedExecutor:
             profile_verbose = profile_active and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
 
             # Try evaluator's bytecode compiler first (better integration)
-            compiler = EvaluatorBytecodeCompiler(use_cache=False)
+            compiler = EvaluatorBytecodeCompiler(use_cache=True)
             bytecode = compiler.compile(node_to_compile, optimize=True)
 
             if bytecode and not compiler.errors:
@@ -605,6 +647,22 @@ class UnifiedExecutor:
             if hasattr(self.evaluator, 'builtins') and self.evaluator.builtins:
                 self.vm.builtins = {k: v for k, v in self.evaluator.builtins.items()}
 
+            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+            if verbose_flag and verbose_flag.lower() not in ("0", "false", "off"):
+                if loop_id not in self._logged_vm_loop_env:
+                    i_val = self.vm.env.get("i")
+                    count_val = self.vm.env.get("PERF_TRANSACTION_COUNT")
+                    use_bulk_all = self.vm.env.get("use_bulk_all")
+                    use_fast_blocks = self.vm.env.get("use_fast_blocks")
+                    blockchain_val = self.vm.env.get("blockchain")
+                    if i_val is not None or count_val is not None or use_bulk_all is not None:
+                        chain_type = type(blockchain_val).__name__ if blockchain_val is not None else None
+                        print(
+                            f"[VM TRACE] loop_id={loop_id} i={i_val} PERF_TRANSACTION_COUNT={count_val} "
+                            f"use_bulk_all={use_bulk_all} use_fast_blocks={use_fast_blocks} blockchain={chain_type}"
+                        )
+                    self._logged_vm_loop_env.add(loop_id)
+
             # Execute bytecode
             entry = self.compiled_loops[loop_id]
             if isinstance(entry, dict):
@@ -630,6 +688,34 @@ class UnifiedExecutor:
         except Exception as e:
             if profile_verbose:
                 print(f"[VM DEBUG] unified execution exception={e}")
+            return EvaluationError(f"VM execution error: {e}")
+
+    def execute_action_bytecode(self, bytecode, env, sync_keys: Optional[set[str]] = None) -> Any:
+        """Execute cached action bytecode via VM with env sync."""
+        from ..object import NULL, EvaluationError
+
+        profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
+        profile_active = profile_flag and profile_flag.lower() not in ("0", "false", "off")
+        verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
+        profile_verbose = profile_active and verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
+
+        try:
+            self.ensure_vm(profile_active=profile_active)
+            self._sync_env_to_vm(env)
+            if hasattr(self.evaluator, 'builtins') and self.evaluator.builtins:
+                self.vm.builtins = {k: v for k, v in self.evaluator.builtins.items()}
+
+            result = self.vm.execute(bytecode, debug=False)
+
+            if sync_keys is None and not bool(self.vm_config.get("vm_action_sync_all", False)):
+                sync_keys = None
+            self._sync_env_from_vm(env, sync_keys=sync_keys)
+            self.workload.stats["vm_executions"] += 1
+            self.stats["vm_hits"] += 1
+            return self._convert_from_vm(result) if result is not None else NULL
+        except Exception as e:
+            if profile_verbose:
+                print(f"[VM DEBUG] action execution exception={e}")
             return EvaluationError(f"VM execution error: {e}")
     
     def _sync_env_to_vm(self, env):
@@ -661,13 +747,29 @@ class UnifiedExecutor:
         if not self.vm or not env:
             return
         
-        # Convert VM values back to evaluator objects
-        for key, value in self.vm.env.items():
-            if sync_keys is not None and key not in sync_keys:
-                if not (hasattr(value, "call_method") or hasattr(value, "get_attr")):
+        if sync_keys is not None:
+            if len(sync_keys) == 0:
+                return
+            # Only sync tracked keys to reduce overhead
+            for key in sync_keys:
+                if key not in self.vm.env:
                     continue
+                value = self.vm.env.get(key)
+                eval_value = self._convert_from_vm(value)
+                if hasattr(env, 'set'):
+                    try:
+                        env.assign(key, eval_value)
+                    except ValueError:
+                        env.set(key, eval_value)
+                elif hasattr(env, 'store'):
+                    env.store[key] = eval_value
+                elif isinstance(env, dict):
+                    env[key] = eval_value
+            return
+
+        # Convert VM values back to evaluator objects (full sync)
+        for key, value in self.vm.env.items():
             eval_value = self._convert_from_vm(value)
-            
             if hasattr(env, 'set'):
                 try:
                     env.assign(key, eval_value)
@@ -682,6 +784,8 @@ class UnifiedExecutor:
     def _convert_to_vm(self, value: Any) -> Any:
         """Convert evaluator object to VM value"""
         from ..object import List as ZList, Map as ZMap
+        if hasattr(value, "call_method") or hasattr(value, "get_attr"):
+            return value
         if isinstance(value, (ZList, ZMap)):
             return value
         if hasattr(value, 'value'):

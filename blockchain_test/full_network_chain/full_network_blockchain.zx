@@ -299,6 +299,10 @@ export contract Blockchain {
             "base_reward": 40,
             "min_stake": 20000,
             "events_enabled": true,
+            "perf_micro_batch": false,
+            "perf_micro_batch_size": 16,
+            "perf_skip_integrity_refresh": false,
+            "perf_use_vm_actions": false,
             "consensus_threshold_bp": 6700,
             "consensus_max_missed": 3,
             "treasury_rate_bp": 800,
@@ -905,6 +909,12 @@ export contract Blockchain {
                 skip_validation = true
             }
         }
+        let skip_integrity_refresh = false
+        if performance_mode {
+            if config["perf_skip_integrity_refresh"] == true {
+                skip_integrity_refresh = true
+            }
+        }
         // Inline ensure_account logic with integrity tracking
         let ledger_was_updated = false
         if _balances[from_addr] == null {
@@ -987,7 +997,7 @@ export contract Blockchain {
             })
         }
 
-        if ledger_was_updated {
+        if ledger_was_updated && skip_integrity_refresh == false {
             this._refresh_balances_integrity()
         }
 
@@ -998,6 +1008,18 @@ export contract Blockchain {
     action submit_transactions_batch(transactions) limit 60000 {
         if transactions == null {
             return 0
+        }
+        if performance_mode {
+            let micro_enabled = config["perf_micro_batch"]
+            let micro_size = config["perf_micro_batch_size"]
+            if micro_enabled == true && config["perf_skip_validation"] == true {
+                if micro_size == null {
+                    micro_size = 16
+                }
+                if len(transactions) <= micro_size {
+                    return this.submit_transactions_batch_fast(transactions)
+                }
+            }
         }
         let skip_validation = false
         if performance_mode {
@@ -2379,7 +2401,22 @@ export contract Blockchain {
         let proposer_address = proposer["address"]
         this.ensure_account(proposer_address)
 
-        let selected = this.select_transactions(batch_size)
+        let selected = null
+        if performance_mode {
+            let micro_enabled = config["perf_micro_batch"]
+            let micro_size = config["perf_micro_batch_size"]
+            if micro_size == null {
+                micro_size = 16
+            }
+            if micro_enabled == true && len(pending_transactions) <= micro_size && batch_size <= micro_size {
+                selected = pending_transactions
+                pending_transactions = []
+                _pending_nonces = {}
+            }
+        }
+        if selected == null {
+            selected = this.select_transactions(batch_size)
+        }
 
         if len(chain) == 0 {
             let repaired_genesis = Block()
@@ -3348,6 +3385,10 @@ export const DEFAULT_FULL_NETWORK_CONFIG = {
     "min_stake": 25000,
     "events_enabled": true,
     "performance_mode": false,
+    "perf_micro_batch": false,
+    "perf_micro_batch_size": 16,
+    "perf_skip_integrity_refresh": false,
+    "perf_use_vm_actions": false,
     "consensus_threshold_bp": 6700,
     "consensus_max_missed": 3,
     "treasury_rate_bp": 800,
@@ -3366,6 +3407,10 @@ export const PERF_FULL_NETWORK_CONFIG = {
     "perf_skip_validation": true,
     "perf_skip_rewards": true,
     "perf_skip_history": true,
+    "perf_micro_batch": true,
+    "perf_micro_batch_size": 32,
+    "perf_skip_integrity_refresh": true,
+    "perf_use_vm_actions": true,
     "consensus_threshold_bp": 6700,
     "consensus_max_missed": 3,
     "treasury_rate_bp": 800,
