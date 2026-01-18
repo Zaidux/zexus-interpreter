@@ -1076,7 +1076,11 @@ class StatementEvaluatorMixin:
         loop_id = id(node)  # Unique identifier for this loop
         
         # Use unified executor if available
-        if hasattr(self, 'unified_executor') and self.unified_executor:
+        if (
+            hasattr(self, 'unified_executor')
+            and self.unified_executor
+            and not getattr(env, 'disable_vm', False)
+        ):
             # Unified execution system handles everything automatically
             try:
                 return self.unified_executor.execute_loop(
@@ -1327,7 +1331,8 @@ class StatementEvaluatorMixin:
                             debug_log(f"  Imported '{name}' from {file_path}", value)
                     elif alias:
                         # Import as alias: use "stdlib/fs" as fs
-                        env.set(alias, module_env)
+                        alias_name = alias.value if hasattr(alias, 'value') else str(alias)
+                        env.set(alias_name, module_env)
                     else:
                         # Import all functions into current scope
                         for key in module_env.store.keys():

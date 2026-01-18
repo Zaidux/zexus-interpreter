@@ -1627,6 +1627,7 @@ class SmartContract:
         # Create a new environment for the action execution
         from zexus.environment import Environment
         action_env = Environment(outer=action.env if hasattr(action, 'env') else None)
+
         
         # Bind 'this' to the current contract instance in the action environment
         action_env.set('this', self)

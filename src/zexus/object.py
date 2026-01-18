@@ -146,6 +146,7 @@ class Map(Object):
         if existing is not None and existing.__class__.__name__ == 'SealedObject':
             raise EvaluationError(f"Cannot modify sealed map key: {key}")
         self.pairs[key] = value
+        return value
 
     def keys(self):
         """Return array of map keys"""

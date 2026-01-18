@@ -328,9 +328,18 @@ class AsyncOptimizer:
         
         # Use pooling if enabled
         if self.coroutine_pool and self.level.value >= AsyncOptimizationLevel.BASIC.value:
-            return self.coroutine_pool.get_wrapper(coro)
+            wrapper = self.coroutine_pool.get_wrapper(coro)
+            return self._wrap_pooled(wrapper)
         
         return coro
+
+    async def _wrap_pooled(self, wrapper: PooledCoroutineWrapper) -> Any:
+        """Ensure pooled wrappers are released after completion."""
+        try:
+            return await wrapper
+        finally:
+            if self.coroutine_pool:
+                self.coroutine_pool.release_wrapper(wrapper)
     
     async def await_optimized(self, awaitable: Any) -> Any:
         """
@@ -346,6 +355,10 @@ class AsyncOptimizer:
         
         # Fast path for already-resolved futures (MODERATE+)
         if self.level.value >= AsyncOptimizationLevel.MODERATE.value:
+            if not asyncio.isfuture(awaitable) and not asyncio.iscoroutine(awaitable) and not hasattr(awaitable, "__await__"):
+                self.stats.fast_path_hits += 1
+                self.stats.event_loop_skips += 1
+                return awaitable
             if isinstance(awaitable, FastFuture):
                 self.stats.fast_path_hits += 1
                 self.stats.event_loop_skips += 1

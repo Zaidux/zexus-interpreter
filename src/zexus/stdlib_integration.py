@@ -238,6 +238,168 @@ def create_stdlib_module(module_name, evaluator=None):
         env.set("keccak256", Builtin(_crypto_keccak256))
         env.set("random_bytes", Builtin(_crypto_random_bytes))
         env.set("pbkdf2", Builtin(_crypto_pbkdf2))
+
+    elif module_name == "perf" or module_name == "stdlib/perf":
+        def _perf_vm_stats(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.vm_stats() requires unified executor")
+            stats = evaluator.unified_executor.get_statistics()
+            return _python_to_zexus(stats)
+
+        def _perf_set_vm_thresholds(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.set_vm_thresholds() requires unified executor")
+            workload = evaluator.unified_executor.workload
+            if len(args) >= 1:
+                val = _zexus_to_python(args[0])
+                if isinstance(val, int):
+                    workload.vm_threshold = val
+            if len(args) >= 2:
+                val = _zexus_to_python(args[1])
+                if isinstance(val, int):
+                    workload.jit_threshold = val
+            if len(args) >= 3:
+                val = _zexus_to_python(args[2])
+                if isinstance(val, int):
+                    workload.parallel_threshold = val
+            return Boolean(True)
+
+        def _perf_enable_vm(*args):
+            if evaluator is None:
+                return EvaluationError("perf.enable_vm() requires evaluator")
+            flag = True
+            if len(args) >= 1:
+                val = _zexus_to_python(args[0])
+                flag = bool(val)
+            evaluator.use_vm = flag
+            if evaluator.unified_executor:
+                evaluator.unified_executor.vm_enabled = flag
+            return Boolean(True)
+
+        def _perf_collect_gc(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.collect_gc() requires unified executor")
+            vm = evaluator.unified_executor.vm
+            if vm is None:
+                return EvaluationError("perf.collect_gc() requires VM initialization")
+            force = False
+            if len(args) >= 1:
+                force = bool(_zexus_to_python(args[0]))
+            result = vm.collect_garbage(force=force)
+            return _python_to_zexus(result)
+
+        def _perf_memory_stats(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.memory_stats() requires unified executor")
+            vm = evaluator.unified_executor.vm
+            if vm is None:
+                return EvaluationError("perf.memory_stats() requires VM initialization")
+            stats = vm.get_memory_stats()
+            return _python_to_zexus(stats)
+
+        def _perf_warmup(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.warmup() requires unified executor")
+            workload = evaluator.unified_executor.workload
+            vm_threshold = 1
+            jit_threshold = workload.jit_threshold
+            if len(args) >= 1:
+                val = _zexus_to_python(args[0])
+                if isinstance(val, int):
+                    vm_threshold = val
+            if len(args) >= 2:
+                val = _zexus_to_python(args[1])
+                if isinstance(val, int):
+                    jit_threshold = val
+            workload.vm_threshold = vm_threshold
+            workload.jit_threshold = jit_threshold
+            return Boolean(True)
+
+        def _perf_profile_start(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.profile_start() requires unified executor")
+            evaluator.unified_executor.ensure_vm(profile_active=True)
+            vm = evaluator.unified_executor.vm
+            if vm is None:
+                return EvaluationError("perf.profile_start() requires VM initialization")
+            vm.start_profiling()
+            return Boolean(True)
+
+        def _perf_profile_stop(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.profile_stop() requires unified executor")
+            vm = evaluator.unified_executor.vm
+            if vm is None:
+                return EvaluationError("perf.profile_stop() requires VM initialization")
+            vm.stop_profiling()
+            return Boolean(True)
+
+        def _perf_profile_report(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.profile_report() requires unified executor")
+            evaluator.unified_executor.ensure_vm(profile_active=True)
+            vm = evaluator.unified_executor.vm
+            if vm is None:
+                return EvaluationError("perf.profile_report() requires VM initialization")
+            report_format = "text"
+            top_n = 20
+            if len(args) >= 1:
+                report_format = str(_zexus_to_python(args[0]))
+            if len(args) >= 2:
+                val = _zexus_to_python(args[1])
+                if isinstance(val, int):
+                    top_n = val
+            report = vm.get_profiling_report(format=report_format, top_n=top_n)
+            return String(report)
+
+        def _perf_set_vm_config(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.set_vm_config() requires unified executor")
+            if len(args) < 1:
+                return EvaluationError("perf.set_vm_config() requires 1 argument: config map")
+            config = _zexus_to_python(args[0])
+            if not isinstance(config, dict):
+                return EvaluationError("perf.set_vm_config() expects a map")
+            evaluator.unified_executor.configure_vm(config)
+            return Boolean(True)
+
+        def _perf_set_vm_mode(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.set_vm_mode() requires unified executor")
+            if len(args) < 1:
+                return EvaluationError("perf.set_vm_mode() requires 1 argument: mode")
+            mode_value = _zexus_to_python(args[0])
+            evaluator.unified_executor.configure_vm({"mode": mode_value})
+            return Boolean(True)
+
+        def _perf_force_vm_loops(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.force_vm_loops() requires unified executor")
+            flag = True
+            if len(args) >= 1:
+                flag = bool(_zexus_to_python(args[0]))
+            evaluator.unified_executor.set_force_vm_loops(flag)
+            return Boolean(True)
+
+        def _perf_reset_vm(*args):
+            if evaluator is None or not hasattr(evaluator, "unified_executor") or not evaluator.unified_executor:
+                return EvaluationError("perf.reset_vm() requires unified executor")
+            evaluator.unified_executor.reset_vm()
+            return Boolean(True)
+
+        env.set("vm_stats", Builtin(_perf_vm_stats))
+        env.set("set_vm_thresholds", Builtin(_perf_set_vm_thresholds))
+        env.set("enable_vm", Builtin(_perf_enable_vm))
+        env.set("collect_gc", Builtin(_perf_collect_gc))
+        env.set("memory_stats", Builtin(_perf_memory_stats))
+        env.set("warmup", Builtin(_perf_warmup))
+        env.set("profile_start", Builtin(_perf_profile_start))
+        env.set("profile_stop", Builtin(_perf_profile_stop))
+        env.set("profile_report", Builtin(_perf_profile_report))
+        env.set("set_vm_config", Builtin(_perf_set_vm_config))
+        env.set("set_vm_mode", Builtin(_perf_set_vm_mode))
+        env.set("force_vm_loops", Builtin(_perf_force_vm_loops))
+        env.set("reset_vm", Builtin(_perf_reset_vm))
         
     elif module_name == "blockchain" or module_name == "stdlib/blockchain":
         from .stdlib.blockchain import BlockchainModule
@@ -323,7 +485,7 @@ def _zexus_to_python(obj):
 
 def is_stdlib_module(module_name):
     """Check if a module name refers to a stdlib module."""
-    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain']
+    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain', 'perf']
     
     # Handle both "fs" and "stdlib/fs" formats
     if module_name in stdlib_modules:

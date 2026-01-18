@@ -82,6 +82,8 @@ class PeepholeOptimizer:
     def __init__(self, level: OptimizationLevel = OptimizationLevel.BASIC):
         self.level = level
         self.stats = OptimizationStats()
+        self._consts: Optional[List[Any]] = None
+        self._const_indexed = False
         
         # Optimization pattern matchers
         self.patterns = {
@@ -144,6 +146,45 @@ class PeepholeOptimizer:
         )
         
         return optimized
+
+    def optimize_bytecode(
+        self,
+        instructions: List[Tuple[Any, Any]],
+        constants: Optional[List[Any]] = None
+    ) -> Tuple[List[Tuple[Any, Any]], List[Any]]:
+        """
+        Optimize raw bytecode instructions with constant pool awareness.
+
+        Args:
+            instructions: List of (opcode, operand) tuples
+            constants: Bytecode constants list (optional)
+
+        Returns:
+            (optimized_instructions, updated_constants)
+        """
+        self._consts = list(constants) if constants is not None else []
+        self._const_indexed = constants is not None
+
+        normalized: List[Instruction] = []
+        for instr in instructions:
+            if instr is None:
+                continue
+            if isinstance(instr, tuple) and len(instr) >= 2:
+                op = instr[0]
+                operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                op_name = op.name if hasattr(op, "name") else op
+                normalized.append(Instruction(str(op_name), operand, 0))
+
+        optimized = self.optimize(normalized)
+
+        out: List[Tuple[Any, Any]] = []
+        for instr in optimized:
+            if instr.opcode == "LOAD_CONST" and self._const_indexed:
+                out.append((instr.opcode, instr.arg))
+            else:
+                out.append((instr.opcode, instr.arg))
+
+        return out, list(self._consts)
     
     def _apply_pattern(
         self,
@@ -199,9 +240,9 @@ class PeepholeOptimizer:
                            'BINARY_ADD', 'BINARY_SUB', 'BINARY_MUL',
                            'BINARY_DIV', 'BINARY_MOD')):
             
-            # Both operands must be constants
-            a = inst1.arg
-            b = inst2.arg
+            # Resolve constant values (supports constant pool indices)
+            a = self._resolve_const(inst1.arg)
+            b = self._resolve_const(inst2.arg)
             
             # Only fold numeric constants
             if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
@@ -228,7 +269,11 @@ class PeepholeOptimizer:
                     return False, [], 0
                 
                 # Replace with single LOAD_CONST
-                replacement = [Instruction('LOAD_CONST', result, inst1.lineno)]
+                if self._const_indexed:
+                    const_index = self._add_const(result)
+                    replacement = [Instruction('LOAD_CONST', const_index, inst1.lineno)]
+                else:
+                    replacement = [Instruction('LOAD_CONST', result, inst1.lineno)]
                 self.stats.constant_folds += 1
                 return True, replacement, 3
                 
@@ -237,6 +282,21 @@ class PeepholeOptimizer:
                 return False, [], 0
         
         return False, [], 0
+
+    def _resolve_const(self, arg: Any) -> Any:
+        if self._const_indexed and isinstance(arg, int) and self._consts is not None:
+            if 0 <= arg < len(self._consts):
+                return self._consts[arg]
+        return arg
+
+    def _add_const(self, value: Any) -> int:
+        if self._consts is None:
+            self._consts = []
+        for i, const in enumerate(self._consts):
+            if const == value and type(const) == type(value):
+                return i
+        self._consts.append(value)
+        return len(self._consts) - 1
     
     # ========== Dead Code Elimination ==========
     

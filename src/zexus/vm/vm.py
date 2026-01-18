@@ -92,6 +92,14 @@ except ImportError:
     PeepholeOptimizer = None
     OptimizationLevel = None
 
+# Bytecode Optimizer (Phase 8)
+try:
+    from .optimizer import BytecodeOptimizer
+    _BYTECODE_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _BYTECODE_OPTIMIZER_AVAILABLE = False
+    BytecodeOptimizer = None
+
 # Async Optimizer (Phase 8)
 try:
     from .async_optimizer import AsyncOptimizer, AsyncOptimizationLevel
@@ -110,6 +118,14 @@ except ImportError:
     _SSA_AVAILABLE = False
     SSAConverter = None
     RegisterAllocator = None
+
+# Bytecode Converter (Stack -> Register)
+try:
+    from .bytecode_converter import BytecodeConverter
+    _BYTECODE_CONVERTER_AVAILABLE = True
+except ImportError:
+    _BYTECODE_CONVERTER_AVAILABLE = False
+    BytecodeConverter = None
 
 # Renderer Backend
 try:
@@ -286,6 +302,7 @@ class VM:
         jit_threshold: int = 100,
         use_memory_manager: bool = False,
         max_heap_mb: int = 100,
+        gc_threshold: int = 1000,
         mode: VMMode = VMMode.AUTO,
         worker_count: int = None,
         chunk_size: int = 50,
@@ -294,14 +311,21 @@ class VM:
         debug: bool = False,
         enable_profiling: bool = False,
         profiling_level: str = "DETAILED",
+        profiling_sample_rate: float = 1.0,
+        profiling_max_samples: int = 2048,
+        profiling_track_overhead: bool = False,
         enable_memory_pool: bool = True,
         pool_max_size: int = 1000,
         enable_peephole_optimizer: bool = True,
+        enable_bytecode_optimizer: bool = False,
+        optimizer_level: int = 2,
         optimization_level: str = "MODERATE",
         enable_async_optimizer: bool = True,
         async_optimization_level: str = "MODERATE",
         enable_ssa: bool = False,
         enable_register_allocation: bool = False,
+        enable_bytecode_converter: bool = False,
+        converter_aggressive: bool = False,
         num_allocator_registers: int = 16,
         enable_gas_metering: bool = True,
         gas_limit: int = None,
@@ -375,7 +399,7 @@ class VM:
             self._memory_lock = threading.Lock()
             self.memory_manager = create_memory_manager(
                 max_heap_mb=max_heap_mb,
-                gc_threshold=1000
+                gc_threshold=gc_threshold
             )
 
         # --- Profiler (Phase 8) ---
@@ -384,7 +408,12 @@ class VM:
         if self.enable_profiling:
             try:
                 level = getattr(ProfilingLevel, profiling_level, ProfilingLevel.DETAILED)
-                self.profiler = InstructionProfiler(level=level)
+                self.profiler = InstructionProfiler(
+                    level=level,
+                    sample_rate=profiling_sample_rate,
+                    max_samples=profiling_max_samples,
+                    track_overhead=profiling_track_overhead
+                )
                 if debug:
                     print(f"[VM] Profiler enabled: {profiling_level}")
             except Exception as e:
@@ -423,6 +452,20 @@ class VM:
                     print(f"[VM] Failed to enable peephole optimizer: {e}")
                 self.enable_peephole_optimizer = False
 
+        # --- Bytecode Optimizer (Phase 8) ---
+        self.enable_bytecode_optimizer = enable_bytecode_optimizer and _BYTECODE_OPTIMIZER_AVAILABLE
+        self.bytecode_optimizer = None
+        if self.enable_bytecode_optimizer:
+            try:
+                level = max(0, min(3, int(optimizer_level)))
+                self.bytecode_optimizer = BytecodeOptimizer(level=level, max_passes=5, debug=debug)
+                if debug:
+                    print(f"[VM] Bytecode optimizer enabled: level={level}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable bytecode optimizer: {e}")
+                self.enable_bytecode_optimizer = False
+
         # --- Async Optimizer (Phase 8) ---
         self.enable_async_optimizer = enable_async_optimizer and _ASYNC_OPTIMIZER_AVAILABLE
         self.async_optimizer = None
@@ -442,6 +485,8 @@ class VM:
         self.enable_register_allocation = enable_register_allocation and _SSA_AVAILABLE
         self.ssa_converter = None
         self.register_allocator = None
+        self.enable_bytecode_converter = enable_bytecode_converter and _BYTECODE_CONVERTER_AVAILABLE
+        self.bytecode_converter = None
         
         if self.enable_ssa:
             try:
@@ -459,12 +504,28 @@ class VM:
                     num_registers=num_allocator_registers,
                     num_temp_registers=8
                 )
+                self._last_register_allocation = None
                 if debug:
                     print(f"[VM] Register allocator enabled: {num_allocator_registers} registers")
             except Exception as e:
                 if debug:
                     print(f"[VM] Failed to enable register allocator: {e}")
                 self.enable_register_allocation = False
+                self._last_register_allocation = None
+
+        if self.enable_bytecode_converter:
+            try:
+                self.bytecode_converter = BytecodeConverter(
+                    num_registers=num_registers,
+                    aggressive=converter_aggressive,
+                    debug=debug
+                )
+                if debug:
+                    print(f"[VM] Bytecode converter enabled: aggressive={converter_aggressive}")
+            except Exception as e:
+                if debug:
+                    print(f"[VM] Failed to enable bytecode converter: {e}")
+                self.enable_bytecode_converter = False
 
         # --- Execution Mode Configuration ---
         self.mode = mode
@@ -620,6 +681,17 @@ class VM:
     def _execute_register(self, bytecode, debug: bool = False):
         """Execute using register-based VM"""
         try:
+            if self.enable_bytecode_converter and self.bytecode_converter and hasattr(bytecode, "instructions"):
+                try:
+                    if not bytecode.metadata.get("converted_to_register"):
+                        bytecode = self.bytecode_converter.convert(bytecode)
+                except Exception:
+                    pass
+            if self.enable_register_allocation and self.register_allocator and hasattr(bytecode, "instructions"):
+                try:
+                    self._last_register_allocation = self.allocate_registers(bytecode.instructions)
+                except Exception:
+                    self._last_register_allocation = None
             # Ensure register VM has current environment and builtins
             self._register_vm.env = self.env.copy()
             self._register_vm.builtins = self.builtins.copy()
@@ -639,13 +711,75 @@ class VM:
     def _execute_parallel(self, bytecode, debug: bool = False):
         """Execute using parallel VM"""
         try:
-            return self._parallel_vm.execute_parallel(
-                bytecode,
-                initial_state={"env": self.env.copy(), "builtins": self.builtins.copy(), "parent_env": self._parent_env}
+            optimized_bytecode = self._optimize_bytecode_for_parallel(bytecode)
+            return self._parallel_vm.execute(
+                optimized_bytecode,
+                initial_state={
+                    "env": self.env.copy(),
+                    "builtins": self.builtins.copy(),
+                    "parent_env": self._parent_env,
+                },
             )
         except Exception as e:
             if debug: print(f"[VM Parallel] Failed: {e}, falling back to stack")
             return asyncio.run(self._run_stack_bytecode(bytecode, debug))
+
+    def _optimize_bytecode_for_parallel(self, bytecode):
+        """Apply peephole/SSA optimizations and map opcodes for parallel execution."""
+        from .bytecode import Bytecode, Opcode
+
+        consts = list(getattr(bytecode, "constants", []))
+        instrs = list(getattr(bytecode, "instructions", []))
+
+        if self.enable_bytecode_optimizer and self.bytecode_optimizer:
+            try:
+                normalized_for_opt: List[Tuple[Any, Any]] = []
+                for instr in instrs:
+                    if instr is None:
+                        continue
+                    if isinstance(instr, tuple) and len(instr) >= 2:
+                        op = instr[0]
+                        operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                        op_name = op.name if hasattr(op, "name") else op
+                        normalized_for_opt.append((str(op_name), operand))
+                instrs = self.bytecode_optimizer.optimize(normalized_for_opt, consts)
+            except Exception:
+                pass
+
+        if self.enable_peephole_optimizer and self.peephole_optimizer:
+            try:
+                instrs, consts = self.peephole_optimizer.optimize_bytecode(instrs, consts)
+            except Exception:
+                pass
+
+        normalized: List[Tuple[Any, Any]] = []
+        for instr in instrs:
+            if instr is None:
+                continue
+            if isinstance(instr, tuple) and len(instr) >= 2:
+                op = instr[0]
+                operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                op_name = op.name if hasattr(op, "name") else op
+                normalized.append((op_name, operand))
+
+        instrs = normalized
+
+        if self.enable_ssa and self.ssa_converter:
+            try:
+                ssa_program = self.ssa_converter.convert_to_ssa(instrs)
+                ssa_instrs = destruct_ssa(ssa_program)
+                instrs, consts = self._normalize_ssa_instructions(ssa_instrs, consts)
+            except Exception:
+                pass
+
+        mapped: List[Tuple[Any, Any]] = []
+        for op, operand in instrs:
+            if isinstance(op, str) and op in Opcode.__members__:
+                mapped.append((Opcode[op], operand))
+            else:
+                mapped.append((op, operand))
+
+        return Bytecode(instructions=mapped, constants=consts)
 
     # ==================== JIT & Optimization Heuristics ====================
 
@@ -679,6 +813,39 @@ class VM:
                 # Double-check it hasn't been compiled by another thread
                 if self.jit_compiler.should_compile(bytecode_hash):
                     self.jit_compiler.compile_hot_path(bytecode)
+
+    def _normalize_ssa_instructions(self, instructions: List[Tuple], consts: List[Any]) -> Tuple[List[Tuple], List[Any]]:
+        """Normalize SSA-destructed instructions to (opcode, operand) format."""
+        def _const_index(value: Any) -> int:
+            for i, const in enumerate(consts):
+                if const == value and type(const) == type(value):
+                    return i
+            consts.append(value)
+            return len(consts) - 1
+
+        normalized: List[Tuple] = []
+        for instr in instructions:
+            if instr is None:
+                continue
+            if not isinstance(instr, tuple):
+                continue
+            op = instr[0]
+            if len(instr) == 2:
+                normalized.append((op, instr[1]))
+                continue
+            if op == "MOVE" and len(instr) >= 3:
+                src = instr[1]
+                dest = instr[2]
+                src_idx = _const_index(src)
+                dest_idx = _const_index(dest)
+                normalized.append(("LOAD_NAME", src_idx))
+                normalized.append(("STORE_NAME", dest_idx))
+                continue
+
+            operand = tuple(instr[1:])
+            normalized.append((op, operand))
+
+        return normalized, consts
 
     def get_jit_stats(self) -> Dict[str, Any]:
         if self.use_jit and self.jit_compiler:
@@ -895,11 +1062,63 @@ class VM:
     # ==================== Core Execution: Stack Bytecode ====================
 
     async def _run_stack_bytecode(self, bytecode, debug=False):
+        # 0. Optional bytecode optimizations (peephole, SSA)
+        consts = list(getattr(bytecode, "constants", []))
+        instrs = list(getattr(bytecode, "instructions", []))
+
+        if self.enable_bytecode_optimizer and self.bytecode_optimizer:
+            try:
+                normalized_for_opt: List[Tuple[Any, Any]] = []
+                for instr in instrs:
+                    if instr is None:
+                        continue
+                    if isinstance(instr, tuple) and len(instr) >= 2:
+                        op = instr[0]
+                        operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                        op_name = op.name if hasattr(op, "name") else op
+                        normalized_for_opt.append((str(op_name), operand))
+                instrs = self.bytecode_optimizer.optimize(normalized_for_opt, consts)
+            except Exception:
+                pass
+
+        # Peephole optimization with constant pool awareness
+        if self.enable_peephole_optimizer and self.peephole_optimizer:
+            try:
+                instrs, consts = self.peephole_optimizer.optimize_bytecode(instrs, consts)
+            except Exception:
+                pass
+
+        # Normalize opcodes to names for SSA pipeline and stack dispatch
+        normalized_instrs: List[Tuple[Any, Any]] = []
+        for instr in instrs:
+            if instr is None:
+                continue
+            if isinstance(instr, tuple) and len(instr) >= 2:
+                op = instr[0]
+                operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                op_name = op.name if hasattr(op, "name") else op
+                normalized_instrs.append((op_name, operand))
+
+        instrs = normalized_instrs
+
+        if self.enable_ssa and self.ssa_converter:
+            try:
+                ssa_program = self.ssa_converter.convert_to_ssa(instrs)
+                ssa_instrs = destruct_ssa(ssa_program)
+                instrs, consts = self._normalize_ssa_instructions(ssa_instrs, consts)
+            except Exception:
+                pass
+
         # 1. JIT Check (with thread safety)
         if self.use_jit and self.jit_compiler:
-            with self._jit_lock:
-                bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
-                jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
+            jit_function = None
+            if self.enable_gas_metering and self.gas_metering:
+                # JIT currently bypasses gas accounting; fall back to interpreter
+                jit_function = None
+            else:
+                with self._jit_lock:
+                    bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
+                    jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
             
             if jit_function:
                 try:
@@ -915,8 +1134,6 @@ class VM:
                     if debug: print(f"[VM JIT] Failed: {e}, falling back")
 
         # 2. Bytecode Execution Setup
-        consts = list(getattr(bytecode, "constants", []))
-        instrs = list(getattr(bytecode, "instructions", []))
         ip = 0
         running = True
         return_value = None
@@ -1038,6 +1255,12 @@ class VM:
             def wrapper(_):
                 b = _unwrap(stack.pop() if stack else 0)
                 a = _unwrap(stack.pop() if stack else 0)
+                if isinstance(a, ZEvaluationError):
+                    stack.append(a)
+                    return
+                if isinstance(b, ZEvaluationError):
+                    stack.append(b)
+                    return
                 try:
                     stack.append(func(a, b))
                 except Exception as exc:
@@ -1048,8 +1271,14 @@ class VM:
 
         def _binary_bool_op(func):
             def wrapper(_):
-                b = stack.pop() if stack else None
-                a = stack.pop() if stack else None
+                b = _unwrap(stack.pop() if stack else None)
+                a = _unwrap(stack.pop() if stack else None)
+                if isinstance(a, ZEvaluationError):
+                    stack.append(a)
+                    return
+                if isinstance(b, ZEvaluationError):
+                    stack.append(b)
+                    return
                 stack.append(func(a, b))
             return wrapper
 
@@ -1091,7 +1320,27 @@ class VM:
 
             result = None
             try:
-                if hasattr(target, "call_method"):
+                if method_name == "set":
+                    if isinstance(target, ZMap):
+                        if len(args) >= 2:
+                            key = args[0]
+                            if isinstance(key, str):
+                                key = ZString(key)
+                            result = target.set(key, args[1])
+                        else:
+                            result = None
+                    elif isinstance(target, ZList):
+                        if len(args) >= 2:
+                            result = target.set(args[0], args[1])
+                        else:
+                            result = None
+                    elif isinstance(target, (dict, list)):
+                        if len(args) >= 2:
+                            target[args[0]] = args[1]
+                            result = args[1]
+                        else:
+                            result = None
+                elif hasattr(target, "call_method"):
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                     result = target.call_method(method_name, wrapped_args)
                 else:
@@ -1111,7 +1360,12 @@ class VM:
             stack.append(self._unwrap_after_builtin(result))
 
         def _op_load_const(idx):
-            stack.append(const(idx))
+            value = const(idx)
+            if self.integer_pool and isinstance(value, int):
+                value = self.integer_pool.get(value)
+            elif self.string_pool and isinstance(value, str):
+                value = self.string_pool.get(value)
+            stack.append(value)
 
         def _op_load_name(idx):
             name = const(idx)
@@ -1122,7 +1376,7 @@ class VM:
             val = stack.pop() if stack else None
             _store(name, val)
             if self.use_memory_manager and val is not None:
-                self._allocate_managed(val, name=name)
+                self._allocate_managed(val, name=name, root=True)
 
         def _op_pop(_):
             if stack:
@@ -1147,7 +1401,8 @@ class VM:
         def _op_jump_if_false(target):
             nonlocal ip
             cond = stack.pop() if stack else None
-            if not cond:
+            cond_val = _unwrap(cond)
+            if not cond_val:
                 ip = target
 
         def _op_return(_):
@@ -1157,8 +1412,15 @@ class VM:
 
         def _op_build_list(count):
             total = count if count is not None else 0
-            elements = [stack.pop() for _ in range(total)][::-1]
-            stack.append(elements)
+            if self.list_pool:
+                lst = self.allocate_list(total)
+                if total > 0:
+                    for i in range(total - 1, -1, -1):
+                        lst[i] = stack.pop()
+                stack.append(lst)
+            else:
+                elements = [stack.pop() for _ in range(total)][::-1]
+                stack.append(elements)
 
         def _op_build_map(count):
             total = count if count is not None else 0
@@ -1171,8 +1433,39 @@ class VM:
         def _op_index(_):
             idx = stack.pop(); obj = stack.pop()
             try:
-                stack.append(obj[idx] if obj is not None else None)
+                if isinstance(obj, ZList):
+                    stack.append(obj.get(idx))
+                elif isinstance(obj, ZMap):
+                    key = idx
+                    if isinstance(key, str):
+                        key = ZString(key)
+                    stack.append(obj.get(key))
+                elif isinstance(obj, ZString):
+                    stack.append(obj[idx])
+                else:
+                    raw_idx = idx.value if hasattr(idx, "value") else idx
+                    stack.append(obj[raw_idx] if obj is not None else None)
             except (IndexError, KeyError, TypeError):
+                stack.append(None)
+
+        def _op_get_attr(_):
+            attr = stack.pop() if stack else None
+            obj = stack.pop() if stack else None
+            if obj is None:
+                stack.append(None)
+                return
+            attr_name = _unwrap(attr)
+            try:
+                if isinstance(obj, ZMap):
+                    key = attr_name
+                    if isinstance(key, str):
+                        key = ZString(key)
+                    stack.append(obj.get(key))
+                elif isinstance(obj, dict):
+                    stack.append(obj.get(attr_name))
+                else:
+                    stack.append(getattr(obj, attr_name, None))
+            except Exception:
                 stack.append(None)
 
         def _op_get_length(_):
@@ -1180,6 +1473,12 @@ class VM:
             try:
                 if obj is None:
                     stack.append(0)
+                elif isinstance(obj, ZList):
+                    stack.append(len(obj.elements))
+                elif isinstance(obj, ZMap):
+                    stack.append(len(obj.pairs))
+                elif isinstance(obj, ZString):
+                    stack.append(len(obj.value))
                 elif hasattr(obj, '__len__'):
                     stack.append(len(obj))
                 else:
@@ -1238,6 +1537,7 @@ class VM:
             "BUILD_LIST": _op_build_list,
             "BUILD_MAP": _op_build_map,
             "INDEX": _op_index,
+            "GET_ATTR": _op_get_attr,
             "GET_LENGTH": _op_get_length,
             "READ": _op_read,
             "IMPORT": _op_import,
@@ -1249,7 +1549,8 @@ class VM:
         prev_ip = None
         while running and ip < len(instrs):
             try:
-                op, operand = instrs[ip]
+                current_ip = ip
+                op, operand = instrs[current_ip]
                 
                 # Handle Opcode enum: convert to name for comparison
                 if hasattr(op, 'name'):  # Opcode IntEnum
@@ -1268,9 +1569,9 @@ class VM:
                     if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
                         instr_start_time = time.perf_counter()
                     # Record instruction (count only for BASIC level)
-                    self.profiler.record_instruction(ip, op_name, operand, prev_ip, len(stack))
+                    self.profiler.record_instruction(current_ip, op_name, operand, prev_ip, len(stack))
                 
-                prev_ip = ip
+                prev_ip = current_ip
                 ip += 1
     
                 # === GAS METERING ===
@@ -1281,7 +1582,7 @@ class VM:
                         gas_kwargs['count'] = operand if operand is not None else 0
                     elif op_name == "MERKLE_ROOT":
                         gas_kwargs['leaf_count'] = operand if operand is not None else 0
-                    elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD"):
+                    elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD", "CALL_BUILTIN"):
                         if op_name == "CALL_NAME":
                             gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
                         elif op_name == "CALL_TOP":
@@ -1450,13 +1751,28 @@ class VM:
                     stack.append(result)
                 elif op_name == "INDEX":
                     idx = stack.pop(); obj = stack.pop()
-                    try: stack.append(obj[idx] if obj is not None else None)
-                    except (IndexError, KeyError, TypeError): stack.append(None)
+                    try:
+                        if isinstance(obj, ZList):
+                            stack.append(obj.get(idx))
+                        elif isinstance(obj, ZMap):
+                            stack.append(obj.get(idx))
+                        elif isinstance(obj, ZString):
+                            stack.append(obj[idx])
+                        else:
+                            stack.append(obj[idx] if obj is not None else None)
+                    except (IndexError, KeyError, TypeError):
+                        stack.append(None)
                 elif op_name == "GET_LENGTH":
                     obj = stack.pop()
                     try:
                         if obj is None:
                             stack.append(0)
+                        elif isinstance(obj, ZList):
+                            stack.append(len(obj.elements))
+                        elif isinstance(obj, ZMap):
+                            stack.append(len(obj.pairs))
+                        elif isinstance(obj, ZString):
+                            stack.append(len(obj.value))
                         elif hasattr(obj, '__len__'):
                             stack.append(len(obj))
                         else:
@@ -1801,7 +2117,7 @@ class VM:
                 # Record instruction timing (if profiling enabled)
                 if instr_start_time is not None and self.profiler:
                     elapsed = time.perf_counter() - instr_start_time
-                    self.profiler.measure_instruction(ip, elapsed)
+                    self.profiler.measure_instruction(current_ip, elapsed)
             except Exception as e:
                 if self.env.get("_continue_on_error", False):
                     # Error Recovery Mode

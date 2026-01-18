@@ -283,18 +283,21 @@ class RegisterVM:
         
         # Execute instruction stream
         pc = 0  # Program counter
+        reg_exec = self._execute_register_instruction
+        stack_exec = self._execute_stack_instruction
+        reg_ops = set(RegisterOpcode.__members__.values())
         while pc < len(instructions):
             inst = instructions[pc]
             opcode = inst[0] if isinstance(inst, tuple) else inst
-            
+
             # Dispatch to handler
-            if opcode in RegisterOpcode.__members__.values():
-                pc = self._execute_register_instruction(inst, pc)
+            if opcode in reg_ops:
+                pc = reg_exec(inst, pc)
             elif self.hybrid_mode:
-                pc = self._execute_stack_instruction(inst, pc)
+                pc = stack_exec(inst, pc)
             else:
                 raise ValueError(f"Stack opcode {opcode} in register-only mode")
-            
+
             self.stats['instructions_executed'] += 1
             pc += 1
         

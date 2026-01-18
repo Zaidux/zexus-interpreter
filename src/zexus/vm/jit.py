@@ -518,7 +518,7 @@ class JITCompiler:
                     stats = self.optimizer.get_stats()
                     if stats['total_optimizations'] > 0:
                         print(f"🔧 JIT Optimizer: {stats['original_size']} → {stats['optimized_size']} instructions "
-                              f"({stats['size_reduction_pct']:.1f}% reduction)")
+                              f"({stats['size_reduction']:.1f}% reduction)")
                 return optimized, constants
             except Exception as e:
                 if self.debug:

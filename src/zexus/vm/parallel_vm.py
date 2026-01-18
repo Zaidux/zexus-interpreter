@@ -111,13 +111,17 @@ def _execute_chunk_helper(args):
     Returns:
         ExecutionResult with execution status and metrics
     """
-    chunk, shared_state_dict, retry_count = args
+    chunk, shared_state_dict, retry_count, builtins, parent_env = args
     
     try:
         start_time = time.time()
         
         # Create a minimal VM for this worker
         vm = VM()
+        if builtins is not None:
+            vm.builtins = builtins
+        if parent_env is not None:
+            vm._parent_env = parent_env
         
         # Load shared state
         for var, value in shared_state_dict.items():
@@ -454,7 +458,13 @@ class WorkerPool:
             self.pool.join()
             self.pool = None
     
-    def execute_chunk(self, chunk: BytecodeChunk, shared_state: SharedState) -> ExecutionResult:
+    def execute_chunk(
+        self,
+        chunk: BytecodeChunk,
+        shared_state: SharedState,
+        builtins: Optional[Dict[str, Any]] = None,
+        parent_env: Optional[Dict[str, Any]] = None,
+    ) -> ExecutionResult:
         """
         Execute a single chunk (called by worker process).
         
@@ -465,6 +475,10 @@ class WorkerPool:
         try:
             # Create a local VM for this chunk
             vm = VM()
+            if builtins is not None:
+                vm.builtins = builtins
+            if parent_env is not None:
+                vm._parent_env = parent_env
             
             # Load shared variables
             for var in chunk.variables_read:
@@ -509,10 +523,14 @@ class WorkerPool:
                 execution_time=execution_time
             )
     
-    def submit_chunks(self, 
-                     chunks: List[BytecodeChunk], 
-                     shared_state: SharedState,
-                     config: ParallelConfig) -> List[ExecutionResult]:
+    def submit_chunks(
+        self,
+        chunks: List[BytecodeChunk],
+        shared_state: SharedState,
+        config: ParallelConfig,
+        builtins: Optional[Dict[str, Any]] = None,
+        parent_env: Optional[Dict[str, Any]] = None,
+    ) -> List[ExecutionResult]:
         """
         Submit chunks for parallel execution with retry logic.
         
@@ -546,38 +564,55 @@ class WorkerPool:
             
             # Execute parallel chunks with retry logic
             if parallel_chunks and len(parallel_chunks) > 1:
-                # Use cloudpickle for better serialization
+                # Use snapshot of shared state for this level
                 shared_dict = dict(shared_state.variables)
-                
-                chunk_results = []
-                for chunk in parallel_chunks:
-                    retry_count = 0
-                    success = False
-                    
-                    while retry_count < config.retry_attempts and not success:
+
+                pending: Dict[int, Tuple[BytecodeChunk, int]] = {
+                    c.chunk_id: (c, 0) for c in parallel_chunks
+                }
+                chunk_results: List[ExecutionResult] = []
+
+                while pending:
+                    futures: Dict[int, Any] = {}
+                    for chunk_id, (chunk, retry_count) in pending.items():
+                        futures[chunk_id] = self.pool.apply_async(
+                            _execute_chunk_helper,
+                            ((chunk, shared_dict, retry_count, builtins, parent_env),)
+                        )
+
+                    next_pending: Dict[int, Tuple[BytecodeChunk, int]] = {}
+                    for chunk_id, future in futures.items():
+                        chunk, retry_count = pending[chunk_id]
                         try:
-                            # Submit with timeout
-                            future = self.pool.apply_async(
-                                _execute_chunk_helper,
-                                ((chunk, shared_dict, retry_count),)
-                            )
                             result = future.get(timeout=config.timeout_seconds)
-                            
                             if result.success:
-                                success = True
                                 chunk_results.append(result)
                                 metrics.chunks_succeeded += 1
                             else:
                                 retry_count += 1
-                                metrics.chunks_retried += 1
-                                logger.warning(f"Chunk {chunk.chunk_id} failed, retry {retry_count}/{config.retry_attempts}")
-                        
+                                if retry_count < config.retry_attempts:
+                                    metrics.chunks_retried += 1
+                                    logger.warning(
+                                        f"Chunk {chunk.chunk_id} failed, retry {retry_count}/{config.retry_attempts}"
+                                    )
+                                    next_pending[chunk_id] = (chunk, retry_count)
+                                else:
+                                    result.retry_count = retry_count
+                                    chunk_results.append(result)
+                                    metrics.chunks_failed += 1
+                                    metrics.errors.append(
+                                        f"Chunk {chunk.chunk_id}: {result.error or 'unknown error'}"
+                                    )
+
                         except mp.TimeoutError:
                             retry_count += 1
-                            metrics.chunks_retried += 1
-                            logger.error(f"Chunk {chunk.chunk_id} timed out after {config.timeout_seconds}s")
-                            
-                            if retry_count >= config.retry_attempts:
+                            if retry_count < config.retry_attempts:
+                                metrics.chunks_retried += 1
+                                logger.error(
+                                    f"Chunk {chunk.chunk_id} timed out after {config.timeout_seconds}s"
+                                )
+                                next_pending[chunk_id] = (chunk, retry_count)
+                            else:
                                 error_result = ExecutionResult(
                                     chunk_id=chunk.chunk_id,
                                     success=False,
@@ -587,13 +622,14 @@ class WorkerPool:
                                 chunk_results.append(error_result)
                                 metrics.chunks_failed += 1
                                 metrics.errors.append(f"Chunk {chunk.chunk_id} timeout")
-                        
+
                         except Exception as e:
                             retry_count += 1
-                            metrics.chunks_retried += 1
-                            logger.error(f"Chunk {chunk.chunk_id} error: {e}")
-                            
-                            if retry_count >= config.retry_attempts:
+                            if retry_count < config.retry_attempts:
+                                metrics.chunks_retried += 1
+                                logger.error(f"Chunk {chunk.chunk_id} error: {e}")
+                                next_pending[chunk_id] = (chunk, retry_count)
+                            else:
                                 error_result = ExecutionResult(
                                     chunk_id=chunk.chunk_id,
                                     success=False,
@@ -604,9 +640,11 @@ class WorkerPool:
                                 chunk_results.append(error_result)
                                 metrics.chunks_failed += 1
                                 metrics.errors.append(f"Chunk {chunk.chunk_id}: {str(e)}")
-                
+
+                    pending = next_pending
+
                 results.extend(chunk_results)
-                
+
                 # Update shared state with results
                 for result in chunk_results:
                     if result.success:
@@ -614,7 +652,7 @@ class WorkerPool:
             
             # Execute sequential chunks one by one
             for chunk in sequential_chunks + (parallel_chunks if len(parallel_chunks) == 1 else []):
-                result = self.execute_chunk(chunk, shared_state)
+                result = self.execute_chunk(chunk, shared_state, builtins=builtins, parent_env=parent_env)
                 results.append(result)
                 
                 if result.success:
@@ -719,7 +757,12 @@ class ParallelVM:
         logger.info(f"ParallelVM initialized: {self.config.worker_count} workers, "
                    f"chunk_size={self.config.chunk_size}, mode={mode.value}")
     
-    def execute(self, bytecode: Bytecode, sequential_fallback: bool = True) -> Any:
+    def execute(
+        self,
+        bytecode: Bytecode,
+        sequential_fallback: bool = True,
+        initial_state: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """
         Execute bytecode in parallel with metrics and error handling.
         
@@ -769,11 +812,26 @@ class ParallelVM:
             manager = Manager()
             self.shared_state = SharedState(manager)
             self.merger = ResultMerger()
+
+            builtins = None
+            parent_env = None
+            if initial_state:
+                env_state = initial_state.get("env")
+                if isinstance(env_state, dict):
+                    self.shared_state.batch_write(env_state)
+                builtins = initial_state.get("builtins")
+                parent_env = initial_state.get("parent_env")
             
             # Execute chunks in parallel
             parallel_start = time.time()
             with self.worker_pool as pool:
-                results = pool.submit_chunks(chunks, self.shared_state, self.config)
+                results = pool.submit_chunks(
+                    chunks,
+                    self.shared_state,
+                    self.config,
+                    builtins=builtins,
+                    parent_env=parent_env,
+                )
             metrics.parallel_time = time.time() - parallel_start
             
             logger.info(f"Parallel execution completed in {metrics.parallel_time:.4f}s")

@@ -126,49 +126,61 @@ class BytecodeConverter:
         if start >= len(instructions):
             return None, 0
         
+        def _op_name(op):
+            return op.name if hasattr(op, "name") else op
+
         # Pattern 1: Constant arithmetic (LOAD_CONST, LOAD_CONST, BINARY_OP)
         if start + 2 < len(instructions):
             inst1, inst2, inst3 = instructions[start:start+3]
             
-            if (inst1[0] == Opcode.LOAD_CONST and
-                inst2[0] == Opcode.LOAD_CONST and
-                inst3[0] in [Opcode.ADD, Opcode.SUB, Opcode.MUL, Opcode.DIV, Opcode.MOD, Opcode.POW]):
+            op1 = _op_name(inst1[0])
+            op2 = _op_name(inst2[0])
+            op3 = _op_name(inst3[0])
+            if (op1 == Opcode.LOAD_CONST.name and
+                op2 == Opcode.LOAD_CONST.name and
+                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name, Opcode.MOD.name, Opcode.POW.name]):
                 
                 return {
                     'type': 'const_binary_op',
                     'const1': inst1[1],
                     'const2': inst2[1],
-                    'operation': inst3[0],
+                    'operation': Opcode[op3],
                 }, 3
         
         # Pattern 2: Variable arithmetic (LOAD_NAME, LOAD_CONST, BINARY_OP)
         if start + 2 < len(instructions):
             inst1, inst2, inst3 = instructions[start:start+3]
             
-            if (inst1[0] == Opcode.LOAD_NAME and
-                inst2[0] == Opcode.LOAD_CONST and
-                inst3[0] in [Opcode.ADD, Opcode.SUB, Opcode.MUL, Opcode.DIV]):
+            op1 = _op_name(inst1[0])
+            op2 = _op_name(inst2[0])
+            op3 = _op_name(inst3[0])
+            if (op1 == Opcode.LOAD_NAME.name and
+                op2 == Opcode.LOAD_CONST.name and
+                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name]):
                 
                 return {
                     'type': 'var_const_binary_op',
                     'var_name': inst1[1],
                     'const': inst2[1],
-                    'operation': inst3[0],
+                    'operation': Opcode[op3],
                 }, 3
         
         # Pattern 3: Two variables (LOAD_NAME x, LOAD_NAME y, BINARY_OP)
         if start + 2 < len(instructions):
             inst1, inst2, inst3 = instructions[start:start+3]
             
-            if (inst1[0] == Opcode.LOAD_NAME and
-                inst2[0] == Opcode.LOAD_NAME and
-                inst3[0] in [Opcode.ADD, Opcode.SUB, Opcode.MUL, Opcode.DIV]):
+            op1 = _op_name(inst1[0])
+            op2 = _op_name(inst2[0])
+            op3 = _op_name(inst3[0])
+            if (op1 == Opcode.LOAD_NAME.name and
+                op2 == Opcode.LOAD_NAME.name and
+                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name]):
                 
                 return {
                     'type': 'var_var_binary_op',
                     'var1': inst1[1],
                     'var2': inst2[1],
-                    'operation': inst3[0],
+                    'operation': Opcode[op3],
                 }, 3
         
         # Pattern 4: Store result (... STORE_NAME)

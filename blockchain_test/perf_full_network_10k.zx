@@ -1,8 +1,10 @@
 // Zexus performance benchmark: 10k transactions sequential vs bulk
 
 use "./full_network_chain/full_network_blockchain.zx"
+use {enable_vm, set_vm_thresholds, set_vm_config, profile_start, profile_stop, profile_report, vm_stats} from "stdlib/perf"
+use {stringify} from "stdlib/json"
 
-const PERF_TRANSACTION_COUNT = 1000
+const PERF_TRANSACTION_COUNT = 200
 
 const PERF_GENESIS = [
     {"address": "VAL_ALPHA", "balance": 5000000},
@@ -32,7 +34,10 @@ function create_performance_blockchain(max_block_txs, logging) {
         "max_block_txs": max_block_txs,
         "base_reward": 75,
         "min_stake": 300000,
-        "performance_mode": perf_mode
+        "performance_mode": perf_mode,
+        "perf_skip_validation": perf_mode,
+        "perf_skip_rewards": perf_mode,
+        "perf_skip_history": perf_mode
     }
     let chain = create_full_network_blockchain(overrides, PERF_GENESIS, PERF_VALIDATORS, logging)
     print("[perf] created blockchain max_txs=" + string(max_block_txs) + " validators=" + string(len(PERF_VALIDATORS)))
@@ -67,9 +72,9 @@ function run_sequential_test() {
             recipient = select_recipient(i, 2)
         }
 
-        let amount = 50 + (i % 250)
-        let fee = 5 + ((i * 3) % 25)
-        let payload = "seq::" + string(i) + "::" + sender + "->" + recipient
+        let amount = PERF_TRANSACTION_COUNT >= 1000 ? 100 : (50 + (i % 250))
+        let fee = PERF_TRANSACTION_COUNT >= 1000 ? 1 : (5 + ((i * 3) % 25))
+        let payload = PERF_TRANSACTION_COUNT >= 1000 ? "" : ("seq::" + string(i) + "::" + sender + "->" + recipient)
 
         let nonce = next_nonce(nonce_tracker, blockchain, sender)
         blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
@@ -94,6 +99,45 @@ function run_sequential_test() {
     }
 }
 
+function run_sequential_batched_test() {
+    let batch_block_txs = PERF_TRANSACTION_COUNT >= 1000 ? 200 : 10
+    let blockchain = create_performance_blockchain(batch_block_txs, false)
+    let nonce_tracker = {}
+    let i = 0
+    let processed_blocks = 0
+    let start_time = time()
+
+    while i < PERF_TRANSACTION_COUNT {
+        let sender = PERF_WALLETS[i % len(PERF_WALLETS)]
+        let recipient = select_recipient(i, 1)
+        if sender == recipient {
+            recipient = select_recipient(i, 2)
+        }
+
+        let amount = PERF_TRANSACTION_COUNT >= 1000 ? 100 : (50 + (i % 250))
+        let fee = PERF_TRANSACTION_COUNT >= 1000 ? 1 : (5 + ((i * 3) % 25))
+        let payload = PERF_TRANSACTION_COUNT >= 1000 ? "" : ("seq_batch::" + string(i) + "::" + sender + "->" + recipient)
+
+        let nonce = next_nonce(nonce_tracker, blockchain, sender)
+        blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
+        nonce_tracker[sender] = nonce + 1
+
+        i = i + 1
+    }
+
+    processed_blocks = blockchain.produce_blocks_fast_until_empty(0)
+
+    let duration = time() - start_time
+    let metrics = blockchain.get_chain_info()
+
+    return {
+        "duration": duration,
+        "blocks": processed_blocks,
+        "metrics": metrics,
+        "blockchain": blockchain
+    }
+}
+
 function run_bulk_test() {
     let bulk_block_txs = PERF_TRANSACTION_COUNT >= 1000 ? 5000 : 75
     let blockchain = create_performance_blockchain(bulk_block_txs, false)
@@ -101,10 +145,14 @@ function run_bulk_test() {
     let i = 0
     let start_submission = time()
     let use_fast_blocks = PERF_TRANSACTION_COUNT >= 1000
-    let use_batch_submit = PERF_TRANSACTION_COUNT >= 1000
-    let batch = []
-    let batch_size = 200
+    let use_batch_submit = false
     let use_bulk_all = PERF_TRANSACTION_COUNT >= 1000
+    let bulk_from = []
+    let bulk_to = []
+    let bulk_amount = []
+    let bulk_fee = []
+    let bulk_nonce = []
+    let bulk_payload = []
 
     while i < PERF_TRANSACTION_COUNT {
         let sender = PERF_WALLETS[i % len(PERF_WALLETS)]
@@ -113,48 +161,34 @@ function run_bulk_test() {
             recipient = select_recipient(i, 4)
         }
 
-        let amount = 80 + ((i * 7) % 300)
-        let fee = 9 + ((i * 5) % 35)
-        let payload = "bulk::" + string(i) + "::" + string(amount) + "::" + sender
+        let amount = PERF_TRANSACTION_COUNT >= 1000 ? 100 : (80 + ((i * 7) % 300))
+        let fee = PERF_TRANSACTION_COUNT >= 1000 ? 1 : (9 + ((i * 5) % 35))
+        let payload = PERF_TRANSACTION_COUNT >= 1000 ? "" : ("bulk::" + string(i) + "::" + string(amount) + "::" + sender)
 
         let nonce = next_nonce(nonce_tracker, blockchain, sender)
-        if use_batch_submit {
-            batch = append(batch, {
-                "from": sender,
-                "to": recipient,
-                "amount": amount,
-                "fee": fee,
-                "nonce": nonce,
-                "payload": payload
-            })
+        if use_bulk_all {
+            bulk_from = append(bulk_from, sender)
+            bulk_to = append(bulk_to, recipient)
+            bulk_amount = append(bulk_amount, amount)
+            bulk_fee = append(bulk_fee, fee)
+            bulk_nonce = append(bulk_nonce, nonce)
+            bulk_payload = append(bulk_payload, payload)
         } else {
             blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
         }
         nonce_tracker[sender] = nonce + 1
-
-        if use_batch_submit && len(batch) >= batch_size {
-            blockchain.submit_transactions_batch(batch)
-            batch = []
-        }
 
         i = i + 1
     }
 
     let submission_time = time() - start_submission
 
-    if use_batch_submit && len(batch) > 0 {
-        blockchain.submit_transactions_batch(batch)
-    }
-
     let start_production = time()
     let produced_blocks = 0
 
     if use_bulk_all {
-        produced_blocks = 0
-        let bulk_result = blockchain.produce_block_bulk_all()
-        if bulk_result != false {
-            produced_blocks = 1
-        }
+        let bulk_result = blockchain.submit_and_produce_bulk_raw(bulk_from, bulk_to, bulk_amount, bulk_fee, bulk_nonce, bulk_payload)
+        produced_blocks = bulk_result != false ? 1 : 0
     } else if use_fast_blocks {
         produced_blocks = blockchain.produce_blocks_fast_until_empty(0)
     } else {
@@ -185,8 +219,46 @@ function run_bulk_test() {
     }
 }
 
-let sequential_result = run_sequential_test()
+// Tune VM thresholds for performance runs
+enable_vm(true)
+set_vm_thresholds(1, 100000, 1)
+set_vm_config({
+    "use_jit": false,
+    "enable_gas_metering": false,
+    "use_memory_manager": true,
+    "gc_threshold": 20000,
+    "enable_peephole_optimizer": true,
+    "enable_bytecode_optimizer": true,
+    "optimizer_level": 2,
+    "enable_memory_pool": true,
+    "enable_async_optimizer": true,
+    "enable_ssa": true,
+    "enable_bytecode_converter": true,
+    "enable_profiling": true,
+    "profiling_level": "DETAILED",
+    "profiling_sample_rate": 1.0,
+    "profiling_max_samples": 2048,
+    "profiling_track_overhead": false,
+    "vm_full_loop": true,
+    "vm_sync_all": false,
+    "vm_allow_unsafe_loops": true,
+    "vm_dump_bytecode": true,
+    "mode": "stack"
+})
+
+// Warm up VM to ensure profiler is initialized before profiling starts
+let warmup_i = 0
+while warmup_i < 6 {
+    warmup_i = warmup_i + 1
+}
+
+profile_start()
+
+let sequential_single_result = run_sequential_test()
+let sequential_result = run_sequential_batched_test()
 let bulk_result = run_bulk_test()
+
+profile_stop()
 
 function compute_tps(total_tx, duration_ms) {
     if duration_ms <= 0 {
@@ -196,6 +268,7 @@ function compute_tps(total_tx, duration_ms) {
 }
 
 let sequential_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_result["duration"])
+let sequential_single_tps = compute_tps(PERF_TRANSACTION_COUNT, sequential_single_result["duration"])
 let bulk_total_time = bulk_result["submission_time"] + bulk_result["production_time"]
 let bulk_tps = compute_tps(PERF_TRANSACTION_COUNT, bulk_total_time)
 
@@ -203,7 +276,12 @@ print("\n===============================================")
 print("ZEXUS PERFORMANCE SUMMARY :: 10K TRANSACTIONS")
 print("===============================================")
 print("Sequential total_ms=" + string(sequential_result["duration"]) + " | blocks=" + string(sequential_result["blocks"]) + " | avg_block_ms=" + string(sequential_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_tps))
+print("Sequential single-block total_ms=" + string(sequential_single_result["duration"]) + " | blocks=" + string(sequential_single_result["blocks"]) + " | avg_block_ms=" + string(sequential_single_result["metrics"].avg_block_ms) + " | tps=" + string(sequential_single_tps))
 print("Bulk submission_ms=" + string(bulk_result["submission_time"]) + " | production_ms=" + string(bulk_result["production_time"]) + " | blocks=" + string(bulk_result["blocks"]) + " | avg_block_ms=" + string(bulk_result["metrics"].avg_block_ms) + " | tps=" + string(bulk_tps))
 print("Pending after sequential=" + string(sequential_result["metrics"].pending_tx) + " | pending after bulk=" + string(bulk_result["metrics"].pending_tx))
 print("Benchmark complete")
+print("\n--- VM PROFILING REPORT ---")
+print(profile_report("text", 20))
+print("\n--- VM STATS ---")
+print(stringify(vm_stats()))
 

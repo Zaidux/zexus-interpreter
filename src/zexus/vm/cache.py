@@ -143,6 +143,8 @@ class BytecodeCache:
         # Allows reusing bytecode for similar code patterns across files
         self._pattern_cache: OrderedDict[str, CacheEntry] = OrderedDict()
         self._max_patterns = 500  # Max pattern cache entries
+        self._pattern_memory_bytes = 0
+        self._max_pattern_memory_bytes = max(1, self.max_memory_bytes // 4)
         
         # Statistics
         self.stats = CacheStats()
@@ -429,6 +431,7 @@ class BytecodeCache:
         self._cache.clear()
         self._file_cache.clear()
         self._pattern_cache.clear()
+        self._pattern_memory_bytes = 0
         self.stats = CacheStats()
         
         if self.debug:
@@ -451,7 +454,15 @@ class BytecodeCache:
             Dictionary with cache statistics
         """
         self.stats.update_hit_rate()
-        return self.stats.to_dict()
+        base = self.stats.to_dict()
+        base['pattern_memory_bytes'] = self._pattern_memory_bytes
+        return base
+
+    def _evict_pattern_lru(self) -> None:
+        if not self._pattern_cache:
+            return
+        _, entry = self._pattern_cache.popitem(last=False)
+        self._pattern_memory_bytes = max(0, self._pattern_memory_bytes - entry.size_bytes)
     
     def reset_stats(self):
         """Reset statistics (keeps cache entries)"""
@@ -858,11 +869,13 @@ class BytecodeCache:
         if not pattern_hash:
             return
         
-        # Evict if at capacity
+        # Evict if at capacity or over memory budget
         while len(self._pattern_cache) >= self._max_patterns:
-            self._pattern_cache.popitem(last=False)
+            self._evict_pattern_lru()
         
         size = self._estimate_size(bytecode)
+        while self._pattern_cache and (self._pattern_memory_bytes + size) > self._max_pattern_memory_bytes:
+            self._evict_pattern_lru()
         entry = CacheEntry(
             bytecode=bytecode,
             timestamp=time.time(),
@@ -871,6 +884,7 @@ class BytecodeCache:
         )
         
         self._pattern_cache[pattern_hash] = entry
+        self._pattern_memory_bytes += size
         
         if self.debug:
             print(f"💾 PatternCache: PUT {pattern_hash[:8]}...")

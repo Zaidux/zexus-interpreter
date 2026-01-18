@@ -257,7 +257,7 @@ class EvaluatorBytecodeCompiler:
         """Compile expression statement"""
         self._compile_node(node.expression)
         # Pop result unless it's the last statement
-        # self.builder.emit("POP")
+        self.builder.emit("POP")
     
     def _compile_LetStatement(self, node: zexus_ast.LetStatement):
         """Compile let statement"""
@@ -287,6 +287,19 @@ class EvaluatorBytecodeCompiler:
         # Emit a special instruction or constant to signal continue mode
         # For now, emit a CONTINUE instruction that the VM can handle
         self.builder.emit("CONTINUE")
+
+    def _compile_BreakStatement(self, node: zexus_ast.BreakStatement):
+        """Compile break statement by jumping to loop end label"""
+        if not self._loop_stack:
+            self.errors.append("Break statement outside loop")
+            self.builder.emit_constant(None)
+            return
+        end_label = self._loop_stack[-1].get('end')
+        if not end_label:
+            self.errors.append("Break statement missing loop end label")
+            self.builder.emit_constant(None)
+            return
+        self.builder.emit_jump(end_label)
     
     def _compile_IfStatement(self, node: zexus_ast.IfStatement):
         """Compile if statement with elif and else branches"""
@@ -721,6 +734,26 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_CallExpression(self, node: zexus_ast.CallExpression):
         """Compile function call"""
+        # Method call on property access (obj.method(...))
+        if isinstance(node.function, zexus_ast.PropertyAccessExpression):
+            # Only handle non-computed property names here
+            if hasattr(node.function, 'computed') and node.function.computed:
+                pass
+            else:
+                method_name = None
+                if hasattr(node.function.property, 'value'):
+                    method_name = node.function.property.value
+                elif isinstance(node.function.property, str):
+                    method_name = node.function.property
+
+                if method_name is not None:
+                    # Load object first, then args, then CALL_METHOD
+                    self._compile_node(node.function.object)
+                    for arg in node.arguments:
+                        self._compile_node(arg)
+                    self.builder.emit_call_method(method_name, len(node.arguments))
+                    return
+
         # Check for blockchain-specific function calls that have dedicated opcodes
         if isinstance(node.function, zexus_ast.Identifier):
             func_name = node.function.value
@@ -792,16 +825,57 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_AssignmentExpression(self, node: zexus_ast.AssignmentExpression):
         """Compile assignment expression"""
-        # Compile the value
-        self._compile_node(node.value)
         # Store to name
         if isinstance(node.name, zexus_ast.Identifier):
+            # Compile the value
+            self._compile_node(node.value)
             self.builder.emit("DUP")  # Keep value on stack
             name = str(node.name.value).strip()
             self.builder.emit_store(name)
-        else:
-            self.errors.append(
-                "Complex assignment targets not yet supported in bytecode")
+            return
+
+        # Property/index assignment (obj.prop = value / obj[expr] = value)
+        if isinstance(node.name, zexus_ast.PropertyAccessExpression):
+            tmp_name = "__assign_tmp"
+            # Evaluate value first and stash it
+            self._compile_node(node.value)
+            self.builder.emit_store(tmp_name)
+
+            # Compile object
+            self._compile_node(node.name.object)
+
+            # Compile property key
+            if hasattr(node.name, 'computed') and node.name.computed:
+                self._compile_node(node.name.property)
+            else:
+                if hasattr(node.name.property, 'value'):
+                    prop_name = node.name.property.value
+                    self.builder.emit_constant(prop_name)
+                else:
+                    self._compile_node(node.name.property)
+
+            # Push value and call set
+            self.builder.emit_load(tmp_name)
+            self.builder.emit_call_method("set", 2)
+
+            # Return assigned value
+            self.builder.emit_load(tmp_name)
+            return
+
+        if isinstance(node.name, zexus_ast.IndexExpression):
+            tmp_name = "__assign_tmp"
+            self._compile_node(node.value)
+            self.builder.emit_store(tmp_name)
+
+            self._compile_node(node.name.left)
+            self._compile_node(node.name.index)
+            self.builder.emit_load(tmp_name)
+            self.builder.emit_call_method("set", 2)
+            self.builder.emit_load(tmp_name)
+            return
+
+        self.errors.append(
+            "Complex assignment targets not yet supported in bytecode")
     
     def _compile_IndexExpression(self, node):
         """Compile index expression"""
@@ -811,6 +885,26 @@ class EvaluatorBytecodeCompiler:
         self._compile_node(node.index)
         # Emit index operation
         self.builder.emit("INDEX")
+
+    def _compile_ThisExpression(self, node):
+        """Compile 'this' expression"""
+        self.builder.emit_load("this")
+
+    def _compile_TernaryExpression(self, node: zexus_ast.TernaryExpression):
+        """Compile ternary expression: condition ? true_value : false_value"""
+        else_label = f"ternary_else_{id(node)}"
+        end_label = f"ternary_end_{id(node)}"
+
+        self._compile_node(node.condition)
+        self.builder.emit_jump_if_false(else_label)
+
+        self._compile_node(node.true_value)
+        self.builder.emit_jump(end_label)
+
+        self.builder.mark_label(else_label)
+        self._compile_node(node.false_value)
+
+        self.builder.mark_label(end_label)
     
     def _compile_PropertyAccessExpression(self, node):
         """Compile property access (obj.property or obj[property])"""
@@ -1146,6 +1240,7 @@ class EvaluatorBytecodeCompiler:
             'InfixExpression', 'PrefixExpression', 'CallExpression',
             'AwaitExpression', 'SpawnExpression', 'AssignmentExpression', 'IndexExpression',
             'PropertyAccessExpression', 'LambdaExpression',
+            'ThisExpression', 'TernaryExpression',
             'FindExpression', 'LoadExpression',
             'UseStatement', 'FromStatement',
             'NativeStatement', 'GCStatement', 'InlineStatement',

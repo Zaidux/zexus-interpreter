@@ -157,7 +157,8 @@ class RegisterAllocator:
         # Color the graph
         allocation, spilled = self._color_graph(
             interference_graph,
-            self.available_registers
+            self.available_registers,
+            live_ranges
         )
         
         return AllocationResult(
@@ -295,7 +296,8 @@ class RegisterAllocator:
     def _color_graph(
         self,
         graph: InterferenceGraph,
-        available_colors: Set[int]
+        available_colors: Set[int],
+        live_ranges: Optional[Dict[str, LiveRange]] = None
     ) -> Tuple[Dict[str, int], Set[str]]:
         """
         Color the interference graph using graph coloring algorithm
@@ -328,11 +330,20 @@ class RegisterAllocator:
                 stack.append((low_degree_node, remaining_graph.neighbors(low_degree_node).copy()))
                 remaining_graph.remove_node(low_degree_node)
             else:
-                # Need to spill - choose node with highest degree
+                # Need to spill - choose lowest-cost node
                 if not remaining_graph.nodes:
                     break
-                
-                spill_node = max(remaining_graph.nodes, key=lambda n: remaining_graph.degree(n))
+
+                def spill_cost(var: str) -> float:
+                    degree = max(1, remaining_graph.degree(var))
+                    if live_ranges and var in live_ranges:
+                        lr = live_ranges[var]
+                        uses = len(lr.uses) + len(lr.defs)
+                        span = max(1, lr.end - lr.start)
+                        return (uses / span) / degree
+                    return 1.0 / degree
+
+                spill_node = min(remaining_graph.nodes, key=spill_cost)
                 stack.append((spill_node, remaining_graph.neighbors(spill_node).copy()))
                 remaining_graph.remove_node(spill_node)
                 spilled.add(spill_node)

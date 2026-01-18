@@ -40,6 +40,8 @@ class InstructionStats:
     
     # Timing samples (for percentile calculation)
     timing_samples: List[float] = field(default_factory=list)
+    max_samples: int = 2048
+    sample_index: int = 0
     
     # Memory tracking
     memory_reads: int = 0
@@ -57,16 +59,12 @@ class InstructionStats:
             self.total_time += execution_time
             self.min_time = min(self.min_time, execution_time)
             self.max_time = max(self.max_time, execution_time)
-            self.timing_samples.append(execution_time)
-            
-            # Keep sample size manageable (max 10000 samples)
-            if len(self.timing_samples) > 10000:
-                # Keep percentiles and random samples
-                self.timing_samples = sorted(self.timing_samples)
-                keep = [self.timing_samples[i] for i in 
-                       [0, len(self.timing_samples)//4, len(self.timing_samples)//2,
-                        3*len(self.timing_samples)//4, -1]]
-                self.timing_samples = keep
+            if self.max_samples > 0:
+                if len(self.timing_samples) < self.max_samples:
+                    self.timing_samples.append(execution_time)
+                else:
+                    self.timing_samples[self.sample_index] = execution_time
+                    self.sample_index = (self.sample_index + 1) % self.max_samples
     
     def avg_time(self) -> float:
         """Average execution time"""
@@ -139,9 +137,19 @@ class InstructionProfiler:
     Tracks execution statistics at instruction level with minimal overhead.
     """
     
-    def __init__(self, level: ProfilingLevel = ProfilingLevel.DETAILED):
+    def __init__(
+        self,
+        level: ProfilingLevel = ProfilingLevel.DETAILED,
+        sample_rate: float = 1.0,
+        max_samples: int = 2048,
+        track_overhead: bool = False
+    ):
         self.level = level
         self.enabled = level != ProfilingLevel.NONE
+        self.sample_rate = max(0.0, min(1.0, float(sample_rate)))
+        self.max_samples = max(0, int(max_samples))
+        self.track_overhead = bool(track_overhead)
+        self._sample_every = int(1 / self.sample_rate) if 0 < self.sample_rate < 1.0 else 1
         
         # Per-instruction statistics (keyed by instruction pointer)
         self.stats: Dict[int, InstructionStats] = {}
@@ -213,8 +221,10 @@ class InstructionProfiler:
         """
         if not self.enabled:
             return
-        
-        overhead_start = time.perf_counter()
+
+        overhead_start = time.perf_counter() if self.track_overhead else None
+        if self.start_time is None:
+            self.start_time = time.perf_counter()
         
         # Update counters
         self.total_instructions += 1
@@ -222,7 +232,12 @@ class InstructionProfiler:
         
         # Get or create stats for this instruction
         if ip not in self.stats:
-            self.stats[ip] = InstructionStats(opcode=opcode, operand=operand, ip=ip)
+            self.stats[ip] = InstructionStats(
+                opcode=opcode,
+                operand=operand,
+                ip=ip,
+                max_samples=self.max_samples
+            )
         
         stat = self.stats[ip]
         
@@ -271,7 +286,8 @@ class InstructionProfiler:
                     stat.branch_not_taken += 1
         
         # Minimal overhead tracking for non-FULL levels
-        self.profiling_overhead += (time.perf_counter() - overhead_start)
+        if self.track_overhead and overhead_start is not None:
+            self.profiling_overhead += (time.perf_counter() - overhead_start)
     
     def measure_instruction(self, ip: int, execution_time: float):
         """
@@ -283,12 +299,16 @@ class InstructionProfiler:
         """
         if not self.enabled or self.level == ProfilingLevel.BASIC:
             return
-        
+
+        if self._sample_every > 1 and (self.total_instructions % self._sample_every) != 0:
+            return
+
         if ip in self.stats:
-            overhead_start = time.perf_counter()
+            overhead_start = time.perf_counter() if self.track_overhead else None
             # Don't increment count - that was already done by record_instruction
             self.stats[ip].record_execution(execution_time, increment_count=False)
-            self.profiling_overhead += (time.perf_counter() - overhead_start)
+            if self.track_overhead and overhead_start is not None:
+                self.profiling_overhead += (time.perf_counter() - overhead_start)
     
     def get_hottest_instructions(self, top_n: int = 10) -> List[InstructionStats]:
         """Get top N hottest instructions by execution count"""

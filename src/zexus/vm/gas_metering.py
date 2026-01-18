@@ -57,6 +57,8 @@ class GasCost(IntEnum):
     # Function operations
     CALL_NAME = 10  # Base cost for function call
     CALL_TOP = 10
+    CALL_METHOD = 10
+    CALL_BUILTIN = 8
     STORE_FUNC = 5
     BUILD_LAMBDA = 5
     
@@ -170,7 +172,7 @@ class GasMetering:
             leaf_count = kwargs.get('leaf_count', 0)
             return base_cost + (leaf_count * 5)
         
-        elif operation in ("CALL_NAME", "CALL_TOP"):
+        elif operation in ("CALL_NAME", "CALL_TOP", "CALL_METHOD", "CALL_BUILTIN"):
             # Cost scales with number of arguments
             arg_count = kwargs.get('arg_count', 0)
             return base_cost + (arg_count * 2)
