@@ -14,13 +14,10 @@ from zexus.parser.parser import UltimateParser
 from zexus.evaluator.core import Evaluator
 from zexus.object import Environment, String, List
 from zexus import config
+from zexus.runtime.file_flags import parse_file_flags, apply_vm_config
 
 def run_zexus_file(filename, debug_level='none', use_vm=False):
     """Execute a Zexus file directly"""
-    
-    # Set debug level
-    config.config.debug_level = debug_level
-    config.config.enable_debug_logs = (debug_level != 'none')
     
     if not os.path.exists(filename):
         print(f"❌ Error: File not found: {filename}", file=sys.stderr)
@@ -28,6 +25,31 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
     
     with open(filename, 'r') as f:
         code = f.read()
+
+    # Apply inline file flags (if any)
+    file_flags = parse_file_flags(code)
+    vm_mode = 'auto'
+    no_optimize = False
+    vm_config = {}
+    if file_flags:
+        if 'use_vm' in file_flags:
+            use_vm = bool(file_flags.get('use_vm'))
+        if 'debug' in file_flags:
+            dbg = file_flags.get('debug')
+            if isinstance(dbg, str):
+                debug_level = dbg
+            else:
+                debug_level = 'full' if dbg else 'none'
+        if 'vm_mode' in file_flags:
+            vm_mode = str(file_flags.get('vm_mode')).lower()
+        if 'no_optimize' in file_flags:
+            no_optimize = bool(file_flags.get('no_optimize'))
+        if 'vm_config' in file_flags and isinstance(file_flags.get('vm_config'), dict):
+            vm_config = dict(file_flags.get('vm_config'))
+
+    # Set debug level (after file flags)
+    config.config.debug_level = debug_level
+    config.config.enable_debug_logs = (debug_level != 'none')
     
     try:
         # Tokenize
@@ -55,7 +77,7 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
                     print("   📦 Compiling AST to bytecode...", file=sys.stderr)
                 
                 try:
-                    bytecode = compile_ast_to_bytecode(ast, optimize=True)
+                    bytecode = compile_ast_to_bytecode(ast, optimize=not no_optimize)
                 except UnsupportedNodeError as e:
                     print(f"⚠️  VM fallback: {e}", file=sys.stderr)
                     use_vm = False
@@ -73,7 +95,20 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
                     if debug_level != 'none':
                         print(f"   ⚡ Executing {len(bytecode.instructions)} instructions...", file=sys.stderr)
                     
-                    vm = VM(mode=VMMode.AUTO, use_jit=True, max_heap_mb=512, debug=(debug_level == 'full'))
+                    vm_mode_map = {
+                        'auto': VMMode.AUTO,
+                        'stack': VMMode.STACK,
+                        'register': VMMode.REGISTER,
+                        'parallel': VMMode.PARALLEL,
+                    }
+                    vm_mode_value = vm_mode if vm_mode in vm_mode_map else 'auto'
+                    vm = VM(
+                        mode=vm_mode_map[vm_mode_value],
+                        use_jit=not no_optimize,
+                        max_heap_mb=512,
+                        debug=(debug_level == 'full')
+                    )
+                    apply_vm_config(vm, vm_config)
                     result = vm.execute(bytecode, debug=(debug_level == 'full'))
                     
                     if debug_level != 'none':

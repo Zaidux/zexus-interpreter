@@ -101,6 +101,14 @@ except ImportError:
     _BYTECODE_OPTIMIZER_AVAILABLE = False
     BytecodeOptimizer = None
 
+# Cython fast-path (optional)
+try:
+    from . import fastops as _fastops
+    _FASTOPS_AVAILABLE = True
+except Exception:
+    _FASTOPS_AVAILABLE = False
+    _fastops = None
+
 # Async Optimizer (Phase 8)
 try:
     from .async_optimizer import AsyncOptimizer, AsyncOptimizationLevel
@@ -683,7 +691,11 @@ class VM:
             elif execution_mode == VMMode.PARALLEL and self._parallel_vm:
                 result = self._execute_parallel(code, debug)
             
-            # 3. Stack Mode (Standard/Fallback + Async Support)
+            # 3. Fast synchronous path for performance mode (no async overhead)
+            elif getattr(self, '_perf_fast_dispatch', False):
+                result = self._run_stack_bytecode_sync(code, debug)
+            
+            # 4. Stack Mode (Standard/Fallback + Async Support)
             else:
                 result = self._run_coroutine_sync(self._execute_stack(code, debug))
             
@@ -1100,6 +1112,299 @@ class VM:
             return None
         if tag == "MAP": return {k: self._eval_hl_op(v) for k, v in op[1].items()}
         if tag == "LIST": return [self._eval_hl_op(e) for e in op[1]]
+        return None
+
+    # ==================== Fast Synchronous Dispatch (Performance Mode) ====================
+
+    def _run_stack_bytecode_sync(self, bytecode, debug=False):
+        """Synchronous fast-path execution without async overhead or gas metering."""
+        consts = list(getattr(bytecode, "constants", []))
+        instrs = list(getattr(bytecode, "instructions", []))
+        
+        # Normalize opcodes
+        normalized: List[Tuple[str, Any]] = []
+        for instr in instrs:
+            if instr is None:
+                continue
+            if isinstance(instr, tuple) and len(instr) >= 2:
+                op = instr[0]
+                operand = instr[1] if len(instr) == 2 else tuple(instr[1:])
+                op_name = op.name if hasattr(op, "name") else op
+                normalized.append((op_name, operand))
+        instrs = normalized
+
+        # Cython fast-path if available
+        if _FASTOPS_AVAILABLE:
+            try:
+                return _fastops.execute(instrs, consts, self.env, self.builtins, self._closure_cells)
+            except NotImplementedError:
+                pass
+            except Exception:
+                pass
+        
+        # Fast stack implementation
+        stack: List[Any] = []
+        stack_append = stack.append
+        stack_pop = stack.pop
+        
+        ip = 0
+        instr_count = len(instrs)
+        env = self.env
+        builtins = self.builtins
+        
+        def const(idx):
+            return consts[idx] if isinstance(idx, int) and 0 <= idx < len(consts) else idx
+        
+        def resolve(name):
+            if name in env:
+                val = env[name]
+                return val.value if isinstance(val, Cell) else val
+            if name in self._closure_cells:
+                return self._closure_cells[name].value
+            return None
+        
+        def store(name, value):
+            if name in env and isinstance(env[name], Cell):
+                env[name].value = value
+            else:
+                env[name] = value
+        
+        while ip < instr_count:
+            op_name, operand = instrs[ip]
+            ip += 1
+            
+            # Hot path: arithmetic and stack ops (inlined)
+            if op_name == "LOAD_CONST":
+                stack_append(const(operand))
+            elif op_name == "LOAD_NAME":
+                stack_append(resolve(const(operand)))
+            elif op_name == "STORE_NAME":
+                store(const(operand), stack_pop() if stack else None)
+            elif op_name == "POP":
+                if stack: stack_pop()
+            elif op_name == "DUP":
+                if stack: stack_append(stack[-1])
+            elif op_name == "ADD":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(a + b)
+            elif op_name == "SUB":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(a - b)
+            elif op_name == "MUL":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(a * b)
+            elif op_name == "DIV":
+                b = stack_pop() if stack else 1
+                a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(a / b if b != 0 else 0)
+            elif op_name == "MOD":
+                b = stack_pop() if stack else 1
+                a = stack_pop() if stack else 0
+                stack_append(a % b if b != 0 else 0)
+            elif op_name == "EQ":
+                b = stack_pop() if stack else None
+                a = stack_pop() if stack else None
+                stack_append(a == b)
+            elif op_name == "NEQ":
+                b = stack_pop() if stack else None
+                a = stack_pop() if stack else None
+                stack_append(a != b)
+            elif op_name == "LT":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                stack_append(a < b)
+            elif op_name == "GT":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                stack_append(a > b)
+            elif op_name == "LTE":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                stack_append(a <= b)
+            elif op_name == "GTE":
+                b = stack_pop() if stack else 0
+                a = stack_pop() if stack else 0
+                stack_append(a >= b)
+            elif op_name == "NOT":
+                a = stack_pop() if stack else False
+                stack_append(not a)
+            elif op_name == "NEG":
+                a = stack_pop() if stack else 0
+                stack_append(-a)
+            elif op_name == "JUMP":
+                ip = operand
+            elif op_name == "JUMP_IF_FALSE":
+                cond = stack_pop() if stack else None
+                if not cond:
+                    ip = operand
+            elif op_name == "RETURN":
+                return stack_pop() if stack else None
+            elif op_name == "BUILD_LIST":
+                count = operand if operand is not None else 0
+                elements = [stack_pop() for _ in range(count)][::-1]
+                stack_append(elements)
+            elif op_name == "BUILD_MAP":
+                count = operand if operand is not None else 0
+                result = {}
+                for _ in range(count):
+                    val = stack_pop()
+                    key = stack_pop()
+                    result[key] = val
+                stack_append(result)
+            elif op_name == "INDEX":
+                idx = stack_pop()
+                obj = stack_pop()
+                try:
+                    if isinstance(obj, ZList):
+                        stack_append(obj.get(idx))
+                    elif isinstance(obj, ZMap):
+                        stack_append(obj.get(idx))
+                    else:
+                        stack_append(obj[idx] if obj is not None else None)
+                except (IndexError, KeyError, TypeError):
+                    stack_append(None)
+            elif op_name == "GET_LENGTH":
+                obj = stack_pop()
+                try:
+                    if obj is None:
+                        stack_append(0)
+                    elif isinstance(obj, ZList):
+                        stack_append(len(obj.elements))
+                    elif isinstance(obj, ZMap):
+                        stack_append(len(obj.pairs))
+                    elif hasattr(obj, '__len__'):
+                        stack_append(len(obj))
+                    else:
+                        stack_append(0)
+                except Exception:
+                    stack_append(0)
+            elif op_name == "CALL_NAME":
+                name_idx, arg_count = operand
+                func_name = const(name_idx)
+                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                fn = resolve(func_name) or builtins.get(func_name)
+                if fn is None:
+                    res = self._call_fallback_builtin(func_name, args)
+                else:
+                    res = self._invoke_callable_sync(fn, args)
+                stack_append(res)
+            elif op_name == "CALL_TOP":
+                arg_count = operand or 0
+                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                fn_obj = stack_pop() if stack else None
+                res = self._invoke_callable_sync(fn_obj, args)
+                stack_append(res)
+            elif op_name == "CALL_METHOD":
+                if not operand:
+                    stack_append(None)
+                    continue
+                method_idx, arg_count = operand
+                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                target = stack_pop() if stack else None
+                method_name = const(method_idx)
+                if target is None:
+                    stack_append(None)
+                    continue
+                result = None
+                try:
+                    if method_name == "set":
+                        if isinstance(target, ZMap) and len(args) >= 2:
+                            key = args[0]
+                            if isinstance(key, str):
+                                key = ZString(key)
+                            result = target.set(key, args[1])
+                        elif isinstance(target, ZList) and len(args) >= 2:
+                            result = target.set(args[0], args[1])
+                        elif isinstance(target, (dict, list)) and len(args) >= 2:
+                            target[args[0]] = args[1]
+                            result = args[1]
+                    elif hasattr(target, "call_method"):
+                        wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
+                        result = target.call_method(method_name, wrapped_args)
+                    else:
+                        attr = getattr(target, method_name, None)
+                        if callable(attr):
+                            result = attr(*args)
+                        elif isinstance(target, dict) and method_name in target:
+                            candidate = target[method_name]
+                            result = candidate(*args) if callable(candidate) else candidate
+                        else:
+                            result = attr
+                except Exception:
+                    result = None
+                stack_append(self._unwrap_after_builtin(result))
+            elif op_name == "PRINT":
+                val = stack_pop() if stack else None
+                print(val)
+            elif op_name == "GET_ATTR":
+                attr = stack_pop() if stack else None
+                obj = stack_pop() if stack else None
+                if obj is None:
+                    stack_append(None)
+                else:
+                    attr_name = attr.value if hasattr(attr, 'value') else attr
+                    try:
+                        if isinstance(obj, ZMap):
+                            key = attr_name
+                            if isinstance(key, str):
+                                key = ZString(key)
+                            stack_append(obj.get(key))
+                        elif isinstance(obj, dict):
+                            stack_append(obj.get(attr_name))
+                        else:
+                            stack_append(getattr(obj, attr_name, None))
+                    except Exception:
+                        stack_append(None)
+            else:
+                # Fallback to async path for unsupported ops
+                return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
+        
+        return stack_pop() if stack else None
+
+    def _invoke_callable_sync(self, fn, args):
+        """Synchronous callable invocation for fast dispatch."""
+        if fn is None:
+            return None
+        if callable(fn) and not asyncio.iscoroutinefunction(fn):
+            try:
+                return fn(*args)
+            except Exception:
+                return None
+        if isinstance(fn, dict):
+            # Function descriptor - execute bytecode
+            bytecode = fn.get("bytecode")
+            if bytecode:
+                params = fn.get("parameters", [])
+                child_vm = VM(
+                    builtins=self.builtins.copy(),
+                    env={},
+                    parent_env=self,
+                    use_jit=False,
+                    enable_gas_metering=False,
+                    enable_peephole_optimizer=False,
+                    enable_bytecode_optimizer=False,
+                    enable_profiling=False,
+                    enable_memory_pool=False,
+                )
+                child_vm._perf_fast_dispatch = True
+                for i, p in enumerate(params):
+                    pname = p.get("name") if isinstance(p, dict) else str(p)
+                    child_vm.env[pname] = args[i] if i < len(args) else None
+                return child_vm._run_stack_bytecode_sync(bytecode, debug=False)
+        # Fallback for async callables
+        if asyncio.iscoroutinefunction(fn):
+            return self._run_coroutine_sync(fn(*args))
         return None
 
     # ==================== Core Execution: Stack Bytecode ====================

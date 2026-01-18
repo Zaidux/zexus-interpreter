@@ -238,6 +238,8 @@ class UnifiedExecutor:
             "single_shot_max_instructions": 64,
             "vm_action_cache": False,
             "vm_action_sync_all": False,
+            "perf_disable_gas_metering": False,
+            "perf_fast_dispatch": False,
         }
         
         # JIT compiler (lazy init)
@@ -328,6 +330,12 @@ class UnifiedExecutor:
             fast_single_shot=bool(self.vm_config.get("fast_single_shot", False)),
             single_shot_max_instructions=int(self.vm_config.get("single_shot_max_instructions", 64)),
         )
+        # Apply perf flags after construction
+        if bool(self.vm_config.get("perf_disable_gas_metering", False)):
+            self.vm.enable_gas_metering = False
+            self.vm.gas_metering = None
+        if bool(self.vm_config.get("perf_fast_dispatch", False)):
+            self.vm._perf_fast_dispatch = True
     
     def execute_loop(self, loop_id: int, condition_node, body_node, env, stack_trace) -> Any:
         """

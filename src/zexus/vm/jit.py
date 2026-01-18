@@ -18,6 +18,7 @@ Features:
 import hashlib
 import time
 import dis
+import os
 from typing import Dict, Any, Optional, Tuple, Callable, List, Set
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,6 +29,13 @@ try:
     OPTIMIZER_AVAILABLE = True
 except ImportError:
     OPTIMIZER_AVAILABLE = False
+
+try:
+    from .native_jit_backend import NativeJITBackend
+    _NATIVE_JIT_AVAILABLE = True
+except Exception:
+    _NATIVE_JIT_AVAILABLE = False
+    NativeJITBackend = None
 
 
 class ExecutionTier(Enum):
@@ -128,6 +136,17 @@ class JITCompiler:
             'RETURN', 'JUMP', 'JUMP_IF_FALSE',
         }
 
+        # Native JIT backend (optional)
+        self.native_backend = None
+        native_flag = os.environ.get("ZEXUS_NATIVE_JIT", "0")
+        if native_flag.lower() in ("1", "true", "yes") and _NATIVE_JIT_AVAILABLE:
+            try:
+                self.native_backend = NativeJITBackend(debug=debug)
+                if self.debug:
+                    print("🔧 JIT: Native backend enabled")
+            except Exception:
+                self.native_backend = None
+
     def should_compile(self, bytecode_hash: str) -> bool:
         """
         Determine if bytecode should be JIT compiled
@@ -216,6 +235,33 @@ class JITCompiler:
         self.stats.cache_misses += 1
 
         start_time = time.time()
+
+        # Native JIT path
+        if self.native_backend is not None:
+            try:
+                native_fn = self.native_backend.compile(bytecode)
+                if native_fn is not None:
+                    self.compilation_cache[bytecode_hash] = native_fn
+                    compilation_time = time.time() - start_time
+                    self.stats.compilations += 1
+                    self.stats.compilation_time += compilation_time
+                    self.stats.average_compilation_time = (
+                        self.stats.compilation_time / self.stats.compilations
+                    )
+                    self.stats.tier_promotions += 1
+
+                    if bytecode_hash in self.hot_paths:
+                        info = self.hot_paths[bytecode_hash]
+                        info.compiled_version = native_fn
+                        info.compilation_time = compilation_time
+                        info.tier = ExecutionTier.JIT_NATIVE
+
+                    if self.debug:
+                        print(f"✅ JIT: Native compiled {bytecode_hash[:8]} in {compilation_time*1000:.2f}ms")
+                    return native_fn
+            except Exception:
+                if self.debug:
+                    print(f"⚠️  JIT: Native backend failed for {bytecode_hash[:8]}, falling back")
 
         try:
             # Step 1: Analyze stack behavior

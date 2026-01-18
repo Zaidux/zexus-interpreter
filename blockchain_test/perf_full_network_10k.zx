@@ -46,6 +46,16 @@ function create_performance_blockchain(max_block_txs, logging) {
     enable_vm(false)
     let chain = create_full_network_blockchain(overrides, PERF_GENESIS, PERF_VALIDATORS, logging)
     enable_vm(true)
+    // Enable fast dispatch mode for VM (no async overhead, no gas metering)
+    set_vm_config({
+        "perf_disable_gas_metering": perf_mode,
+        "perf_fast_dispatch": perf_mode,
+        "enable_bytecode_optimizer": true,
+        "fast_single_shot": true,
+        "vm_single_shot": true,
+        "vm_action_cache": perf_mode,
+        "vm_sync_all": true
+    })
     print("[perf] created blockchain max_txs=" + string(max_block_txs) + " validators=" + string(len(PERF_VALIDATORS)))
     return chain
 }
@@ -69,7 +79,7 @@ function run_sequential_test() {
     let i = 0
     let processed_blocks = 0
     let start_time = time()
-    let use_fast_blocks = PERF_TRANSACTION_COUNT >= 1000
+    let use_fast_blocks = PERF_TRANSACTION_COUNT >= 500
 
     while i < PERF_TRANSACTION_COUNT {
         let sender = PERF_WALLETS[i % len(PERF_WALLETS)]
@@ -78,15 +88,18 @@ function run_sequential_test() {
             recipient = select_recipient(i, 2)
         }
 
-        let amount = PERF_TRANSACTION_COUNT >= 1000 ? 100 : (50 + (i % 250))
-        let fee = PERF_TRANSACTION_COUNT >= 1000 ? 1 : (5 + ((i * 3) % 25))
-        let payload = PERF_TRANSACTION_COUNT >= 1000 ? "" : ("seq::" + string(i) + "::" + sender + "->" + recipient)
+        let amount = 100
+        let fee = 1
+        let payload = ""
 
-        let nonce = next_nonce(nonce_tracker, blockchain, sender)
+        let nonce = nonce_tracker[sender]
+        if nonce == null {
+            nonce = 0
+        }
         blockchain.submit_transaction_fast(sender, recipient, amount, fee, nonce, payload)
         nonce_tracker[sender] = nonce + 1
 
-        let result = use_fast_blocks ? blockchain.produce_block_fast() : blockchain.produce_block()
+        let result = blockchain.produce_single_tx_block()
         if result != false {
             processed_blocks = processed_blocks + 1
         }
@@ -231,23 +244,23 @@ set_vm_thresholds(1, 100000, 1)
 set_vm_config({
     "use_jit": false,
     "enable_gas_metering": false,
-    "use_memory_manager": true,
-    "gc_threshold": 20000,
+    "use_memory_manager": false,
+    "gc_threshold": 50000,
     "enable_peephole_optimizer": true,
     "enable_bytecode_optimizer": true,
-    "optimizer_level": 2,
+    "optimizer_level": 3,
     "enable_memory_pool": true,
-    "enable_async_optimizer": true,
+    "enable_async_optimizer": false,
     "enable_ssa": false,
-    "enable_bytecode_converter": true,
+    "enable_bytecode_converter": false,
     "vm_single_shot": true,
-    "vm_single_shot_min_instructions": 24,
+    "vm_single_shot_min_instructions": 8,
     "fast_single_shot": true,
-    "single_shot_max_instructions": 64,
+    "single_shot_max_instructions": 128,
     "enable_profiling": false,
-    "profiling_level": "DETAILED",
-    "profiling_sample_rate": 1.0,
-    "profiling_max_samples": 2048,
+    "profiling_level": "BASIC",
+    "profiling_sample_rate": 0.0,
+    "profiling_max_samples": 0,
     "profiling_track_overhead": false,
     "vm_full_loop": true,
     "vm_sync_all": false,

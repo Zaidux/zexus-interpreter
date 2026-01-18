@@ -74,6 +74,7 @@ from ..object import Environment, String
 from ..syntax_validator import SyntaxValidator
 from ..hybrid_orchestrator import orchestrator
 from ..config import config
+from ..runtime.file_flags import parse_file_flags, apply_vm_config
 # Import error handling
 from ..error_reporter import get_error_reporter, ZexusError, print_error
 # VM and Compiler for high-performance execution
@@ -208,6 +209,35 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
         
         # Register source with error reporter
         error_reporter.register_source(file, source_code)
+
+        # Apply in-file execution flags (if any)
+        file_flags = parse_file_flags(source_code)
+        vm_config = {}
+        if file_flags:
+            if 'use_vm' in file_flags:
+                use_vm = bool(file_flags.get('use_vm'))
+            if 'vm_mode' in file_flags:
+                vm_mode = str(file_flags.get('vm_mode')).lower()
+            if 'no_optimize' in file_flags:
+                no_optimize = bool(file_flags.get('no_optimize'))
+            if 'syntax_style' in file_flags:
+                ctx.obj['SYNTAX_STYLE'] = str(file_flags.get('syntax_style'))
+            if 'advanced_parsing' in file_flags:
+                ctx.obj['ADVANCED_PARSING'] = bool(file_flags.get('advanced_parsing'))
+            if 'execution_mode' in file_flags:
+                ctx.obj['EXECUTION_MODE'] = str(file_flags.get('execution_mode'))
+            if 'debug' in file_flags:
+                dbg = file_flags.get('debug')
+                if isinstance(dbg, str):
+                    config.debug_level = dbg
+                    ctx.obj['DEBUG'] = dbg != 'none'
+                else:
+                    ctx.obj['DEBUG'] = bool(dbg)
+                    config.enable_debug_logs = ctx.obj['DEBUG']
+            if 'vm_config' in file_flags and isinstance(file_flags.get('vm_config'), dict):
+                vm_config = dict(file_flags.get('vm_config'))
+
+            console.print("[dim]Applied file flags (@zexus) overrides[/dim]")
         
         syntax_style = ctx.obj['SYNTAX_STYLE']
         advanced_parsing = ctx.obj['ADVANCED_PARSING']
@@ -313,12 +343,14 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 fallback_reason = str(e)
 
         if bytecode is not None and fallback_reason is None:
-            vm_mode_enum = {
+            vm_mode_map = {
                 'auto': VMMode.AUTO,
                 'stack': VMMode.STACK,
                 'register': VMMode.REGISTER,
                 'parallel': VMMode.PARALLEL
-            }[vm_mode]
+            }
+            vm_mode_value = vm_mode if vm_mode in vm_mode_map else 'auto'
+            vm_mode_enum = vm_mode_map[vm_mode_value]
 
             console.print(f"[dim]Initializing VM ({vm_mode} mode)...[/dim]", end="")
             vm = VM(
@@ -327,6 +359,7 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 max_heap_mb=1000,  # 1GB heap limit
                 debug=ctx.obj.get('DEBUG', False)
             )
+            apply_vm_config(vm, vm_config)
             console.print(" [green]done[/green]")
 
             console.print("[dim]Executing on VM...[/dim]")

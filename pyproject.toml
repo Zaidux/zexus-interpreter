@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2", "Cython>=0.29"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -57,6 +57,10 @@ blockchain = [
     "web3>=5.0",
     "eth-account>=0.5",
 ]
+jit = [
+    "llvmlite>=0.41.0",
+    "Cython>=0.29",
+]
 
 [project.urls]
 Homepage = "https://github.com/Zaidux/zexus-interpreter"
@@ -68,6 +72,7 @@ Changelog = "https://github.com/Zaidux/zexus-interpreter/blob/main/CHANGELOG.md"
 [project.scripts]
 zx = "zexus.cli.main:cli"
 zexus = "zexus.cli.main:cli"
+zx-pypy = "zexus.cli.main:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

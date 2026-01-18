@@ -6,6 +6,7 @@ COMPLETE_FIXES_DOCUMENTATION.md
 DEMO_ALL_FIXES.zx
 FIX_SUMMARY.md
 LICENSE
+NEXT_STEPS.md
 PARSER_SEMICOLON_FIX.md
 PUBLISH_TO_NPM.md
 QUICK_START.md
@@ -16,6 +17,7 @@ SECURITY_REMEDIATION_COMPLETE.md
 SPEED_RESULTS.md
 SYSTEM_ANALYSIS_FINDINGS.md
 UNIFIED_SYSTEM_COMPLETE.md
+VM_KEYWORD_SUPPORT_REPORT.md
 VULNERABILITY_FINDINGS.md
 VULNERABILITY_TEST_RESULTS.md
 any.zx
@@ -35,6 +37,8 @@ fix_type_checks.py
 index.zx
 install.sh
 package.json
+patch_vm.py
+probe_list_debug.txt
 profile_performance.py
 pyproject.toml
 pytest.ini
@@ -46,8 +50,11 @@ shared_config.json
 stress_test_output_full.txt
 test_contract_parse.py
 test_data.json
+test_hash.zx
 test_parse_assignment.py
 ultimate_test.zx
+vm_feature_verify.zx
+vm_test_data.txt
 zexus.json
 zpics
 zpm
@@ -156,6 +163,8 @@ blockchain_test/perf_10k_v2.zx
 blockchain_test/perf_10k_v3.zx
 blockchain_test/perf_500.zx
 blockchain_test/perf_clean.txt
+blockchain_test/perf_full_network_100.zx
+blockchain_test/perf_full_network_10k.zx
 blockchain_test/perf_quick_100.zx
 blockchain_test/performance_results.txt
 blockchain_test/performance_results_simple.txt
@@ -182,6 +191,14 @@ blockchain_test/vm_perf_100.zx
 blockchain_test/vm_test_basic.zx
 blockchain_test/vm_test_simple.zx
 blockchain_test/wallet.zx
+blockchain_test/full_network_chain/full_network_blockchain.zx
+blockchain_test/full_network_chain/tmp_account_init.zx
+blockchain_test/full_network_chain/tmp_assign_test.zx
+blockchain_test/full_network_chain/tmp_min.zx
+blockchain_test/full_network_chain/tmp_pass_contract.zx
+blockchain_test/full_network_chain/tmp_simple.zx
+blockchain_test/full_network_chain/tmp_store_contract.zx
+blockchain_test/security_tests/blockchain_exploit_probe.zx
 blockchain_test/security_tests_working/test_dos_working.zx
 blockchain_test/security_tests_working/test_overflow_working.zx
 blockchain_test/security_tests_working/test_reentrancy_working.zx
@@ -568,6 +585,7 @@ src/zexus/renderer/main_renderer.py
 src/zexus/renderer/painter.py
 src/zexus/runtime/__init__.py
 src/zexus/runtime/async_runtime.py
+src/zexus/runtime/file_flags.py
 src/zexus/runtime/load_manager.py
 src/zexus/safety/__init__.py
 src/zexus/safety/memory_safety.py
@@ -597,12 +615,16 @@ src/zexus/vm/__init__.py
 src/zexus/vm/async_optimizer.py
 src/zexus/vm/bytecode.py
 src/zexus/vm/bytecode_converter.py
+src/zexus/vm/cabi.c
 src/zexus/vm/cache.py
 src/zexus/vm/compiler.py
+src/zexus/vm/fastops.c
 src/zexus/vm/gas_metering.py
 src/zexus/vm/jit.py
 src/zexus/vm/memory_manager.py
 src/zexus/vm/memory_pool.py
+src/zexus/vm/native_jit_backend.py
+src/zexus/vm/native_runtime.cpp
 src/zexus/vm/optimizer.py
 src/zexus/vm/parallel_vm.py
 src/zexus/vm/peephole_optimizer.py

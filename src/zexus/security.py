@@ -1624,22 +1624,36 @@ class SmartContract:
         # Get the action (Action object)
         action = self.actions[action_name]
         
-        # Create a new environment for the action execution
+        # FAST PATH: Cache environments per action for reuse (big perf win)
+        if not hasattr(self, '_action_env_cache'):
+            self._action_env_cache = {}
+        
         from zexus.environment import Environment
-        action_env = Environment(outer=action.env if hasattr(action, 'env') else None)
+        cached_env = self._action_env_cache.get(action_name)
+        if cached_env is not None:
+            action_env = cached_env
+            # Clear only local store, keep outer linkage intact
+            action_env.store.clear()
+        else:
+            action_env = Environment(outer=action.env if hasattr(action, 'env') else None)
+            self._action_env_cache[action_name] = action_env
 
         
         # Bind 'this' to the current contract instance in the action environment
         action_env.set('this', self)
         
-        # Add msg.sender context - default to contract deployer if not in transaction context
-        # In a real blockchain, this would be the transaction sender's address
+        # FAST PATH: Reuse msg object
         msg_sender = getattr(self, '_current_sender', self.deployer if hasattr(self, 'deployer') else "0x0000000000000000")
+        cached_msg = getattr(self, '_cached_msg_obj', None)
         from zexus.object import String as ZexusString, Map as ZexusMap
-        # msg is a Map with sender property for better compatibility
-        msg_obj = ZexusMap({
-            ZexusString("sender"): ZexusString(msg_sender)
-        })
+        if cached_msg is not None and getattr(self, '_cached_msg_sender', None) == msg_sender:
+            msg_obj = cached_msg
+        else:
+            msg_obj = ZexusMap({
+                ZexusString("sender"): ZexusString(msg_sender)
+            })
+            self._cached_msg_obj = msg_obj
+            self._cached_msg_sender = msg_sender
         action_env.set('msg', msg_obj)
         
         # Make contract storage accessible in the action environment

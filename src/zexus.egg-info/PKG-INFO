@@ -41,6 +41,9 @@ Requires-Dist: mypy>=0.900; extra == "dev"
 Provides-Extra: blockchain
 Requires-Dist: web3>=5.0; extra == "blockchain"
 Requires-Dist: eth-account>=0.5; extra == "blockchain"
+Provides-Extra: jit
+Requires-Dist: llvmlite>=0.41.0; extra == "jit"
+Requires-Dist: Cython>=0.29; extra == "jit"
 Dynamic: author
 Dynamic: home-page
 Dynamic: license-file

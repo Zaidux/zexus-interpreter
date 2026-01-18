@@ -3,6 +3,7 @@
 Zexus Programming Language - Setup Configuration
 """
 from setuptools import setup, find_packages
+from setuptools import Extension
 from setuptools.command.install import install
 import sys
 import os
@@ -38,6 +39,41 @@ class PostInstallCommand(install):
 # Read long description from README
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
+
+ext_modules = []
+try:
+    from Cython.Build import cythonize
+    ext_modules = cythonize(
+        [
+            Extension(
+                "zexus.vm.fastops",
+                ["src/zexus/vm/fastops.pyx"],
+            )
+        ],
+        compiler_directives={
+            "language_level": 3,
+            "boundscheck": False,
+            "wraparound": False,
+            "cdivision": True,
+        },
+    )
+except Exception:
+    ext_modules = []
+
+ext_modules.append(
+    Extension(
+        "zexus.vm.cabi",
+        ["src/zexus/vm/cabi.c"],
+    )
+)
+
+ext_modules.append(
+    Extension(
+        "zexus.vm.native_runtime",
+        ["src/zexus/vm/native_runtime.cpp"],
+        language="c++",
+    )
+)
 
 setup(
     name='zexus',
@@ -76,12 +112,17 @@ setup(
         'lsp': [
             'pygls>=1.0.0',
         ],
+        'jit': [
+            'llvmlite>=0.41.0',
+            'Cython>=0.29',
+        ],
     },
     entry_points={
         'console_scripts': [
             'zx=zexus.cli.main:cli',
             'zexus=zexus.cli.main:cli',
             'zpm=zexus.cli.zpm:cli',
+            'zx-pypy=zexus.cli.main:cli',
         ]
     },
     cmdclass={
@@ -104,4 +145,5 @@ setup(
     ],
     keywords='programming-language interpreter compiler blockchain smart-contracts security policy-as-code',
     zip_safe=False,
+    ext_modules=ext_modules,
 )

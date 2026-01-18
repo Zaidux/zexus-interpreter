@@ -12,3 +12,7 @@ pytest-cov>=2.0
 black>=21.0
 flake8>=3.9
 mypy>=0.900
+
+[jit]
+llvmlite>=0.41.0
+Cython>=0.29
