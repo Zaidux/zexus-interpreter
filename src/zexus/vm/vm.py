@@ -350,6 +350,7 @@ class VM:
         self.env = env or {}
         self._parent_env = parent_env
         self.debug = debug
+        self._register_import_builtins()
         
         # --- Gas Metering (Security) ---
         self.enable_gas_metering = enable_gas_metering and _GAS_METERING_AVAILABLE
@@ -384,8 +385,11 @@ class VM:
         self._mode_usage = {m.value: 0 for m in VMMode}
         self._last_opcode_profile = None
         self._call_method_trace_count = 0
+        self._call_method_total = 0
+        self._method_target_trace_count = 0
         self._action_evaluator = None
         self._opcode_exec_count = 0
+        self._in_execution = 0
         self._native_jit_auto_enabled = False
         self._native_jit_auto_threshold = 700
         self._env_version = 0
@@ -579,6 +583,98 @@ class VM:
         if debug:
             print(f"[VM] Initialized | Mode: {mode.value} | JIT: {self.use_jit} | MemMgr: {self.use_memory_manager}")
 
+    @classmethod
+    def create_child(cls, parent_vm, env: Dict[str, Any], builtins: Dict[str, Any] = None):
+        """
+        Create a lightweight child VM execution context sharing infrastructure/components from parent.
+        Avoids overhead of full initialization for function calls.
+        """
+        vm = cls.__new__(cls)
+        
+        # Core Context
+        vm.builtins = builtins if builtins is not None else parent_vm.builtins
+        vm.env = env
+        vm._parent_env = parent_vm
+        vm.debug = parent_vm.debug
+        vm.mode = parent_vm.mode
+        
+        # Infrastructure (shared)
+        vm.use_jit = parent_vm.use_jit
+        vm.jit_compiler = parent_vm.jit_compiler
+        vm._jit_lock = parent_vm._jit_lock
+        
+        vm.use_memory_manager = parent_vm.use_memory_manager
+        vm.memory_manager = parent_vm.memory_manager
+        vm._memory_lock = parent_vm._memory_lock
+        vm._managed_objects = {} # Local GC tracking
+        
+        vm.enable_gas_metering = parent_vm.enable_gas_metering
+        vm.gas_metering = parent_vm.gas_metering
+        
+        vm.enable_profiling = parent_vm.enable_profiling
+        vm.profiler = parent_vm.profiler
+        
+        # Optimizers (shared)
+        vm.enable_peephole_optimizer = parent_vm.enable_peephole_optimizer
+        vm.peephole_optimizer = parent_vm.peephole_optimizer
+        
+        vm.enable_bytecode_optimizer = parent_vm.enable_bytecode_optimizer
+        vm.bytecode_optimizer = parent_vm.bytecode_optimizer
+        
+        vm.enable_async_optimizer = parent_vm.enable_async_optimizer
+        vm.async_optimizer = parent_vm.async_optimizer
+        
+        # Pools (shared)
+        vm.enable_memory_pool = parent_vm.enable_memory_pool
+        vm.integer_pool = parent_vm.integer_pool
+        vm.string_pool = parent_vm.string_pool
+        vm.list_pool = parent_vm.list_pool
+        
+        # Advanced Features (shared)
+        vm.enable_ssa = parent_vm.enable_ssa
+        vm.ssa_converter = parent_vm.ssa_converter
+        vm.enable_register_allocation = parent_vm.enable_register_allocation
+        vm.register_allocator = parent_vm.register_allocator
+        
+        vm.enable_bytecode_converter = parent_vm.enable_bytecode_converter
+        vm.bytecode_converter = parent_vm.bytecode_converter
+
+        # Execution Helpers (shared)
+        vm._register_vm = parent_vm._register_vm
+        vm._parallel_vm = parent_vm._parallel_vm
+
+        # Local State Init
+        vm._closure_cells = {}
+        vm._events = {}
+        vm._tasks = {} 
+        vm._task_counter = 0
+        vm._env_version = 0
+        vm._name_cache = {}
+        vm._method_cache = {}
+        vm._execution_count = 0
+        vm._total_execution_time = 0.0
+        vm._mode_usage = {m.value: 0 for m in VMMode}
+        vm._last_opcode_profile = None
+        vm._call_method_trace_count = 0
+        vm._call_method_total = 0
+        vm._method_target_trace_count = 0
+        vm._action_evaluator = None
+        vm._opcode_exec_count = 0
+        vm._in_execution = 0
+        vm._native_jit_auto_enabled = parent_vm._native_jit_auto_enabled
+        vm._native_jit_auto_threshold = parent_vm._native_jit_auto_threshold
+        vm._perf_fast_dispatch = getattr(parent_vm, "_perf_fast_dispatch", False)
+        
+        # Settings
+        vm.worker_count = parent_vm.worker_count
+        vm.chunk_size = parent_vm.chunk_size
+        vm.num_registers = parent_vm.num_registers
+        vm.hybrid_mode = parent_vm.hybrid_mode
+        vm.fast_single_shot = parent_vm.fast_single_shot
+        vm.single_shot_max_instructions = parent_vm.single_shot_max_instructions
+        
+        return vm
+
     # ==================== VM <-> Evaluator Conversions ====================
 
     @staticmethod
@@ -598,9 +694,19 @@ class VM:
         if isinstance(value, dict):
             pairs = {}
             for key, val in value.items():
-                wrapped_key = VM._wrap_for_builtin(key)
+                if isinstance(key, ZString):
+                    norm_key = key.value
+                elif isinstance(key, str):
+                    norm_key = key
+                elif hasattr(key, "inspect"):
+                    try:
+                        norm_key = key.inspect()
+                    except Exception:
+                        norm_key = str(key)
+                else:
+                    norm_key = str(key)
                 wrapped_val = VM._wrap_for_builtin(val)
-                pairs[wrapped_key] = wrapped_val
+                pairs[norm_key] = wrapped_val
             return ZMap(pairs)
         return value
 
@@ -667,6 +773,197 @@ class VM:
         if name is not None:
             self._name_cache[name] = (value, self._env_version)
 
+    def _register_import_builtins(self) -> None:
+        if "__vm_use_module__" not in self.builtins:
+            self.builtins["__vm_use_module__"] = self._vm_use_module
+        if "__vm_from_module__" not in self.builtins:
+            self.builtins["__vm_from_module__"] = self._vm_from_module
+
+    def _vm_use_module(self, spec):
+        if spec is None:
+            return None
+        if isinstance(spec, ZMap):
+            spec = self._unwrap_after_builtin(spec)
+        file_path = spec.get("file", "") if isinstance(spec, dict) else ""
+        alias = spec.get("alias", "") if isinstance(spec, dict) else ""
+        names = spec.get("names", []) if isinstance(spec, dict) else []
+        is_named = bool(spec.get("is_named")) if isinstance(spec, dict) else False
+        trace_imports = os.environ.get("ZEXUS_VM_IMPORT_TRACE")
+        if trace_imports and trace_imports.lower() not in ("0", "false", "off"):
+            print(f"[VM TRACE] __vm_use_module__ file={file_path} alias={alias} names={len(names)}")
+        return self._execute_import(file_path, alias=alias, names=names, is_named=is_named)
+
+    def _vm_from_module(self, spec):
+        if spec is None:
+            return None
+        if isinstance(spec, ZMap):
+            spec = self._unwrap_after_builtin(spec)
+        file_path = spec.get("file", "") if isinstance(spec, dict) else ""
+        imports = spec.get("imports", []) if isinstance(spec, dict) else []
+        names = []
+        alias_map = {}
+        for entry in imports:
+            if isinstance(entry, dict):
+                name = entry.get("name")
+                alias = entry.get("alias")
+            elif isinstance(entry, (list, tuple)):
+                name = entry[0] if len(entry) > 0 else None
+                alias = entry[1] if len(entry) > 1 else None
+            else:
+                name = entry
+                alias = None
+            if name:
+                names.append(name)
+                if alias:
+                    alias_map[name] = alias
+        return self._execute_import(file_path, alias="", names=names, is_named=True, alias_map=alias_map)
+
+    def _module_env_to_map(self, module_env):
+        if module_env is None:
+            return None
+        if isinstance(module_env, dict):
+            return module_env
+        exports = None
+        if hasattr(module_env, "get_exports"):
+            try:
+                exports = module_env.get_exports()
+            except Exception:
+                exports = None
+        store = getattr(module_env, "store", None)
+        if isinstance(store, dict):
+            if exports and isinstance(exports, dict):
+                merged = dict(store)
+                merged.update(exports)
+                return merged
+            return store
+        if isinstance(module_env, ZMap):
+            mapped = {}
+            for key, value in module_env.pairs.items():
+                if isinstance(key, ZString):
+                    mapped[key.value] = value
+                else:
+                    mapped[str(key)] = value
+            return mapped
+        return None
+
+    def _get_importer_file(self) -> Optional[str]:
+        importer = self.env.get("__file__") if isinstance(self.env, dict) else None
+        if importer is None:
+            return None
+        if hasattr(importer, "value"):
+            return importer.value
+        if isinstance(importer, str):
+            return importer
+        return None
+
+    def _load_zexus_module_env(self, file_path: str):
+        from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
+        from ..object import Environment, String
+        from ..lexer import Lexer
+        from ..parser import Parser
+        from ..evaluator.core import Evaluator
+
+        normalized_path = normalize_path(file_path)
+        module_env = get_cached_module(normalized_path)
+        if module_env:
+            return module_env
+
+        importer_file = self._get_importer_file()
+        candidates = get_module_candidates(file_path, importer_file)
+        module_env = Environment()
+        loaded = False
+
+        try:
+            cache_module(normalized_path, module_env)
+        except Exception:
+            pass
+
+        for candidate in candidates:
+            try:
+                if not os.path.exists(candidate):
+                    continue
+                with open(candidate, "r", encoding="utf-8") as handle:
+                    code = handle.read()
+                lexer = Lexer(code)
+                parser = Parser(lexer)
+                program = parser.parse_program()
+                if getattr(parser, "errors", None):
+                    continue
+                module_env.set("__file__", String(os.path.abspath(candidate)))
+                module_env.set("__MODULE__", String(file_path))
+                if self._action_evaluator is None:
+                    self._action_evaluator = Evaluator(use_vm=False)
+                self._action_evaluator.eval_node(program, module_env)
+                cache_module(normalized_path, module_env)
+                loaded = True
+                break
+            except Exception:
+                continue
+
+        if not loaded:
+            try:
+                invalidate_module(normalized_path)
+            except Exception:
+                pass
+            return None
+        return module_env
+
+    def _execute_import(self, module_path: str, alias: str = "", names: Optional[List[Any]] = None, is_named: bool = False, alias_map: Optional[Dict[str, str]] = None):
+        if not module_path:
+            return None
+        names = names or []
+        alias_map = alias_map or {}
+        module_env = None
+        module_map = None
+        trace_imports = os.environ.get("ZEXUS_VM_IMPORT_TRACE")
+        trace_enabled = trace_imports and trace_imports.lower() not in ("0", "false", "off")
+
+        try:
+            from ..stdlib_integration import is_stdlib_module, get_stdlib_module
+            from ..builtin_modules import is_builtin_module, get_builtin_module
+            if is_stdlib_module(module_path):
+                module_env = get_stdlib_module(module_path)
+            elif is_builtin_module(module_path):
+                module_env = get_builtin_module(module_path, None)
+        except Exception:
+            module_env = None
+
+        if module_env is None:
+            module_env = self._load_zexus_module_env(module_path)
+            if trace_enabled:
+                status = "ok" if module_env is not None else "failed"
+                print(f"[VM TRACE] import {module_path} -> {status}")
+
+        if module_env is not None:
+            module_map = self._module_env_to_map(module_env) or {}
+            if is_named and names:
+                for raw in names:
+                    key = raw.value if hasattr(raw, "value") else str(raw)
+                    dest = alias_map.get(key, key)
+                    value = module_map.get(key)
+                    self.env[dest] = value
+                    self._bump_env_version(dest, value)
+            elif alias:
+                self.env[alias] = module_map
+                self._bump_env_version(alias, module_map)
+            else:
+                for key, value in module_map.items():
+                    self.env[key] = value
+                    self._bump_env_version(key, value)
+            return module_env
+
+        try:
+            mod = importlib.import_module(module_path)
+            key = alias or module_path
+            self.env[key] = mod
+            self._bump_env_version(key, mod)
+            return mod
+        except Exception:
+            key = alias or module_path
+            self.env[key] = None
+            self._bump_env_version(key, None)
+            return None
+
     def _get_cached_method(self, target: Any, method_name: str):
         if target is None:
             return None
@@ -702,6 +999,7 @@ class VM:
         """
         start_time = time.perf_counter()
         self._execution_count += 1
+        self._in_execution = getattr(self, "_in_execution", 0) + 1
         
         # Handle High-Level Ops (List format)
         if isinstance(code, list) and not hasattr(code, "instructions"):
@@ -746,6 +1044,7 @@ class VM:
             return result
             
         finally:
+            self._in_execution = max(0, getattr(self, "_in_execution", 1) - 1)
             self._total_execution_time += (time.perf_counter() - start_time)
 
     def _select_execution_mode(self, code) -> VMMode:
@@ -1109,11 +1408,7 @@ class VM:
                         await self._call_builtin_async(h, [payload])
                 elif code == "IMPORT":
                     _, module_path, alias = op
-                    try:
-                        mod = importlib.import_module(module_path)
-                        self.env[alias or module_path] = mod
-                    except Exception:
-                        self.env[alias or module_path] = None
+                    self._execute_import(module_path, alias=alias or "")
                 elif code == "DEFINE_ENUM":
                     _, name, members = op
                     enum_registry = self.env.setdefault("enums", {})
@@ -1198,6 +1493,12 @@ class VM:
             return stack.pop()
         
         ip = 0
+        trace_interval = 0
+        try:
+            trace_interval = int(os.environ.get("ZEXUS_VM_TRACE_INTERVAL", "0"))
+        except Exception:
+            trace_interval = 0
+        trace_counter = 0
         instr_count = len(instrs)
         env = self.env
         builtins = self.builtins
@@ -1231,6 +1532,14 @@ class VM:
         while ip < instr_count:
             op_name, operand = instrs[ip]
             ip += 1
+            if trace_interval > 0:
+                trace_counter += 1
+                if trace_counter % trace_interval == 0:
+                    try:
+                        stack_size = len(stack)
+                    except Exception:
+                        stack_size = -1
+                    print(f"[VM TRACE] sync ip={ip} op={op_name} stack={stack_size}")
             
             # Hot path: arithmetic and stack ops (inlined)
             if op_name == "LOAD_CONST":
@@ -1395,6 +1704,16 @@ class VM:
                 args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                 target = stack_pop() if stack else None
                 method_name = const(method_idx)
+                trace_calls = os.environ.get("ZEXUS_VM_TRACE_CALLS")
+                if trace_calls:
+                    try:
+                        interval = int(trace_calls) if trace_calls.isdigit() else 1000
+                    except Exception:
+                        interval = 1000
+                    self._call_method_total += 1
+                    if interval > 0 and self._call_method_total % interval == 0:
+                        target_type = type(target).__name__ if target is not None else "None"
+                        print(f"[VM TRACE] CALL_METHOD total={self._call_method_total} method={method_name} target={target_type}")
                 if target is None:
                     stack_append(None)
                     continue
@@ -1403,17 +1722,40 @@ class VM:
                     if method_name == "set":
                         if isinstance(target, ZMap) and len(args) >= 2:
                             key = args[0]
-                            if isinstance(key, str):
-                                key = ZString(key)
-                            result = target.set(key, args[1])
+                            if isinstance(key, ZString):
+                                norm_key = key.value
+                            elif isinstance(key, str):
+                                norm_key = key
+                            elif hasattr(key, "inspect"):
+                                norm_key = key.inspect()
+                            else:
+                                norm_key = str(key)
+                            existing = target.pairs.get(norm_key)
+                            if existing is not None and existing.__class__.__name__ == 'SealedObject':
+                                raise ZEvaluationError(f"Cannot modify sealed map key: {key}")
+                            target.pairs[norm_key] = args[1]
+                            result = args[1]
                         elif isinstance(target, ZList) and len(args) >= 2:
-                            result = target.set(args[0], args[1])
+                            target.set(args[0], args[1])
+                            result = args[1]
                         elif isinstance(target, (dict, list)) and len(args) >= 2:
                             target[args[0]] = args[1]
                             result = args[1]
                     elif hasattr(target, "call_method"):
                         wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
-                        result = target.call_method(method_name, wrapped_args)
+                        try:
+                            from .. import security as _security
+                            _security._set_vm_action_context(True)
+                        except Exception:
+                            _security = None
+                        try:
+                            result = target.call_method(method_name, wrapped_args)
+                        finally:
+                            if _security is not None:
+                                try:
+                                    _security._set_vm_action_context(False)
+                                except Exception:
+                                    pass
                     else:
                         attr = self._get_cached_method(target, method_name)
                         if callable(attr):
@@ -1570,6 +1912,12 @@ class VM:
 
         # 2. Bytecode Execution Setup
         ip = 0
+        trace_interval = 0
+        try:
+            trace_interval = int(os.environ.get("ZEXUS_VM_TRACE_INTERVAL", "0"))
+        except Exception:
+            trace_interval = 0
+        trace_counter = 0
         running = True
         return_value = None
         profile_flag = os.environ.get("ZEXUS_VM_PROFILE_OPS")
@@ -1714,6 +2062,8 @@ class VM:
             def wrapper(_):
                 b = _unwrap(stack.pop() if stack else 0)
                 a = _unwrap(stack.pop() if stack else 0)
+                if a is None: a = 0
+                if b is None: b = 0
                 if isinstance(a, ZEvaluationError):
                     stack.append(a)
                     return
@@ -1774,7 +2124,27 @@ class VM:
             target = stack.pop() if stack else None
             method_name = const(method_idx)
 
+            trace_calls = os.environ.get("ZEXUS_VM_TRACE_CALLS")
+            if trace_calls:
+                try:
+                    interval = int(trace_calls) if trace_calls.isdigit() else 1000
+                except Exception:
+                    interval = 1000
+                self._call_method_total += 1
+                if interval > 0 and self._call_method_total % interval == 0:
+                    target_type = type(target).__name__ if target is not None else "None"
+                    print(f"[VM TRACE] CALL_METHOD total={self._call_method_total} method={method_name} target={target_type}")
+
             if target is None:
+                trace_targets = os.environ.get("ZEXUS_VM_TRACE_METHOD_TARGETS")
+                if trace_targets and trace_targets.lower() not in ("0", "false", "off"):
+                    if method_name in ("submit_transaction_fast", "produce_single_tx_block", "produce_blocks_fast_until_empty"):
+                        if self._method_target_trace_count < 10:
+                            env_val = self.env.get("blockchain") if isinstance(self.env, dict) else None
+                            env_type = type(env_val).__name__ if env_val is not None else "None"
+                            stack_size = len(stack) if hasattr(stack, "__len__") else -1
+                            print(f"[VM TRACE] {method_name} target None; env.blockchain={env_type} arg_count={arg_count} stack={stack_size}")
+                            self._method_target_trace_count += 1
                 stack.append(None)
                 return
 
@@ -1796,14 +2166,25 @@ class VM:
                     if isinstance(target, ZMap):
                         if len(args) >= 2:
                             key = args[0]
-                            if isinstance(key, str):
-                                key = ZString(key)
-                            result = target.set(key, args[1])
+                            if isinstance(key, ZString):
+                                norm_key = key.value
+                            elif isinstance(key, str):
+                                norm_key = key
+                            elif hasattr(key, "inspect"):
+                                norm_key = key.inspect()
+                            else:
+                                norm_key = str(key)
+                            existing = target.pairs.get(norm_key)
+                            if existing is not None and existing.__class__.__name__ == 'SealedObject':
+                                raise ZEvaluationError(f"Cannot modify sealed map key: {key}")
+                            target.pairs[norm_key] = args[1]
+                            result = args[1]
                         else:
                             result = None
                     elif isinstance(target, ZList):
                         if len(args) >= 2:
-                            result = target.set(args[0], args[1])
+                            target.set(args[0], args[1])
+                            result = args[1]
                         else:
                             result = None
                     elif isinstance(target, (dict, list)):
@@ -1814,7 +2195,19 @@ class VM:
                             result = None
                 elif hasattr(target, "call_method"):
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
-                    result = target.call_method(method_name, wrapped_args)
+                    try:
+                        from .. import security as _security
+                        _security._set_vm_action_context(True)
+                    except Exception:
+                        _security = None
+                    try:
+                        result = target.call_method(method_name, wrapped_args)
+                    finally:
+                        if _security is not None:
+                            try:
+                                _security._set_vm_action_context(False)
+                            except Exception:
+                                pass
                 else:
                     attr = self._get_cached_method(target, method_name)
                     if callable(attr):
@@ -2054,6 +2447,15 @@ class VM:
                 
                 prev_ip = current_ip
                 ip += 1
+
+                if trace_interval > 0:
+                    trace_counter += 1
+                    if trace_counter % trace_interval == 0:
+                        try:
+                            stack_size = len(stack)
+                        except Exception:
+                            stack_size = -1
+                        print(f"[VM TRACE] async ip={current_ip} op={op_name} stack={stack_size}")
     
                 # === GAS METERING ===
                 if self.enable_gas_metering and self.gas_metering:
@@ -2683,16 +3085,10 @@ class VM:
     
                 elif op_name == "IMPORT":
                     mod_name = const(operand[0])
-                    alias = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else None
-                    try:
-                        mod = importlib.import_module(mod_name)
-                        key = alias or mod_name
-                        self.env[key] = mod
-                        self._bump_env_version(key, mod)
-                    except Exception:
-                        key = alias or mod_name
-                        self.env[key] = None
-                        self._bump_env_version(key, None)
+                    alias = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else ""
+                    names = const(operand[2]) if isinstance(operand, (list, tuple)) and len(operand) > 2 else []
+                    is_named = const(operand[3]) if isinstance(operand, (list, tuple)) and len(operand) > 3 else False
+                    self._execute_import(mod_name, alias=alias or "", names=names, is_named=bool(is_named))
 
                 elif op_name == "EXPORT":
                     name = None
@@ -3056,14 +3452,13 @@ class VM:
             
             local_env = {k: v for k, v in zip(params, args)}
             
-            inner_vm = VM(
-                builtins=self.builtins, 
-                env=local_env, 
-                parent_env=parent_env,
-                # Inherit configuration
-                use_jit=self.use_jit,
-                use_memory_manager=self.use_memory_manager
+            inner_vm = VM.create_child(
+                parent_vm=parent_env if isinstance(parent_env, VM) else self,
+                env=local_env
             )
+            if not isinstance(parent_env, VM):
+                 inner_vm._parent_env = parent_env
+            
             snapshot = fn.get("closure_snapshot")
             if snapshot:
                 for key, value in snapshot.items():
@@ -3103,6 +3498,10 @@ class VM:
                         self._action_evaluator = Evaluator(use_vm=False)
                     call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
                     result = self._action_evaluator.apply_function(real_fn, call_args)
+                    trace_errors = os.environ.get("ZEXUS_VM_TRACE_ERRORS")
+                    if trace_errors and trace_errors.lower() not in ("0", "false", "off"):
+                        if isinstance(result, ZEvaluationError):
+                            print(f"[VM TRACE] action error: {result.message}")
                     return self._unwrap_after_builtin(result)
             except Exception:
                 pass
@@ -3116,6 +3515,10 @@ class VM:
                 fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
                 print(f"[VM DEBUG] calling builtin {fn_name} args={[type(a).__name__ for a in call_args]}")
             res = real_fn(*call_args)
+            trace_errors = os.environ.get("ZEXUS_VM_TRACE_ERRORS")
+            if trace_errors and trace_errors.lower() not in ("0", "false", "off"):
+                if isinstance(res, ZEvaluationError):
+                    print(f"[VM TRACE] builtin error: {res.message}")
             if verbose_active and res is None:
                 fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
                 print(f"[VM DEBUG] builtin {fn_name} returned None args={call_args}")

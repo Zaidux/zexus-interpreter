@@ -204,6 +204,7 @@ class UnifiedExecutor:
         # VM instance (lazy init)
         self.vm = None
         self._profile_reported = False
+        self._vm_action_child = None
 
         # VM configuration overrides (applied on next VM init)
         self.vm_config: Dict[str, Any] = {
@@ -709,15 +710,26 @@ class UnifiedExecutor:
 
         try:
             self.ensure_vm(profile_active=profile_active)
-            self._sync_env_to_vm(env)
-            if hasattr(self.evaluator, 'builtins') and self.evaluator.builtins:
-                self.vm.builtins = {k: v for k, v in self.evaluator.builtins.items()}
+            vm_target = self.vm
+            # Avoid VM re-entrancy when actions are invoked from within VM execution
+            if getattr(self.vm, "_in_execution", 0) > 0:
+                if (
+                    self._vm_action_child is None
+                    or getattr(self._vm_action_child, "_in_execution", 0) > 0
+                ):
+                    self._vm_action_child = type(self.vm).create_child(parent_vm=self.vm, env={})
+                vm_target = self._vm_action_child
+                vm_target.env.clear()
 
-            result = self.vm.execute(bytecode, debug=False)
+            self._sync_env_to_vm(env, vm=vm_target)
+            if hasattr(self.evaluator, 'builtins') and self.evaluator.builtins:
+                vm_target.builtins = {k: v for k, v in self.evaluator.builtins.items()}
+
+            result = vm_target.execute(bytecode, debug=False)
 
             if sync_keys is None and not bool(self.vm_config.get("vm_action_sync_all", False)):
                 sync_keys = None
-            self._sync_env_from_vm(env, sync_keys=sync_keys)
+            self._sync_env_from_vm(env, sync_keys=sync_keys, vm=vm_target)
             self.workload.stats["vm_executions"] += 1
             self.stats["vm_hits"] += 1
             return self._convert_from_vm(result) if result is not None else NULL
@@ -726,9 +738,10 @@ class UnifiedExecutor:
                 print(f"[VM DEBUG] action execution exception={e}")
             return EvaluationError(f"VM execution error: {e}")
     
-    def _sync_env_to_vm(self, env):
+    def _sync_env_to_vm(self, env, vm=None):
         """Sync evaluator environment to VM"""
-        if not self.vm or not env:
+        vm_target = vm or self.vm
+        if not vm_target or not env:
             return
         
         self.stats["environment_syncs"] += 1
@@ -744,15 +757,20 @@ class UnifiedExecutor:
             for scope in reversed(scopes):
                 for key, value in scope.store.items():
                     vm_value = self._convert_to_vm(value)
-                    self.vm.env[key] = vm_value
+                    vm_target.env[key] = vm_value
         elif isinstance(env, dict):
             for key, value in env.items():
                 vm_value = self._convert_to_vm(value)
-                self.vm.env[key] = vm_value
+                vm_target.env[key] = vm_value
+        try:
+            vm_target._bump_env_version()
+        except Exception:
+            pass
     
-    def _sync_env_from_vm(self, env, sync_keys: Optional[set[str]] = None):
+    def _sync_env_from_vm(self, env, sync_keys: Optional[set[str]] = None, vm=None):
         """Sync VM environment back to evaluator"""
-        if not self.vm or not env:
+        vm_target = vm or self.vm
+        if not vm_target or not env:
             return
         
         if sync_keys is not None:
@@ -760,9 +778,9 @@ class UnifiedExecutor:
                 return
             # Only sync tracked keys to reduce overhead
             for key in sync_keys:
-                if key not in self.vm.env:
+                if key not in vm_target.env:
                     continue
-                value = self.vm.env.get(key)
+                value = vm_target.env.get(key)
                 eval_value = self._convert_from_vm(value)
                 if hasattr(env, 'set'):
                     try:
@@ -776,7 +794,7 @@ class UnifiedExecutor:
             return
 
         # Convert VM values back to evaluator objects (full sync)
-        for key, value in self.vm.env.items():
+        for key, value in vm_target.env.items():
             eval_value = self._convert_from_vm(value)
             if hasattr(env, 'set'):
                 try:
@@ -907,7 +925,11 @@ class UnifiedExecutor:
         except Exception:
             return False
 
-        unsafe_nodes = (zexus_ast.TxStatement, zexus_ast.BreakStatement, zexus_ast.ContinueStatement)
+        unsafe_nodes = (
+            zexus_ast.TxStatement,
+            zexus_ast.BreakStatement,
+            zexus_ast.ContinueStatement,
+        )
 
         def _walk(node) -> bool:
             if node is None:

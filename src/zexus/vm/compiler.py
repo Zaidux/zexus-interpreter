@@ -134,6 +134,7 @@ class BytecodeCompiler:
         """Return a friendly message for unsupported nodes."""
         hints = {
             "UseStatement": "Module imports",
+            "FromStatement": "Module imports",
             "EntityStatement": "Entity declarations",
             "ContractStatement": "Contract declarations",
             "ActionStatement": "Action/function declarations",
@@ -641,17 +642,60 @@ class BytecodeCompiler:
         raise UnsupportedNodeError(type(target).__name__, "Assignment target not supported")
 
     def _compile_UseStatement(self, node):
-        """Compile module import"""
-        # node.file_path is string or StringLiteral
-        path = node.file_path.value if hasattr(node.file_path, 'value') else str(node.file_path)
-        path_idx = self._add_constant(path)
-        
-        # Handle alias
-        alias = node.alias.value if node.alias and hasattr(node.alias, 'value') else (node.alias or path)
-        alias_idx = self._add_constant(alias)
-        
-        # Emit IMPORT (path_idx, alias_idx)
-        self._emit(Opcode.IMPORT, (path_idx, alias_idx))
+        """Compile module import via VM import helper."""
+        file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
+        path = file_path_attr.value if hasattr(file_path_attr, 'value') else str(file_path_attr or "")
+        alias = node.alias.value if node.alias and hasattr(node.alias, 'value') else (node.alias or "")
+
+        names_list = []
+        if getattr(node, 'names', None):
+            for entry in node.names:
+                if entry is None:
+                    continue
+                names_list.append(entry.value if hasattr(entry, 'value') else str(entry))
+
+        spec = {
+            "file": path,
+            "alias": alias,
+            "names": names_list,
+            "is_named": bool(getattr(node, 'is_named_import', False)) and len(names_list) > 0,
+        }
+
+        spec_idx = self._add_constant(spec)
+        self._emit(Opcode.LOAD_CONST, spec_idx)
+        name_idx = self._add_constant("__vm_use_module__")
+        self._emit(Opcode.CALL_NAME, (name_idx, 1))
+        self._emit(Opcode.POP)
+
+    def _compile_FromStatement(self, node):
+        """Compile from-import statements into VM helper calls."""
+        file_path_attr = getattr(node, 'file_path', None) or getattr(node, 'embedded_ref', None)
+        file_path = file_path_attr.value if hasattr(file_path_attr, 'value') else str(file_path_attr or "")
+        entries = []
+        for entry in getattr(node, 'imports', []) or []:
+            if isinstance(entry, (list, tuple)):
+                base = entry[0] if len(entry) > 0 else None
+                alias = entry[1] if len(entry) > 1 else None
+            else:
+                base = entry
+                alias = None
+            if base is None:
+                continue
+            entries.append({
+                "name": base.value if hasattr(base, 'value') else str(base),
+                "alias": alias.value if hasattr(alias, 'value') else (str(alias) if alias else ""),
+            })
+
+        spec = {
+            "file": file_path,
+            "imports": entries,
+        }
+
+        spec_idx = self._add_constant(spec)
+        self._emit(Opcode.LOAD_CONST, spec_idx)
+        name_idx = self._add_constant("__vm_from_module__")
+        self._emit(Opcode.CALL_NAME, (name_idx, 1))
+        self._emit(Opcode.POP)
 
     def _compile_TxStatement(self, node):
         """Compile transaction block"""

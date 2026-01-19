@@ -147,6 +147,8 @@ class JITCompiler:
         native_flag = os.environ.get("ZEXUS_NATIVE_JIT", "0")
         if native_flag.lower() in ("1", "true", "yes"):
             self.enable_native_backend()
+        if os.environ.get("ZEXUS_JIT_TRACE", "0") in ("1", "true", "yes"):
+            print(f"[JIT TRACE] native_backend={'on' if self.native_backend else 'off'}")
 
     def enable_native_backend(self) -> bool:
         if self.native_backend is not None:

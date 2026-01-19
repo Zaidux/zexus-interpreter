@@ -5,6 +5,7 @@ Compiles a restricted subset of numeric bytecode into native machine code.
 """
 
 from typing import Optional, Callable, List, Tuple, Dict, Any
+import os
 
 try:
     from llvmlite import ir
@@ -51,6 +52,7 @@ class NativeJITBackend:
                     continue
 
     def compile(self, bytecode) -> Optional[Callable]:
+        trace_enabled = self.debug or os.environ.get("ZEXUS_NATIVE_JIT_TRACE", "0") in ("1", "true", "yes")
         instrs = list(getattr(bytecode, "instructions", []))
         consts = list(getattr(bytecode, "constants", []))
 
@@ -195,6 +197,13 @@ class NativeJITBackend:
                 use_object_mode = True
             if op_name not in supported and op_name not in object_ops:
                 return None
+
+        if trace_enabled:
+            try:
+                mode = "object" if use_object_mode else "numeric"
+                print(f"[NATIVE JIT] compile mode={mode} instrs={len(normalized)} consts={len(consts)}")
+            except Exception:
+                pass
 
         if use_object_mode:
             func_ptr = self._build_object_function(normalized, consts)

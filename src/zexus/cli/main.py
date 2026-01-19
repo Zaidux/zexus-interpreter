@@ -286,7 +286,7 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
             for error in parser.errors:
                 console.print(f"  ❌ {error}")
             sys.exit(1)
-        
+
         # Use the evaluator package
         env = Environment()
         
@@ -361,6 +361,14 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 gas_limit=100000000  # 100M instructions for heavy checks
             )
             apply_vm_config(vm, vm_config)
+            # Mirror interpreter module context for relative imports in VM
+            vm.env["__file__"] = abs_file
+            vm.env["__FILE__"] = abs_file
+            vm.env["__MODULE__"] = "__main__"
+            vm.env["__DIR__"] = os.path.dirname(abs_file)
+            vm.env["__ARGS__"] = args
+            vm.env["__ARGV__"] = args
+            vm.env["__PACKAGE__"] = package_name.value if hasattr(package_name, "value") else package_name
             console.print(" [green]done[/green]")
 
             console.print("[dim]Executing on VM...[/dim]")

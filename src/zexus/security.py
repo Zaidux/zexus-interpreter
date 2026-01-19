@@ -46,6 +46,13 @@ except ImportError:  # Fallback if optional type missing
 # This cache provides thread-local evaluators that can be reused
 
 _evaluator_cache = threading.local()
+_vm_action_context = threading.local()
+
+def _get_vm_action_context() -> bool:
+    return bool(getattr(_vm_action_context, 'disable_vm', False))
+
+def _set_vm_action_context(flag: bool) -> None:
+    _vm_action_context.disable_vm = bool(flag)
 
 def _get_cached_evaluator():
     """Get a cached evaluator instance for the current thread.
@@ -1621,6 +1628,17 @@ class SmartContract:
             from zexus.object import EvaluationError
             return EvaluationError(f"Action '{action_name}' not found in contract {self.name}")
 
+        trace_calls = os.environ.get("ZEXUS_VM_TRACE_CALLS")
+        if trace_calls:
+            try:
+                interval = int(trace_calls) if trace_calls.isdigit() else 1000
+            except Exception:
+                interval = 1000
+            count = getattr(self, "_trace_call_count", 0) + 1
+            self._trace_call_count = count
+            if interval > 0 and count % interval == 0:
+                print(f"[VM TRACE] CONTRACT action={action_name} total={count}")
+
         # Get the action (Action object)
         action = self.actions[action_name]
         
@@ -1696,6 +1714,15 @@ class SmartContract:
         
         # Execute the action body - use cached evaluator for performance
         evaluator = _get_cached_evaluator()
+        disable_vm = _get_vm_action_context()
+        saved_use_vm = None
+        saved_vm_enabled = None
+        if disable_vm:
+            saved_use_vm = evaluator.use_vm
+            evaluator.use_vm = False
+            if evaluator.unified_executor is not None:
+                saved_vm_enabled = evaluator.unified_executor.vm_enabled
+                evaluator.unified_executor.vm_enabled = False
 
         # Optional: VM cached action execution for performance mode
         vm_result = None
@@ -1720,6 +1747,9 @@ class SmartContract:
                     if perf_use_vm_actions is True and perf_mode is True:
                         use_vm_actions = True
         except Exception:
+            use_vm_actions = False
+
+        if disable_vm:
             use_vm_actions = False
         
         # Start batching storage writes for performance
@@ -1754,14 +1784,26 @@ class SmartContract:
                                     sync_cache[action_name] = None
 
                         if bytecode is not None:
-                            sync_keys = None
+                            instr_count = 0
                             try:
-                                sync_keys = self._vm_action_sync_keys.get(action_name)
+                                instr_count = len(getattr(bytecode, "instructions", []) or [])
                             except Exception:
+                                instr_count = 0
+                            min_instr = 32
+                            try:
+                                min_instr = int(evaluator.unified_executor.vm_config.get("vm_action_min_instructions", 32))
+                            except Exception:
+                                min_instr = 32
+
+                            if instr_count >= min_instr:
                                 sync_keys = None
-                            vm_result = evaluator.unified_executor.execute_action_bytecode(bytecode, action_env, sync_keys=sync_keys)
-                            if is_error(vm_result):
-                                vm_result = None
+                                try:
+                                    sync_keys = self._vm_action_sync_keys.get(action_name)
+                                except Exception:
+                                    sync_keys = None
+                                vm_result = evaluator.unified_executor.execute_action_bytecode(bytecode, action_env, sync_keys=sync_keys)
+                                if is_error(vm_result):
+                                    vm_result = None
                 except Exception:
                     vm_result = None
 
@@ -1811,6 +1853,11 @@ class SmartContract:
             raise e
         finally:
             self.storage.disable_action_cache()
+
+            if disable_vm:
+                evaluator.use_vm = saved_use_vm
+                if evaluator.unified_executor is not None and saved_vm_enabled is not None:
+                    evaluator.unified_executor.vm_enabled = saved_vm_enabled
 
         
         return result
