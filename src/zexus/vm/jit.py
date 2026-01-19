@@ -31,6 +31,12 @@ except ImportError:
     OPTIMIZER_AVAILABLE = False
 
 try:
+    from .gas_metering import OutOfGasError, OperationLimitExceededError
+except Exception:
+    OutOfGasError = None
+    OperationLimitExceededError = None
+
+try:
     from .native_jit_backend import NativeJITBackend
     _NATIVE_JIT_AVAILABLE = True
 except Exception:
@@ -297,7 +303,11 @@ class JITCompiler:
             compiled = compile(python_code, f'<jit:{bytecode_hash[:8]}>', 'exec')
 
             # Step 5: Create executable function
-            namespace = {'__builtins__': {}}
+            namespace = {
+                '__builtins__': {},
+                'OutOfGasError': OutOfGasError,
+                'OperationLimitExceededError': OperationLimitExceededError,
+            }
             exec(compiled, namespace)
             jit_function = namespace.get('jit_execute')
 
@@ -842,6 +852,14 @@ class JITCompiler:
         lines = [
             "def jit_execute(vm, stack, env):",
             "    # JIT-compiled native code",
+            "    gas = getattr(vm, 'gas_metering', None)",
+            "    def _gas(op, **kwargs):",
+            "        if gas is None:",
+            "            return",
+            "        if not gas.consume(op, **kwargs):",
+            "            if gas.operation_count > gas.max_operations:",
+            "                raise OperationLimitExceededError(gas.operation_count, gas.max_operations)",
+            "            raise OutOfGasError(gas.gas_used, gas.gas_limit, op)",
         ]
         
         # Track variable assignments for efficient code generation
@@ -855,6 +873,7 @@ class JITCompiler:
             frame = stack_frames[i]
             
             if opcode == 'LOAD_CONST':
+                lines.append("    _gas('LOAD_CONST')")
                 if operand < len(constants):
                     const_val = constants[operand]
                     var_name = f"const_{operand}_{i}"
@@ -868,6 +887,7 @@ class JITCompiler:
                 stack_height += 1
                 
             elif opcode == 'LOAD_NAME':
+                lines.append("    _gas('LOAD_NAME')")
                 if operand < len(constants):
                     name = constants[operand]
                     var_name = f"var_{operand}_{i}"
@@ -881,6 +901,7 @@ class JITCompiler:
                 stack_height += 1
                 
             elif opcode == 'STORE_NAME':
+                lines.append("    _gas('STORE_NAME')")
                 if operand < len(constants):
                     name = constants[operand]
                     if stack_height > 0:
@@ -888,6 +909,7 @@ class JITCompiler:
                         stack_height -= 1
                         
             elif opcode == 'STORE_CONST':
+                lines.append("    _gas('STORE_NAME')")
                 if isinstance(operand, tuple) and len(operand) == 2:
                     name_idx, const_idx = operand
                     if name_idx < len(constants) and const_idx < len(constants):
@@ -896,6 +918,7 @@ class JITCompiler:
                         lines.append(f"    env[{repr(name)}] = {repr(const_val)}")
                         
             elif opcode in ['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'POW']:
+                lines.append(f"    _gas('{opcode}')")
                 if stack_height >= 2:
                     # Generate efficient arithmetic
                     operator = self._opcode_to_operator(opcode)
@@ -938,6 +961,7 @@ class JITCompiler:
                     stack_height -= 1  # 2 popped, 1 pushed = net -1
                     
             elif opcode == 'RETURN':
+                lines.append("    _gas('RETURN')")
                 if stack_height > 0:
                     lines.append("    return stack[-1]")
                 else:

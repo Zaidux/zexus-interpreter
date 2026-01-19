@@ -75,6 +75,19 @@ def _call_method(target, method_name, args):
         return None
 
 
+def _call_top(fn_obj, args):
+    if fn_obj is None:
+        return None
+    if isinstance(fn_obj, dict) and "bytecode" in fn_obj:
+        raise NotImplementedError("CALL_TOP requires VM execution")
+    try:
+        if callable(fn_obj):
+            return fn_obj(*args)
+        return None
+    except Exception:
+        return None
+
+
 def execute(list instrs, list consts, dict env, dict builtins, dict closure_cells=None):
     cdef Py_ssize_t ip = 0
     cdef Py_ssize_t instr_count = len(instrs)
@@ -182,6 +195,17 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
             count = operand if operand is not None else 0
             elements = [stack.pop() for _ in range(count)][::-1]
             stack.append(elements)
+        elif op_name == "BUILD_MAP":
+            count = operand if operand is not None else 0
+            result = {}
+            for _ in range(count):
+                val = stack.pop(); key = stack.pop()
+                result[key] = val
+            stack.append(result)
+        elif op_name == "BUILD_SET":
+            count = operand if operand is not None else 0
+            elements = [stack.pop() for _ in range(count)][::-1]
+            stack.append(set(elements))
         elif op_name == "INDEX":
             idx = stack.pop()
             obj = stack.pop()
@@ -194,6 +218,34 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
                     stack.append(obj[idx] if obj is not None else None)
             except Exception:
                 stack.append(None)
+        elif op_name == "SLICE":
+            end = stack.pop() if stack else None
+            start = stack.pop() if stack else None
+            obj = stack.pop() if stack else None
+            try:
+                if isinstance(obj, ZList):
+                    stack.append(obj.elements[start:end])
+                elif isinstance(obj, ZString):
+                    stack.append(obj.value[start:end])
+                else:
+                    stack.append(obj[start:end] if obj is not None else None)
+            except Exception:
+                stack.append(None)
+        elif op_name == "GET_LENGTH":
+            obj = stack.pop() if stack else None
+            try:
+                if obj is None:
+                    stack.append(0)
+                elif isinstance(obj, ZList):
+                    stack.append(len(obj.elements))
+                elif isinstance(obj, ZMap):
+                    stack.append(len(obj.pairs))
+                elif isinstance(obj, ZString):
+                    stack.append(len(obj.value))
+                else:
+                    stack.append(len(obj))
+            except Exception:
+                stack.append(0)
         elif op_name == "CALL_NAME":
             name_idx, arg_count = operand
             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
@@ -203,12 +255,29 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
                 stack.append(None)
             else:
                 stack.append(fn(*args))
+        elif op_name == "CALL_BUILTIN":
+            name_idx, arg_count = operand
+            func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
+            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            fn = builtins.get(func_name)
+            if fn is None:
+                stack.append(None)
+            else:
+                try:
+                    stack.append(fn(*args))
+                except Exception:
+                    stack.append(None)
         elif op_name == "CALL_METHOD":
             method_idx, arg_count = operand
             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
             target = stack.pop() if stack else None
             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx
             stack.append(_call_method(target, method_name, args))
+        elif op_name == "CALL_TOP":
+            arg_count = operand
+            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            fn_obj = stack.pop() if stack else None
+            stack.append(_call_top(fn_obj, args))
         else:
             raise NotImplementedError(f"opcode not supported: {op_name}")
 

@@ -388,6 +388,9 @@ class VM:
         self._opcode_exec_count = 0
         self._native_jit_auto_enabled = False
         self._native_jit_auto_threshold = 700
+        self._env_version = 0
+        self._name_cache: Dict[str, Tuple[Any, int]] = {}
+        self._method_cache: Dict[Tuple[type, str], Any] = {}
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
@@ -658,6 +661,39 @@ class VM:
         if "error" in error_holder:
             raise error_holder["error"]
         return result_holder.get("result")
+
+    def _bump_env_version(self, name: Optional[str] = None, value: Any = None) -> None:
+        self._env_version += 1
+        if name is not None:
+            self._name_cache[name] = (value, self._env_version)
+
+    def _get_cached_method(self, target: Any, method_name: str):
+        if target is None:
+            return None
+        if isinstance(target, (dict, ZMap, ZList)):
+            return None
+        try:
+            if hasattr(target, "__dict__") and method_name in target.__dict__:
+                return getattr(target, method_name, None)
+        except Exception:
+            return getattr(target, method_name, None)
+
+        key = (type(target), method_name)
+        cached = self._method_cache.get(key)
+        if cached is not None:
+            try:
+                return cached.__get__(target, type(target))
+            except Exception:
+                return getattr(target, method_name, None)
+
+        attr = getattr(type(target), method_name, None)
+        if attr is not None:
+            self._method_cache[key] = attr
+            try:
+                return attr.__get__(target, type(target))
+            except Exception:
+                return getattr(target, method_name, None)
+        return getattr(target, method_name, None)
 
     def execute(self, code: Union[List[Tuple], Any], debug: bool = False) -> Any:
         """
@@ -1166,18 +1202,27 @@ class VM:
             return consts[idx] if isinstance(idx, int) and 0 <= idx < len(consts) else idx
         
         def resolve(name):
+            cached = self._name_cache.get(name)
+            if cached and cached[1] == self._env_version:
+                return cached[0]
             if name in env:
                 val = env[name]
-                return val.value if isinstance(val, Cell) else val
+                resolved = val.value if isinstance(val, Cell) else val
+                self._name_cache[name] = (resolved, self._env_version)
+                return resolved
             if name in self._closure_cells:
-                return self._closure_cells[name].value
+                resolved = self._closure_cells[name].value
+                self._name_cache[name] = (resolved, self._env_version)
+                return resolved
             return None
         
         def store(name, value):
             if name in env and isinstance(env[name], Cell):
                 env[name].value = value
+                self._bump_env_version(name, value)
             else:
                 env[name] = value
+                self._bump_env_version(name, value)
         
         while ip < instr_count:
             op_name, operand = instrs[ip]
@@ -1343,7 +1388,7 @@ class VM:
                         wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                         result = target.call_method(method_name, wrapped_args)
                     else:
-                        attr = getattr(target, method_name, None)
+                        attr = self._get_cached_method(target, method_name)
                         if callable(attr):
                             result = attr(*args)
                         elif isinstance(target, dict) and method_name in target:
@@ -1479,13 +1524,9 @@ class VM:
         # 1. JIT Check (with thread safety)
         if self.use_jit and self.jit_compiler:
             jit_function = None
-            if self.enable_gas_metering and self.gas_metering:
-                # JIT currently bypasses gas accounting; fall back to interpreter
-                jit_function = None
-            else:
-                with self._jit_lock:
-                    bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
-                    jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
+            with self._jit_lock:
+                bytecode_hash = self.jit_compiler._hash_bytecode(bytecode)
+                jit_function = self.jit_compiler.compilation_cache.get(bytecode_hash)
             
             if jit_function:
                 try:
@@ -1567,13 +1608,20 @@ class VM:
 
         # Lexical Resolution Helper (Closures/Cells)
         def _resolve(name):
+            cached = self._name_cache.get(name)
+            if cached and cached[1] == self._env_version:
+                return cached[0]
             # 1. Local
             if name in self.env:
                 val = self.env[name]
-                return val.value if isinstance(val, Cell) else val
+                resolved = val.value if isinstance(val, Cell) else val
+                self._name_cache[name] = (resolved, self._env_version)
+                return resolved
             # 2. Closure Cells (attached to VM)
             if name in self._closure_cells:
-                return self._closure_cells[name].value
+                resolved = self._closure_cells[name].value
+                self._name_cache[name] = (resolved, self._env_version)
+                return resolved
             # 3. Parent Chain
             p = self._parent_env
             while p is not None:
@@ -1592,28 +1640,43 @@ class VM:
         def _store(name, value):
             # Update existing Cell in local env
             if name in self.env and isinstance(self.env[name], Cell):
-                self.env[name].value = value; return
+                self.env[name].value = value
+                self._bump_env_version(name, value)
+                return
             # Update local non-cell
             if name in self.env:
-                self.env[name] = value; return
+                self.env[name] = value
+                self._bump_env_version(name, value)
+                return
             # Update Closure Cell
             if name in self._closure_cells:
-                self._closure_cells[name].value = value; return
+                self._closure_cells[name].value = value
+                self._bump_env_version(name, value)
+                return
             # Update Parent Chain
             p = self._parent_env
             while p is not None:
                 if isinstance(p, VM):
                     if name in p._closure_cells:
-                        p._closure_cells[name].value = value; return
+                        p._closure_cells[name].value = value
+                        p._bump_env_version(name, value)
+                        self._bump_env_version(name, value)
+                        return
                     if name in p.env:
-                        p.env[name] = value; return
+                        p.env[name] = value
+                        p._bump_env_version(name, value)
+                        self._bump_env_version(name, value)
+                        return
                     p = p._parent_env
                 else:
                     if name in p:
-                        p[name] = value; return
+                        p[name] = value
+                        self._bump_env_version(name, value)
+                        return
                     p = None
             # Default: Create local
             self.env[name] = value
+            self._bump_env_version(name, value)
 
         def _unwrap(value):
             if isinstance(value, ZNull):
@@ -1725,7 +1788,7 @@ class VM:
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                     result = target.call_method(method_name, wrapped_args)
                 else:
-                    attr = getattr(target, method_name, None)
+                    attr = self._get_cached_method(target, method_name)
                     if callable(attr):
                         result = attr(*args)
                     elif isinstance(target, dict) and method_name in target:
@@ -1881,10 +1944,6 @@ class VM:
             except:
                 stack.append(None)
 
-        def _op_import(operand):
-            # Placeholder
-            pass
-
         def _op_store_func(operand):
             name_idx, func_idx = operand
             name = const(name_idx)
@@ -1923,7 +1982,6 @@ class VM:
             "GET_ATTR": _op_get_attr,
             "GET_LENGTH": _op_get_length,
             "READ": _op_read,
-            "IMPORT": _op_import,
             "STORE_FUNC": _op_store_func,
         }
         async_dispatch_ops = {"CALL_NAME", "CALL_TOP", "CALL_METHOD"}
@@ -2040,6 +2098,7 @@ class VM:
                         func_desc_copy["closure_snapshot"] = closure_snapshot
                     func_desc_copy["parent_vm"] = self
                     self.env[name] = func_desc_copy
+                    self._bump_env_version(name, func_desc_copy)
 
                 elif op_name == "LOAD_REG":
                     reg, const_idx = operand
@@ -2296,72 +2355,6 @@ class VM:
                         except StopIteration:
                             ip = target
 
-                elif op_name == "ATOMIC_ADD":
-                    if not hasattr(self, "_locks"):
-                        self._locks = {}
-                    if not hasattr(self, "_atomic"):
-                        self._atomic = {}
-                    delta = stack.pop() if stack else 0
-                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
-                    key = _unwrap(key)
-                    lock = self._locks.get(key)
-                    if lock is None:
-                        import threading
-                        lock = threading.Lock()
-                        self._locks[key] = lock
-                    with lock:
-                        cur = self._atomic.get(key, 0)
-                        new_val = cur + delta
-                        self._atomic[key] = new_val
-                    stack.append(new_val)
-
-                elif op_name == "ATOMIC_CAS":
-                    if not hasattr(self, "_locks"):
-                        self._locks = {}
-                    if not hasattr(self, "_atomic"):
-                        self._atomic = {}
-                    new_val = stack.pop() if stack else None
-                    expected = stack.pop() if stack else None
-                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
-                    key = _unwrap(key)
-                    lock = self._locks.get(key)
-                    if lock is None:
-                        import threading
-                        lock = threading.Lock()
-                        self._locks[key] = lock
-                    with lock:
-                        cur = self._atomic.get(key, None)
-                        if cur == expected:
-                            self._atomic[key] = new_val
-                            stack.append(True)
-                        else:
-                            stack.append(False)
-
-                elif op_name == "BARRIER":
-                    barrier_obj = stack.pop() if stack else None
-                    timeout = const(operand) if operand is not None else None
-                    if barrier_obj is None:
-                        stack.append(None)
-                    else:
-                        try:
-                            if timeout is not None:
-                                res = barrier_obj.wait(timeout=timeout)
-                            else:
-                                res = barrier_obj.wait()
-                            stack.append(res)
-                        except Exception as exc:
-                            stack.append(exc)
-
-                elif op_name == "FOR_ITER":
-                    it = stack[-1] if stack else None
-                    try:
-                        val = next(it)
-                        stack.append(val)
-                    except StopIteration:
-                        if stack:
-                            stack.pop()
-                        ip = int(operand) if operand is not None else ip
-                
                 elif op_name == "CALL_NAME":
                     name_idx, arg_count = operand
                     func_name = const(name_idx)
@@ -2371,6 +2364,29 @@ class VM:
                         res = self._call_fallback_builtin(func_name, args)
                     else:
                         res = await self._invoke_callable_or_funcdesc(fn, args)
+                    stack.append(res)
+
+                elif op_name == "CALL_BUILTIN":
+                    name_idx, arg_count = operand if isinstance(operand, (list, tuple)) else (operand, 0)
+                    func_name = const(name_idx)
+                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    fn = self.builtins.get(func_name)
+                    if fn is None:
+                        res = self._call_fallback_builtin(func_name, args)
+                    else:
+                        res = await self._invoke_callable_or_funcdesc(fn, args)
+                    stack.append(res)
+
+                elif op_name == "CALL_FUNC_CONST":
+                    if isinstance(operand, (list, tuple)):
+                        func_idx = operand[0]
+                        arg_count = operand[1] if len(operand) > 1 else 0
+                    else:
+                        func_idx = operand
+                        arg_count = 0
+                    func_desc = const(func_idx)
+                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    res = await self._invoke_callable_or_funcdesc(func_desc, args, is_constant=True)
                     stack.append(res)
                 
                 elif op_name == "CALL_TOP":
@@ -2454,6 +2470,10 @@ class VM:
                         val = stack.pop(); key = stack.pop()
                         result[key] = val
                     stack.append(result)
+                elif op_name == "BUILD_SET":
+                    count = operand if operand is not None else 0
+                    elements = [stack.pop() for _ in range(count)][::-1]
+                    stack.append(set(elements))
                 elif op_name == "INDEX":
                     idx = stack.pop(); obj = stack.pop()
                     try:
@@ -2466,6 +2486,19 @@ class VM:
                         else:
                             stack.append(obj[idx] if obj is not None else None)
                     except (IndexError, KeyError, TypeError):
+                        stack.append(None)
+                elif op_name == "SLICE":
+                    end = stack.pop() if stack else None
+                    start = stack.pop() if stack else None
+                    obj = stack.pop() if stack else None
+                    try:
+                        if isinstance(obj, ZList):
+                            stack.append(obj.elements[start:end])
+                        elif isinstance(obj, ZString):
+                            stack.append(obj.value[start:end])
+                        else:
+                            stack.append(obj[start:end] if obj is not None else None)
+                    except Exception:
                         stack.append(None)
                 elif op_name == "GET_LENGTH":
                     obj = stack.pop()
@@ -2502,6 +2535,24 @@ class VM:
                         else:
                             task = asyncio.create_task(coro)
                         
+                        self._task_counter += 1
+                        tid = f"task_{self._task_counter}"
+                        self._tasks[tid] = task
+                        task_handle = tid
+                    stack.append(task_handle)
+
+                elif op_name == "SPAWN_CALL":
+                    task_handle = None
+                    if isinstance(operand, (list, tuple)) and operand:
+                        name_idx = operand[0]
+                        arg_count = operand[1] if len(operand) > 1 else 0
+                        fn_name = const(name_idx)
+                        args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                        fn = self.builtins.get(fn_name) or self.env.get(fn_name)
+                        coro = self._to_coro(fn, args)
+                        if self.async_optimizer:
+                            coro = self.async_optimizer.spawn(coro)
+                        task = asyncio.create_task(coro)
                         self._task_counter += 1
                         tid = f"task_{self._task_counter}"
                         self._tasks[tid] = task
@@ -2591,9 +2642,51 @@ class VM:
                     alias = const(operand[1]) if isinstance(operand, (list,tuple)) and len(operand) > 1 else None
                     try:
                         mod = importlib.import_module(mod_name)
-                        self.env[alias or mod_name] = mod
+                        key = alias or mod_name
+                        self.env[key] = mod
+                        self._bump_env_version(key, mod)
                     except Exception:
-                        self.env[alias or mod_name] = None
+                        key = alias or mod_name
+                        self.env[key] = None
+                        self._bump_env_version(key, None)
+
+                elif op_name == "EXPORT":
+                    name = None
+                    value = None
+                    if isinstance(operand, (list, tuple)) and operand:
+                        name = const(operand[0])
+                        if len(operand) > 1:
+                            value = const(operand[1])
+                    if name is None:
+                        name = stack.pop() if stack else None
+                    if value is None:
+                        value = stack.pop() if stack else None
+
+                    export_fn = getattr(self.env, "export", None)
+                    if callable(export_fn):
+                        try:
+                            export_fn(name, value)
+                        except Exception:
+                            pass
+                    else:
+                        self.env[name] = value
+                    self._bump_env_version(name, value)
+
+                elif op_name == "WRITE":
+                    payload = stack.pop() if stack else None
+                    path = stack.pop() if stack else None
+                    try:
+                        if path is not None:
+                            with open(path, "w") as f:
+                                if isinstance(payload, bytes):
+                                    f.write(payload.decode("utf-8"))
+                                else:
+                                    f.write(str(payload) if payload is not None else "")
+                            stack.append(True)
+                        else:
+                            stack.append(False)
+                    except Exception:
+                        stack.append(False)
 
                 elif op_name == "DEFINE_SCREEN":
                     if isinstance(operand, (list, tuple)) and len(operand) >= 2:
@@ -2636,6 +2729,14 @@ class VM:
                     enum_map = const(operand[1])
                     self.env.setdefault("enums", {})[enum_name] = enum_map
                     self.env[enum_name] = enum_map
+                    self._bump_env_version(enum_name, enum_map)
+
+                elif op_name == "DEFINE_PROTOCOL":
+                    proto_name = _unwrap(const(operand[0]))
+                    proto_spec = const(operand[1])
+                    self.env.setdefault("protocols", {})[proto_name] = proto_spec
+                    self.env[proto_name] = proto_spec
+                    self._bump_env_version(proto_name, proto_spec)
     
                 elif op_name == "ASSERT_PROTOCOL":
                     obj_name = const(operand[0])

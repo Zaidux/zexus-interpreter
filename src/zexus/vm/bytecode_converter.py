@@ -156,7 +156,8 @@ class BytecodeConverter:
             op3 = _op_name(inst3[0])
             if (op1 == Opcode.LOAD_NAME.name and
                 op2 == Opcode.LOAD_CONST.name and
-                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name]):
+                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name,
+                        Opcode.MOD.name, Opcode.POW.name]):
                 
                 return {
                     'type': 'var_const_binary_op',
@@ -174,7 +175,8 @@ class BytecodeConverter:
             op3 = _op_name(inst3[0])
             if (op1 == Opcode.LOAD_NAME.name and
                 op2 == Opcode.LOAD_NAME.name and
-                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name]):
+                op3 in [Opcode.ADD.name, Opcode.SUB.name, Opcode.MUL.name, Opcode.DIV.name,
+                        Opcode.MOD.name, Opcode.POW.name]):
                 
                 return {
                     'type': 'var_var_binary_op',
