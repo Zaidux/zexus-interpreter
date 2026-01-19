@@ -696,7 +696,36 @@ class EvaluatorBytecodeCompiler:
             self._compile_node(value_expr)
         # Build map from stack
         self.builder.emit("BUILD_MAP", len(node.pairs))
-    
+
+    def _compile_PropertyAccessExpression(self, node: zexus_ast.PropertyAccessExpression):
+        """Compile property access"""
+        if self.builder is None:
+            return
+        
+        # Compile object
+        self._compile_node(node.object)
+        
+        if node.computed:
+            # Bracket notation: obj[expr]
+            self._compile_node(node.property)
+            self._builder_emit("INDEX")
+        else:
+            # Dot notation: obj.prop
+            if hasattr(node.property, 'value'):
+                name = node.property.value
+            else:
+                name = str(node.property)
+            
+            # Push property name as constant
+            self.builder.emit_constant(name)
+            self._builder_emit("GET_ATTR")
+            
+    def _builder_emit(self, opcode):
+        """Helper to emit opcode string or enum"""
+        # If builder has emit, use it. Some builders might use emit(opcode, operand).
+        # Wrapper to handle potential string usage if enum not fully refreshed
+        self.builder.emit(opcode)
+
     def _compile_InfixExpression(self, node: zexus_ast.InfixExpression):
         """Compile infix expression"""
         if self.builder is None:

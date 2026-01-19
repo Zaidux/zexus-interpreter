@@ -241,6 +241,30 @@ class BytecodeCompiler:
         """Load boolean constant"""
         const_idx = self._add_constant(node.value)
         self._emit(Opcode.LOAD_CONST, const_idx)
+
+    def _compile_NullLiteral(self, node):
+        """Load null constant"""
+        const_idx = self._add_constant(None)
+        self._emit(Opcode.LOAD_CONST, const_idx)
+
+    def _compile_PropertyAccessExpression(self, node):
+        """Compile property access"""
+        # Compile object
+        self._compile_node(node.object)
+        
+        if node.computed:
+            # Bracket notation: obj[expr]
+            self._compile_node(node.property)
+            self._emit(Opcode.INDEX)
+        else:
+            # Dot notation: obj.prop
+            if hasattr(node.property, 'value'):
+                name = node.property.value
+            else:
+                name = str(node.property)
+            const_idx = self._add_constant(name)
+            self._emit(Opcode.LOAD_CONST, const_idx)
+            self._emit(Opcode.GET_ATTR)
     
     # ==================== Binary Operations ====================
     
@@ -318,6 +342,27 @@ class BytecodeCompiler:
         self.instructions[-1] = (Opcode.NOP, end_label)
     
     _compile_IfStatement = _compile_IfExpression
+
+    def _compile_TernaryExpression(self, node):
+        """Compile ternary expression (cond ? true : false)"""
+        # Compile condition
+        self._compile_node(node.condition)
+        
+        # Jump if false
+        else_label = self._make_label()
+        end_label = self._make_label()
+        
+        self._emit(Opcode.JUMP_IF_FALSE, else_label)
+        
+        # True branch
+        self._compile_node(node.true_value)
+        self._emit(Opcode.JUMP, end_label)
+        
+        # False branch
+        self._mark_label(else_label)
+        self._compile_node(node.false_value)
+        
+        self._mark_label(end_label)
 
     def _compile_WhileStatement(self, node):
         """Compile while loop"""
@@ -548,19 +593,52 @@ class BytecodeCompiler:
         self._emit(Opcode.READ)
 
     def _compile_AssignmentExpression(self, node):
-        """Compile variable assignment"""
-        # 1. Compile value expression
-        self._compile_node(node.value)
+        """Compile variable or property assignment"""
         
-        # 2. Duplicate value because assignment is an expression that returns the value
-        # AND currently most usage is inside ExpressionStatement which pops it.
-        # But for correctness as an Expression, it must leave value on stack.
-        self._emit(Opcode.DUP)
+        # Check target type
+        target = node.name
         
-        # 3. Store to variable
-        name = node.name.value if hasattr(node.name, 'value') else str(node.name)
-        name_idx = self._add_constant(name)
-        self._emit(Opcode.STORE_NAME, name_idx)
+        # 1. Variable Assignment (target is Identifier or string)
+        if isinstance(target, (zexus_ast.Identifier, str)):
+            self._compile_node(node.value)
+            self._emit(Opcode.DUP)
+            name = target.value if hasattr(target, 'value') else str(target)
+            name_idx = self._add_constant(name)
+            self._emit(Opcode.STORE_NAME, name_idx)
+            return
+
+        # 2. Property/Index Assignment (target[key] = value, target.prop = value)
+        if hasattr(zexus_ast, 'IndexExpression') and isinstance(target, zexus_ast.IndexExpression) or \
+           isinstance(target, zexus_ast.PropertyAccessExpression):
+            # Transform to obj.set(key, value)
+            
+            # 2a. Compile object
+            obj = target.object if isinstance(target, zexus_ast.PropertyAccessExpression) else target.left
+            self._compile_node(obj)
+            
+            # 2b. Compile key
+            if isinstance(target, zexus_ast.PropertyAccessExpression):
+                if target.computed:
+                    self._compile_node(target.property)
+                else:
+                    if hasattr(target.property, 'value'):
+                        prop_name = target.property.value
+                    else:
+                        prop_name = str(target.property)
+                    idx = self._add_constant(prop_name)
+                    self._emit(Opcode.LOAD_CONST, idx)
+            else: # IndexExpression
+                self._compile_node(target.index)
+            
+            # 2c. Compile value
+            self._compile_node(node.value)
+            
+            # 2d. Call set(key, value)
+            method_idx = self._add_constant("set")
+            self._emit(Opcode.CALL_METHOD, (method_idx, 2))
+            return
+
+        raise UnsupportedNodeError(type(target).__name__, "Assignment target not supported")
 
     def _compile_UseStatement(self, node):
         """Compile module import"""

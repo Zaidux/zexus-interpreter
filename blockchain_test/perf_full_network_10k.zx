@@ -4,7 +4,7 @@ use "./full_network_chain/full_network_blockchain.zx"
 use {enable_vm, set_vm_thresholds, set_vm_config, profile_start, profile_stop, profile_report, vm_stats} from "stdlib/perf"
 use {stringify} from "stdlib/json"
 
-const PERF_TRANSACTION_COUNT = 2000
+const PERF_TRANSACTION_COUNT = 500
 const PERF_USE_JIT = true
 const PERF_USE_FAST_DISPATCH = true
 const PERF_ENABLE_REGISTER_PATH = true

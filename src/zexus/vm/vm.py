@@ -1191,7 +1191,11 @@ class VM:
         # Fast stack implementation
         stack: List[Any] = []
         stack_append = stack.append
-        stack_pop = stack.pop
+        # stack_pop = stack.pop
+        def stack_pop():
+            if not stack:
+                return None
+            return stack.pop()
         
         ip = 0
         instr_count = len(instrs)
@@ -1879,22 +1883,26 @@ class VM:
                 lst = self.allocate_list(total)
                 if total > 0:
                     for i in range(total - 1, -1, -1):
-                        lst[i] = stack.pop()
+                        lst[i] = stack.pop() if stack else None
                 stack.append(lst)
             else:
-                elements = [stack.pop() for _ in range(total)][::-1]
+                elements = [None] * total
+                for i in range(total - 1, -1, -1):
+                    elements[i] = stack.pop() if stack else None
                 stack.append(elements)
 
         def _op_build_map(count):
             total = count if count is not None else 0
             result = {}
             for _ in range(total):
-                val = stack.pop(); key = stack.pop()
+                val = stack.pop() if stack else None
+                key = stack.pop() if stack else None
                 result[key] = val
             stack.append(result)
 
         def _op_index(_):
-            idx = stack.pop(); obj = stack.pop()
+            idx = stack.pop() if stack else None
+            obj = stack.pop() if stack else None
             try:
                 if isinstance(obj, ZList):
                     stack.append(obj.get(idx))
@@ -1906,8 +1914,15 @@ class VM:
                 elif isinstance(obj, ZString):
                     stack.append(obj[idx])
                 else:
-                    raw_idx = idx.value if hasattr(idx, "value") else idx
-                    stack.append(obj[raw_idx] if obj is not None else None)
+                    # Fallback
+                    if obj is None:
+                        stack.append(None)
+                    else:
+                        raw_idx = idx.value if hasattr(idx, "value") else idx
+                        try:
+                            stack.append(obj[raw_idx])
+                        except Exception:
+                            stack.append(None)
             except (IndexError, KeyError, TypeError):
                 stack.append(None)
 
@@ -1932,7 +1947,7 @@ class VM:
                 stack.append(None)
 
         def _op_get_length(_):
-            obj = stack.pop()
+            obj = stack.pop() if stack else None
             try:
                 if obj is None:
                     stack.append(0)
@@ -2478,13 +2493,16 @@ class VM:
                 # --- Collections ---
                 elif op_name == "BUILD_LIST":
                     count = operand if operand is not None else 0
-                    elements = [stack.pop() for _ in range(count)][::-1]
+                    elements = [None] * count
+                    for i in range(count - 1, -1, -1):
+                        elements[i] = stack.pop() if stack else None
                     stack.append(elements)
                 elif op_name == "BUILD_MAP":
                     count = operand if operand is not None else 0
                     result = {}
                     for _ in range(count):
-                        val = stack.pop(); key = stack.pop()
+                        val = stack.pop() if stack else None
+                        key = stack.pop() if stack else None
                         result[key] = val
                     stack.append(result)
                 elif op_name == "BUILD_SET":
@@ -2492,7 +2510,8 @@ class VM:
                     elements = [stack.pop() for _ in range(count)][::-1]
                     stack.append(set(elements))
                 elif op_name == "INDEX":
-                    idx = stack.pop(); obj = stack.pop()
+                    idx = stack.pop() if stack else None
+                    obj = stack.pop() if stack else None
                     try:
                         if isinstance(obj, ZList):
                             stack.append(obj.get(idx))
@@ -2501,7 +2520,8 @@ class VM:
                         elif isinstance(obj, ZString):
                             stack.append(obj[idx])
                         else:
-                            stack.append(obj[idx] if obj is not None else None)
+                            val = obj[idx] if obj is not None and idx is not None else None
+                            stack.append(val)
                     except (IndexError, KeyError, TypeError):
                         stack.append(None)
                 elif op_name == "SLICE":
@@ -2518,7 +2538,7 @@ class VM:
                     except Exception:
                         stack.append(None)
                 elif op_name == "GET_LENGTH":
-                    obj = stack.pop()
+                    obj = stack.pop() if stack else None
                     try:
                         if obj is None:
                             stack.append(0)

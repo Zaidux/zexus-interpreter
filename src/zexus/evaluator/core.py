@@ -128,6 +128,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 zexus_ast.InfixExpression: self._handle_infix_expression,
                 zexus_ast.PrefixExpression: self._handle_prefix_expression,
                 zexus_ast.CallExpression: self._handle_call_expression,
+                zexus_ast.PropertyAccessExpression: self._handle_property_access_expression,
                 zexus_ast.MethodCallExpression: self._handle_method_call_expression,
                 zexus_ast.ListLiteral: self._handle_list_literal,
             }
@@ -211,6 +212,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     def _handle_call_expression(self, node, env, stack_trace):
         debug_log("🚀 CallExpression node", f"Calling {node.function}")
         return self.eval_call_expression(node, env, stack_trace)
+
+    def _handle_property_access_expression(self, node, env, stack_trace):
+        debug_log("  PropertyAccessExpression node")
+        return self.eval_property_access_expression(node, env, stack_trace)
 
     def _handle_method_call_expression(self, node, env, stack_trace):
         debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")

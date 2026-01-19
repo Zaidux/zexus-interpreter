@@ -62,6 +62,7 @@ class Opcode(IntEnum):
     BUILD_SET = 62      # Build set from stack items
     INDEX = 63          # Index into collection
     SLICE = 64          # Slice operation
+    GET_ATTR = 65       # Get attribute/property of object
     
     # Async/Concurrency
     SPAWN = 70          # Spawn coroutine/task

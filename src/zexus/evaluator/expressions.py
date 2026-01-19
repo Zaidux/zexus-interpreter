@@ -17,6 +17,51 @@ from .utils import is_error, debug_log, NULL, TRUE, FALSE, is_truthy, _python_to
 class ExpressionEvaluatorMixin:
     """Handles evaluation of expressions: Literals, Math, Logic, Identifiers."""
     
+    def eval_property_access_expression(self, node, env, stack_trace=None):
+        obj = self.eval_node(node.object, env, stack_trace)
+        if is_error(obj): return obj
+
+        from ..object import String, Map, List, EvaluationError
+
+        if node.computed:
+            # Index notation: obj[expr]
+            idx = self.eval_node(node.property, env, stack_trace)
+            if is_error(idx): return idx
+            
+            if isinstance(obj, List):
+                 return obj.get(idx)
+            elif isinstance(obj, Map):
+                 key = idx
+                 if isinstance(key, str): key = String(key)
+                 return obj.get(key) or NULL
+            elif isinstance(obj, String):
+                 return obj.get(idx)
+            else:
+                 # Fallback for Python objects
+                 try:
+                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+                     return obj[raw_idx]
+                 except (IndexError, KeyError, TypeError):
+                     return NULL
+        else:
+            # Dot notation: obj.prop
+            if not hasattr(node.property, 'value'):
+                 return EvaluationError(f"Invalid property identifier: {node.property}")
+            
+            prop_name = str(node.property.value)
+            
+            if isinstance(obj, Map):
+                 return obj.get(String(prop_name)) or NULL
+            elif isinstance(obj, dict):
+                 return obj.get(prop_name, NULL)
+            else:
+                 # Try getattr (for data classes, etc.)
+                 try:
+                     res = getattr(obj, prop_name, NULL)
+                     return res
+                 except Exception:
+                     return NULL
+
     def eval_identifier(self, node, env):
         name = node.value
         if zexus_config.fast_debug_enabled:
