@@ -1329,6 +1329,23 @@ class VM:
                         stack_append(obj[idx] if obj is not None else None)
                 except (IndexError, KeyError, TypeError):
                     stack_append(None)
+            elif op_name == "SLICE":
+                end = stack_pop() if stack else None
+                start = stack_pop() if stack else None
+                obj = stack_pop() if stack else None
+                if hasattr(start, "value"):
+                    start = start.value
+                if hasattr(end, "value"):
+                    end = end.value
+                try:
+                    if isinstance(obj, ZList):
+                        stack_append(ZList(obj.elements[start:end]))
+                    elif isinstance(obj, ZString):
+                        stack_append(ZString(obj.value[start:end]))
+                    else:
+                        stack_append(obj[start:end] if obj is not None else None)
+                except Exception:
+                    stack_append(None)
             elif op_name == "GET_LENGTH":
                 obj = stack_pop()
                 try:
@@ -2488,14 +2505,14 @@ class VM:
                     except (IndexError, KeyError, TypeError):
                         stack.append(None)
                 elif op_name == "SLICE":
-                    end = stack.pop() if stack else None
-                    start = stack.pop() if stack else None
+                    end = _unwrap(stack.pop() if stack else None)
+                    start = _unwrap(stack.pop() if stack else None)
                     obj = stack.pop() if stack else None
                     try:
                         if isinstance(obj, ZList):
-                            stack.append(obj.elements[start:end])
+                            stack.append(ZList(obj.elements[start:end]))
                         elif isinstance(obj, ZString):
-                            stack.append(obj.value[start:end])
+                            stack.append(ZString(obj.value[start:end]))
                         else:
                             stack.append(obj[start:end] if obj is not None else None)
                     except Exception:
@@ -3076,7 +3093,10 @@ class VM:
                 fn_name = getattr(fn_obj, "name", getattr(real_fn, "__name__", "<callable>"))
                 print(f"[VM DEBUG] builtin {fn_name} returned None args={call_args}")
             if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
-                res = await res
+                if self.async_optimizer:
+                    res = await self.async_optimizer.await_optimized(res)
+                else:
+                    res = await res
             return self._unwrap_after_builtin(res)
         except Exception as e:
             return e

@@ -3478,11 +3478,39 @@ class UltimateParser:
         # current token is LBRACKET (parser calls this after advancing to that token)
         # Move to the first token inside the brackets
         self.next_token()
-        index_expr = self.parse_expression(LOWEST)
+        start_expr = None
+        end_expr = None
+
+        if self.cur_token_is(COLON):
+            # Slice with omitted start: obj[:end]
+            if self.peek_token_is(RBRACKET):
+                # obj[:]
+                self.next_token()
+                return SliceExpression(object=left, start=None, end=None)
+            self.next_token()
+            end_expr = self.parse_expression(LOWEST)
+            if not self.expect_peek(RBRACKET):
+                return None
+            return SliceExpression(object=left, start=None, end=end_expr)
+
+        start_expr = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(COLON):
+            # Slice with explicit start: obj[start:end]
+            self.next_token()  # move to ':'
+            if self.peek_token_is(RBRACKET):
+                self.next_token()  # move to ']'
+                return SliceExpression(object=left, start=start_expr, end=None)
+            self.next_token()
+            end_expr = self.parse_expression(LOWEST)
+            if not self.expect_peek(RBRACKET):
+                return None
+            return SliceExpression(object=left, start=start_expr, end=end_expr)
+
         # Expect closing bracket
         if not self.expect_peek(RBRACKET):
             return None
-        return PropertyAccessExpression(object=left, property=index_expr, computed=True)
+        return PropertyAccessExpression(object=left, property=start_expr, computed=True)
 
     def _lookahead_token_after_matching_paren(self):
         """Character-level lookahead: detect if the matching ')' is followed by '=>' (arrow).

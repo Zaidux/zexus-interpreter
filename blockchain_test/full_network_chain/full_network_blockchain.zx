@@ -36,6 +36,7 @@ export contract Block {
     data execution_ms = 0
     data logging_enabled = true
     data tx_hash_cache = ""
+    data merkle_root = ""
 
     action initialize(idx, txs, prev_hash, diff) {
         index = idx
@@ -70,6 +71,38 @@ export contract Block {
             i = i + 1
         }
         tx_hash_cache = tx_accum
+        merkle_root = this.build_merkle_root(txs)
+    }
+
+    action build_merkle_root(txs) {
+        if txs == null || len(txs) == 0 {
+            return ""
+        }
+        let leaves = []
+        let i = 0
+        while i < len(txs) {
+            let tx = txs[i]
+            let val = tx["hash"]
+            if val == "" || val == null {
+                val = string(i)
+            }
+            leaves = append(leaves, hash(string(val), "SHA256"))
+            i = i + 1
+        }
+        while len(leaves) > 1 {
+            if len(leaves) % 2 != 0 {
+                leaves = append(leaves, leaves[len(leaves) - 1])
+            }
+            let merged = []
+            let j = 0
+            while j < len(leaves) {
+                let combined = leaves[j] + leaves[j + 1]
+                merged = append(merged, hash(combined, "SHA256"))
+                j = j + 2
+            }
+            leaves = merged
+        }
+        return leaves[0]
     }
 
     action calculate_hash() {
@@ -237,7 +270,9 @@ export contract Blockchain {
         "treasury_accruals": 0,
         "slash_events": 0,
         "participant_rewards": 0,
-        "fee_accumulator": 0
+        "fee_accumulator": 0,
+        "validator_update_failures": 0,
+        "resource_trim_events": 0
     }
     private data balances_integrity = ""
 
@@ -303,13 +338,20 @@ export contract Blockchain {
             "perf_micro_batch_size": 16,
             "perf_skip_integrity_refresh": false,
             "perf_use_vm_actions": false,
+            "perf_unified_paths": false,
             "consensus_threshold_bp": 6700,
             "consensus_max_missed": 3,
             "treasury_rate_bp": 800,
             "proposer_commission_bp": 8200,
             "participation_rate_bp": 1000,
             "validator_slash_penalty_bp": 200,
-            "storage_root_limit": 128
+            "storage_root_limit": 128,
+            "max_pending_txs": 50000,
+            "max_events": 5000,
+            "max_block_timings": 5000,
+            "max_consensus_history": 3000,
+            "max_storage_journal": 512,
+            "max_storage_roots": 512
         };
         config = new_config;
         let empty_timings = [];
@@ -324,7 +366,9 @@ export contract Blockchain {
             "treasury_accruals": 0,
             "slash_events": 0,
             "participant_rewards": 0,
-            "fee_accumulator": 0
+            "fee_accumulator": 0,
+            "validator_update_failures": 0,
+            "resource_trim_events": 0
         };
         storage_roots = [];
         storage_journal = [];
@@ -629,11 +673,19 @@ export contract Blockchain {
                 }
                 validators.set(index, entry)
                 applied = true
-            } catch error {}
+            } catch error {
+                audit_stats["validator_update_failures"] = audit_stats["validator_update_failures"] + 1
+                if logging_enabled {
+                    print("[WARN] validator set failed idx=" + string(index) + " err=" + string(error))
+                }
+            }
             if applied == false {
                 validators[index] = entry
             }
+            return true
         }
+        audit_stats["validator_update_failures"] = audit_stats["validator_update_failures"] + 1
+        return false
     }
 
     action register_validator(address, stake_amount, pubkey) {
@@ -903,6 +955,18 @@ export contract Blockchain {
     // Fast path for bulk transactions - skips Transaction contract overhead
     action submit_transaction_fast(from_addr, to_addr, amount, fee_value, nonce_value, payload) limit 15000 {
         this._assert_balances_integrity()
+        if performance_mode && config["perf_unified_paths"] == true {
+            return this.submit_transactions_batch([
+                {
+                    "from": from_addr,
+                    "to": to_addr,
+                    "amount": amount,
+                    "fee": fee_value,
+                    "nonce": nonce_value,
+                    "payload": payload
+                }
+            ])
+        }
         let skip_validation = false
         if performance_mode {
             if config["perf_skip_validation"] == true {
@@ -997,6 +1061,8 @@ export contract Blockchain {
             })
         }
 
+        this._enforce_resource_limits()
+
         if ledger_was_updated && skip_integrity_refresh == false {
             this._refresh_balances_integrity()
         }
@@ -1008,6 +1074,9 @@ export contract Blockchain {
     action submit_transactions_batch(transactions) limit 60000 {
         if transactions == null {
             return 0
+        }
+        if performance_mode && config["perf_unified_paths"] == true {
+            return this.submit_transactions_batch_fast(transactions)
         }
         if performance_mode {
             let micro_enabled = config["perf_micro_batch"]
@@ -1136,6 +1205,7 @@ export contract Blockchain {
             i = i + 1
         }
         _pending_nonces = local_pending
+        this._enforce_resource_limits()
         return accepted
     }
 
@@ -1205,6 +1275,7 @@ export contract Blockchain {
             i = i + 1
         }
         _pending_nonces = local_pending
+        this._enforce_resource_limits()
         return accepted
     }
 
@@ -1460,7 +1531,171 @@ export contract Blockchain {
             }
         }
 
+        let max_roots = config["max_storage_roots"]
+        if max_roots == null {
+            max_roots = 0
+        }
+        if max_roots > 0 && len(storage_roots) > max_roots {
+            let start_roots = len(storage_roots) - max_roots
+            storage_roots = slice(storage_roots, start_roots, len(storage_roots))
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
+        let max_journal = config["max_storage_journal"]
+        if max_journal == null {
+            max_journal = 0
+        }
+        if max_journal > 0 && len(storage_journal) > max_journal {
+            let start_entries = len(storage_journal) - max_journal
+            storage_journal = slice(storage_journal, start_entries, len(storage_journal))
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
+
         return entry
+    }
+
+    private action _compute_merkle_root(txs) {
+        if txs == null || len(txs) == 0 {
+            return ""
+        }
+        let leaves = []
+        let i = 0
+        while i < len(txs) {
+            let tx = txs[i]
+            let val = tx["hash"]
+            if val == "" || val == null {
+                val = string(i)
+            }
+            leaves = append(leaves, hash(string(val), "SHA256"))
+            i = i + 1
+        }
+        while len(leaves) > 1 {
+            if len(leaves) % 2 != 0 {
+                leaves = append(leaves, leaves[len(leaves) - 1])
+            }
+            let merged = []
+            let j = 0
+            while j < len(leaves) {
+                let combined = leaves[j] + leaves[j + 1]
+                merged = append(merged, hash(combined, "SHA256"))
+                j = j + 2
+            }
+            leaves = merged
+        }
+        return leaves[0]
+    }
+
+    action verify_light_client(block_info, expected_prev_hash, expected_root) {
+        if block_info == null {
+            return {"ok": false, "reason": "missing_block"}
+        }
+        let prev_hash = block_info["previous_hash"]
+        if prev_hash == null {
+            prev_hash = block_info["prev_hash"]
+        }
+        if expected_prev_hash != null && prev_hash != expected_prev_hash {
+            return {"ok": false, "reason": "prev_hash_mismatch"}
+        }
+        let txs = block_info["transactions"]
+        if txs == null {
+            txs = []
+        }
+        let computed_root = this._compute_merkle_root(txs)
+        if expected_root != null && computed_root != expected_root {
+            return {"ok": false, "reason": "merkle_mismatch", "computed": computed_root}
+        }
+        return {"ok": true, "root": computed_root}
+    }
+
+    action simulate_network_latency(latency_ms, jitter_ms, loss_bp) {
+        let base = latency_ms
+        if base == null {
+            base = 0
+        }
+        let jitter = jitter_ms
+        if jitter == null {
+            jitter = 0
+        }
+        let loss = loss_bp
+        if loss == null {
+            loss = 0
+        }
+        if loss < 0 {
+            loss = 0
+        }
+        if loss > 10000 {
+            loss = 10000
+        }
+        let slot = time() % 10000
+        let dropped = false
+        if loss > 0 && slot < loss {
+            dropped = true
+        }
+        return {
+            "latency_ms": base,
+            "jitter_ms": jitter,
+            "dropped": dropped
+        }
+    }
+
+    private action _rebuild_pending_nonces(transactions) {
+        let cache = {}
+        let i = 0
+        while i < len(transactions) {
+            let tx = transactions[i]
+            let addr = tx["from"]
+            let n_pending = tx["nonce"]
+            if addr != null && n_pending != null {
+                let current = cache[addr]
+                if current == null || n_pending > current {
+                    cache[addr] = n_pending
+                }
+            }
+            i = i + 1
+        }
+        return cache
+    }
+
+    private action _enforce_resource_limits() {
+        let max_pending = config["max_pending_txs"]
+        if max_pending == null {
+            max_pending = 0
+        }
+        if max_pending > 0 && len(pending_transactions) > max_pending {
+            let start_pending = len(pending_transactions) - max_pending
+            pending_transactions = slice(pending_transactions, start_pending, len(pending_transactions))
+            _pending_nonces = this._rebuild_pending_nonces(pending_transactions)
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
+
+        let max_events = config["max_events"]
+        if max_events == null {
+            max_events = 0
+        }
+        if max_events > 0 && len(events) > max_events {
+            let start_events = len(events) - max_events
+            events = slice(events, start_events, len(events))
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
+
+        let max_timings = config["max_block_timings"]
+        if max_timings == null {
+            max_timings = 0
+        }
+        if max_timings > 0 && len(block_timings) > max_timings {
+            let start_timings = len(block_timings) - max_timings
+            block_timings = slice(block_timings, start_timings, len(block_timings))
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
+
+        let max_history = config["max_consensus_history"]
+        if max_history == null {
+            max_history = 0
+        }
+        if max_history > 0 && len(consensus_history) > max_history {
+            let start_hist = len(consensus_history) - max_history
+            consensus_history = slice(consensus_history, start_hist, len(consensus_history))
+            audit_stats["resource_trim_events"] = audit_stats["resource_trim_events"] + 1
+        }
     }
 
     private action _snapshot_state() {
@@ -1522,6 +1757,7 @@ export contract Blockchain {
         let storage_root = this._compute_storage_root()
 
         return {
+            "snapshot_version": 1,
             "ledger": ledger,
             "pending": pending_copy,
             "pending_nonces": pending_nonce_copy,
@@ -1529,13 +1765,18 @@ export contract Blockchain {
             "finalized_height": finalized_height,
             "round_number": round_number,
             "treasury_balance": treasury_snapshot,
-            "storage_root": storage_root
+            "storage_root": storage_root,
+            "pending_count": len(pending_copy)
         }
     }
 
     private action _restore_state(snapshot) {
         if snapshot == null {
-            return
+            return {
+                "restored": false,
+                "storage_integrity_ok": false,
+                "error": "snapshot_missing"
+            }
         }
 
         let ledger = snapshot["ledger"]
@@ -1567,9 +1808,20 @@ export contract Blockchain {
         _account_set = fresh_account_set
 
         let pending_source = snapshot["pending"]
+        if pending_source == null {
+            pending_source = []
+        }
         let restored_pending = []
         i = 0
-        while i < len(pending_source) {
+        let max_pending = config["max_pending_txs"]
+        if max_pending == null {
+            max_pending = 0
+        }
+        let pending_limit = len(pending_source)
+        if max_pending > 0 && pending_limit > max_pending {
+            pending_limit = max_pending
+        }
+        while i < pending_limit {
             let tx = pending_source[i]
             let clone = {
                 "from": tx["from"],
@@ -1589,14 +1841,18 @@ export contract Blockchain {
 
         let pending_nonce_source = snapshot["pending_nonces"]
         let restored_pending_nonce = {}
-        i = 0
-        while i < len(rebuilt_index) {
-            let addr = rebuilt_index[i]
-            let pn = pending_nonce_source[addr]
-            if pn != null {
-                restored_pending_nonce[addr] = pn
+        if pending_nonce_source == null {
+            restored_pending_nonce = this._rebuild_pending_nonces(restored_pending)
+        } else {
+            i = 0
+            while i < len(rebuilt_index) {
+                let addr = rebuilt_index[i]
+                let pn = pending_nonce_source[addr]
+                if pn != null {
+                    restored_pending_nonce[addr] = pn
+                }
+                i = i + 1
             }
-            i = i + 1
         }
         _pending_nonces = restored_pending_nonce
 
@@ -2258,6 +2514,8 @@ export contract Blockchain {
                 })
             }
 
+            this._enforce_resource_limits()
+
             return {
                 "height": new_height,
                 "proposer": proposer_address,
@@ -2354,6 +2612,8 @@ export contract Blockchain {
             })
         }
 
+        this._enforce_resource_limits()
+
         return {
             "height": new_height,
             "proposer": proposer_address,
@@ -2403,6 +2663,8 @@ export contract Blockchain {
         let block = Block()
         block.initialize(new_height, applied, "0", difficulty)
         chain = append(chain, block)
+
+        this._enforce_resource_limits()
         
         return true
     }
@@ -2703,6 +2965,8 @@ export contract Blockchain {
                 "proposer_reward": reward_report["proposer_reward"]
             })
         }
+
+        this._enforce_resource_limits()
 
         return {
             "height": new_height,
@@ -3491,13 +3755,20 @@ export const DEFAULT_FULL_NETWORK_CONFIG = {
     "perf_micro_batch_size": 16,
     "perf_skip_integrity_refresh": false,
     "perf_use_vm_actions": false,
+    "perf_unified_paths": false,
     "consensus_threshold_bp": 6700,
     "consensus_max_missed": 3,
     "treasury_rate_bp": 800,
     "proposer_commission_bp": 8200,
     "participation_rate_bp": 1000,
     "validator_slash_penalty_bp": 200,
-    "storage_root_limit": 128
+    "storage_root_limit": 128,
+    "max_pending_txs": 50000,
+    "max_events": 5000,
+    "max_block_timings": 5000,
+    "max_consensus_history": 3000,
+    "max_storage_journal": 512,
+    "max_storage_roots": 512
 }
 
 export const PERF_FULL_NETWORK_CONFIG = {
@@ -3513,13 +3784,20 @@ export const PERF_FULL_NETWORK_CONFIG = {
     "perf_micro_batch_size": 32,
     "perf_skip_integrity_refresh": true,
     "perf_use_vm_actions": true,
+    "perf_unified_paths": true,
     "consensus_threshold_bp": 6700,
     "consensus_max_missed": 3,
     "treasury_rate_bp": 800,
     "proposer_commission_bp": 8200,
     "participation_rate_bp": 1000,
     "validator_slash_penalty_bp": 200,
-    "storage_root_limit": 0
+    "storage_root_limit": 0,
+    "max_pending_txs": 20000,
+    "max_events": 0,
+    "max_block_timings": 2000,
+    "max_consensus_history": 1000,
+    "max_storage_journal": 256,
+    "max_storage_roots": 256
 }
 
 export const DEFAULT_FULL_NETWORK_GENESIS = [

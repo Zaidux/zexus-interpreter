@@ -886,6 +886,22 @@ class EvaluatorBytecodeCompiler:
         # Emit index operation
         self.builder.emit("INDEX")
 
+    def _compile_SliceExpression(self, node):
+        """Compile slice expression"""
+        self._compile_node(node.object)
+
+        if node.start is not None:
+            self._compile_node(node.start)
+        else:
+            self.builder.emit_constant(None)
+
+        if node.end is not None:
+            self._compile_node(node.end)
+        else:
+            self.builder.emit_constant(None)
+
+        self.builder.emit("SLICE")
+
     def _compile_ThisExpression(self, node):
         """Compile 'this' expression"""
         self.builder.emit_load("this")
@@ -1239,7 +1255,7 @@ class EvaluatorBytecodeCompiler:
             'StringLiteral', 'Boolean', 'ListLiteral', 'MapLiteral', 'NullLiteral',
             'InfixExpression', 'PrefixExpression', 'CallExpression',
             'AwaitExpression', 'SpawnExpression', 'AssignmentExpression', 'IndexExpression',
-            'PropertyAccessExpression', 'LambdaExpression',
+            'PropertyAccessExpression', 'SliceExpression', 'LambdaExpression',
             'ThisExpression', 'TernaryExpression',
             'FindExpression', 'LoadExpression',
             'UseStatement', 'FromStatement',

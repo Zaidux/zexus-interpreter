@@ -647,6 +647,17 @@ class PropertyAccessExpression(Expression):
     def __repr__(self):
         return f"PropertyAccessExpression(object={self.object}, property={self.property}, computed={self.computed})"
 
+
+class SliceExpression(Expression):
+    """Slice expression: obj[start:end]"""
+    def __init__(self, object, start=None, end=None):
+        self.object = object
+        self.start = start
+        self.end = end
+
+    def __repr__(self):
+        return f"SliceExpression(object={self.object}, start={self.start}, end={self.end})"
+
 class AssignmentExpression(Expression):
     def __init__(self, name, value):
         self.name = name

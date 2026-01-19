@@ -5,6 +5,9 @@ use {enable_vm, set_vm_thresholds, set_vm_config, profile_start, profile_stop, p
 use {stringify} from "stdlib/json"
 
 const PERF_TRANSACTION_COUNT = 2000
+const PERF_USE_JIT = true
+const PERF_USE_FAST_DISPATCH = true
+const PERF_ENABLE_REGISTER_PATH = true
 
 const PERF_GENESIS = [
     {"address": "VAL_ALPHA", "balance": 5000000},
@@ -30,6 +33,7 @@ const PERF_WALLETS = ["WALLET_1", "WALLET_2", "WALLET_3", "WALLET_4", "WALLET_5"
 
 function create_performance_blockchain(max_block_txs, logging) {
     let perf_mode = PERF_TRANSACTION_COUNT >= 150
+    let use_fast_dispatch = perf_mode && PERF_USE_FAST_DISPATCH && !PERF_USE_JIT
     let overrides = {
         "max_block_txs": max_block_txs,
         "base_reward": 75,
@@ -49,7 +53,7 @@ function create_performance_blockchain(max_block_txs, logging) {
     // Enable fast dispatch mode for VM (no async overhead, no gas metering)
     set_vm_config({
         "perf_disable_gas_metering": perf_mode,
-        "perf_fast_dispatch": perf_mode,
+        "perf_fast_dispatch": use_fast_dispatch,
         "enable_bytecode_optimizer": true,
         "fast_single_shot": true,
         "vm_single_shot": true,
@@ -242,7 +246,7 @@ function run_bulk_test() {
 enable_vm(true)
 set_vm_thresholds(1, 100000, 1)
 set_vm_config({
-    "use_jit": false,
+    "use_jit": PERF_USE_JIT,
     "enable_gas_metering": false,
     "use_memory_manager": false,
     "gc_threshold": 50000,
@@ -250,9 +254,10 @@ set_vm_config({
     "enable_bytecode_optimizer": true,
     "optimizer_level": 3,
     "enable_memory_pool": true,
-    "enable_async_optimizer": false,
+    "enable_async_optimizer": true,
     "enable_ssa": false,
-    "enable_bytecode_converter": false,
+    "enable_bytecode_converter": PERF_ENABLE_REGISTER_PATH,
+    "enable_register_allocation": PERF_ENABLE_REGISTER_PATH,
     "vm_single_shot": true,
     "vm_single_shot_min_instructions": 8,
     "fast_single_shot": true,
@@ -266,7 +271,7 @@ set_vm_config({
     "vm_sync_all": false,
     "vm_allow_unsafe_loops": false,
     "vm_dump_bytecode": false,
-    "mode": "stack"
+    "mode": "auto"
 })
 
 // Warm up VM to ensure profiler is initialized before profiling starts

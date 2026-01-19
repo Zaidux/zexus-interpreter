@@ -222,11 +222,15 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
             end = stack.pop() if stack else None
             start = stack.pop() if stack else None
             obj = stack.pop() if stack else None
+            if hasattr(start, "value"):
+                start = start.value
+            if hasattr(end, "value"):
+                end = end.value
             try:
                 if isinstance(obj, ZList):
-                    stack.append(obj.elements[start:end])
+                    stack.append(ZList(obj.elements[start:end]))
                 elif isinstance(obj, ZString):
-                    stack.append(obj.value[start:end])
+                    stack.append(ZString(obj.value[start:end]))
                 else:
                     stack.append(obj[start:end] if obj is not None else None)
             except Exception:

@@ -4626,12 +4626,35 @@ class ContextStackParser:
                 # If there's a closing RBRACKET, skip it
                 if i < n and tokens[i].type == RBRACKET:
                     i += 1
-                prop_expr = self._parse_expression(inner_tokens) if inner_tokens else Identifier('')
-                current_expr = PropertyAccessExpression(
-                    object=current_expr,
-                    property=prop_expr,
-                    computed=True
-                )
+                colon_idx = None
+                depth = 0
+                for idx, tok in enumerate(inner_tokens):
+                    if tok.type in {LBRACKET, LPAREN, LBRACE}:
+                        depth += 1
+                    elif tok.type in {RBRACKET, RPAREN, RBRACE}:
+                        if depth > 0:
+                            depth -= 1
+                    elif tok.type == COLON and depth == 0:
+                        colon_idx = idx
+                        break
+
+                if colon_idx is not None:
+                    start_tokens = inner_tokens[:colon_idx]
+                    end_tokens = inner_tokens[colon_idx + 1:]
+                    start_expr = self._parse_expression(start_tokens) if start_tokens else None
+                    end_expr = self._parse_expression(end_tokens) if end_tokens else None
+                    current_expr = SliceExpression(
+                        object=current_expr,
+                        start=start_expr,
+                        end=end_expr
+                    )
+                else:
+                    prop_expr = self._parse_expression(inner_tokens) if inner_tokens else Identifier('')
+                    current_expr = PropertyAccessExpression(
+                        object=current_expr,
+                        property=prop_expr,
+                        computed=True
+                    )
                 continue
 
             # Binary operators (comparisons and arithmetic - but NOT AND/OR which are handled above)

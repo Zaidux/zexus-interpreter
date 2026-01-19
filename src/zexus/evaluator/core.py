@@ -909,6 +909,35 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                                 return EvaluationError('Access denied: admin required')
                     return val
 
+            elif isinstance(node, zexus_ast.SliceExpression):
+                debug_log("  SliceExpression node", f"{node.object}[{node.start}:{node.end}]")
+                obj = self.eval_node(node.object, env, stack_trace)
+                if is_error(obj):
+                    return obj
+
+                start_val = None
+                end_val = None
+                if node.start is not None:
+                    start_val = self.eval_node(node.start, env, stack_trace)
+                    if is_error(start_val):
+                        return start_val
+                    start_val = start_val.value if hasattr(start_val, 'value') else start_val
+                if node.end is not None:
+                    end_val = self.eval_node(node.end, env, stack_trace)
+                    if is_error(end_val):
+                        return end_val
+                    end_val = end_val.value if hasattr(end_val, 'value') else end_val
+
+                if isinstance(obj, List):
+                    return List(obj.elements[start_val:end_val])
+                if isinstance(obj, String):
+                    return String(obj.value[start_val:end_val])
+                if isinstance(obj, list):
+                    return obj[start_val:end_val]
+                if isinstance(obj, str):
+                    return obj[start_val:end_val]
+                return NULL
+
                 return NULL
             
             # === BLOCKCHAIN EXPRESSIONS ===

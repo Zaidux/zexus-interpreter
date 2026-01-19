@@ -470,15 +470,33 @@ class BytecodeCompiler:
         self._emit(Opcode.INDEX)
 
     def _compile_PropertyAccessExpression(self, node):
-        """Compile dot notation: obj.prop -> obj['prop']"""
+        """Compile property access (obj.prop or obj[expr])."""
         self._compile_node(node.object)
-        
-        # Property is usually an Identifier, but for access we want the string name
-        prop_name = node.property.value if hasattr(node.property, 'value') else str(node.property)
-        prop_idx = self._add_constant(prop_name)
-        self._emit(Opcode.LOAD_CONST, prop_idx)
-        
+
+        if getattr(node, "computed", False):
+            self._compile_node(node.property)
+        else:
+            prop_name = node.property.value if hasattr(node.property, 'value') else str(node.property)
+            prop_idx = self._add_constant(prop_name)
+            self._emit(Opcode.LOAD_CONST, prop_idx)
+
         self._emit(Opcode.INDEX)
+
+    def _compile_SliceExpression(self, node):
+        """Compile slice expression: obj[start:end]"""
+        self._compile_node(node.object)
+
+        if node.start is not None:
+            self._compile_node(node.start)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+
+        if node.end is not None:
+            self._compile_node(node.end)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+
+        self._emit(Opcode.SLICE)
 
     # ==================== Advanced Control Flow & Declarations ====================
 

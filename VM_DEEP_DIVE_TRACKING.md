@@ -11,13 +11,14 @@ Status key:
 - [x] Implement missing stack opcodes (BUILD_SET, SLICE, WRITE, EXPORT)
 - [x] Implement missing call opcodes (CALL_BUILTIN, CALL_FUNC_CONST, SPAWN_CALL)
 - [x] Implement missing protocol opcode (DEFINE_PROTOCOL)
+- [x] Implement slice syntax + SLICE opcode end-to-end
 
 ## Phase 2: Performance upgrades (planned)
 - [x] Expand `fastops` opcode coverage for hot paths
 - [x] Inline cache for name/method lookups in stack VM
 - [x] Safer JIT + gas metering compatibility
 - [x] Broaden register conversion coverage
-- [ ] Async optimizer usage audit
+- [x] Async optimizer usage audit
 
 ## Notes
 - Keep changes small and verify behavior with existing tests/benchmarks.
