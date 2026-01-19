@@ -1368,7 +1368,7 @@ class VM:
             elif op_name == "CALL_NAME":
                 name_idx, arg_count = operand
                 func_name = const(name_idx)
-                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                 fn = resolve(func_name) or builtins.get(func_name)
                 if fn is None:
                     res = self._call_fallback_builtin(func_name, args)
@@ -1377,7 +1377,7 @@ class VM:
                 stack_append(res)
             elif op_name == "CALL_TOP":
                 arg_count = operand or 0
-                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                 fn_obj = stack_pop() if stack else None
                 res = self._invoke_callable_sync(fn_obj, args)
                 stack_append(res)
@@ -1386,7 +1386,7 @@ class VM:
                     stack_append(None)
                     continue
                 method_idx, arg_count = operand
-                args = [stack_pop() for _ in range(arg_count)][::-1] if arg_count else []
+                args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                 target = stack_pop() if stack else None
                 method_name = const(method_idx)
                 if target is None:
@@ -1741,7 +1741,7 @@ class VM:
                 return
             name_idx, arg_count = operand
             func_name = const(name_idx)
-            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
             fn = _resolve(func_name) or self.builtins.get(func_name)
             if fn is None:
                 fallback_res = self._call_fallback_builtin(func_name, args)
@@ -1763,7 +1763,7 @@ class VM:
                 return
 
             method_idx, arg_count = operand
-            args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+            args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
             target = stack.pop() if stack else None
             method_name = const(method_idx)
 
@@ -2262,7 +2262,7 @@ class VM:
                     task_handle = None
                     if isinstance(operand, tuple) and operand[0] == "CALL":
                         fn_name = operand[1]; arg_count = operand[2]
-                        args = [stack.pop() for _ in range(arg_count)][::-1]
+                        args = [stack.pop() if stack else None for _ in range(arg_count)][::-1]
                         fn = self.builtins.get(fn_name) or self.env.get(fn_name)
                         coro = self._to_coro(fn, args)
                         if self.async_optimizer:
@@ -2274,7 +2274,7 @@ class VM:
                         task_handle = tid
                     else:
                         arg_count = int(operand) if operand is not None else 0
-                        args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                        args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                         callable_obj = stack.pop() if stack else None
                         coro = self._to_coro(callable_obj, args)
                         if self.async_optimizer:
@@ -2390,7 +2390,7 @@ class VM:
                 elif op_name == "CALL_NAME":
                     name_idx, arg_count = operand
                     func_name = const(name_idx)
-                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                     fn = _resolve(func_name) or self.builtins.get(func_name)
                     if fn is None:
                         res = self._call_fallback_builtin(func_name, args)
@@ -2401,7 +2401,7 @@ class VM:
                 elif op_name == "CALL_BUILTIN":
                     name_idx, arg_count = operand if isinstance(operand, (list, tuple)) else (operand, 0)
                     func_name = const(name_idx)
-                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                     fn = self.builtins.get(func_name)
                     if fn is None:
                         res = self._call_fallback_builtin(func_name, args)
@@ -2417,13 +2417,13 @@ class VM:
                         func_idx = operand
                         arg_count = 0
                     func_desc = const(func_idx)
-                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                     res = await self._invoke_callable_or_funcdesc(func_desc, args, is_constant=True)
                     stack.append(res)
                 
                 elif op_name == "CALL_TOP":
                     arg_count = operand
-                    args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                    args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                     fn_obj = stack.pop() if stack else None
                     res = await self._invoke_callable_or_funcdesc(fn_obj, args)
                     stack.append(res)
@@ -2561,7 +2561,7 @@ class VM:
                     task_handle = None
                     if isinstance(operand, tuple) and operand[0] == "CALL":
                         fn_name = operand[1]; arg_count = operand[2]
-                        args = [stack.pop() for _ in range(arg_count)][::-1]
+                        args = [stack.pop() if stack else None for _ in range(arg_count)][::-1]
                         fn = self.builtins.get(fn_name) or self.env.get(fn_name)
                         coro = self._to_coro(fn, args)
                         
@@ -2584,7 +2584,7 @@ class VM:
                         name_idx = operand[0]
                         arg_count = operand[1] if len(operand) > 1 else 0
                         fn_name = const(name_idx)
-                        args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                        args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
                         fn = self.builtins.get(fn_name) or self.env.get(fn_name)
                         coro = self._to_coro(fn, args)
                         if self.async_optimizer:
