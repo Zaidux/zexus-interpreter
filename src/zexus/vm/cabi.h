@@ -19,6 +19,7 @@ int zexus_cabi_env_set(ZxValue env, ZxValue name, ZxValue value);
 
 ZxValue zexus_cabi_build_list_from_array(ZxValue *items, Py_ssize_t count);
 ZxValue zexus_cabi_build_map_from_array(ZxValue *items, Py_ssize_t count);
+ZxValue zexus_cabi_build_set_from_array(ZxValue *items, Py_ssize_t count);
 ZxValue zexus_cabi_build_tuple_from_array(ZxValue *items, Py_ssize_t count);
 
 ZxValue zexus_cabi_number_add(ZxValue a, ZxValue b);
@@ -47,6 +48,7 @@ ZxValue zexus_cabi_get_length(ZxValue obj);
 
 ZxValue zexus_cabi_print(ZxValue obj);
 ZxValue zexus_cabi_read(ZxValue path);
+ZxValue zexus_cabi_write(ZxValue path, ZxValue content);
 ZxValue zexus_cabi_import(ZxValue name);
 
 ZxValue zexus_cabi_int_from_long(long long value);
@@ -71,6 +73,21 @@ ZxValue zexus_cabi_await(ZxValue vm, ZxValue task_or_coro);
 
 ZxValue zexus_cabi_define_enum(ZxValue env, ZxValue name, ZxValue spec);
 ZxValue zexus_cabi_define_protocol(ZxValue env, ZxValue name, ZxValue spec);
+ZxValue zexus_cabi_assert_protocol(ZxValue env, ZxValue name, ZxValue spec);
+ZxValue zexus_cabi_define_capability(ZxValue env, ZxValue name, ZxValue definition);
+ZxValue zexus_cabi_grant_capability(ZxValue env, ZxValue entity, ZxValue *caps, Py_ssize_t count);
+ZxValue zexus_cabi_revoke_capability(ZxValue env, ZxValue entity, ZxValue *caps, Py_ssize_t count);
+ZxValue zexus_cabi_audit_log(ZxValue env, ZxValue ts, ZxValue action, ZxValue data);
+ZxValue zexus_cabi_define_screen(ZxValue env, ZxValue name, ZxValue props);
+ZxValue zexus_cabi_define_component(ZxValue env, ZxValue name, ZxValue props);
+ZxValue zexus_cabi_define_theme(ZxValue env, ZxValue name, ZxValue props);
+ZxValue zexus_cabi_define_contract(ZxValue *items, Py_ssize_t count, ZxValue name);
+ZxValue zexus_cabi_define_entity(ZxValue *items, Py_ssize_t count, ZxValue name);
+ZxValue zexus_cabi_restrict_access(ZxValue env, ZxValue obj, ZxValue prop, ZxValue restriction);
+ZxValue zexus_cabi_enable_error_mode(ZxValue env);
+ZxValue zexus_cabi_export(ZxValue env, ZxValue name, ZxValue value);
+ZxValue zexus_cabi_slice(ZxValue obj, ZxValue start, ZxValue end);
+ZxValue zexus_cabi_require(ZxValue env, ZxValue condition, ZxValue message);
 
 #ifdef __cplusplus
 }

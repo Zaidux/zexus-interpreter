@@ -2272,6 +2272,42 @@ class VM:
                         self.env[alias or mod_name] = mod
                     except Exception:
                         self.env[alias or mod_name] = None
+
+                elif op_name == "DEFINE_SCREEN":
+                    if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                        name = const(operand[0])
+                        props = const(operand[1])
+                    else:
+                        props = stack.pop() if stack else None
+                        name = stack.pop() if stack else None
+                    if _BACKEND_AVAILABLE:
+                        _BACKEND.define_screen(name, props)
+                    else:
+                        key = _unwrap(name)
+                        self.env.setdefault("screens", {})[key] = props
+
+                elif op_name == "DEFINE_COMPONENT":
+                    if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                        name = const(operand[0])
+                        props = const(operand[1])
+                    else:
+                        props = stack.pop() if stack else None
+                        name = stack.pop() if stack else None
+                    if _BACKEND_AVAILABLE:
+                        _BACKEND.define_component(name, props)
+                    else:
+                        key = _unwrap(name)
+                        self.env.setdefault("components", {})[key] = props
+
+                elif op_name == "DEFINE_THEME":
+                    if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                        name = const(operand[0])
+                        props = const(operand[1])
+                    else:
+                        props = stack.pop() if stack else None
+                        name = stack.pop() if stack else None
+                    key = _unwrap(name)
+                    self.env.setdefault("themes", {})[key] = props
     
                 elif op_name == "DEFINE_ENUM":
                     enum_name = _unwrap(const(operand[0]))
@@ -2493,6 +2529,10 @@ class VM:
                     if isinstance(entry, dict) and "timestamp" not in entry:
                         entry["timestamp"] = time.time()
                     self.env.setdefault("_ledger", []).append(entry)
+
+                elif op_name in ("PARALLEL_START", "PARALLEL_END"):
+                    # Marker ops for parallel execution - no-op in stack VM
+                    pass
     
                 else:
                     if debug: print(f"[VM] Unknown Opcode: {op}")

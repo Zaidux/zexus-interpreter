@@ -122,6 +122,23 @@ static PyObject *zx_env_get_list(PyObject *env, const char *key, int create) {
     return val;
 }
 
+static PyObject *zx_unwrap_value(PyObject *obj) {
+    if (!obj) {
+        Py_RETURN_NONE;
+    }
+    PyObject *attr = PyObject_GetAttrString(obj, "value");
+    if (attr) {
+        if (!PyCallable_Check(attr)) {
+            return attr;
+        }
+        Py_DECREF(attr);
+    } else {
+        PyErr_Clear();
+    }
+    Py_INCREF(obj);
+    return obj;
+}
+
 // ---- C ABI functions (callable from native JIT) ----
 PyObject *zexus_cabi_call_callable(PyObject *callable, PyObject *arg_tuple) {
     if (!callable || !PyCallable_Check(callable)) {
@@ -197,6 +214,18 @@ PyObject *zexus_cabi_build_map_from_array(PyObject **items, Py_ssize_t count) {
     return dict;
 }
 
+PyObject *zexus_cabi_build_set_from_array(PyObject **items, Py_ssize_t count) {
+    PyObject *set = PySet_New(NULL);
+    if (!set) {
+        return NULL;
+    }
+    for (Py_ssize_t i = 0; i < count; i++) {
+        PyObject *item = items[i] ? items[i] : Py_None;
+        PySet_Add(set, item);
+    }
+    return set;
+}
+
 PyObject *zexus_cabi_env_get(PyObject *env, PyObject *name) {
     if (!env || !name) {
         Py_RETURN_NONE;
@@ -218,6 +247,40 @@ int zexus_cabi_env_set(PyObject *env, PyObject *name, PyObject *value) {
     }
     PyErr_Clear();
     return 0;
+}
+
+PyObject *zexus_cabi_export(PyObject *env, PyObject *name, PyObject *value) {
+    if (!env || !name) { Py_RETURN_NONE; }
+    PyObject *val = value;
+    if (!val || val == Py_None) {
+        val = PyObject_GetItem(env, name);
+        if (!val) {
+            PyErr_Clear();
+            val = Py_None;
+            Py_INCREF(val);
+        }
+    } else {
+        Py_INCREF(val);
+    }
+
+    PyObject *export_fn = PyObject_GetAttrString(env, "export");
+    if (export_fn && PyCallable_Check(export_fn)) {
+        PyObject *args = PyTuple_Pack(2, name, val);
+        if (args) {
+            PyObject *res = PyObject_CallObject(export_fn, args);
+            Py_XDECREF(res);
+            Py_DECREF(args);
+        }
+        Py_DECREF(export_fn);
+    } else {
+        Py_XDECREF(export_fn);
+        if (PyObject_SetItem(env, name, val) != 0) {
+            PyErr_Clear();
+        }
+    }
+
+    Py_DECREF(val);
+    Py_RETURN_NONE;
 }
 
 PyObject *zexus_cabi_number_add(PyObject *a, PyObject *b) { return PyNumber_Add(a, b); }
@@ -293,6 +356,41 @@ PyObject *zexus_cabi_index(PyObject *obj, PyObject *idx) {
     return val;
 }
 
+PyObject *zexus_cabi_slice(PyObject *obj, PyObject *start, PyObject *end) {
+    if (!obj) { Py_RETURN_NONE; }
+    PyObject *slice = PySlice_New(start ? start : Py_None, end ? end : Py_None, Py_None);
+    if (!slice) { PyErr_Clear(); Py_RETURN_NONE; }
+    PyObject *res = PyObject_GetItem(obj, slice);
+    Py_DECREF(slice);
+    if (res) {
+        return res;
+    }
+    PyErr_Clear();
+
+    PyObject *elements = PyObject_GetAttrString(obj, "elements");
+    if (!elements) {
+        PyErr_Clear();
+        Py_RETURN_NONE;
+    }
+    Py_ssize_t s = 0;
+    Py_ssize_t e = PyList_Check(elements) ? PyList_Size(elements) : PySequence_Size(elements);
+    if (start && start != Py_None) {
+        s = PyLong_AsSsize_t(start);
+    }
+    if (end && end != Py_None) {
+        e = PyLong_AsSsize_t(end);
+    }
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        s = 0;
+        e = PySequence_Size(elements);
+    }
+    PyObject *slice_list = PySequence_GetSlice(elements, s, e);
+    Py_DECREF(elements);
+    if (!slice_list) { PyErr_Clear(); Py_RETURN_NONE; }
+    return slice_list;
+}
+
 PyObject *zexus_cabi_get_attr(PyObject *obj, PyObject *attr) {
     if (!obj || !attr) { Py_RETURN_NONE; }
     PyObject *val = PyObject_GetAttr(obj, attr);
@@ -349,6 +447,36 @@ PyObject *zexus_cabi_read(PyObject *path) {
     Py_DECREF(file);
     if (!content) { PyErr_Clear(); Py_RETURN_NONE; }
     return content;
+}
+
+PyObject *zexus_cabi_write(PyObject *path, PyObject *content) {
+    if (!path) { Py_RETURN_NONE; }
+    PyObject *io = PyImport_ImportModule("io");
+    if (!io) { PyErr_Clear(); Py_RETURN_NONE; }
+    PyObject *open_fn = PyObject_GetAttrString(io, "open");
+    Py_DECREF(io);
+    if (!open_fn) { PyErr_Clear(); Py_RETURN_NONE; }
+    PyObject *args = PyTuple_Pack(2, path, PyUnicode_FromString("w"));
+    PyObject *file = PyObject_CallObject(open_fn, args);
+    Py_DECREF(args);
+    Py_DECREF(open_fn);
+    if (!file) { PyErr_Clear(); Py_RETURN_NONE; }
+    PyObject *write_fn = PyObject_GetAttrString(file, "write");
+    if (!write_fn) { PyErr_Clear(); Py_DECREF(file); Py_RETURN_NONE; }
+    PyObject *text = content ? PyObject_Str(content) : PyUnicode_FromString("null");
+    PyObject *write_args = PyTuple_Pack(1, text ? text : PyUnicode_FromString(""));
+    PyObject *write_res = PyObject_CallObject(write_fn, write_args);
+    Py_XDECREF(write_res);
+    Py_DECREF(write_args);
+    Py_XDECREF(text);
+    Py_DECREF(write_fn);
+    PyObject *close_fn = PyObject_GetAttrString(file, "close");
+    if (close_fn) {
+        PyObject_CallObject(close_fn, NULL);
+        Py_DECREF(close_fn);
+    }
+    Py_DECREF(file);
+    Py_RETURN_NONE;
 }
 
 PyObject *zexus_cabi_import(PyObject *name) {
@@ -582,6 +710,43 @@ PyObject *zexus_cabi_gas_charge(PyObject *env, PyObject *amount) {
     return NULL;
 }
 
+PyObject *zexus_cabi_require(PyObject *env, PyObject *condition, PyObject *message) {
+    int ok = condition ? PyObject_IsTrue(condition) : 0;
+    if (ok > 0) {
+        return NULL;
+    }
+    if (ok < 0) {
+        PyErr_Clear();
+    }
+
+    if (env && PyDict_Check(env)) {
+        PyObject *in_tx = zx_env_get_bool(env, "_in_transaction");
+        int in_transaction = in_tx ? PyObject_IsTrue(in_tx) : 0;
+        if (in_transaction) {
+            PyObject *snapshot = zx_env_get_dict(env, "_tx_snapshot", 0);
+            if (snapshot && PyDict_Check(snapshot)) {
+                zx_env_set(env, "_blockchain_state", snapshot);
+            }
+            zx_env_set(env, "_in_transaction", Py_False);
+            PyObject *empty = PyDict_New();
+            if (empty) {
+                zx_env_set(env, "_tx_pending_state", empty);
+                Py_DECREF(empty);
+            }
+        }
+    }
+
+    PyObject *err = PyDict_New();
+    if (!err) return NULL;
+    PyDict_SetItemString(err, "error", PyUnicode_FromString("RequirementFailed"));
+    PyObject *msg_obj = message && message != Py_None ? PyObject_Str(message) : PyUnicode_FromString("Requirement failed");
+    if (msg_obj) {
+        PyDict_SetItemString(err, "message", msg_obj);
+        Py_DECREF(msg_obj);
+    }
+    return err;
+}
+
 PyObject *zexus_cabi_ledger_append(PyObject *env, PyObject *entry) {
     PyObject *ledger = zx_env_get_list(env, "_ledger", 1);
     if (!ledger || !PyList_Check(ledger)) { Py_RETURN_NONE; }
@@ -794,6 +959,226 @@ PyObject *zexus_cabi_define_protocol(PyObject *env, PyObject *name, PyObject *sp
     Py_RETURN_NONE;
 }
 
+PyObject *zexus_cabi_assert_protocol(PyObject *env, PyObject *name, PyObject *spec) {
+    if (!env || !PyDict_Check(env) || !name || !spec) {
+        PyObject *empty = PyList_New(0);
+        return PyTuple_Pack(2, Py_False, empty ? empty : PyList_New(0));
+    }
+    PyObject *obj = PyDict_GetItem(env, name);
+    PyObject *methods = PyDict_GetItemString(spec, "methods");
+    PyObject *missing = PyList_New(0);
+    int ok = 1;
+    if (methods && PySequence_Check(methods)) {
+        Py_ssize_t n = PySequence_Size(methods);
+        for (Py_ssize_t i = 0; i < n; i++) {
+            PyObject *m = PySequence_GetItem(methods, i);
+            if (!m) { PyErr_Clear(); continue; }
+            int has = obj ? PyObject_HasAttr(obj, m) : 0;
+            if (has <= 0) {
+                ok = 0;
+                PyList_Append(missing, m);
+            }
+            Py_DECREF(m);
+        }
+    }
+    PyObject *ok_obj = ok ? Py_True : Py_False;
+    Py_INCREF(ok_obj);
+    PyObject *result = PyTuple_Pack(2, ok_obj, missing ? missing : PyList_New(0));
+    Py_DECREF(ok_obj);
+    Py_XDECREF(missing);
+    return result;
+}
+
+PyObject *zexus_cabi_define_capability(PyObject *env, PyObject *name, PyObject *definition) {
+    if (!env || !PyDict_Check(env) || !name) { Py_RETURN_NONE; }
+    PyObject *caps = zx_env_get_dict(env, "_capabilities", 1);
+    PyObject *key = zx_unwrap_value(name);
+    if (caps && PyDict_Check(caps)) {
+        PyDict_SetItem(caps, key, definition ? definition : Py_None);
+    }
+    Py_DECREF(key);
+    Py_RETURN_NONE;
+}
+
+static PyObject *zx_get_or_create_set(PyObject *mapping, PyObject *key) {
+    if (!mapping || !PyDict_Check(mapping) || !key) return NULL;
+    PyObject *val = PyDict_GetItem(mapping, key);
+    if (val && PySet_Check(val)) {
+        return val;
+    }
+    PyObject *set_obj = PySet_New(NULL);
+    if (!set_obj) return NULL;
+    PyDict_SetItem(mapping, key, set_obj);
+    Py_DECREF(set_obj);
+    return PyDict_GetItem(mapping, key);
+}
+
+static PyObject *zx_to_string_key(PyObject *obj) {
+    PyObject *val = zx_unwrap_value(obj);
+    PyObject *s = PyObject_Str(val);
+    Py_DECREF(val);
+    if (!s) { PyErr_Clear(); return PyUnicode_FromString(""); }
+    return s;
+}
+
+PyObject *zexus_cabi_grant_capability(PyObject *env, PyObject *entity, PyObject **caps, Py_ssize_t count) {
+    if (!env || !PyDict_Check(env) || !entity) { Py_RETURN_NONE; }
+    PyObject *grants = zx_env_get_dict(env, "_grants", 1);
+    PyObject *entity_key = zx_to_string_key(entity);
+    PyObject *entity_grants = zx_get_or_create_set(grants, entity_key);
+    Py_DECREF(entity_key);
+    if (entity_grants && PySet_Check(entity_grants)) {
+        for (Py_ssize_t i = 0; i < count; i++) {
+            PyObject *cap_key = zx_to_string_key(caps[i] ? caps[i] : Py_None);
+            PySet_Add(entity_grants, cap_key);
+            Py_DECREF(cap_key);
+        }
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_revoke_capability(PyObject *env, PyObject *entity, PyObject **caps, Py_ssize_t count) {
+    if (!env || !PyDict_Check(env) || !entity) { Py_RETURN_NONE; }
+    PyObject *grants = zx_env_get_dict(env, "_grants", 0);
+    PyObject *entity_key = zx_to_string_key(entity);
+    PyObject *entity_grants = grants ? PyDict_GetItem(grants, entity_key) : NULL;
+    Py_DECREF(entity_key);
+    if (entity_grants && PySet_Check(entity_grants)) {
+        for (Py_ssize_t i = 0; i < count; i++) {
+            PyObject *cap_key = zx_to_string_key(caps[i] ? caps[i] : Py_None);
+            PySet_Discard(entity_grants, cap_key);
+            Py_DECREF(cap_key);
+        }
+    }
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_audit_log(PyObject *env, PyObject *ts, PyObject *action, PyObject *data) {
+    if (!env || !PyDict_Check(env)) { Py_RETURN_NONE; }
+    PyObject *log_list = zx_env_get_list(env, "_audit_log", 1);
+    if (!log_list || !PyList_Check(log_list)) { Py_RETURN_NONE; }
+    PyObject *ts_val = zx_unwrap_value(ts ? ts : Py_None);
+    PyObject *action_val = zx_unwrap_value(action ? action : Py_None);
+    PyObject *data_val = zx_unwrap_value(data ? data : Py_None);
+    PyObject *entry = PyDict_New();
+    if (entry) {
+        PyDict_SetItemString(entry, "timestamp", ts_val);
+        PyDict_SetItemString(entry, "action", action_val);
+        PyDict_SetItemString(entry, "data", data_val);
+        PyList_Append(log_list, entry);
+        Py_DECREF(entry);
+    }
+    Py_DECREF(ts_val);
+    Py_DECREF(action_val);
+    Py_DECREF(data_val);
+    Py_RETURN_NONE;
+}
+
+static PyObject *zx_get_or_create_dict(PyObject *env, const char *key) {
+    if (!env || !PyDict_Check(env) || !key) return NULL;
+    PyObject *dict = zx_env_get_dict(env, key, 1);
+    if (dict && PyDict_Check(dict)) return dict;
+    return NULL;
+}
+
+PyObject *zexus_cabi_define_screen(PyObject *env, PyObject *name, PyObject *props) {
+    PyObject *screens = zx_get_or_create_dict(env, "screens");
+    if (!screens) { Py_RETURN_NONE; }
+    PyObject *key = zx_to_string_key(name ? name : Py_None);
+    PyDict_SetItem(screens, key, props ? props : Py_None);
+    Py_DECREF(key);
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_define_component(PyObject *env, PyObject *name, PyObject *props) {
+    PyObject *components = zx_get_or_create_dict(env, "components");
+    if (!components) { Py_RETURN_NONE; }
+    PyObject *key = zx_to_string_key(name ? name : Py_None);
+    PyDict_SetItem(components, key, props ? props : Py_None);
+    Py_DECREF(key);
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_define_theme(PyObject *env, PyObject *name, PyObject *props) {
+    PyObject *themes = zx_get_or_create_dict(env, "themes");
+    if (!themes) { Py_RETURN_NONE; }
+    PyObject *key = zx_to_string_key(name ? name : Py_None);
+    PyDict_SetItem(themes, key, props ? props : Py_None);
+    Py_DECREF(key);
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_define_contract(PyObject **items, Py_ssize_t count, PyObject *name) {
+    PyObject *members = PyDict_New();
+    if (!members) { Py_RETURN_NONE; }
+    Py_ssize_t total = count * 2;
+    for (Py_ssize_t i = 0; i < count; i++) {
+        Py_ssize_t key_index = total - 1 - (i * 2);
+        Py_ssize_t val_index = total - 2 - (i * 2);
+        PyObject *key_obj = (key_index >= 0 && key_index < total) ? items[key_index] : Py_None;
+        PyObject *val_obj = (val_index >= 0 && val_index < total) ? items[val_index] : Py_None;
+        PyObject *key_val = zx_unwrap_value(key_obj ? key_obj : Py_None);
+        PyObject *key_str = PyObject_Str(key_val);
+        Py_DECREF(key_val);
+        if (key_str) {
+            PyDict_SetItem(members, key_str, val_obj ? val_obj : Py_None);
+            Py_DECREF(key_str);
+        } else {
+            PyErr_Clear();
+        }
+    }
+    return members;
+}
+
+PyObject *zexus_cabi_define_entity(PyObject **items, Py_ssize_t count, PyObject *name) {
+    PyObject *members = zexus_cabi_define_contract(items, count, name);
+    if (!members || !PyDict_Check(members)) {
+        return members ? members : Py_None;
+    }
+    PyObject *name_val = zx_unwrap_value(name ? name : Py_None);
+    PyObject *name_str = PyObject_Str(name_val);
+    Py_DECREF(name_val);
+    if (!name_str) { PyErr_Clear(); name_str = PyUnicode_FromString(""); }
+    PyDict_SetItemString(members, "_type", PyUnicode_FromString("entity"));
+    PyDict_SetItemString(members, "_name", name_str);
+    Py_DECREF(name_str);
+    return members;
+}
+
+PyObject *zexus_cabi_restrict_access(PyObject *env, PyObject *obj, PyObject *prop, PyObject *restriction) {
+    if (!env || !PyDict_Check(env)) { Py_RETURN_NONE; }
+    PyObject *restrictions = zx_env_get_dict(env, "_restrictions", 1);
+    if (!restrictions || !PyDict_Check(restrictions)) { Py_RETURN_NONE; }
+    PyObject *obj_str = zx_to_string_key(obj ? obj : Py_None);
+    PyObject *prop_str = prop ? zx_to_string_key(prop) : NULL;
+    PyObject *key = NULL;
+    if (prop_str && PyUnicode_GetLength(prop_str) > 0) {
+        PyObject *dot = PyUnicode_FromString(".");
+        PyObject *tmp = PyUnicode_Concat(obj_str, dot);
+        Py_DECREF(dot);
+        if (tmp) {
+            key = PyUnicode_Concat(tmp, prop_str);
+            Py_DECREF(tmp);
+        }
+    } else {
+        key = obj_str;
+        Py_INCREF(key);
+    }
+    if (key) {
+        PyDict_SetItem(restrictions, key, restriction ? restriction : Py_None);
+        Py_DECREF(key);
+    }
+    Py_DECREF(obj_str);
+    Py_XDECREF(prop_str);
+    Py_RETURN_NONE;
+}
+
+PyObject *zexus_cabi_enable_error_mode(PyObject *env) {
+    if (!env || !PyDict_Check(env)) { Py_RETURN_NONE; }
+    zx_env_set(env, "_continue_on_error", Py_True);
+    Py_RETURN_NONE;
+}
+
 PyObject *zexus_cabi_build_tuple_from_array(PyObject **items, Py_ssize_t count) {
     PyObject *tuple = PyTuple_New(count);
     if (!tuple) return NULL;
@@ -898,6 +1283,20 @@ static PyObject *zexus_build_map_from_array(PyObject *self, PyObject *args) {
     return zexus_cabi_build_map_from_array(items, count);
 }
 
+// Build a set from C array of PyObject*
+static PyObject *zexus_build_set_from_array(PyObject *self, PyObject *args) {
+    PyObject *addr_obj = NULL;
+    Py_ssize_t count = 0;
+    if (!PyArg_ParseTuple(args, "On", &addr_obj, &count)) {
+        return NULL;
+    }
+    PyObject **items = (PyObject **)PyLong_AsVoidPtr(addr_obj);
+    if (!items) {
+        Py_RETURN_NONE;
+    }
+    return zexus_cabi_build_set_from_array(items, count);
+}
+
 // env get/set helpers
 static PyObject *zexus_env_get(PyObject *self, PyObject *args) {
     PyObject *env = NULL;
@@ -917,6 +1316,16 @@ static PyObject *zexus_env_set(PyObject *self, PyObject *args) {
     }
     int ok = zexus_cabi_env_set(env, name, value);
     if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
+}
+
+static PyObject *zexus_export(PyObject *self, PyObject *args) {
+    PyObject *env = NULL;
+    PyObject *name = NULL;
+    PyObject *value = Py_None;
+    if (!PyArg_ParseTuple(args, "OO|O", &env, &name, &value)) {
+        return NULL;
+    }
+    return zexus_cabi_export(env, name, value);
 }
 
 // Resolve and call a name from env/builtins
@@ -1001,6 +1410,12 @@ static PyObject *zexus_index(PyObject *self, PyObject *args) {
     return zexus_cabi_index(obj, idx);
 }
 
+static PyObject *zexus_slice(PyObject *self, PyObject *args) {
+    PyObject *obj=NULL,*start=NULL,*end=Py_None;
+    if (!PyArg_ParseTuple(args, "OO|O", &obj, &start, &end)) return NULL;
+    return zexus_cabi_slice(obj, start, end);
+}
+
 static PyObject *zexus_get_attr(PyObject *self, PyObject *args) {
     PyObject *obj=NULL,*attr=NULL; if (!PyArg_ParseTuple(args, "OO", &obj, &attr)) return NULL;
     return zexus_cabi_get_attr(obj, attr);
@@ -1019,6 +1434,12 @@ static PyObject *zexus_print(PyObject *self, PyObject *args) {
 static PyObject *zexus_read(PyObject *self, PyObject *args) {
     PyObject *path=NULL; if (!PyArg_ParseTuple(args, "O", &path)) return NULL;
     return zexus_cabi_read(path);
+}
+
+static PyObject *zexus_write(PyObject *self, PyObject *args) {
+    PyObject *path=NULL,*content=NULL;
+    if (!PyArg_ParseTuple(args, "OO", &path, &content)) return NULL;
+    return zexus_cabi_write(path, content);
 }
 
 static PyObject *zexus_import(PyObject *self, PyObject *args) {
@@ -1075,6 +1496,12 @@ static PyObject *zexus_gas_charge(PyObject *self, PyObject *args) {
     return zexus_cabi_gas_charge(env, amount);
 }
 
+static PyObject *zexus_require(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*condition=NULL,*message=Py_None;
+    if (!PyArg_ParseTuple(args, "OO|O", &env, &condition, &message)) return NULL;
+    return zexus_cabi_require(env, condition, message);
+}
+
 static PyObject *zexus_ledger_append(PyObject *self, PyObject *args) {
     PyObject *env=NULL,*entry=NULL; if (!PyArg_ParseTuple(args, "OO", &env, &entry)) return NULL;
     return zexus_cabi_ledger_append(env, entry);
@@ -1118,6 +1545,79 @@ static PyObject *zexus_define_protocol(PyObject *self, PyObject *args) {
     return zexus_cabi_define_protocol(env, name, spec);
 }
 
+static PyObject *zexus_assert_protocol(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*name=NULL,*spec=NULL; if (!PyArg_ParseTuple(args, "OOO", &env, &name, &spec)) return NULL;
+    return zexus_cabi_assert_protocol(env, name, spec);
+}
+
+static PyObject *zexus_define_capability(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*name=NULL,*definition=NULL; if (!PyArg_ParseTuple(args, "OOO", &env, &name, &definition)) return NULL;
+    return zexus_cabi_define_capability(env, name, definition);
+}
+
+static PyObject *zexus_define_screen(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*name=NULL,*props=NULL; if (!PyArg_ParseTuple(args, "OOO", &env, &name, &props)) return NULL;
+    return zexus_cabi_define_screen(env, name, props);
+}
+
+static PyObject *zexus_define_component(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*name=NULL,*props=NULL; if (!PyArg_ParseTuple(args, "OOO", &env, &name, &props)) return NULL;
+    return zexus_cabi_define_component(env, name, props);
+}
+
+static PyObject *zexus_define_theme(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*name=NULL,*props=NULL; if (!PyArg_ParseTuple(args, "OOO", &env, &name, &props)) return NULL;
+    return zexus_cabi_define_theme(env, name, props);
+}
+
+static PyObject *zexus_grant_capability(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*entity=NULL,*addr_obj=NULL; Py_ssize_t count=0;
+    if (!PyArg_ParseTuple(args, "OOOn", &env, &entity, &addr_obj, &count)) return NULL;
+    PyObject **items = (PyObject **)PyLong_AsVoidPtr(addr_obj);
+    if (!items) Py_RETURN_NONE;
+    return zexus_cabi_grant_capability(env, entity, items, count);
+}
+
+static PyObject *zexus_revoke_capability(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*entity=NULL,*addr_obj=NULL; Py_ssize_t count=0;
+    if (!PyArg_ParseTuple(args, "OOOn", &env, &entity, &addr_obj, &count)) return NULL;
+    PyObject **items = (PyObject **)PyLong_AsVoidPtr(addr_obj);
+    if (!items) Py_RETURN_NONE;
+    return zexus_cabi_revoke_capability(env, entity, items, count);
+}
+
+static PyObject *zexus_audit_log(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*ts=NULL,*action=NULL,*data=NULL; if (!PyArg_ParseTuple(args, "OOOO", &env, &ts, &action, &data)) return NULL;
+    return zexus_cabi_audit_log(env, ts, action, data);
+}
+
+static PyObject *zexus_define_contract(PyObject *self, PyObject *args) {
+    PyObject *addr_obj=NULL,*name=NULL; Py_ssize_t count=0;
+    if (!PyArg_ParseTuple(args, "OnO", &addr_obj, &count, &name)) return NULL;
+    PyObject **items = (PyObject **)PyLong_AsVoidPtr(addr_obj);
+    if (!items) Py_RETURN_NONE;
+    return zexus_cabi_define_contract(items, count, name);
+}
+
+static PyObject *zexus_define_entity(PyObject *self, PyObject *args) {
+    PyObject *addr_obj=NULL,*name=NULL; Py_ssize_t count=0;
+    if (!PyArg_ParseTuple(args, "OnO", &addr_obj, &count, &name)) return NULL;
+    PyObject **items = (PyObject **)PyLong_AsVoidPtr(addr_obj);
+    if (!items) Py_RETURN_NONE;
+    return zexus_cabi_define_entity(items, count, name);
+}
+
+static PyObject *zexus_restrict_access(PyObject *self, PyObject *args) {
+    PyObject *env=NULL,*obj=NULL,*prop=NULL,*restriction=NULL;
+    if (!PyArg_ParseTuple(args, "OOOO", &env, &obj, &prop, &restriction)) return NULL;
+    return zexus_cabi_restrict_access(env, obj, prop, restriction);
+}
+
+static PyObject *zexus_enable_error_mode(PyObject *self, PyObject *args) {
+    PyObject *env=NULL; if (!PyArg_ParseTuple(args, "O", &env)) return NULL;
+    return zexus_cabi_enable_error_mode(env);
+}
+
 static PyObject *zexus_get_symbols(PyObject *self, PyObject *args) {
     PyObject *symbols = PyDict_New();
     if (!symbols) {
@@ -1128,10 +1628,13 @@ static PyObject *zexus_get_symbols(PyObject *self, PyObject *args) {
     PyDict_SetItemString(symbols, "zexus_call_method", PyLong_FromVoidPtr((void *)&zexus_cabi_call_method));
     PyDict_SetItemString(symbols, "zexus_build_list", PyLong_FromVoidPtr((void *)&zexus_cabi_build_list_from_array));
     PyDict_SetItemString(symbols, "zexus_build_map", PyLong_FromVoidPtr((void *)&zexus_cabi_build_map_from_array));
+    PyDict_SetItemString(symbols, "zexus_build_set", PyLong_FromVoidPtr((void *)&zexus_cabi_build_set_from_array));
     PyDict_SetItemString(symbols, "zexus_build_list_from_array", PyLong_FromVoidPtr((void *)&zexus_cabi_build_list_from_array));
     PyDict_SetItemString(symbols, "zexus_build_map_from_array", PyLong_FromVoidPtr((void *)&zexus_cabi_build_map_from_array));
+    PyDict_SetItemString(symbols, "zexus_build_set_from_array", PyLong_FromVoidPtr((void *)&zexus_cabi_build_set_from_array));
     PyDict_SetItemString(symbols, "zexus_env_get", PyLong_FromVoidPtr((void *)&zexus_cabi_env_get));
     PyDict_SetItemString(symbols, "zexus_env_set", PyLong_FromVoidPtr((void *)&zexus_cabi_env_set));
+    PyDict_SetItemString(symbols, "zexus_export", PyLong_FromVoidPtr((void *)&zexus_cabi_export));
     PyDict_SetItemString(symbols, "zexus_number_add", PyLong_FromVoidPtr((void *)&zexus_cabi_number_add));
     PyDict_SetItemString(symbols, "zexus_number_sub", PyLong_FromVoidPtr((void *)&zexus_cabi_number_sub));
     PyDict_SetItemString(symbols, "zexus_number_mul", PyLong_FromVoidPtr((void *)&zexus_cabi_number_mul));
@@ -1151,10 +1654,12 @@ static PyObject *zexus_get_symbols(PyObject *self, PyObject *args) {
     PyDict_SetItemString(symbols, "zexus_compare_lte", PyLong_FromVoidPtr((void *)&zexus_cabi_compare_lte));
     PyDict_SetItemString(symbols, "zexus_compare_gte", PyLong_FromVoidPtr((void *)&zexus_cabi_compare_gte));
     PyDict_SetItemString(symbols, "zexus_index", PyLong_FromVoidPtr((void *)&zexus_cabi_index));
+    PyDict_SetItemString(symbols, "zexus_slice", PyLong_FromVoidPtr((void *)&zexus_cabi_slice));
     PyDict_SetItemString(symbols, "zexus_get_attr", PyLong_FromVoidPtr((void *)&zexus_cabi_get_attr));
     PyDict_SetItemString(symbols, "zexus_get_length", PyLong_FromVoidPtr((void *)&zexus_cabi_get_length));
     PyDict_SetItemString(symbols, "zexus_print", PyLong_FromVoidPtr((void *)&zexus_cabi_print));
     PyDict_SetItemString(symbols, "zexus_read", PyLong_FromVoidPtr((void *)&zexus_cabi_read));
+    PyDict_SetItemString(symbols, "zexus_write", PyLong_FromVoidPtr((void *)&zexus_cabi_write));
     PyDict_SetItemString(symbols, "zexus_import", PyLong_FromVoidPtr((void *)&zexus_cabi_import));
     PyDict_SetItemString(symbols, "zexus_int_from_long", PyLong_FromVoidPtr((void *)&zexus_cabi_int_from_long));
     PyDict_SetItemString(symbols, "zexus_build_tuple_from_array", PyLong_FromVoidPtr((void *)&zexus_cabi_build_tuple_from_array));
@@ -1167,6 +1672,7 @@ static PyObject *zexus_get_symbols(PyObject *self, PyObject *args) {
     PyDict_SetItemString(symbols, "zexus_tx_commit", PyLong_FromVoidPtr((void *)&zexus_cabi_tx_commit));
     PyDict_SetItemString(symbols, "zexus_tx_revert", PyLong_FromVoidPtr((void *)&zexus_cabi_tx_revert));
     PyDict_SetItemString(symbols, "zexus_gas_charge", PyLong_FromVoidPtr((void *)&zexus_cabi_gas_charge));
+    PyDict_SetItemString(symbols, "zexus_require", PyLong_FromVoidPtr((void *)&zexus_cabi_require));
     PyDict_SetItemString(symbols, "zexus_ledger_append", PyLong_FromVoidPtr((void *)&zexus_cabi_ledger_append));
     PyDict_SetItemString(symbols, "zexus_register_event", PyLong_FromVoidPtr((void *)&zexus_cabi_register_event));
     PyDict_SetItemString(symbols, "zexus_emit_event", PyLong_FromVoidPtr((void *)&zexus_cabi_emit_event));
@@ -1175,6 +1681,18 @@ static PyObject *zexus_get_symbols(PyObject *self, PyObject *args) {
     PyDict_SetItemString(symbols, "zexus_await", PyLong_FromVoidPtr((void *)&zexus_cabi_await));
     PyDict_SetItemString(symbols, "zexus_define_enum", PyLong_FromVoidPtr((void *)&zexus_cabi_define_enum));
     PyDict_SetItemString(symbols, "zexus_define_protocol", PyLong_FromVoidPtr((void *)&zexus_cabi_define_protocol));
+    PyDict_SetItemString(symbols, "zexus_assert_protocol", PyLong_FromVoidPtr((void *)&zexus_cabi_assert_protocol));
+    PyDict_SetItemString(symbols, "zexus_define_capability", PyLong_FromVoidPtr((void *)&zexus_cabi_define_capability));
+    PyDict_SetItemString(symbols, "zexus_define_screen", PyLong_FromVoidPtr((void *)&zexus_cabi_define_screen));
+    PyDict_SetItemString(symbols, "zexus_define_component", PyLong_FromVoidPtr((void *)&zexus_cabi_define_component));
+    PyDict_SetItemString(symbols, "zexus_define_theme", PyLong_FromVoidPtr((void *)&zexus_cabi_define_theme));
+    PyDict_SetItemString(symbols, "zexus_grant_capability", PyLong_FromVoidPtr((void *)&zexus_cabi_grant_capability));
+    PyDict_SetItemString(symbols, "zexus_revoke_capability", PyLong_FromVoidPtr((void *)&zexus_cabi_revoke_capability));
+    PyDict_SetItemString(symbols, "zexus_audit_log", PyLong_FromVoidPtr((void *)&zexus_cabi_audit_log));
+    PyDict_SetItemString(symbols, "zexus_define_contract", PyLong_FromVoidPtr((void *)&zexus_cabi_define_contract));
+    PyDict_SetItemString(symbols, "zexus_define_entity", PyLong_FromVoidPtr((void *)&zexus_cabi_define_entity));
+    PyDict_SetItemString(symbols, "zexus_restrict_access", PyLong_FromVoidPtr((void *)&zexus_cabi_restrict_access));
+    PyDict_SetItemString(symbols, "zexus_enable_error_mode", PyLong_FromVoidPtr((void *)&zexus_cabi_enable_error_mode));
     return symbols;
 }
 
@@ -1186,8 +1704,10 @@ static PyMethodDef ZexusCABIMethods[] = {
     {"build_map", zexus_build_map, METH_VARARGS, "Build dict from sequence of pairs"},
     {"build_list_from_array", zexus_build_list_from_array, METH_VARARGS, "Build list from C array"},
     {"build_map_from_array", zexus_build_map_from_array, METH_VARARGS, "Build dict from C array"},
+    {"build_set_from_array", zexus_build_set_from_array, METH_VARARGS, "Build set from C array"},
     {"env_get", zexus_env_get, METH_VARARGS, "Get item from env"},
     {"env_set", zexus_env_set, METH_VARARGS, "Set item in env"},
+    {"export", zexus_export, METH_VARARGS, "Export value to env"},
     {"number_add", zexus_number_add, METH_VARARGS, "Add numbers"},
     {"number_sub", zexus_number_sub, METH_VARARGS, "Subtract numbers"},
     {"number_mul", zexus_number_mul, METH_VARARGS, "Multiply numbers"},
@@ -1204,10 +1724,12 @@ static PyMethodDef ZexusCABIMethods[] = {
     {"compare_lte", zexus_compare_lte, METH_VARARGS, "Compare LTE"},
     {"compare_gte", zexus_compare_gte, METH_VARARGS, "Compare GTE"},
     {"index", zexus_index, METH_VARARGS, "Index"},
+    {"slice", zexus_slice, METH_VARARGS, "Slice"},
     {"get_attr", zexus_get_attr, METH_VARARGS, "Get attr"},
     {"get_length", zexus_get_length, METH_VARARGS, "Get length"},
     {"print", zexus_print, METH_VARARGS, "Print"},
     {"read", zexus_read, METH_VARARGS, "Read file"},
+    {"write", zexus_write, METH_VARARGS, "Write file"},
     {"import", zexus_import, METH_VARARGS, "Import module"},
     {"int_from_long", zexus_int_from_long, METH_VARARGS, "Create int from long"},
     {"hash_block", zexus_hash_block, METH_VARARGS, "Hash block"},
@@ -1219,6 +1741,7 @@ static PyMethodDef ZexusCABIMethods[] = {
     {"tx_commit", zexus_tx_commit, METH_VARARGS, "Transaction commit"},
     {"tx_revert", zexus_tx_revert, METH_VARARGS, "Transaction revert"},
     {"gas_charge", zexus_gas_charge, METH_VARARGS, "Gas charge"},
+    {"require", zexus_require, METH_VARARGS, "Require condition"},
     {"ledger_append", zexus_ledger_append, METH_VARARGS, "Ledger append"},
     {"register_event", zexus_register_event, METH_VARARGS, "Register event"},
     {"emit_event", zexus_emit_event, METH_VARARGS, "Emit event"},
@@ -1227,6 +1750,18 @@ static PyMethodDef ZexusCABIMethods[] = {
     {"await_task", zexus_await, METH_VARARGS, "Await task or coroutine"},
     {"define_enum", zexus_define_enum, METH_VARARGS, "Define enum"},
     {"define_protocol", zexus_define_protocol, METH_VARARGS, "Define protocol"},
+    {"assert_protocol", zexus_assert_protocol, METH_VARARGS, "Assert protocol"},
+    {"define_capability", zexus_define_capability, METH_VARARGS, "Define capability"},
+    {"define_screen", zexus_define_screen, METH_VARARGS, "Define screen"},
+    {"define_component", zexus_define_component, METH_VARARGS, "Define component"},
+    {"define_theme", zexus_define_theme, METH_VARARGS, "Define theme"},
+    {"grant_capability", zexus_grant_capability, METH_VARARGS, "Grant capability"},
+    {"revoke_capability", zexus_revoke_capability, METH_VARARGS, "Revoke capability"},
+    {"audit_log", zexus_audit_log, METH_VARARGS, "Audit log"},
+    {"define_contract", zexus_define_contract, METH_VARARGS, "Define contract"},
+    {"define_entity", zexus_define_entity, METH_VARARGS, "Define entity"},
+    {"restrict_access", zexus_restrict_access, METH_VARARGS, "Restrict access"},
+    {"enable_error_mode", zexus_enable_error_mode, METH_VARARGS, "Enable error mode"},
     {"get_symbols", zexus_get_symbols, METH_VARARGS, "Return symbol addresses for native JIT"},
     {NULL, NULL, 0, NULL}
 };

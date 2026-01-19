@@ -1,4 +1,4 @@
-"""
+g"""
 Native JIT backend using LLVM (llvmlite).
 
 Compiles a restricted subset of numeric bytecode into native machine code.
@@ -108,12 +108,16 @@ class NativeJITBackend:
             "CALL_BUILTIN",
             "BUILD_LIST",
             "BUILD_MAP",
+            "BUILD_SET",
             "INDEX",
+            "SLICE",
             "GET_ATTR",
             "GET_LENGTH",
             "PRINT",
             "READ",
+            "WRITE",
             "IMPORT",
+            "EXPORT",
             "STORE_FUNC",
             "STORE_CONST",
             "POW",
@@ -131,9 +135,25 @@ class NativeJITBackend:
             "TX_COMMIT",
             "TX_REVERT",
             "GAS_CHARGE",
+            "REQUIRE",
             "LEDGER_APPEND",
             "DEFINE_ENUM",
             "DEFINE_PROTOCOL",
+            "ASSERT_PROTOCOL",
+            "DEFINE_CAPABILITY",
+            "GRANT_CAPABILITY",
+            "REVOKE_CAPABILITY",
+            "AUDIT_LOG",
+            "DEFINE_SCREEN",
+            "DEFINE_COMPONENT",
+            "DEFINE_THEME",
+            "DEFINE_CONTRACT",
+            "DEFINE_ENTITY",
+            "RESTRICT_ACCESS",
+            "ENABLE_ERROR_MODE",
+            "NOP",
+            "PARALLEL_START",
+            "PARALLEL_END",
         }
         use_object_mode = False
         for op_name, _ in normalized:
@@ -402,6 +422,7 @@ class NativeJITBackend:
         cabi_call_callable = decl("zexus_call_callable", ptr, [ptr, ptr])
         cabi_build_list = decl("zexus_build_list_from_array", ptr, [ptr, ir.IntType(64)])
         cabi_build_map = decl("zexus_build_map_from_array", ptr, [ptr, ir.IntType(64)])
+        cabi_build_set = decl("zexus_build_set_from_array", ptr, [ptr, ir.IntType(64)])
         cabi_build_tuple = decl("zexus_build_tuple_from_array", ptr, [ptr, ir.IntType(64)])
         cabi_add = decl("zexus_number_add", ptr, [ptr, ptr])
         cabi_sub = decl("zexus_number_sub", ptr, [ptr, ptr])
@@ -421,11 +442,14 @@ class NativeJITBackend:
         cabi_bool_and = decl("zexus_bool_and", ptr, [ptr, ptr])
         cabi_bool_or = decl("zexus_bool_or", ptr, [ptr, ptr])
         cabi_index = decl("zexus_index", ptr, [ptr, ptr])
+        cabi_slice = decl("zexus_slice", ptr, [ptr, ptr, ptr])
         cabi_get_attr = decl("zexus_get_attr", ptr, [ptr, ptr])
         cabi_get_length = decl("zexus_get_length", ptr, [ptr])
         cabi_print = decl("zexus_print", ptr, [ptr])
         cabi_read = decl("zexus_read", ptr, [ptr])
+        cabi_write = decl("zexus_write", ptr, [ptr, ptr])
         cabi_import = decl("zexus_import", ptr, [ptr])
+        cabi_export = decl("zexus_export", ptr, [ptr, ptr, ptr])
         cabi_int_from_long = decl("zexus_int_from_long", ptr, [ir.IntType(64)])
         cabi_hash_block = decl("zexus_hash_block", ptr, [ptr])
         cabi_merkle_root = decl("zexus_merkle_root", ptr, [ptr, ir.IntType(64)])
@@ -436,6 +460,7 @@ class NativeJITBackend:
         cabi_tx_commit = decl("zexus_tx_commit", ptr, [ptr])
         cabi_tx_revert = decl("zexus_tx_revert", ptr, [ptr])
         cabi_gas_charge = decl("zexus_gas_charge", ptr, [ptr, ptr])
+        cabi_require = decl("zexus_require", ptr, [ptr, ptr, ptr])
         cabi_ledger_append = decl("zexus_ledger_append", ptr, [ptr, ptr])
         cabi_register_event = decl("zexus_register_event", ptr, [ptr, ptr, ptr])
         cabi_emit_event = decl("zexus_emit_event", ptr, [ptr, ptr, ptr, ptr, ptr])
@@ -444,6 +469,18 @@ class NativeJITBackend:
         cabi_await = decl("zexus_await", ptr, [ptr, ptr])
         cabi_define_enum = decl("zexus_define_enum", ptr, [ptr, ptr, ptr])
         cabi_define_protocol = decl("zexus_define_protocol", ptr, [ptr, ptr, ptr])
+        cabi_assert_protocol = decl("zexus_assert_protocol", ptr, [ptr, ptr, ptr])
+        cabi_define_capability = decl("zexus_define_capability", ptr, [ptr, ptr, ptr])
+        cabi_define_screen = decl("zexus_define_screen", ptr, [ptr, ptr, ptr])
+        cabi_define_component = decl("zexus_define_component", ptr, [ptr, ptr, ptr])
+        cabi_define_theme = decl("zexus_define_theme", ptr, [ptr, ptr, ptr])
+        cabi_grant_capability = decl("zexus_grant_capability", ptr, [ptr, ptr, ptr, ir.IntType(64)])
+        cabi_revoke_capability = decl("zexus_revoke_capability", ptr, [ptr, ptr, ptr, ir.IntType(64)])
+        cabi_audit_log = decl("zexus_audit_log", ptr, [ptr, ptr, ptr, ptr])
+        cabi_define_contract = decl("zexus_define_contract", ptr, [ptr, ir.IntType(64), ptr])
+        cabi_define_entity = decl("zexus_define_entity", ptr, [ptr, ir.IntType(64), ptr])
+        cabi_restrict_access = decl("zexus_restrict_access", ptr, [ptr, ptr, ptr, ptr])
+        cabi_enable_error_mode = decl("zexus_enable_error_mode", ptr, [ptr])
 
         blocks = [func.append_basic_block(name=f"b{i}") for i in range(len(instrs) + 1)]
         builder = ir.IRBuilder(blocks[0])
@@ -727,10 +764,33 @@ class NativeJITBackend:
                 builder.branch(blocks[idx + 1])
                 continue
 
+            if op_name == "BUILD_SET":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), count))
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                st = builder.call(cabi_build_set, [items_ptr_cast, count_val])
+                builder.store(base, sp)
+                push(st)
+                builder.branch(blocks[idx + 1])
+                continue
+
             if op_name == "INDEX":
                 idx_val = pop()
                 obj_val = pop()
                 res = builder.call(cabi_index, [obj_val, idx_val])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "SLICE":
+                count = int(operand) if operand is not None else 2
+                end_val = pop() if count >= 3 else ir.Constant(ptr, None)
+                start_val = pop()
+                obj_val = pop()
+                res = builder.call(cabi_slice, [obj_val, start_val, end_val])
                 push(res)
                 builder.branch(blocks[idx + 1])
                 continue
@@ -763,6 +823,13 @@ class NativeJITBackend:
                 builder.branch(blocks[idx + 1])
                 continue
 
+            if op_name == "WRITE":
+                content = pop()
+                path = pop()
+                _ = builder.call(cabi_write, [path, content])
+                builder.branch(blocks[idx + 1])
+                continue
+
             if op_name == "IMPORT":
                 if isinstance(operand, (list, tuple)) and operand:
                     name_idx = operand[0]
@@ -775,6 +842,26 @@ class NativeJITBackend:
                     name = pop()
                     res = builder.call(cabi_import, [name])
                     push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "EXPORT":
+                if isinstance(operand, (list, tuple)) and operand:
+                    name_idx = operand[0]
+                    value_idx = operand[1] if len(operand) > 1 else None
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    if isinstance(value_idx, int):
+                        value_obj = const_obj(int(value_idx))
+                    else:
+                        value_obj = pop()
+                    builder.call(cabi_export, [env_ptr, name_obj, value_obj])
+                elif isinstance(operand, int):
+                    name_obj = const_obj(int(operand))
+                    builder.call(cabi_export, [env_ptr, name_obj, ir.Constant(ptr, 0)])
+                else:
+                    value_obj = pop()
+                    name_obj = pop()
+                    builder.call(cabi_export, [env_ptr, name_obj, value_obj])
                 builder.branch(blocks[idx + 1])
                 continue
 
@@ -1008,6 +1095,22 @@ class NativeJITBackend:
                 err_builder.ret(res)
                 continue
 
+            if op_name == "REQUIRE":
+                msg_obj = None
+                if isinstance(operand, int):
+                    msg_obj = const_obj(int(operand))
+                else:
+                    msg_obj = pop()
+                cond_obj = pop()
+                res = builder.call(cabi_require, [env_ptr, cond_obj, msg_obj])
+                null_ptr = ir.Constant(ptr, None)
+                has_err = builder.icmp_unsigned("!=", res, null_ptr)
+                err_block = func.append_basic_block(name=f"req_err_{idx}")
+                builder.cbranch(has_err, err_block, blocks[idx + 1])
+                err_builder = ir.IRBuilder(err_block)
+                err_builder.ret(res)
+                continue
+
             if op_name == "LEDGER_APPEND":
                 entry = pop()
                 builder.call(cabi_ledger_append, [env_ptr, entry])
@@ -1024,6 +1127,45 @@ class NativeJITBackend:
                 builder.branch(blocks[idx + 1])
                 continue
 
+            if op_name == "DEFINE_SCREEN":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    props_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    props_obj = const_obj(int(props_idx)) if isinstance(props_idx, int) else ir.Constant(ptr, 0)
+                else:
+                    props_obj = pop()
+                    name_obj = pop()
+                builder.call(cabi_define_screen, [env_ptr, name_obj, props_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_COMPONENT":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    props_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    props_obj = const_obj(int(props_idx)) if isinstance(props_idx, int) else ir.Constant(ptr, 0)
+                else:
+                    props_obj = pop()
+                    name_obj = pop()
+                builder.call(cabi_define_component, [env_ptr, name_obj, props_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_THEME":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    props_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    props_obj = const_obj(int(props_idx)) if isinstance(props_idx, int) else ir.Constant(ptr, 0)
+                else:
+                    props_obj = pop()
+                    name_obj = pop()
+                builder.call(cabi_define_theme, [env_ptr, name_obj, props_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
             if op_name == "DEFINE_PROTOCOL":
                 if isinstance(operand, (list, tuple)) and len(operand) >= 2:
                     name_idx = operand[0]
@@ -1031,6 +1173,111 @@ class NativeJITBackend:
                     name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
                     spec_obj = const_obj(int(spec_idx)) if isinstance(spec_idx, int) else ir.Constant(ptr, 0)
                     builder.call(cabi_define_protocol, [env_ptr, name_obj, spec_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ASSERT_PROTOCOL":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    spec_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    spec_obj = const_obj(int(spec_idx)) if isinstance(spec_idx, int) else ir.Constant(ptr, 0)
+                    res = builder.call(cabi_assert_protocol, [env_ptr, name_obj, spec_obj])
+                    push(res)
+                else:
+                    push(ir.Constant(ptr, 0))
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_CAPABILITY":
+                name_obj = pop()
+                definition = pop()
+                builder.call(cabi_define_capability, [env_ptr, name_obj, definition])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "GRANT_CAPABILITY":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), count))
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                builder.store(base, sp)
+                entity_name = pop()
+                builder.call(cabi_grant_capability, [env_ptr, entity_name, items_ptr_cast, count_val])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "REVOKE_CAPABILITY":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), count))
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                builder.store(base, sp)
+                entity_name = pop()
+                builder.call(cabi_revoke_capability, [env_ptr, entity_name, items_ptr_cast, count_val])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "AUDIT_LOG":
+                ts = pop()
+                action = pop()
+                data = pop()
+                builder.call(cabi_audit_log, [env_ptr, ts, action, data])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_CONTRACT":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                pair_count = ir.Constant(ir.IntType(32), count * 2)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, pair_count)
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                builder.store(base, sp)
+                name_obj = pop()
+                res = builder.call(cabi_define_contract, [items_ptr_cast, count_val, name_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_ENTITY":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                pair_count = ir.Constant(ir.IntType(32), count * 2)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, pair_count)
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                builder.store(base, sp)
+                name_obj = pop()
+                res = builder.call(cabi_define_entity, [items_ptr_cast, count_val, name_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "RESTRICT_ACCESS":
+                restriction = pop()
+                prop = pop()
+                obj = pop()
+                builder.call(cabi_restrict_access, [env_ptr, obj, prop, restriction])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ENABLE_ERROR_MODE":
+                builder.call(cabi_enable_error_mode, [env_ptr])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "NOP":
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name in ("PARALLEL_START", "PARALLEL_END"):
                 builder.branch(blocks[idx + 1])
                 continue
 
