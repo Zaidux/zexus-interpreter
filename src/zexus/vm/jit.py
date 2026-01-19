@@ -139,13 +139,22 @@ class JITCompiler:
         # Native JIT backend (optional)
         self.native_backend = None
         native_flag = os.environ.get("ZEXUS_NATIVE_JIT", "0")
-        if native_flag.lower() in ("1", "true", "yes") and _NATIVE_JIT_AVAILABLE:
-            try:
-                self.native_backend = NativeJITBackend(debug=debug)
-                if self.debug:
-                    print("🔧 JIT: Native backend enabled")
-            except Exception:
-                self.native_backend = None
+        if native_flag.lower() in ("1", "true", "yes"):
+            self.enable_native_backend()
+
+    def enable_native_backend(self) -> bool:
+        if self.native_backend is not None:
+            return True
+        if not _NATIVE_JIT_AVAILABLE:
+            return False
+        try:
+            self.native_backend = NativeJITBackend(debug=self.debug)
+            if self.debug:
+                print("🔧 JIT: Native backend enabled")
+            return True
+        except Exception:
+            self.native_backend = None
+            return False
 
     def should_compile(self, bytecode_hash: str) -> bool:
         """

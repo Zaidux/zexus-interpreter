@@ -385,6 +385,9 @@ class VM:
         self._last_opcode_profile = None
         self._call_method_trace_count = 0
         self._action_evaluator = None
+        self._opcode_exec_count = 0
+        self._native_jit_auto_enabled = False
+        self._native_jit_auto_threshold = 700
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
@@ -849,6 +852,10 @@ class VM:
 
     def _track_execution_for_jit(self, bytecode, execution_time: float, execution_mode: VMMode):
         if not self.use_jit or not self.jit_compiler: return
+
+        if (not self._native_jit_auto_enabled
+            and self._opcode_exec_count >= self._native_jit_auto_threshold):
+            self._native_jit_auto_enabled = self.jit_compiler.enable_native_backend()
         
         with self._jit_lock:
             hot_path_info = self.jit_compiler.track_execution(bytecode, execution_time)
@@ -1120,6 +1127,9 @@ class VM:
         """Synchronous fast-path execution without async overhead or gas metering."""
         consts = list(getattr(bytecode, "constants", []))
         instrs = list(getattr(bytecode, "instructions", []))
+
+        if not self._native_jit_auto_enabled:
+            self._opcode_exec_count += len(instrs)
         
         # Normalize opcodes
         normalized: List[Tuple[str, Any]] = []
@@ -1454,6 +1464,9 @@ class VM:
                 normalized_instrs.append((op_name, operand))
 
         instrs = normalized_instrs
+
+        if not self._native_jit_auto_enabled:
+            self._opcode_exec_count += len(instrs)
 
         if not fast_single_shot and self.enable_ssa and self.ssa_converter:
             try:

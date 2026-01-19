@@ -98,16 +98,42 @@ class NativeJITBackend:
             "RETURN",
             "JUMP",
             "JUMP_IF_FALSE",
+            "JUMP_IF_TRUE",
         }
         object_ops = {
             "CALL_NAME",
+            "CALL_FUNC_CONST",
             "CALL_METHOD",
             "CALL_TOP",
+            "CALL_BUILTIN",
             "BUILD_LIST",
             "BUILD_MAP",
             "INDEX",
             "GET_ATTR",
             "GET_LENGTH",
+            "PRINT",
+            "READ",
+            "IMPORT",
+            "STORE_FUNC",
+            "STORE_CONST",
+            "POW",
+            "SPAWN",
+            "AWAIT",
+            "SPAWN_CALL",
+            "REGISTER_EVENT",
+            "EMIT_EVENT",
+            "HASH_BLOCK",
+            "VERIFY_SIGNATURE",
+            "MERKLE_ROOT",
+            "STATE_READ",
+            "STATE_WRITE",
+            "TX_BEGIN",
+            "TX_COMMIT",
+            "TX_REVERT",
+            "GAS_CHARGE",
+            "LEDGER_APPEND",
+            "DEFINE_ENUM",
+            "DEFINE_PROTOCOL",
         }
         use_object_mode = False
         for op_name, _ in normalized:
@@ -126,13 +152,13 @@ class NativeJITBackend:
         from ctypes import CFUNCTYPE, c_double, POINTER, py_object
 
         if use_object_mode:
-            cfunc = CFUNCTYPE(py_object, py_object, py_object, POINTER(py_object))(func_ptr)
+            cfunc = CFUNCTYPE(py_object, py_object, py_object, py_object, POINTER(py_object))(func_ptr)
             const_objs = [c for c in consts]
 
             def jit_execute(vm, stack, env):
                 try:
                     const_buf = (py_object * max(len(const_objs), 1))(*const_objs)
-                    return cfunc(env, vm.builtins, const_buf)
+                    return cfunc(vm, env, vm.builtins, const_buf)
                 except Exception:
                     return None
 
@@ -327,6 +353,14 @@ class NativeJITBackend:
                 builder.cbranch(is_false, blocks[target], blocks[idx + 1])
                 continue
 
+            if op_name == "JUMP_IF_TRUE":
+                cond = pop()
+                zero = ir.Constant(double, 0.0)
+                is_true = builder.fcmp_ordered("!=", cond, zero)
+                target = int(operand) if operand is not None else idx + 1
+                builder.cbranch(is_true, blocks[target], blocks[idx + 1])
+                continue
+
             if op_name == "RETURN":
                 res = pop()
                 builder.ret(res)
@@ -351,9 +385,9 @@ class NativeJITBackend:
         ptr = ir.IntType(8).as_pointer()  # PyObject*
         ptr_ptr = ptr.as_pointer()       # PyObject**
 
-        func_type = ir.FunctionType(ptr, [ptr, ptr, ptr_ptr])
+        func_type = ir.FunctionType(ptr, [ptr, ptr, ptr, ptr_ptr])
         func = ir.Function(ir.Module(name="zexus_native_jit_obj"), func_type, name="jit_obj_fn")
-        env_ptr, builtins_ptr, consts_ptr = func.args
+        vm_ptr, env_ptr, builtins_ptr, consts_ptr = func.args
 
         module = func.module
 
@@ -374,6 +408,7 @@ class NativeJITBackend:
         cabi_mul = decl("zexus_number_mul", ptr, [ptr, ptr])
         cabi_div = decl("zexus_number_div", ptr, [ptr, ptr])
         cabi_mod = decl("zexus_number_mod", ptr, [ptr, ptr])
+        cabi_pow = decl("zexus_number_pow", ptr, [ptr, ptr])
         cabi_neg = decl("zexus_number_neg", ptr, [ptr])
         cabi_eq = decl("zexus_compare_eq", ptr, [ptr, ptr])
         cabi_neq = decl("zexus_compare_ne", ptr, [ptr, ptr])
@@ -388,6 +423,27 @@ class NativeJITBackend:
         cabi_index = decl("zexus_index", ptr, [ptr, ptr])
         cabi_get_attr = decl("zexus_get_attr", ptr, [ptr, ptr])
         cabi_get_length = decl("zexus_get_length", ptr, [ptr])
+        cabi_print = decl("zexus_print", ptr, [ptr])
+        cabi_read = decl("zexus_read", ptr, [ptr])
+        cabi_import = decl("zexus_import", ptr, [ptr])
+        cabi_int_from_long = decl("zexus_int_from_long", ptr, [ir.IntType(64)])
+        cabi_hash_block = decl("zexus_hash_block", ptr, [ptr])
+        cabi_merkle_root = decl("zexus_merkle_root", ptr, [ptr, ir.IntType(64)])
+        cabi_verify_signature = decl("zexus_verify_signature", ptr, [ptr, ptr, ptr, ptr, ptr])
+        cabi_state_read = decl("zexus_state_read", ptr, [ptr, ptr])
+        cabi_state_write = decl("zexus_state_write", ptr, [ptr, ptr, ptr])
+        cabi_tx_begin = decl("zexus_tx_begin", ptr, [ptr])
+        cabi_tx_commit = decl("zexus_tx_commit", ptr, [ptr])
+        cabi_tx_revert = decl("zexus_tx_revert", ptr, [ptr])
+        cabi_gas_charge = decl("zexus_gas_charge", ptr, [ptr, ptr])
+        cabi_ledger_append = decl("zexus_ledger_append", ptr, [ptr, ptr])
+        cabi_register_event = decl("zexus_register_event", ptr, [ptr, ptr, ptr])
+        cabi_emit_event = decl("zexus_emit_event", ptr, [ptr, ptr, ptr, ptr, ptr])
+        cabi_spawn_name = decl("zexus_spawn_name", ptr, [ptr, ptr, ptr, ptr, ptr])
+        cabi_spawn_call = decl("zexus_spawn_call", ptr, [ptr, ptr, ptr])
+        cabi_await = decl("zexus_await", ptr, [ptr, ptr])
+        cabi_define_enum = decl("zexus_define_enum", ptr, [ptr, ptr, ptr])
+        cabi_define_protocol = decl("zexus_define_protocol", ptr, [ptr, ptr, ptr])
 
         blocks = [func.append_basic_block(name=f"b{i}") for i in range(len(instrs) + 1)]
         builder = ir.IRBuilder(blocks[0])
@@ -439,6 +495,24 @@ class NativeJITBackend:
                 builder.branch(blocks[idx + 1])
                 continue
 
+            if op_name == "STORE_CONST":
+                if isinstance(operand, (tuple, list)) and len(operand) == 2:
+                    name_idx = operand[0]
+                    value_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    value_obj = const_obj(int(value_idx)) if isinstance(value_idx, int) else ir.Constant(ptr, 0)
+                    builder.call(cabi_env_set, [env_ptr, name_obj, value_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "STORE_FUNC":
+                name_idx, func_idx = operand
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                func_obj = const_obj(int(func_idx)) if isinstance(func_idx, int) else ir.Constant(ptr, 0)
+                builder.call(cabi_env_set, [env_ptr, name_obj, func_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
             if op_name == "POP":
                 _ = pop()
                 builder.branch(blocks[idx + 1])
@@ -464,6 +538,14 @@ class NativeJITBackend:
                     res = builder.call(cabi_div, [a, b])
                 else:
                     res = builder.call(cabi_mod, [a, b])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "POW":
+                b = pop()
+                a = pop()
+                res = builder.call(cabi_pow, [a, b])
                 push(res)
                 builder.branch(blocks[idx + 1])
                 continue
@@ -531,6 +613,15 @@ class NativeJITBackend:
                 builder.cbranch(is_false, blocks[target], blocks[idx + 1])
                 continue
 
+            if op_name == "JUMP_IF_TRUE":
+                cond = pop()
+                truth = builder.call(cabi_truthy, [cond])
+                zero = ir.Constant(ir.IntType(32), 0)
+                is_true = builder.icmp_signed("!=", truth, zero)
+                target = int(operand) if operand is not None else idx + 1
+                builder.cbranch(is_true, blocks[target], blocks[idx + 1])
+                continue
+
             if op_name == "CALL_NAME":
                 name_idx, arg_count = operand
                 name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
@@ -544,6 +635,37 @@ class NativeJITBackend:
                 # pop args
                 builder.store(base, sp)
                 res = builder.call(cabi_call_name, [env_ptr, builtins_ptr, name_obj, args_tuple])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "CALL_FUNC_CONST":
+                func_idx, arg_count = operand
+                func_obj = const_obj(int(func_idx)) if isinstance(func_idx, int) else ir.Constant(ptr, 0)
+                count_val = ir.Constant(ir.IntType(64), int(arg_count))
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), int(arg_count)))
+                args_ptr = builder.gep(stack_base, [base])
+                args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                builder.store(base, sp)
+                res = builder.call(cabi_call_callable, [func_obj, args_tuple])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "CALL_BUILTIN":
+                name_idx, arg_count = operand
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                count_val = ir.Constant(ir.IntType(64), int(arg_count))
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), int(arg_count)))
+                args_ptr = builder.gep(stack_base, [base])
+                args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                builder.store(base, sp)
+                null_env = ir.Constant(ptr, 0)
+                res = builder.call(cabi_call_name, [null_env, builtins_ptr, name_obj, args_tuple])
                 push(res)
                 builder.branch(blocks[idx + 1])
                 continue
@@ -625,6 +747,290 @@ class NativeJITBackend:
                 obj = pop()
                 res = builder.call(cabi_get_length, [obj])
                 push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "PRINT":
+                val = pop()
+                _ = builder.call(cabi_print, [val])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "READ":
+                path = pop()
+                res = builder.call(cabi_read, [path])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "IMPORT":
+                if isinstance(operand, (list, tuple)) and operand:
+                    name_idx = operand[0]
+                    alias_idx = operand[1] if len(operand) > 1 else None
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    alias_obj = const_obj(int(alias_idx)) if isinstance(alias_idx, int) else name_obj
+                    res = builder.call(cabi_import, [name_obj])
+                    builder.call(cabi_env_set, [env_ptr, alias_obj, res])
+                else:
+                    name = pop()
+                    res = builder.call(cabi_import, [name])
+                    push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "SPAWN":
+                if isinstance(operand, tuple) and len(operand) >= 3 and operand[0] == "CALL":
+                    name_idx = operand[1]
+                    arg_count = int(operand[2])
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_name, [vm_ptr, env_ptr, builtins_ptr, name_obj, args_tuple])
+                    push(res)
+                else:
+                    arg_count = int(operand) if operand is not None else 0
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    callable_obj = pop()
+                    res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
+                    push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "SPAWN_CALL":
+                if isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_NAME":
+                    name_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_name, [vm_ptr, env_ptr, builtins_ptr, name_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_BUILTIN":
+                    name_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_name, [vm_ptr, env_ptr, builtins_ptr, name_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_FUNC_CONST":
+                    func_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    func_obj = const_obj(int(func_idx)) if isinstance(func_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_call, [vm_ptr, func_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_TOP":
+                    arg_count = int(operand[1]) if len(operand) > 1 else 0
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    callable_obj = pop()
+                    res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
+                    push(res)
+                else:
+                    arg_count = int(operand) if operand is not None else 0
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    callable_obj = pop()
+                    res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
+                    push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "AWAIT":
+                obj = pop()
+                res = builder.call(cabi_await, [vm_ptr, obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "REGISTER_EVENT":
+                if isinstance(operand, (list, tuple)):
+                    name_idx = operand[0] if len(operand) > 0 else None
+                    handler_idx = operand[1] if len(operand) > 1 else None
+                else:
+                    name_idx = operand
+                    handler_idx = None
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                handler_obj = const_obj(int(handler_idx)) if isinstance(handler_idx, int) else ir.Constant(ptr, 0)
+                builder.call(cabi_register_event, [vm_ptr, name_obj, handler_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "EMIT_EVENT":
+                if isinstance(operand, (list, tuple)):
+                    name_idx = operand[0] if len(operand) > 0 else None
+                    payload_idx = operand[1] if len(operand) > 1 else None
+                else:
+                    name_idx = operand
+                    payload_idx = None
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                if isinstance(payload_idx, int):
+                    payload_obj = const_obj(int(payload_idx))
+                    builder.call(cabi_emit_event, [vm_ptr, env_ptr, builtins_ptr, name_obj, payload_obj])
+                    builder.branch(blocks[idx + 1])
+                    continue
+
+                cur_sp = builder.load(sp)
+                has_payload = builder.icmp_signed("!=", cur_sp, ir.Constant(ir.IntType(32), 0))
+                has_block = func.append_basic_block(name=f"emit_has_payload_{idx}")
+                none_block = func.append_basic_block(name=f"emit_no_payload_{idx}")
+                merge_block = func.append_basic_block(name=f"emit_merge_{idx}")
+                builder.cbranch(has_payload, has_block, none_block)
+
+                has_builder = ir.IRBuilder(has_block)
+                payload_val = None
+                # pop in has payload path
+                has_cur_sp = has_builder.load(sp)
+                has_new_sp = has_builder.sub(has_cur_sp, ir.Constant(ir.IntType(32), 1))
+                has_builder.store(has_new_sp, sp)
+                has_ptr_slot = has_builder.gep(stack_base, [has_new_sp])
+                payload_val = has_builder.load(has_ptr_slot)
+                has_builder.branch(merge_block)
+
+                none_builder = ir.IRBuilder(none_block)
+                none_builder.branch(merge_block)
+
+                merge_builder = ir.IRBuilder(merge_block)
+                payload_phi = merge_builder.phi(ptr)
+                payload_phi.add_incoming(payload_val, has_block)
+                payload_phi.add_incoming(ir.Constant(ptr, 0), none_block)
+                merge_builder.call(cabi_emit_event, [vm_ptr, env_ptr, builtins_ptr, name_obj, payload_phi])
+                merge_builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "HASH_BLOCK":
+                obj = pop()
+                res = builder.call(cabi_hash_block, [obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "VERIFY_SIGNATURE":
+                pk = pop()
+                msg = pop()
+                sig = pop()
+                res = builder.call(cabi_verify_signature, [env_ptr, builtins_ptr, sig, msg, pk])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "MERKLE_ROOT":
+                count = int(operand) if operand is not None else 0
+                count_val = ir.Constant(ir.IntType(64), count)
+                cur_sp = builder.load(sp)
+                base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), count))
+                items_ptr = builder.gep(stack_base, [base])
+                items_ptr_cast = builder.bitcast(items_ptr, ptr)
+                res = builder.call(cabi_merkle_root, [items_ptr_cast, count_val])
+                builder.store(base, sp)
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "STATE_READ":
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else ir.Constant(ptr, 0))
+                res = builder.call(cabi_state_read, [env_ptr, key_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "STATE_WRITE":
+                val = pop()
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else ir.Constant(ptr, 0))
+                builder.call(cabi_state_write, [env_ptr, key_obj, val])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "TX_BEGIN":
+                builder.call(cabi_tx_begin, [env_ptr])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "TX_COMMIT":
+                builder.call(cabi_tx_commit, [env_ptr])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "TX_REVERT":
+                builder.call(cabi_tx_revert, [env_ptr])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "GAS_CHARGE":
+                if isinstance(operand, int):
+                    amount_obj = builder.call(cabi_int_from_long, [ir.Constant(ir.IntType(64), int(operand))])
+                else:
+                    amount_obj = pop()
+                res = builder.call(cabi_gas_charge, [env_ptr, amount_obj])
+                null_ptr = ir.Constant(ptr, None)
+                has_err = builder.icmp_unsigned("!=", res, null_ptr)
+                err_block = func.append_basic_block(name=f"gas_err_{idx}")
+                builder.cbranch(has_err, err_block, blocks[idx + 1])
+                err_builder = ir.IRBuilder(err_block)
+                err_builder.ret(res)
+                continue
+
+            if op_name == "LEDGER_APPEND":
+                entry = pop()
+                builder.call(cabi_ledger_append, [env_ptr, entry])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_ENUM":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    spec_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    spec_obj = const_obj(int(spec_idx)) if isinstance(spec_idx, int) else ir.Constant(ptr, 0)
+                    builder.call(cabi_define_enum, [env_ptr, name_obj, spec_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "DEFINE_PROTOCOL":
+                if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                    name_idx = operand[0]
+                    spec_idx = operand[1]
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    spec_obj = const_obj(int(spec_idx)) if isinstance(spec_idx, int) else ir.Constant(ptr, 0)
+                    builder.call(cabi_define_protocol, [env_ptr, name_obj, spec_obj])
                 builder.branch(blocks[idx + 1])
                 continue
 
