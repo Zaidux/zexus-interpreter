@@ -136,16 +136,22 @@ class Map(Object):
             pairs.append(f"{key_str}: {value_str}")
         return "{" + ", ".join(pairs) + "}"
 
+    def _normalize_key(self, key):
+        if hasattr(key, 'inspect'):
+            return key.inspect()
+        return str(key)
+
     def get(self, key):
         """Get value by key (compatible with string keys)"""
-        return self.pairs.get(key)
+        return self.pairs.get(self._normalize_key(key))
 
     def set(self, key, value):
         """Set value for key, blocking modification if key is sealed."""
-        existing = self.pairs.get(key)
+        norm_key = self._normalize_key(key)
+        existing = self.pairs.get(norm_key)
         if existing is not None and existing.__class__.__name__ == 'SealedObject':
             raise EvaluationError(f"Cannot modify sealed map key: {key}")
-        self.pairs[key] = value
+        self.pairs[norm_key] = value
         return value
 
     def keys(self):

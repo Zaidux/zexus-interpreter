@@ -463,6 +463,10 @@ class ExpressionEvaluatorMixin:
         
         # Comparison with mixed numeric types (Integer/Float comparison allowed)
         elif operator in ("<", ">", "<=", ">="):
+            # Safe null handling: Any comparison with NULL is False (except != handled above)
+            if left == NULL or right == NULL:
+                return FALSE
+
             if isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):
                 l_val = float(left.value)
                 r_val = float(right.value)

@@ -92,11 +92,11 @@ class GasMetering:
             gas_limit: Maximum gas allowed (None = unlimited)
             enable_timeout: Enable execution timeout mechanism
         """
-        self.gas_limit = gas_limit if gas_limit is not None else 1_000_000
+        self.gas_limit = gas_limit if gas_limit is not None else 100_000_000
         self.gas_used = 0
         self.enable_timeout = enable_timeout
         self.operation_count = 0
-        self.max_operations = 1_000_000  # Safety limit for operations with generous default
+        self.max_operations = 100_000_000  # Safety limit for operations with generous default
         
         # Track gas usage by operation type for profiling
         self.gas_by_operation: Dict[str, int] = {}

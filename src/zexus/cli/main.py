@@ -357,7 +357,8 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 mode=vm_mode_enum,
                 use_jit=not no_optimize,
                 max_heap_mb=1000,  # 1GB heap limit
-                debug=ctx.obj.get('DEBUG', False)
+                debug=ctx.obj.get('DEBUG', False),
+                gas_limit=100000000  # 100M instructions for heavy checks
             )
             apply_vm_config(vm, vm_config)
             console.print(" [green]done[/green]")

@@ -1254,6 +1254,8 @@ class VM:
                 a = stack_pop() if stack else 0
                 if hasattr(a, 'value'): a = a.value
                 if hasattr(b, 'value'): b = b.value
+                if a is None: a = 0
+                if b is None: b = 0
                 stack_append(a - b)
             elif op_name == "MUL":
                 b = stack_pop() if stack else 0
@@ -1282,19 +1284,23 @@ class VM:
             elif op_name == "LT":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
-                stack_append(a < b)
+                if a is None or b is None: stack_append(False)
+                else: stack_append(a < b)
             elif op_name == "GT":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
-                stack_append(a > b)
+                if a is None or b is None: stack_append(False)
+                else: stack_append(a > b)
             elif op_name == "LTE":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
-                stack_append(a <= b)
+                if a is None or b is None: stack_append(False)
+                else: stack_append(a <= b)
             elif op_name == "GTE":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
-                stack_append(a >= b)
+                if a is None or b is None: stack_append(False)
+                else: stack_append(a >= b)
             elif op_name == "NOT":
                 a = stack_pop() if stack else False
                 stack_append(not a)
@@ -1752,8 +1758,9 @@ class VM:
 
         async def _op_call_top(arg_count):
             count = arg_count or 0
-            args = [stack.pop() for _ in range(count)][::-1] if count else []
-            fn_obj = stack.pop() if stack else None
+            # Use stack_pop to avoid crash on empty stack
+            args = [stack_pop() for _ in range(count)][::-1] if count else []
+            fn_obj = stack_pop()
             res = await self._invoke_callable_or_funcdesc(fn_obj, args)
             stack.append(res)
 
@@ -2507,7 +2514,7 @@ class VM:
                     stack.append(result)
                 elif op_name == "BUILD_SET":
                     count = operand if operand is not None else 0
-                    elements = [stack.pop() for _ in range(count)][::-1]
+                    elements = [stack_pop() for _ in range(count)][::-1]
                     stack.append(set(elements))
                 elif op_name == "INDEX":
                     idx = stack.pop() if stack else None
@@ -2981,9 +2988,9 @@ class VM:
                                 entity_grants.remove(c_val)
     
                 elif op_name == "AUDIT_LOG":
-                    ts = stack.pop()
-                    action = stack.pop()
-                    data = stack.pop()
+                    ts = stack_pop()
+                    action = stack_pop()
+                    data = stack_pop()
                     # Unwrap
                     ts = ts.value if hasattr(ts, 'value') else ts
                     action = action.value if hasattr(action, 'value') else action
@@ -2994,9 +3001,9 @@ class VM:
                     if self.debug: print(f"[AUDIT] {entry}")
     
                 elif op_name == "RESTRICT_ACCESS":
-                    restriction = stack.pop()
-                    prop = stack.pop()
-                    obj = stack.pop()
+                    restriction = stack_pop()
+                    prop = stack_pop()
+                    obj = stack_pop()
                     # Just store in a registry for now. 
                     # Real implementation would hook into PropertyAccess/Assign logic.
                     r_key = f"{obj}.{prop}" if prop else str(obj)
