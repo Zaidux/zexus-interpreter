@@ -21,6 +21,7 @@ ZxValue zexus_cabi_build_list_from_array(ZxValue *items, Py_ssize_t count);
 ZxValue zexus_cabi_build_map_from_array(ZxValue *items, Py_ssize_t count);
 ZxValue zexus_cabi_build_set_from_array(ZxValue *items, Py_ssize_t count);
 ZxValue zexus_cabi_build_tuple_from_array(ZxValue *items, Py_ssize_t count);
+ZxValue zexus_cabi_iter_next(ZxValue iterator);
 
 ZxValue zexus_cabi_number_add(ZxValue a, ZxValue b);
 ZxValue zexus_cabi_number_sub(ZxValue a, ZxValue b);
@@ -70,6 +71,16 @@ ZxValue zexus_cabi_emit_event(ZxValue vm, ZxValue env, ZxValue builtins, ZxValue
 ZxValue zexus_cabi_spawn_name(ZxValue vm, ZxValue env, ZxValue builtins, ZxValue name, ZxValue args_tuple);
 ZxValue zexus_cabi_spawn_call(ZxValue vm, ZxValue callable, ZxValue args_tuple);
 ZxValue zexus_cabi_await(ZxValue vm, ZxValue task_or_coro);
+ZxValue zexus_cabi_lock_acquire(ZxValue env, ZxValue key);
+ZxValue zexus_cabi_lock_release(ZxValue env, ZxValue key);
+ZxValue zexus_cabi_barrier_wait(ZxValue barrier, ZxValue timeout);
+ZxValue zexus_cabi_atomic_add(ZxValue env, ZxValue key, ZxValue delta);
+ZxValue zexus_cabi_atomic_cas(ZxValue env, ZxValue key, ZxValue expected, ZxValue new_value);
+ZxValue zexus_cabi_get_iter(ZxValue obj);
+ZxValue zexus_cabi_iter_next_pair(ZxValue iterator);
+ZxValue zexus_cabi_atomic_add(ZxValue env, ZxValue key, ZxValue delta);
+ZxValue zexus_cabi_atomic_cas(ZxValue env, ZxValue key, ZxValue expected, ZxValue new_value);
+ZxValue zexus_cabi_barrier_wait(ZxValue barrier, ZxValue timeout);
 
 ZxValue zexus_cabi_define_enum(ZxValue env, ZxValue name, ZxValue spec);
 ZxValue zexus_cabi_define_protocol(ZxValue env, ZxValue name, ZxValue spec);

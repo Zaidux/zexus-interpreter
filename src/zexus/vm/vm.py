@@ -1930,6 +1930,7 @@ class VM:
 
         # 3. Execution Loop
         prev_ip = None
+        try_stack: List[int] = []
         while running and ip < len(instrs):
             try:
                 current_ip = ip
@@ -2039,6 +2040,327 @@ class VM:
                         func_desc_copy["closure_snapshot"] = closure_snapshot
                     func_desc_copy["parent_vm"] = self
                     self.env[name] = func_desc_copy
+
+                elif op_name == "LOAD_REG":
+                    reg, const_idx = operand
+                    value = const(const_idx)
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[reg] = value
+
+                elif op_name == "LOAD_VAR_REG":
+                    reg, name_idx = operand
+                    name = const(name_idx)
+                    value = _resolve(name)
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[reg] = value
+
+                elif op_name == "STORE_REG":
+                    reg, name_idx = operand
+                    name = const(name_idx)
+                    value = getattr(self, "_jit_registers", {}).get(reg)
+                    _store(name, value)
+
+                elif op_name == "MOV_REG":
+                    dest, src = operand
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = self._jit_registers.get(src)
+
+                elif op_name == "PUSH_REG":
+                    reg = operand if not isinstance(operand, (list, tuple)) else operand[0]
+                    value = getattr(self, "_jit_registers", {}).get(reg)
+                    stack.append(value)
+
+                elif op_name in ("ADD_REG", "SUB_REG", "MUL_REG", "DIV_REG", "MOD_REG"):
+                    dest, src1, src2 = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src1)
+                    v2 = regs.get(src2)
+                    if op_name == "ADD_REG":
+                        res = v1 + v2
+                    elif op_name == "SUB_REG":
+                        res = v1 - v2
+                    elif op_name == "MUL_REG":
+                        res = v1 * v2
+                    elif op_name == "DIV_REG":
+                        res = v1 / v2 if v2 != 0 else 0
+                    else:
+                        res = v1 % v2 if v2 != 0 else 0
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name == "POW_REG":
+                    dest, src1, src2 = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src1)
+                    v2 = regs.get(src2)
+                    res = v1 ** v2
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name == "NEG_REG":
+                    dest, src = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src)
+                    res = -v1
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name in ("EQ_REG", "NEQ_REG", "LT_REG"):
+                    dest, src1, src2 = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src1)
+                    v2 = regs.get(src2)
+                    if op_name == "EQ_REG":
+                        res = v1 == v2
+                    elif op_name == "NEQ_REG":
+                        res = v1 != v2
+                    else:
+                        res = v1 < v2
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name in ("GT_REG", "LTE_REG", "GTE_REG"):
+                    dest, src1, src2 = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src1)
+                    v2 = regs.get(src2)
+                    if op_name == "GT_REG":
+                        res = v1 > v2
+                    elif op_name == "LTE_REG":
+                        res = v1 <= v2
+                    else:
+                        res = v1 >= v2
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name in ("AND_REG", "OR_REG"):
+                    dest, src1, src2 = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src1)
+                    v2 = regs.get(src2)
+                    res = v1 and v2 if op_name == "AND_REG" else v1 or v2
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name == "NOT_REG":
+                    dest, src = operand
+                    regs = getattr(self, "_jit_registers", {})
+                    v1 = regs.get(src)
+                    res = not v1
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[dest] = res
+
+                elif op_name == "POP_REG":
+                    reg = operand if not isinstance(operand, (list, tuple)) else operand[0]
+                    value = stack.pop() if stack else None
+                    if not hasattr(self, "_jit_registers"):
+                        self._jit_registers = {}
+                    self._jit_registers[reg] = value
+
+                elif op_name == "SPAWN_TASK":
+                    task_handle = None
+                    if isinstance(operand, tuple) and operand[0] == "CALL":
+                        fn_name = operand[1]; arg_count = operand[2]
+                        args = [stack.pop() for _ in range(arg_count)][::-1]
+                        fn = self.builtins.get(fn_name) or self.env.get(fn_name)
+                        coro = self._to_coro(fn, args)
+                        if self.async_optimizer:
+                            coro = self.async_optimizer.spawn(coro)
+                        task = asyncio.create_task(coro)
+                        self._task_counter += 1
+                        tid = f"task_{self._task_counter}"
+                        self._tasks[tid] = task
+                        task_handle = tid
+                    else:
+                        arg_count = int(operand) if operand is not None else 0
+                        args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
+                        callable_obj = stack.pop() if stack else None
+                        coro = self._to_coro(callable_obj, args)
+                        if self.async_optimizer:
+                            coro = self.async_optimizer.spawn(coro)
+                        task = asyncio.create_task(coro)
+                        self._task_counter += 1
+                        tid = f"task_{self._task_counter}"
+                        self._tasks[tid] = task
+                        task_handle = tid
+                    stack.append(task_handle)
+
+                elif op_name == "TASK_JOIN":
+                    task_ref = stack.pop() if stack else None
+                    if isinstance(task_ref, str) and task_ref in self._tasks:
+                        res = await self._tasks[task_ref]
+                        stack.append(res)
+                    elif asyncio.iscoroutine(task_ref) or isinstance(task_ref, asyncio.Future):
+                        res = await task_ref
+                        stack.append(res)
+                    else:
+                        stack.append(task_ref)
+
+                elif op_name == "TASK_RESULT":
+                    task_ref = stack.pop() if stack else None
+                    if isinstance(task_ref, str) and task_ref in self._tasks:
+                        res = await self._tasks[task_ref]
+                        stack.append(res)
+                    elif asyncio.iscoroutine(task_ref) or isinstance(task_ref, asyncio.Future):
+                        res = await task_ref
+                        stack.append(res)
+                    else:
+                        stack.append(task_ref)
+
+                elif op_name == "LOCK_ACQUIRE":
+                    if not hasattr(self, "_locks"):
+                        self._locks = {}
+                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
+                    key = _unwrap(key)
+                    lock = self._locks.get(key)
+                    if lock is None:
+                        import threading
+                        lock = threading.Lock()
+                        self._locks[key] = lock
+                    lock.acquire()
+
+                elif op_name == "LOCK_RELEASE":
+                    if not hasattr(self, "_locks"):
+                        self._locks = {}
+                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
+                    key = _unwrap(key)
+                    lock = self._locks.get(key)
+                    if lock:
+                        lock.release()
+
+                elif op_name == "BARRIER":
+                    barrier_obj = stack.pop() if stack else None
+                    timeout = const(operand) if operand is not None else None
+                    if hasattr(barrier_obj, "wait"):
+                        try:
+                            res = barrier_obj.wait(timeout=timeout) if timeout is not None else barrier_obj.wait()
+                        except Exception as exc:
+                            res = exc
+                        stack.append(res)
+                    else:
+                        stack.append(None)
+
+                elif op_name == "ATOMIC_ADD":
+                    delta = stack.pop() if stack else 0
+                    key = stack.pop() if operand is None else const(operand)
+                    key = _unwrap(key)
+                    if not hasattr(self, "_atomic_lock"):
+                        import threading
+                        self._atomic_lock = threading.Lock()
+                    if "_atomic_state" not in self.env:
+                        self.env["_atomic_state"] = {}
+                    with self._atomic_lock:
+                        current = self.env["_atomic_state"].get(key, 0)
+                        new_val = current + delta
+                        self.env["_atomic_state"][key] = new_val
+                    stack.append(new_val)
+
+                elif op_name == "ATOMIC_CAS":
+                    new_val = stack.pop() if stack else None
+                    expected = stack.pop() if stack else None
+                    key = stack.pop() if operand is None else const(operand)
+                    key = _unwrap(key)
+                    if not hasattr(self, "_atomic_lock"):
+                        import threading
+                        self._atomic_lock = threading.Lock()
+                    if "_atomic_state" not in self.env:
+                        self.env["_atomic_state"] = {}
+                    with self._atomic_lock:
+                        current = self.env["_atomic_state"].get(key, None)
+                        ok = current == expected
+                        if ok:
+                            self.env["_atomic_state"][key] = new_val
+                    stack.append(ok)
+
+                elif op_name == "FOR_ITER":
+                    target = int(operand) if operand is not None else ip
+                    it = stack.pop() if stack else None
+                    if it is None:
+                        ip = target
+                    else:
+                        try:
+                            iterator = iter(it)
+                            value = next(iterator)
+                            stack.append(iterator)
+                            stack.append(value)
+                        except StopIteration:
+                            ip = target
+
+                elif op_name == "ATOMIC_ADD":
+                    if not hasattr(self, "_locks"):
+                        self._locks = {}
+                    if not hasattr(self, "_atomic"):
+                        self._atomic = {}
+                    delta = stack.pop() if stack else 0
+                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
+                    key = _unwrap(key)
+                    lock = self._locks.get(key)
+                    if lock is None:
+                        import threading
+                        lock = threading.Lock()
+                        self._locks[key] = lock
+                    with lock:
+                        cur = self._atomic.get(key, 0)
+                        new_val = cur + delta
+                        self._atomic[key] = new_val
+                    stack.append(new_val)
+
+                elif op_name == "ATOMIC_CAS":
+                    if not hasattr(self, "_locks"):
+                        self._locks = {}
+                    if not hasattr(self, "_atomic"):
+                        self._atomic = {}
+                    new_val = stack.pop() if stack else None
+                    expected = stack.pop() if stack else None
+                    key = const(operand) if operand is not None else (stack.pop() if stack else None)
+                    key = _unwrap(key)
+                    lock = self._locks.get(key)
+                    if lock is None:
+                        import threading
+                        lock = threading.Lock()
+                        self._locks[key] = lock
+                    with lock:
+                        cur = self._atomic.get(key, None)
+                        if cur == expected:
+                            self._atomic[key] = new_val
+                            stack.append(True)
+                        else:
+                            stack.append(False)
+
+                elif op_name == "BARRIER":
+                    barrier_obj = stack.pop() if stack else None
+                    timeout = const(operand) if operand is not None else None
+                    if barrier_obj is None:
+                        stack.append(None)
+                    else:
+                        try:
+                            if timeout is not None:
+                                res = barrier_obj.wait(timeout=timeout)
+                            else:
+                                res = barrier_obj.wait()
+                            stack.append(res)
+                        except Exception as exc:
+                            stack.append(exc)
+
+                elif op_name == "FOR_ITER":
+                    it = stack[-1] if stack else None
+                    try:
+                        val = next(it)
+                        stack.append(val)
+                    except StopIteration:
+                        if stack:
+                            stack.pop()
+                        ip = int(operand) if operand is not None else ip
                 
                 elif op_name == "CALL_NAME":
                     name_idx, arg_count = operand
@@ -2396,6 +2718,24 @@ class VM:
                     self.env["_tx_pending_state"] = {}
                     self.env["_tx_snapshot"] = dict(self.env.get("_blockchain_state", {}))
                     if self.use_memory_manager: self.env["_tx_memory_snapshot"] = dict(self._managed_objects)
+
+                elif op_name == "SETUP_TRY":
+                    handler = int(operand) if operand is not None else ip
+                    try_stack.append(handler)
+
+                elif op_name == "POP_TRY":
+                    if try_stack:
+                        try_stack.pop()
+
+                elif op_name == "THROW":
+                    exc = stack.pop() if stack else None
+                    if try_stack:
+                        handler = try_stack.pop()
+                        stack.append(exc)
+                        ip = handler
+                    else:
+                        msg = exc.value if hasattr(exc, "value") else exc
+                        raise ZEvaluationError(str(msg))
     
                 elif op_name == "TX_COMMIT":
                     if self.env.get("_in_transaction", False):

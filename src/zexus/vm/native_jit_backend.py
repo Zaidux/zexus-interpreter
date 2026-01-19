@@ -106,6 +106,28 @@ class NativeJITBackend:
             "CALL_METHOD",
             "CALL_TOP",
             "CALL_BUILTIN",
+            "LOAD_REG",
+            "LOAD_VAR_REG",
+            "STORE_REG",
+            "MOV_REG",
+            "ADD_REG",
+            "SUB_REG",
+            "MUL_REG",
+            "DIV_REG",
+            "MOD_REG",
+            "POW_REG",
+            "NEG_REG",
+            "EQ_REG",
+            "NEQ_REG",
+            "LT_REG",
+            "GT_REG",
+            "LTE_REG",
+            "GTE_REG",
+            "AND_REG",
+            "OR_REG",
+            "NOT_REG",
+            "PUSH_REG",
+            "POP_REG",
             "BUILD_LIST",
             "BUILD_MAP",
             "BUILD_SET",
@@ -154,6 +176,18 @@ class NativeJITBackend:
             "NOP",
             "PARALLEL_START",
             "PARALLEL_END",
+            "SPAWN_TASK",
+            "TASK_JOIN",
+            "TASK_RESULT",
+            "LOCK_ACQUIRE",
+            "LOCK_RELEASE",
+            "ATOMIC_ADD",
+            "ATOMIC_CAS",
+            "BARRIER",
+            "SETUP_TRY",
+            "POP_TRY",
+            "THROW",
+            "FOR_ITER",
         }
         use_object_mode = False
         for op_name, _ in normalized:
@@ -291,6 +325,22 @@ class NativeJITBackend:
                 builder.branch(blocks[idx + 1])
                 continue
 
+            if op_name == "PUSH_REG":
+                reg_idx = int(operand) if not isinstance(operand, (list, tuple)) else int(operand[0])
+                reg_slot = reg_ptr(ir.Constant(ir.IntType(32), reg_idx))
+                val = builder.load(reg_slot)
+                push(val)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "POP_REG":
+                reg_idx = int(operand) if not isinstance(operand, (list, tuple)) else int(operand[0])
+                val = pop()
+                reg_slot = reg_ptr(ir.Constant(ir.IntType(32), reg_idx))
+                builder.store(val, reg_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
             if op_name in ("ADD", "SUB", "MUL", "DIV", "MOD"):
                 b = pop()
                 a = pop()
@@ -405,6 +455,43 @@ class NativeJITBackend:
         ptr = ir.IntType(8).as_pointer()  # PyObject*
         ptr_ptr = ptr.as_pointer()       # PyObject**
 
+        # Determine register file size for register ops
+        max_reg = -1
+        register_ops = {
+            "LOAD_REG", "LOAD_VAR_REG", "STORE_REG", "MOV_REG",
+            "ADD_REG", "SUB_REG", "MUL_REG", "DIV_REG", "MOD_REG", "POW_REG",
+            "NEG_REG", "EQ_REG", "NEQ_REG", "LT_REG", "GT_REG", "LTE_REG", "GTE_REG",
+            "AND_REG", "OR_REG", "NOT_REG", "PUSH_REG", "POP_REG",
+        }
+        for op_name, operand in instrs:
+            if op_name in register_ops:
+                if op_name in ("LOAD_REG", "LOAD_VAR_REG", "STORE_REG"):
+                    if isinstance(operand, (list, tuple)) and operand and isinstance(operand[0], int):
+                        max_reg = max(max_reg, operand[0])
+                elif op_name == "MOV_REG":
+                    if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                        if isinstance(operand[0], int):
+                            max_reg = max(max_reg, operand[0])
+                        if isinstance(operand[1], int):
+                            max_reg = max(max_reg, operand[1])
+                elif op_name in ("NEG_REG", "NOT_REG"):
+                    if isinstance(operand, (list, tuple)) and len(operand) >= 2:
+                        if isinstance(operand[0], int):
+                            max_reg = max(max_reg, operand[0])
+                        if isinstance(operand[1], int):
+                            max_reg = max(max_reg, operand[1])
+                elif op_name in ("PUSH_REG", "POP_REG"):
+                    if isinstance(operand, int):
+                        max_reg = max(max_reg, operand)
+                    elif isinstance(operand, (list, tuple)) and operand and isinstance(operand[0], int):
+                        max_reg = max(max_reg, operand[0])
+                else:
+                    if isinstance(operand, (list, tuple)):
+                        for item in operand:
+                            if isinstance(item, int):
+                                max_reg = max(max_reg, item)
+        reg_count = max(1, max_reg + 1)
+
         func_type = ir.FunctionType(ptr, [ptr, ptr, ptr, ptr_ptr])
         func = ir.Function(ir.Module(name="zexus_native_jit_obj"), func_type, name="jit_obj_fn")
         vm_ptr, env_ptr, builtins_ptr, consts_ptr = func.args
@@ -424,6 +511,7 @@ class NativeJITBackend:
         cabi_build_map = decl("zexus_build_map_from_array", ptr, [ptr, ir.IntType(64)])
         cabi_build_set = decl("zexus_build_set_from_array", ptr, [ptr, ir.IntType(64)])
         cabi_build_tuple = decl("zexus_build_tuple_from_array", ptr, [ptr, ir.IntType(64)])
+        cabi_iter_next = decl("zexus_iter_next", ptr, [ptr])
         cabi_add = decl("zexus_number_add", ptr, [ptr, ptr])
         cabi_sub = decl("zexus_number_sub", ptr, [ptr, ptr])
         cabi_mul = decl("zexus_number_mul", ptr, [ptr, ptr])
@@ -467,6 +555,16 @@ class NativeJITBackend:
         cabi_spawn_name = decl("zexus_spawn_name", ptr, [ptr, ptr, ptr, ptr, ptr])
         cabi_spawn_call = decl("zexus_spawn_call", ptr, [ptr, ptr, ptr])
         cabi_await = decl("zexus_await", ptr, [ptr, ptr])
+        cabi_lock_acquire = decl("zexus_lock_acquire", ptr, [ptr, ptr])
+        cabi_lock_release = decl("zexus_lock_release", ptr, [ptr, ptr])
+        cabi_barrier_wait = decl("zexus_barrier_wait", ptr, [ptr, ptr])
+        cabi_atomic_add = decl("zexus_atomic_add", ptr, [ptr, ptr, ptr])
+        cabi_atomic_cas = decl("zexus_atomic_cas", ptr, [ptr, ptr, ptr, ptr])
+        cabi_get_iter = decl("zexus_get_iter", ptr, [ptr])
+        cabi_iter_next_pair = decl("zexus_iter_next_pair", ptr, [ptr])
+        cabi_atomic_add = decl("zexus_atomic_add", ptr, [ptr, ptr, ptr])
+        cabi_atomic_cas = decl("zexus_atomic_cas", ptr, [ptr, ptr, ptr, ptr])
+        cabi_barrier_wait = decl("zexus_barrier_wait", ptr, [ptr, ptr])
         cabi_define_enum = decl("zexus_define_enum", ptr, [ptr, ptr, ptr])
         cabi_define_protocol = decl("zexus_define_protocol", ptr, [ptr, ptr, ptr])
         cabi_assert_protocol = decl("zexus_assert_protocol", ptr, [ptr, ptr, ptr])
@@ -491,11 +589,30 @@ class NativeJITBackend:
         sp = builder.alloca(ir.IntType(32))
         builder.store(ir.Constant(ir.IntType(32), 0), sp)
 
+        try_stack_size = max(4, len(instrs) + 2)
+        try_stack_arr = builder.alloca(ir.ArrayType(ir.IntType(32), try_stack_size))
+        try_stack_base = builder.gep(try_stack_arr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+        try_sp = builder.alloca(ir.IntType(32))
+        builder.store(ir.Constant(ir.IntType(32), 0), try_sp)
+
+        reg_arr = builder.alloca(ir.ArrayType(ptr, reg_count))
+        reg_base = builder.gep(reg_arr, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+        null_ptr = ir.Constant(ptr, 0)
+        for r in range(reg_count):
+            reg_slot = builder.gep(reg_base, [ir.Constant(ir.IntType(32), r)])
+            builder.store(null_ptr, reg_slot)
+
         def push(val):
             cur_sp = builder.load(sp)
             ptr_slot = builder.gep(stack_base, [cur_sp])
             builder.store(val, ptr_slot)
             builder.store(builder.add(cur_sp, ir.Constant(ir.IntType(32), 1)), sp)
+
+        def push_with(bld, val):
+            cur_sp = bld.load(sp)
+            ptr_slot = bld.gep(stack_base, [cur_sp])
+            bld.store(val, ptr_slot)
+            bld.store(bld.add(cur_sp, ir.Constant(ir.IntType(32), 1)), sp)
 
         def pop():
             cur_sp = builder.load(sp)
@@ -506,6 +623,29 @@ class NativeJITBackend:
 
         def const_obj(idx):
             return builder.load(builder.gep(consts_ptr, [ir.Constant(ir.IntType(32), idx)]))
+
+        def reg_ptr(idx_val):
+            return builder.gep(reg_base, [idx_val])
+
+        def try_push(handler_idx):
+            cur_sp = builder.load(try_sp)
+            slot = builder.gep(try_stack_base, [cur_sp])
+            builder.store(handler_idx, slot)
+            builder.store(builder.add(cur_sp, ir.Constant(ir.IntType(32), 1)), try_sp)
+
+        def try_pop():
+            cur_sp = builder.load(try_sp)
+            new_sp = builder.sub(cur_sp, ir.Constant(ir.IntType(32), 1))
+            builder.store(new_sp, try_sp)
+            slot = builder.gep(try_stack_base, [new_sp])
+            return builder.load(slot)
+
+        def try_pop_with(bld):
+            cur_sp = bld.load(try_sp)
+            new_sp = bld.sub(cur_sp, ir.Constant(ir.IntType(32), 1))
+            bld.store(new_sp, try_sp)
+            slot = bld.gep(try_stack_base, [new_sp])
+            return bld.load(slot)
 
         for idx, (op_name, operand) in enumerate(instrs):
             builder = ir.IRBuilder(blocks[idx])
@@ -547,6 +687,143 @@ class NativeJITBackend:
                 name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
                 func_obj = const_obj(int(func_idx)) if isinstance(func_idx, int) else ir.Constant(ptr, 0)
                 builder.call(cabi_env_set, [env_ptr, name_obj, func_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "LOAD_REG":
+                reg_idx, const_idx = operand
+                reg_slot = reg_ptr(ir.Constant(ir.IntType(32), int(reg_idx)))
+                value_obj = const_obj(int(const_idx)) if isinstance(const_idx, int) else ir.Constant(ptr, 0)
+                builder.store(value_obj, reg_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "LOAD_VAR_REG":
+                reg_idx, name_idx = operand
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                val = builder.call(cabi_env_get, [env_ptr, name_obj])
+                reg_slot = reg_ptr(ir.Constant(ir.IntType(32), int(reg_idx)))
+                builder.store(val, reg_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "STORE_REG":
+                reg_idx, name_idx = operand
+                reg_slot = reg_ptr(ir.Constant(ir.IntType(32), int(reg_idx)))
+                val = builder.load(reg_slot)
+                name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                builder.call(cabi_env_set, [env_ptr, name_obj, val])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "MOV_REG":
+                dest_idx, src_idx = operand
+                src_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                val = builder.load(src_slot)
+                builder.store(val, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name in ("ADD_REG", "SUB_REG", "MUL_REG", "DIV_REG", "MOD_REG"):
+                dest_idx, src1_idx, src2_idx = operand
+                src1_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src1_idx)))
+                src2_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src2_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src1_slot)
+                v2 = builder.load(src2_slot)
+                if op_name == "ADD_REG":
+                    res = builder.call(cabi_add, [v1, v2])
+                elif op_name == "SUB_REG":
+                    res = builder.call(cabi_sub, [v1, v2])
+                elif op_name == "MUL_REG":
+                    res = builder.call(cabi_mul, [v1, v2])
+                elif op_name == "DIV_REG":
+                    res = builder.call(cabi_div, [v1, v2])
+                else:
+                    res = builder.call(cabi_mod, [v1, v2])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "POW_REG":
+                dest_idx, src1_idx, src2_idx = operand
+                src1_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src1_idx)))
+                src2_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src2_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src1_slot)
+                v2 = builder.load(src2_slot)
+                res = builder.call(cabi_pow, [v1, v2])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "NEG_REG":
+                dest_idx, src_idx = operand
+                src_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src_slot)
+                res = builder.call(cabi_neg, [v1])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name in ("EQ_REG", "NEQ_REG", "LT_REG"):
+                dest_idx, src1_idx, src2_idx = operand
+                src1_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src1_idx)))
+                src2_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src2_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src1_slot)
+                v2 = builder.load(src2_slot)
+                if op_name == "EQ_REG":
+                    res = builder.call(cabi_eq, [v1, v2])
+                elif op_name == "NEQ_REG":
+                    res = builder.call(cabi_neq, [v1, v2])
+                else:
+                    res = builder.call(cabi_lt, [v1, v2])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name in ("GT_REG", "LTE_REG", "GTE_REG"):
+                dest_idx, src1_idx, src2_idx = operand
+                src1_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src1_idx)))
+                src2_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src2_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src1_slot)
+                v2 = builder.load(src2_slot)
+                if op_name == "GT_REG":
+                    res = builder.call(cabi_gt, [v1, v2])
+                elif op_name == "LTE_REG":
+                    res = builder.call(cabi_lte, [v1, v2])
+                else:
+                    res = builder.call(cabi_gte, [v1, v2])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name in ("AND_REG", "OR_REG"):
+                dest_idx, src1_idx, src2_idx = operand
+                src1_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src1_idx)))
+                src2_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src2_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src1_slot)
+                v2 = builder.load(src2_slot)
+                if op_name == "AND_REG":
+                    res = builder.call(cabi_bool_and, [v1, v2])
+                else:
+                    res = builder.call(cabi_bool_or, [v1, v2])
+                builder.store(res, dest_slot)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "NOT_REG":
+                dest_idx, src_idx = operand
+                src_slot = reg_ptr(ir.Constant(ir.IntType(32), int(src_idx)))
+                dest_slot = reg_ptr(ir.Constant(ir.IntType(32), int(dest_idx)))
+                v1 = builder.load(src_slot)
+                res = builder.call(cabi_not, [v1])
+                builder.store(res, dest_slot)
                 builder.branch(blocks[idx + 1])
                 continue
 
@@ -736,6 +1013,60 @@ class NativeJITBackend:
                 res = builder.call(cabi_call_callable, [callable_obj, args_tuple])
                 push(res)
                 builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "SETUP_TRY":
+                handler = int(operand) if operand is not None else idx + 1
+                try_push(ir.Constant(ir.IntType(32), handler))
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "POP_TRY":
+                _ = try_pop()
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "THROW":
+                exc = pop()
+                cur_sp = builder.load(try_sp)
+                has_handler = builder.icmp_unsigned("!=", cur_sp, ir.Constant(ir.IntType(32), 0))
+                handler_block = func.append_basic_block(name=f"throw_handler_{idx}")
+                no_handler_block = func.append_basic_block(name=f"throw_unhandled_{idx}")
+                builder.cbranch(has_handler, handler_block, no_handler_block)
+
+                handler_builder = ir.IRBuilder(handler_block)
+                handler_idx = try_pop_with(handler_builder)
+                push_with(handler_builder, exc)
+                switch_inst = handler_builder.switch(handler_idx, blocks[idx + 1])
+                for case_idx, block in enumerate(blocks):
+                    switch_inst.add_case(ir.Constant(ir.IntType(32), case_idx), block)
+
+                no_handler_builder = ir.IRBuilder(no_handler_block)
+                no_handler_builder.ret(exc)
+                continue
+
+            if op_name == "FOR_ITER":
+                target = int(operand) if operand is not None else idx + 1
+                iter_obj = pop()
+                iter_obj = builder.call(cabi_get_iter, [iter_obj])
+                pair = builder.call(cabi_iter_next_pair, [iter_obj])
+                one_obj = builder.call(cabi_int_from_long, [ir.Constant(ir.IntType(64), 1)])
+                zero_obj = builder.call(cabi_int_from_long, [ir.Constant(ir.IntType(64), 0)])
+                has_flag = builder.call(cabi_index, [pair, one_obj])
+                truth = builder.call(cabi_truthy, [has_flag])
+                is_true = builder.icmp_signed("!=", truth, ir.Constant(ir.IntType(32), 0))
+                has_block = func.append_basic_block(name=f"for_has_{idx}")
+                done_block = func.append_basic_block(name=f"for_done_{idx}")
+                builder.cbranch(is_true, has_block, done_block)
+
+                has_builder = ir.IRBuilder(has_block)
+                val = has_builder.call(cabi_index, [pair, zero_obj])
+                push_with(has_builder, iter_obj)
+                push_with(has_builder, val)
+                has_builder.branch(blocks[idx + 1])
+
+                done_builder = ir.IRBuilder(done_block)
+                done_builder.branch(blocks[target])
                 continue
 
             if op_name == "BUILD_LIST":
@@ -958,6 +1289,86 @@ class NativeJITBackend:
                     callable_obj = pop()
                     res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
                     push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "SPAWN_TASK":
+                if isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_NAME":
+                    name_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_name, [vm_ptr, env_ptr, builtins_ptr, name_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_BUILTIN":
+                    name_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    name_obj = const_obj(int(name_idx)) if isinstance(name_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_name, [vm_ptr, env_ptr, builtins_ptr, name_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_FUNC_CONST":
+                    func_idx = operand[1]
+                    arg_count = int(operand[2]) if len(operand) > 2 else 0
+                    func_obj = const_obj(int(func_idx)) if isinstance(func_idx, int) else ir.Constant(ptr, 0)
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    res = builder.call(cabi_spawn_call, [vm_ptr, func_obj, args_tuple])
+                    push(res)
+                elif isinstance(operand, tuple) and len(operand) >= 2 and operand[0] == "CALL_TOP":
+                    arg_count = int(operand[1]) if len(operand) > 1 else 0
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    callable_obj = pop()
+                    res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
+                    push(res)
+                else:
+                    arg_count = int(operand) if operand is not None else 0
+                    count_val = ir.Constant(ir.IntType(64), arg_count)
+                    cur_sp = builder.load(sp)
+                    base = builder.sub(cur_sp, ir.Constant(ir.IntType(32), arg_count))
+                    args_ptr = builder.gep(stack_base, [base])
+                    args_ptr_cast = builder.bitcast(args_ptr, ptr)
+                    args_tuple = builder.call(cabi_build_tuple, [args_ptr_cast, count_val])
+                    builder.store(base, sp)
+                    callable_obj = pop()
+                    res = builder.call(cabi_spawn_call, [vm_ptr, callable_obj, args_tuple])
+                    push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "TASK_JOIN":
+                task_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                _ = builder.call(cabi_await, [vm_ptr, task_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "TASK_RESULT":
+                task_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                res = builder.call(cabi_await, [vm_ptr, task_obj])
+                push(res)
                 builder.branch(blocks[idx + 1])
                 continue
 
@@ -1279,6 +1690,96 @@ class NativeJITBackend:
 
             if op_name in ("PARALLEL_START", "PARALLEL_END"):
                 builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "LOCK_ACQUIRE":
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                builder.call(cabi_lock_acquire, [env_ptr, key_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "LOCK_RELEASE":
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                builder.call(cabi_lock_release, [env_ptr, key_obj])
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "BARRIER":
+                barrier_obj = pop()
+                timeout_obj = None
+                if operand is not None and isinstance(operand, int):
+                    timeout_obj = const_obj(int(operand))
+                else:
+                    timeout_obj = ir.Constant(ptr, 0)
+                res = builder.call(cabi_barrier_wait, [barrier_obj, timeout_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ATOMIC_ADD":
+                delta = pop()
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                res = builder.call(cabi_atomic_add, [env_ptr, key_obj, delta])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ATOMIC_CAS":
+                new_val = pop()
+                expected = pop()
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                res = builder.call(cabi_atomic_cas, [env_ptr, key_obj, expected, new_val])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ATOMIC_ADD":
+                delta_obj = pop()
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                res = builder.call(cabi_atomic_add, [env_ptr, key_obj, delta_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "ATOMIC_CAS":
+                new_obj = pop()
+                expected_obj = pop()
+                key_obj = pop() if operand is None else (const_obj(int(operand)) if isinstance(operand, int) else pop())
+                res = builder.call(cabi_atomic_cas, [env_ptr, key_obj, expected_obj, new_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "BARRIER":
+                timeout_obj = ir.Constant(ptr, 0)
+                if operand is not None and isinstance(operand, int):
+                    timeout_obj = const_obj(int(operand))
+                barrier_obj = pop()
+                res = builder.call(cabi_barrier_wait, [barrier_obj, timeout_obj])
+                push(res)
+                builder.branch(blocks[idx + 1])
+                continue
+
+            if op_name == "FOR_ITER":
+                cur_sp = builder.load(sp)
+                top_idx = builder.sub(cur_sp, ir.Constant(ir.IntType(32), 1))
+                iter_ptr = builder.gep(stack_base, [top_idx])
+                iter_obj = builder.load(iter_ptr)
+                res = builder.call(cabi_iter_next, [iter_obj])
+                null_ptr = ir.Constant(ptr, 0)
+                is_done = builder.icmp_unsigned("==", res, null_ptr)
+                done_block = func.append_basic_block(name=f"for_done_{idx}")
+                cont_block = func.append_basic_block(name=f"for_cont_{idx}")
+                builder.cbranch(is_done, done_block, cont_block)
+
+                done_builder = ir.IRBuilder(done_block)
+                done_builder.store(top_idx, sp)
+                target = int(operand) if operand is not None else idx + 1
+                done_builder.branch(blocks[target])
+
+                cont_builder = ir.IRBuilder(cont_block)
+                push_with(cont_builder, res)
+                cont_builder.branch(blocks[idx + 1])
                 continue
 
             if op_name == "RETURN":
