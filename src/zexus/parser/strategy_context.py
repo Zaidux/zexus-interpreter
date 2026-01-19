@@ -4649,7 +4649,14 @@ class ContextStackParser:
                         end=end_expr
                     )
                 else:
-                    prop_expr = self._parse_expression(inner_tokens) if inner_tokens else Identifier('')
+                    if not inner_tokens:
+                        parser_debug("  ❌ Empty bracket access is invalid")
+                        prop_expr = StringLiteral("")
+                    else:
+                        prop_expr = self._parse_expression(inner_tokens)
+                        if prop_expr is None:
+                            parser_debug("  ❌ Could not parse bracket expression")
+                            prop_expr = StringLiteral("")
                     current_expr = PropertyAccessExpression(
                         object=current_expr,
                         property=prop_expr,

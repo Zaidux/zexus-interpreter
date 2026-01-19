@@ -310,6 +310,19 @@ if sequential_single_result != null {
 let bulk_total_time = bulk_result["submission_time"] + bulk_result["production_time"]
 let bulk_tps = compute_tps(PERF_TRANSACTION_COUNT, bulk_total_time)
 
+// Quick validation of slice + light client verification
+let wallet_slice = slice(PERF_WALLETS, 1, 3)
+print("Slice test wallets=" + string(wallet_slice))
+let latest_info = bulk_result["blockchain"].get_latest_block_info()
+if latest_info != null {
+    let light_report = bulk_result["blockchain"].verify_light_client(
+        latest_info,
+        latest_info["previous_hash"],
+        latest_info["merkle_root"]
+    )
+    print("Light client verify=" + string(light_report))
+}
+
 print("\n===============================================")
 print("ZEXUS PERFORMANCE SUMMARY :: 10K TRANSACTIONS")
 print("===============================================")

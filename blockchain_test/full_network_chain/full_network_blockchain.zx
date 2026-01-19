@@ -1,6 +1,8 @@
 // ZEXUS FULL NETWORK SCENARIO
 // Comprehensive validator and fee testing for the Zexus interpreter
 
+use {post} from "stdlib/http"
+
 inline function optimized_basis_points(amount, rate_bp) {
     if rate_bp <= 0 {
         return 0
@@ -158,7 +160,8 @@ export contract Block {
             applied: applied_count,
             skipped: skipped_count,
             fees: total_fees,
-            elapsed_ms: execution_ms
+            elapsed_ms: execution_ms,
+            merkle_root: merkle_root
         }
     }
 
@@ -261,6 +264,8 @@ export contract Blockchain {
     data storage_roots = []
     data storage_journal = []
     data performance_mode = false
+    data telemetry_enabled = false
+    data telemetry_endpoint = ""
     data audit_stats = {
         "consensus_failures": 0,
         "reverted_blocks": 0,
@@ -480,6 +485,63 @@ export contract Blockchain {
             config["storage_root_limit"] = 0
         }
         return performance_mode
+    }
+
+    action set_network_telemetry(endpoint, enabled) {
+        telemetry_endpoint = endpoint
+        telemetry_enabled = enabled == true
+        return telemetry_enabled
+    }
+
+    action get_latest_block_info() {
+        if len(chain) == 0 {
+            return null
+        }
+        let latest_block = chain[len(chain) - 1]
+        if latest_block == null {
+            return null
+        }
+        let info = null
+        if latest_block.get_info != null {
+            info = latest_block.get_info()
+        }
+        if info == null {
+            let txs = latest_block["transactions"]
+            if txs == null {
+                txs = []
+            }
+            info = {
+                index: latest_block["index"],
+                hash: latest_block["hash"],
+                previous_hash: latest_block["previous_hash"],
+                timestamp: latest_block["timestamp"],
+                nonce: latest_block["nonce"],
+                tx_count: len(txs),
+                difficulty: latest_block["difficulty"],
+                proposer: latest_block["proposer"],
+                selected: latest_block["selected"],
+                applied: latest_block["applied"],
+                skipped: latest_block["skipped"],
+                fees: latest_block["fees"],
+                elapsed_ms: latest_block["elapsed_ms"],
+                merkle_root: latest_block["merkle_root"]
+            }
+            if info["previous_hash"] == null {
+                info["previous_hash"] = latest_block["prev_hash"]
+            }
+        }
+        let txs_final = latest_block["transactions"]
+        if txs_final == null && latest_block.transactions != null {
+            txs_final = latest_block.transactions
+        }
+        info["transactions"] = txs_final
+        if info["previous_hash"] == null && latest_block.previous_hash != null {
+            info["previous_hash"] = latest_block.previous_hash
+        }
+        if info["merkle_root"] == null && latest_block.merkle_root != null {
+            info["merkle_root"] = latest_block.merkle_root
+        }
+        return info
     }
 
     action configure(settings) {
@@ -1698,6 +1760,104 @@ export contract Blockchain {
         }
     }
 
+    private action _append_commit_history(new_height, proposer_address, selected, applied, requeue, total_fees, elapsed_ms, consensus_result, reward_report, health_events) {
+        block_timings = append(block_timings, {
+            "height": new_height,
+            "elapsed_ms": elapsed_ms
+        })
+
+        let storage_entry = this._record_storage_checkpoint("block_commit", new_height, {
+            "proposer": proposer_address,
+            "fees": total_fees,
+            "ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "treasury_accrual": reward_report["treasury_accrual"]
+        })
+
+        let consensus_entry = {
+            "height": new_height,
+            "proposer": proposer_address,
+            "ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "votes": len(consensus_result["votes"]),
+            "committed": true,
+            "timestamp": time(),
+            "fees": total_fees,
+            "treasury_accrual": reward_report["treasury_accrual"],
+            "participant_paid": reward_report["participant_paid"],
+            "proposer_reward": reward_report["proposer_reward"]
+        }
+        consensus_history = append(consensus_history, consensus_entry)
+
+        if events_enabled {
+            let idx = 0
+            while idx < len(health_events) {
+                events = append(events, health_events[idx])
+                idx = idx + 1
+            }
+            events = append(events, {
+                "type": "REWARD_DISTRIBUTED",
+                "height": new_height,
+                "proposer": proposer_address,
+                "total_reward": reward_report["total_reward"],
+                "proposer_reward": reward_report["proposer_reward"],
+                "participant_paid": reward_report["participant_paid"],
+                "treasury_accrual": reward_report["treasury_accrual"],
+                "timestamp": time()
+            })
+            events = append(events, {
+                "type": "STORAGE_COMMIT",
+                "height": storage_entry["height"],
+                "root": storage_entry["root"],
+                "timestamp": storage_entry["timestamp"]
+            })
+            events = append(events, {
+                "type": "BLOCK_COMMITTED",
+                "height": new_height,
+                "proposer": proposer_address,
+                "tx_applied": len(applied),
+                "tx_attempted": len(selected),
+                "skipped": len(requeue),
+                "fees": total_fees,
+                "elapsed_ms": elapsed_ms,
+                "consensus_ratio_bp": consensus_result["ratio_bp"],
+                "threshold_bp": consensus_result["threshold_bp"],
+                "votes": len(consensus_result["votes"]),
+                "timestamp": time()
+            })
+        }
+
+        return storage_entry
+    }
+
+    private action _emit_network_metrics(new_height, proposer_address, total_fees, elapsed_ms, consensus_result) {
+        if telemetry_enabled != true {
+            return false
+        }
+        if telemetry_endpoint == "" || telemetry_endpoint == null {
+            return false
+        }
+        let payload = {
+            "height": new_height,
+            "proposer": proposer_address,
+            "fees": total_fees,
+            "elapsed_ms": elapsed_ms,
+            "consensus_ratio_bp": consensus_result["ratio_bp"],
+            "threshold_bp": consensus_result["threshold_bp"],
+            "timestamp": time()
+        }
+        let net = this.simulate_network_latency(0, 0, 0)
+        if net["dropped"] == true {
+            return false
+        }
+        try {
+            post(telemetry_endpoint, payload)
+            return true
+        } catch error {
+            return false
+        }
+    }
+
     private action _snapshot_state() {
         let ledger = []
         let i = 0
@@ -2546,71 +2706,20 @@ export contract Blockchain {
         this._refresh_balances_integrity()
         audit_stats["fee_accumulator"] = audit_stats["fee_accumulator"] + total_fees
 
-        block_timings = append(block_timings, {
-            "height": new_height,
-            "elapsed_ms": elapsed_ms
-        })
+        this._append_commit_history(
+            new_height,
+            proposer_address,
+            selected,
+            applied,
+            requeue,
+            total_fees,
+            elapsed_ms,
+            consensus_result,
+            reward_report,
+            health_events
+        )
 
-        let storage_entry = this._record_storage_checkpoint("block_commit", new_height, {
-            "proposer": proposer_address,
-            "fees": total_fees,
-            "ratio_bp": consensus_result["ratio_bp"],
-            "threshold_bp": consensus_result["threshold_bp"],
-            "treasury_accrual": reward_report["treasury_accrual"]
-        })
-
-        let consensus_entry = {
-            "height": new_height,
-            "proposer": proposer_address,
-            "ratio_bp": consensus_result["ratio_bp"],
-            "threshold_bp": consensus_result["threshold_bp"],
-            "votes": len(consensus_result["votes"]),
-            "committed": true,
-            "timestamp": time(),
-            "fees": total_fees,
-            "treasury_accrual": reward_report["treasury_accrual"],
-            "participant_paid": reward_report["participant_paid"],
-            "proposer_reward": reward_report["proposer_reward"]
-        }
-        consensus_history = append(consensus_history, consensus_entry)
-
-        if events_enabled {
-            let idx = 0
-            while idx < len(health_events) {
-                events = append(events, health_events[idx])
-                idx = idx + 1
-            }
-            events = append(events, {
-                "type": "REWARD_DISTRIBUTED",
-                "height": new_height,
-                "proposer": proposer_address,
-                "total_reward": reward_report["total_reward"],
-                "proposer_reward": reward_report["proposer_reward"],
-                "participant_paid": reward_report["participant_paid"],
-                "treasury_accrual": reward_report["treasury_accrual"],
-                "timestamp": time()
-            })
-            events = append(events, {
-                "type": "STORAGE_COMMIT",
-                "height": storage_entry["height"],
-                "root": storage_entry["root"],
-                "timestamp": storage_entry["timestamp"]
-            })
-            events = append(events, {
-                "type": "BLOCK_COMMITTED",
-                "height": new_height,
-                "proposer": proposer_address,
-                "tx_applied": len(applied),
-                "tx_attempted": len(selected),
-                "skipped": len(requeue),
-                "fees": total_fees,
-                "elapsed_ms": elapsed_ms,
-                "consensus_ratio_bp": consensus_result["ratio_bp"],
-                "threshold_bp": consensus_result["threshold_bp"],
-                "votes": len(consensus_result["votes"]),
-                "timestamp": time()
-            })
-        }
+        this._emit_network_metrics(new_height, proposer_address, total_fees, elapsed_ms, consensus_result)
 
         this._enforce_resource_limits()
 
@@ -2934,37 +3043,21 @@ export contract Blockchain {
         }
 
         if skip_history == false {
-            block_timings = append(block_timings, {
-                "height": new_height,
-                "elapsed_ms": 0
-            })
-
-            this._record_storage_checkpoint("block_commit", new_height, {
-                "proposer": proposer_address,
-                "fees": total_fees,
-                "ratio_bp": consensus_result["ratio_bp"],
-                "threshold_bp": consensus_result["threshold_bp"],
-                "treasury_accrual": reward_report["treasury_accrual"]
-            })
-
-            let consensus_timestamp = 0
-            if performance_mode == false {
-                consensus_timestamp = time()
-            }
-            consensus_history = append(consensus_history, {
-                "height": new_height,
-                "proposer": proposer_address,
-                "ratio_bp": consensus_result["ratio_bp"],
-                "threshold_bp": consensus_result["threshold_bp"],
-                "votes": len(consensus_result["votes"]),
-                "committed": true,
-                "timestamp": consensus_timestamp,
-                "fees": total_fees,
-                "treasury_accrual": reward_report["treasury_accrual"],
-                "participant_paid": reward_report["participant_paid"],
-                "proposer_reward": reward_report["proposer_reward"]
-            })
+            this._append_commit_history(
+                new_height,
+                proposer_address,
+                selected,
+                applied,
+                requeue,
+                total_fees,
+                0,
+                consensus_result,
+                reward_report,
+                []
+            )
         }
+
+        this._emit_network_metrics(new_height, proposer_address, total_fees, 0, consensus_result)
 
         this._enforce_resource_limits()
 
