@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
 # Ensure local src is on path
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,7 @@ from zexus.evaluator import evaluate, Evaluator
 from zexus.object import Environment, String
 from zexus.vm.vm import VM
 from zexus.vm.profiler import ProfilingLevel
+from zexus.runtime.file_flags import parse_file_flags, apply_vm_config
 import zexus.vm.vm as vm_module
 
 DEFAULT_FILES = [
@@ -65,6 +67,9 @@ class ProfileConfig:
     enable_opcode_profile: bool
     enable_gas_metering: bool
     gas_limit: Optional[int]
+    perf_fast_dispatch: bool
+    vm_single_shot: bool
+    single_shot_max_instructions: int
 
 
 @dataclass
@@ -96,8 +101,18 @@ class FileReport:
     errors: List[str]
 
 
-def _parse_file(path: Path, syntax_style: str) -> Tuple[Any, str, float]:
+def _parse_file(
+    path: Path,
+    syntax_style: str,
+    transaction_count: Optional[int] = None
+) -> Tuple[Any, str, float, Dict[str, Any]]:
     source = path.read_text(encoding="utf-8")
+    if transaction_count is not None:
+        source = re.sub(
+            r"const\s+PERF_TRANSACTION_COUNT\s*=\s*\d+",
+            f"const PERF_TRANSACTION_COUNT = {int(transaction_count)}",
+            source,
+        )
     lexer = Lexer(source)
     setattr(lexer, "filename", str(path))
     parser = UltimateParser(lexer, syntax_style)
@@ -106,7 +121,7 @@ def _parse_file(path: Path, syntax_style: str) -> Tuple[Any, str, float]:
     parse_time = (time.perf_counter() - start) * 1000
     if parser.errors:
         raise RuntimeError(f"Parse errors: {parser.errors}")
-    return program, source, parse_time
+    return program, source, parse_time, parse_file_flags(source)
 
 
 def _extract_top(stats: pstats.Stats, sort_key: str, top_n: int) -> List[Dict[str, Any]]:
@@ -157,9 +172,12 @@ def _build_env(file_path: Path) -> Environment:
 def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> ProfileSummary:
     env = _build_env(file_path)
     setattr(env, "disable_vm", True)
+    evaluator = Evaluator(use_vm=False)
+    evaluator.use_vm = False
+    evaluator.unified_executor = None
 
     def run():
-        evaluate(program, env, use_vm=False)
+        evaluator.eval_node(program, env)
 
     elapsed_ms, memory_peak_mb, stats = _profile_call(run, cfg.enable_memory)
     return ProfileSummary(
@@ -171,7 +189,7 @@ def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> Profil
     )
 
 
-def _profile_vm(program, file_path: Path, cfg: ProfileConfig) -> Tuple[ProfileSummary, VmExtras]:
+def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[str, Any]) -> Tuple[ProfileSummary, VmExtras]:
     env = _build_env(file_path)
     evaluator = Evaluator(use_vm=True)
 
@@ -185,7 +203,14 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig) -> Tuple[ProfileSu
         profiling_level=vm_profiler_level.name,
         profiling_sample_rate=cfg.vm_profiler_sample_rate,
         profiling_track_overhead=False,
+        fast_single_shot=cfg.vm_single_shot,
+        single_shot_max_instructions=cfg.single_shot_max_instructions,
     )
+    vm._perf_fast_dispatch = bool(cfg.perf_fast_dispatch)
+    if isinstance(file_flags, dict):
+        vm_config = file_flags.get("vm_config")
+        if isinstance(vm_config, dict):
+            apply_vm_config(vm, vm_config)
     evaluator.vm_instance = vm
     evaluator.use_vm = True
 
@@ -289,9 +314,13 @@ def main() -> int:
     parser.add_argument("--no-opcode-profile", action="store_true", help="Disable VM opcode counting")
     parser.add_argument("--no-gas", action="store_true", help="Disable gas metering in VM")
     parser.add_argument("--gas-limit", type=int, default=None, help="Override gas limit for VM")
+    parser.add_argument("--perf-fast-dispatch", action="store_true", help="Use VM fast synchronous dispatch")
+    parser.add_argument("--vm-single-shot", action="store_true", help="Enable VM single-shot execution")
+    parser.add_argument("--single-shot-max", type=int, default=64, help="Max instructions for single-shot mode")
     parser.add_argument("--skip-interpreter", action="store_true", help="Skip interpreter profiling")
     parser.add_argument("--skip-vm", action="store_true", help="Skip VM profiling")
     parser.add_argument("--parse-only", action="store_true", help="Only parse files (no execution)")
+    parser.add_argument("--transaction-count", type=int, default=None, help="Override PERF_TRANSACTION_COUNT")
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "tmp" / "perf_reports"))
     args = parser.parse_args()
 
@@ -311,6 +340,9 @@ def main() -> int:
         enable_opcode_profile=not args.no_opcode_profile,
         enable_gas_metering=not args.no_gas,
         gas_limit=args.gas_limit,
+        perf_fast_dispatch=args.perf_fast_dispatch,
+        vm_single_shot=args.vm_single_shot,
+        single_shot_max_instructions=args.single_shot_max,
     )
 
     for path in targets:
@@ -334,7 +366,9 @@ def main() -> int:
             continue
 
         try:
-            program, _, parse_time_ms = _parse_file(path, cfg.syntax_style)
+            program, _, parse_time_ms, file_flags = _parse_file(
+                path, cfg.syntax_style, args.transaction_count
+            )
         except Exception as exc:
             errors.append(str(exc))
             report = FileReport(
@@ -370,7 +404,7 @@ def main() -> int:
 
         if not args.skip_vm:
             try:
-                vm_summary, vm_extras = _profile_vm(program, path, cfg)
+                vm_summary, vm_extras = _profile_vm(program, path, cfg, file_flags)
             except Exception as exc:
                 errors.append(f"VM error: {exc}")
 
