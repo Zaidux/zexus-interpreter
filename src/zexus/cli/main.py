@@ -68,7 +68,7 @@ except ModuleNotFoundError:  # Fallback to minimal console utilities when rich i
 from ..lexer import Lexer
 from ..parser import Parser
 # UPDATED: Import evaluate from evaluator package
-from ..evaluator import evaluate
+from ..evaluator import evaluate, Evaluator
 # UPDATED: Import Environment and String from object module
 from ..object import Environment, String
 from ..syntax_validator import SyntaxValidator
@@ -107,7 +107,9 @@ def show_all_commands():
         ("--syntax-style=<style>", "universal, tolerable, or auto (default)"),
         ("--execution-mode=<mode>", "interpreter, compiler, or auto (default)"),
         ("--advanced-parsing", "Enable multi-strategy parsing (default: on)"),
-        ("--debug", "Enable debug output"),
+        ("--debug <on|off|minimal|full>", "Enable/disable debug output"),
+        ("--no-debug", "Disable debug output"),
+        ("--no-vm", "Disable VM execution for run"),
         ("--version", "Show Zexus version"),
         ("--help", "Show detailed help"),
         ("", ""),
@@ -158,10 +160,12 @@ def show_all_commands():
               help='Enable advanced multi-strategy parsing (recommended)')
 @click.option('--execution-mode', type=click.Choice(['interpreter', 'compiler', 'auto']),
               default='auto', help='Execution engine to use')
-@click.option('--debug', is_flag=True, help='Enable debug logging')
+@click.option('--debug', type=click.Choice(['on', 'off', 'minimal', 'full', 'none']),
+              help='Enable/disable debug logging (on/off/minimal/full)')
+@click.option('--no-debug', is_flag=True, help='Disable debug logging')
 @click.option('--zexus', is_flag=True, help='Show all available Zexus commands')
 @click.pass_context
-def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
+def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, zexus):
     """Zexus Programming Language - Hybrid Interpreter/Compiler
     
     Use 'zx run --zexus' or 'zx --zexus' to see all available commands.
@@ -171,20 +175,30 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
         show_all_commands()
         sys.exit(0)
     
-    # If no command provided, show help
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
-        return
-    
     ctx.ensure_object(dict)
     ctx.obj['SYNTAX_STYLE'] = syntax_style
     ctx.obj['ADVANCED_PARSING'] = advanced_parsing
     ctx.obj['EXECUTION_MODE'] = execution_mode
-    ctx.obj['DEBUG'] = debug
+    ctx.obj['DEBUG'] = False
     
     # Update config based on CLI flags
-    if debug:
+    if no_debug or debug in ('off', 'none'):
+        config.disable_debug()
+        config.enable_debug_logs = False
+        ctx.obj['DEBUG'] = False
+    elif debug in ('on', 'full'):
+        config.enable_debug('full')
         config.enable_debug_logs = True
+        ctx.obj['DEBUG'] = True
+    elif debug == 'minimal':
+        config.enable_debug('minimal')
+        config.enable_debug_logs = True
+        ctx.obj['DEBUG'] = True
+
+    # If no command provided, show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        return
     if execution_mode == 'compiler':
         config.use_hybrid_compiler = True
     elif execution_mode == 'interpreter':
@@ -193,7 +207,7 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, zexus):
 @cli.command()
 @click.argument('file', type=click.Path(exists=True))
 @click.argument('args', nargs=-1)  # Accept any number of additional arguments
-@click.option('--use-vm', is_flag=True, default=True, help='Use VM for execution (default: enabled for performance)')
+@click.option('--use-vm/--no-vm', default=True, help='Use VM for execution (default: enabled for performance)')
 @click.option('--vm-mode', type=click.Choice(['auto', 'stack', 'register', 'parallel']),
               default='auto', help='VM execution mode (auto=best performance)')
 @click.option('--no-optimize', is_flag=True, default=False, help='Disable bytecode optimizations')
@@ -317,6 +331,11 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
         env.set("__PACKAGE__", package_name)
         
         # Execute based on mode
+        if not use_vm:
+            try:
+                env.disable_vm = True
+            except Exception:
+                pass
         bytecode = None
         fallback_reason = None
 
@@ -352,6 +371,13 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
             vm_mode_value = vm_mode if vm_mode in vm_mode_map else 'auto'
             vm_mode_enum = vm_mode_map[vm_mode_value]
 
+            vm_builtins = {}
+            try:
+                builtin_evaluator = Evaluator(use_vm=False)
+                vm_builtins = dict(builtin_evaluator.builtins)
+            except Exception:
+                vm_builtins = {}
+
             console.print(f"[dim]Initializing VM ({vm_mode} mode)...[/dim]", end="")
             vm = VM(
                 mode=vm_mode_enum,
@@ -360,6 +386,8 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 debug=ctx.obj.get('DEBUG', False),
                 gas_limit=100000000  # 100M instructions for heavy checks
             )
+            if vm_builtins:
+                vm.builtins.update(vm_builtins)
             apply_vm_config(vm, vm_config)
             # Mirror interpreter module context for relative imports in VM
             vm.env["__file__"] = abs_file
@@ -383,10 +411,10 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
 
         if fallback_reason is not None:
             console.print("[bold yellow]🔄 Falling back to interpreter execution...[/bold yellow]")
-            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'], use_vm=False)
         elif bytecode is None:
             # No bytecode generated but VM not requested or compile skipped
-            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
+            result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'], use_vm=False)
         
         if result and hasattr(result, 'inspect') and result.inspect() != 'null':
             console.print(f"\n✅ [bold green]Result:[/bold green] {result.inspect()}")

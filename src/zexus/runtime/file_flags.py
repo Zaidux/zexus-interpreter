@@ -91,6 +91,14 @@ def apply_vm_config(vm, vm_config: Dict[str, Any]) -> None:
     if not vm_config:
         return
 
+    mode_value = vm_config.get("mode")
+    if isinstance(mode_value, str):
+        try:
+            from ..vm.vm import VMMode
+            vm.mode = VMMode(mode_value.lower())
+        except Exception:
+            pass
+
     # Explicit gas metering disable
     if vm_config.get("enable_gas_metering") is False:
         try:
@@ -106,8 +114,22 @@ def apply_vm_config(vm, vm_config: Dict[str, Any]) -> None:
         except Exception:
             pass
 
+    if vm_config.get("prefer_register") is True:
+        try:
+            vm.prefer_register = True
+        except Exception:
+            pass
+
+    if vm_config.get("prefer_parallel") is True:
+        try:
+            vm.prefer_parallel = True
+        except Exception:
+            pass
+
     # generic attribute setters
     for key, value in vm_config.items():
+        if key == "mode":
+            continue
         if hasattr(vm, key):
             try:
                 setattr(vm, key, value)

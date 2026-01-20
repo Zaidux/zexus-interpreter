@@ -1,10 +1,11 @@
+// @zexus: {"vm_config": {"perf_fast_dispatch": true, "enable_gas_metering": false}}
 // Zexus performance benchmark: 10k transactions sequential vs bulk
 
 use "./full_network_chain/full_network_blockchain.zx"
 use {enable_vm, set_vm_thresholds, set_vm_config, profile_start, profile_stop, profile_report, vm_stats} from "stdlib/perf"
 use {stringify} from "stdlib/json"
 
-const PERF_TRANSACTION_COUNT = 500
+const PERF_TRANSACTION_COUNT = 2000
 const PERF_USE_JIT = true
 const PERF_USE_FAST_DISPATCH = true
 const PERF_ENABLE_REGISTER_PATH = true
@@ -258,6 +259,8 @@ set_vm_config({
     "enable_ssa": false,
     "enable_bytecode_converter": PERF_ENABLE_REGISTER_PATH,
     "enable_register_allocation": PERF_ENABLE_REGISTER_PATH,
+    "prefer_register": true,
+    "perf_fast_dispatch": true,
     "vm_single_shot": true,
     "vm_single_shot_min_instructions": 8,
     "fast_single_shot": true,
@@ -271,7 +274,7 @@ set_vm_config({
     "vm_sync_all": false,
     "vm_allow_unsafe_loops": false,
     "vm_dump_bytecode": false,
-    "mode": "auto"
+    "mode": "register"
 })
 
 // Warm up VM to ensure profiler is initialized before profiling starts

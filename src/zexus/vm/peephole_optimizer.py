@@ -162,6 +162,24 @@ class PeepholeOptimizer:
         Returns:
             (optimized_instructions, updated_constants)
         """
+        control_flow_ops = {
+            "JUMP",
+            "JUMP_IF_FALSE",
+            "JUMP_IF_TRUE",
+            "JUMP_FORWARD",
+            "JUMP_BACKWARD",
+            "JUMP_TARGET",
+            "LABEL",
+        }
+        for instr in instructions:
+            if instr is None:
+                continue
+            if isinstance(instr, tuple) and len(instr) >= 1:
+                op = instr[0]
+                op_name = op.name if hasattr(op, "name") else str(op)
+                if op_name in control_flow_ops:
+                    return instructions, list(constants) if constants is not None else []
+
         self._consts = list(constants) if constants is not None else []
         self._const_indexed = constants is not None
 

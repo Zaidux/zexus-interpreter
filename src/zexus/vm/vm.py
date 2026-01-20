@@ -395,6 +395,8 @@ class VM:
         self._env_version = 0
         self._name_cache: Dict[str, Tuple[Any, int]] = {}
         self._method_cache: Dict[Tuple[type, str], Any] = {}
+        self.prefer_register = False
+        self.prefer_parallel = False
         
         # --- JIT Compilation (Phase 2) ---
         self.use_jit = use_jit and _JIT_AVAILABLE
@@ -1016,6 +1018,10 @@ class VM:
         try:
             execution_mode = self._select_execution_mode(code)
             self._mode_usage[execution_mode.value] += 1
+
+            trace_mode = os.environ.get("ZEXUS_VM_TRACE_MODE")
+            if trace_mode and trace_mode.lower() not in ("0", "false", "off"):
+                print(f"[VM TRACE] execution mode={execution_mode.value}")
             
             if debug or self.debug:
                 print(f"[VM] Executing Bytecode | Mode: {execution_mode.value}")
@@ -1041,6 +1047,20 @@ class VM:
                 execution_time = time.perf_counter() - start_time
                 self._track_execution_for_jit(code, execution_time, execution_mode)
             
+            profile_print = os.environ.get("ZEXUS_VM_PROFILE_PRINT")
+            if profile_print and profile_print.lower() not in ("0", "false", "off"):
+                if self._last_opcode_profile:
+                    try:
+                        top_n = int(os.environ.get("ZEXUS_VM_PROFILE_TOP", "10"))
+                    except Exception:
+                        top_n = 10
+                    total_ops = sum(count for _, count in self._last_opcode_profile)
+                    elapsed = time.perf_counter() - start_time
+                    ops_per_sec = (total_ops / elapsed) if elapsed > 0 else 0.0
+                    print(f"[VM PROFILE] total_ops={total_ops} top={top_n} elapsed_ms={elapsed * 1000:.2f} ops_per_sec={ops_per_sec:.2f}")
+                    for op_name, count in self._last_opcode_profile[:top_n]:
+                        pct = (count / total_ops * 100) if total_ops else 0.0
+                        print(f"[VM PROFILE] {op_name} count={count} pct={pct:.2f}%")
             return result
             
         finally:
@@ -1050,7 +1070,14 @@ class VM:
     def _select_execution_mode(self, code) -> VMMode:
         if self.mode != VMMode.AUTO:
             return self.mode
-        
+
+        if hasattr(code, 'instructions'):
+            instructions = code.instructions
+            if self.prefer_parallel and self._parallel_vm and self._is_parallelizable(instructions):
+                return VMMode.PARALLEL
+            if self.prefer_register and self._register_vm and self._is_register_friendly(instructions):
+                return VMMode.REGISTER
+
         if self.use_jit:
             return VMMode.STACK
 
@@ -1060,7 +1087,7 @@ class VM:
                 return VMMode.PARALLEL
             if self._register_vm and self._is_register_friendly(instructions):
                 return VMMode.REGISTER
-        
+
         return VMMode.STACK
 
     # ==================== Specialized Execution Methods ====================
@@ -1177,12 +1204,23 @@ class VM:
     # ==================== JIT & Optimization Heuristics ====================
 
     def _is_parallelizable(self, instructions) -> bool:
-        if len(instructions) < 100: return False
-        independent_ops = sum(1 for op, _ in instructions if op in ['LOAD_CONST', 'ADD', 'SUB', 'MUL', 'HASH_BLOCK'])
+        if len(instructions) < 100:
+            return False
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+        independent_ops = sum(
+            1 for op, _ in instructions
+            if _op_name(op) in ['LOAD_CONST', 'ADD', 'SUB', 'MUL', 'HASH_BLOCK']
+        )
         return independent_ops / len(instructions) > 0.3
 
     def _is_register_friendly(self, instructions) -> bool:
-        arith_ops = sum(1 for op, _ in instructions if op in ['ADD', 'SUB', 'MUL', 'DIV', 'EQ', 'LT'])
+        def _op_name(op):
+            return op.name if hasattr(op, 'name') else op
+        arith_ops = sum(
+            1 for op, _ in instructions
+            if _op_name(op) in ['ADD', 'SUB', 'MUL', 'DIV', 'EQ', 'LT']
+        )
         return arith_ops / max(len(instructions), 1) > 0.4
 
     def _track_execution_for_jit(self, bytecode, execution_time: float, execution_mode: VMMode):
@@ -1741,6 +1779,11 @@ class VM:
                         elif isinstance(target, (dict, list)) and len(args) >= 2:
                             target[args[0]] = args[1]
                             result = args[1]
+                    elif method_name == "get":
+                        if isinstance(target, ZMap) and args:
+                            result = target.get(args[0])
+                        elif isinstance(target, dict) and args:
+                            result = target.get(args[0])
                     elif hasattr(target, "call_method"):
                         wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                         try:
@@ -1800,9 +1843,28 @@ class VM:
         """Synchronous callable invocation for fast dispatch."""
         if fn is None:
             return None
-        if callable(fn) and not asyncio.iscoroutinefunction(fn):
+        real_fn = fn.fn if hasattr(fn, "fn") else fn
+        try:
+            from ..object import Action as ZAction, LambdaFunction as ZLambda
+        except Exception:
+            ZAction = None
+            ZLambda = None
+        if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
             try:
-                return fn(*args)
+                from ..evaluator.core import Evaluator
+                if self._action_evaluator is None:
+                    self._action_evaluator = Evaluator(use_vm=False)
+                call_args = [self._wrap_for_builtin(arg) for arg in args]
+                result = self._action_evaluator.apply_function(real_fn, call_args)
+                return self._unwrap_after_builtin(result)
+            except Exception:
+                return None
+        if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+            try:
+                wrap_args = hasattr(fn, "fn")
+                call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
+                result = real_fn(*call_args)
+                return self._unwrap_after_builtin(result) if wrap_args else result
             except Exception:
                 return None
         if isinstance(fn, dict):
@@ -1827,8 +1889,8 @@ class VM:
                     child_vm.env[pname] = args[i] if i < len(args) else None
                 return child_vm._run_stack_bytecode_sync(bytecode, debug=False)
         # Fallback for async callables
-        if asyncio.iscoroutinefunction(fn):
-            return self._run_coroutine_sync(fn(*args))
+        if asyncio.iscoroutinefunction(real_fn):
+            return self._run_coroutine_sync(real_fn(*args))
         return None
 
     # ==================== Core Execution: Stack Bytecode ====================
@@ -1927,6 +1989,22 @@ class VM:
         opcode_counts: Optional[Dict[str, int]] = {} if profile_ops else None
         if profile_ops and profile_verbose:
             print(f"[VM DEBUG] opcode profiling enabled; instrs={len(instrs)}")
+        trace_ip_range = None
+        trace_ip_env = os.environ.get("ZEXUS_VM_TRACE_IP_RANGE")
+        if trace_ip_env:
+            try:
+                parts = str(trace_ip_env).split("-", 1)
+                if len(parts) == 2:
+                    trace_ip_range = (int(parts[0]), int(parts[1]))
+            except Exception:
+                trace_ip_range = None
+
+        trace_loads_flag = os.environ.get("ZEXUS_VM_TRACE_LOADS")
+        trace_loads_active = trace_loads_flag and trace_loads_flag.lower() not in ("0", "false", "off")
+        trace_calls_flag = os.environ.get("ZEXUS_VM_TRACE_CALLS")
+        trace_calls_active = trace_calls_flag and trace_calls_flag.lower() not in ("0", "false", "off")
+        trace_targets_flag = os.environ.get("ZEXUS_VM_TRACE_METHOD_TARGETS")
+        trace_targets_active = trace_targets_flag and trace_targets_flag.lower() not in ("0", "false", "off")
 
         class _EvalStack:
             __slots__ = ("data", "sp")
@@ -2120,24 +2198,88 @@ class VM:
                 return
 
             method_idx, arg_count = operand
+            trace_stack = os.environ.get("ZEXUS_VM_TRACE_STACK")
+            if trace_stack and trace_stack.lower() not in ("0", "false", "off"):
+                if len(stack) < arg_count + 1:
+                    try:
+                        window = []
+                        start = max(0, ip - 12)
+                        for k in range(start, min(len(instrs), ip + 1)):
+                            instr = instrs[k]
+                            if instr is None:
+                                continue
+                            opk = instr[0] if isinstance(instr, tuple) else instr
+                            namek = opk.name if hasattr(opk, "name") else str(opk)
+                            operk = instr[1] if isinstance(instr, tuple) and len(instr) > 1 else None
+                            if namek in ("LOAD_NAME", "LOAD_CONST"):
+                                try:
+                                    val = const(operk)
+                                except Exception:
+                                    val = operk
+                                window.append(f"{k}:{namek}={val}")
+                            else:
+                                window.append(f"{k}:{namek}")
+                        try:
+                            tail = stack.snapshot()[-8:]
+                        except Exception:
+                            tail = "<unavailable>"
+                        print(
+                            f"[VM TRACE] stack_underflow ip={ip} method={const(method_idx)} "
+                            f"argc={arg_count} stack={len(stack)} tail={tail} ops={'|'.join(window)}"
+                        )
+                    except Exception:
+                        print(f"[VM TRACE] stack_underflow ip={ip} method={const(method_idx)} argc={arg_count} stack={len(stack)}")
+            if len(stack) < arg_count + 1:
+                missing = (arg_count + 1) - len(stack)
+                for _ in range(missing):
+                    stack.append(None)
             args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
             target = stack.pop() if stack else None
             method_name = const(method_idx)
-
-            trace_calls = os.environ.get("ZEXUS_VM_TRACE_CALLS")
-            if trace_calls:
+            trace_methods = os.environ.get("ZEXUS_VM_TRACE_METHOD_OPS")
+            if trace_methods:
                 try:
-                    interval = int(trace_calls) if trace_calls.isdigit() else 1000
+                    targets = [m.strip() for m in trace_methods.split(",") if m.strip()]
+                except Exception:
+                    targets = []
+                if method_name in targets:
+                    try:
+                        window = []
+                        start = max(0, ip - 10)
+                        for k in range(start, min(len(instrs), ip + 2)):
+                            instr = instrs[k]
+                            if instr is None:
+                                continue
+                            opk = instr[0] if isinstance(instr, tuple) else instr
+                            namek = opk.name if hasattr(opk, "name") else str(opk)
+                            operk = instr[1] if isinstance(instr, tuple) and len(instr) > 1 else None
+                            if namek in ("LOAD_NAME", "LOAD_CONST", "STORE_NAME"):
+                                try:
+                                    val = const(operk)
+                                except Exception:
+                                    val = operk
+                                window.append(f"{k}:{namek}={val}")
+                            else:
+                                window.append(f"{k}:{namek}")
+                        print(f"[VM TRACE] method_ops {method_name} ip={ip} ops={'|'.join(window)}")
+                    except Exception:
+                        print(f"[VM TRACE] method_ops {method_name} ip={ip}")
+
+            if trace_calls_active:
+                try:
+                    interval = int(trace_calls_flag) if trace_calls_flag.isdigit() else 1000
                 except Exception:
                     interval = 1000
                 self._call_method_total += 1
                 if interval > 0 and self._call_method_total % interval == 0:
                     target_type = type(target).__name__ if target is not None else "None"
-                    print(f"[VM TRACE] CALL_METHOD total={self._call_method_total} method={method_name} target={target_type}")
+                    print(
+                        f"[VM TRACE] CALL_METHOD total={self._call_method_total} method={method_name} "
+                        f"argc={arg_count} target={target_type}"
+                    )
 
             if target is None:
-                trace_targets = os.environ.get("ZEXUS_VM_TRACE_METHOD_TARGETS")
-                if trace_targets and trace_targets.lower() not in ("0", "false", "off"):
+                if trace_targets_active:
                     if method_name in ("submit_transaction_fast", "produce_single_tx_block", "produce_blocks_fast_until_empty"):
                         if self._method_target_trace_count < 10:
                             env_val = self.env.get("blockchain") if isinstance(self.env, dict) else None
@@ -2193,6 +2335,11 @@ class VM:
                             result = args[1]
                         else:
                             result = None
+                elif method_name == "get":
+                    if isinstance(target, ZMap) and args:
+                        result = target.get(args[0])
+                    elif isinstance(target, dict) and args:
+                        result = target.get(args[0])
                 elif hasattr(target, "call_method"):
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                     try:
@@ -2226,21 +2373,36 @@ class VM:
 
             stack.append(self._unwrap_after_builtin(result))
 
+        stack_append = stack.append
+        stack_pop = stack.pop
+
         def _op_load_const(idx):
             value = const(idx)
             if self.integer_pool and isinstance(value, int):
                 value = self.integer_pool.get(value)
             elif self.string_pool and isinstance(value, str):
                 value = self.string_pool.get(value)
-            stack.append(value)
+            stack_append(value)
+            if trace_loads_active:
+                if value is None:
+                    try:
+                        print(f"[VM TRACE] LOAD_CONST None ip={ip - 1} stack={len(stack)}")
+                    except Exception:
+                        print(f"[VM TRACE] LOAD_CONST None ip={ip - 1}")
 
         def _op_load_name(idx):
             name = const(idx)
-            stack.append(_resolve(name))
+            stack_append(_resolve(name))
+            if trace_loads_active:
+                if name in ("blockchain", "sender"):
+                    try:
+                        print(f"[VM TRACE] LOAD_NAME {name} ip={ip - 1} stack={len(stack)}")
+                    except Exception:
+                        print(f"[VM TRACE] LOAD_NAME {name} ip={ip - 1}")
 
         def _op_store_name(idx):
             name = const(idx)
-            val = stack.pop() if stack else None
+            val = stack_pop() if stack else None
             _store(name, val)
             if self.use_memory_manager and val is not None:
                 self._allocate_managed(val, name=name, root=True)
@@ -2256,6 +2418,21 @@ class VM:
         def _op_neg(_):
             a = _unwrap(stack.pop() if stack else 0)
             stack.append(-a)
+
+        def _op_add(_):
+            b = _unwrap(stack_pop() if stack else 0)
+            a = _unwrap(stack_pop() if stack else 0)
+            if a is None:
+                a = 0
+            if b is None:
+                b = 0
+            if isinstance(a, ZEvaluationError):
+                stack_append(a)
+                return
+            if isinstance(b, ZEvaluationError):
+                stack_append(b)
+                return
+            stack_append(a + b)
 
         def _op_not(_):
             a = stack.pop() if stack else False
@@ -2327,10 +2504,10 @@ class VM:
                 stack.append(None)
 
         def _op_get_attr(_):
-            attr = stack.pop() if stack else None
-            obj = stack.pop() if stack else None
+            attr = stack_pop() if stack else None
+            obj = stack_pop() if stack else None
             if obj is None:
-                stack.append(None)
+                stack_append(None)
                 return
             attr_name = _unwrap(attr)
             try:
@@ -2338,13 +2515,13 @@ class VM:
                     key = attr_name
                     if isinstance(key, str):
                         key = ZString(key)
-                    stack.append(obj.get(key))
+                    stack_append(obj.get(key))
                 elif isinstance(obj, dict):
-                    stack.append(obj.get(attr_name))
+                    stack_append(obj.get(attr_name))
                 else:
-                    stack.append(getattr(obj, attr_name, None))
+                    stack_append(getattr(obj, attr_name, None))
             except Exception:
-                stack.append(None)
+                stack_append(None)
 
         def _op_get_length(_):
             obj = stack.pop() if stack else None
@@ -2391,7 +2568,7 @@ class VM:
             "CALL_NAME": _op_call_name,
             "CALL_TOP": _op_call_top,
             "CALL_METHOD": _op_call_method,
-            "ADD": _binary_op(lambda a, b: a + b),
+            "ADD": _op_add,
             "SUB": _binary_op(lambda a, b: a - b),
             "MUL": _binary_op(lambda a, b: a * b),
             "DIV": _binary_op(lambda a, b: a / b if b != 0 else 0),
@@ -2489,11 +2666,26 @@ class VM:
                             )
     
                 handler = dispatch_table.get(op_name)
+                if trace_ip_range and trace_ip_range[0] <= current_ip <= trace_ip_range[1]:
+                    op_detail = op_name
+                    if op_name in ("LOAD_NAME", "STORE_NAME"):
+                        try:
+                            op_detail = f"{op_name}({const(operand)})"
+                        except Exception:
+                            op_detail = op_name
+                    elif op_name == "LOAD_CONST":
+                        try:
+                            op_detail = f"{op_name}({const(operand)})"
+                        except Exception:
+                            op_detail = op_name
+                    print(f"[VM TRACE] ip={current_ip} op={op_detail} pre_stack={len(stack)}")
                 if handler is not None:
                     if op_name in async_dispatch_ops:
                         await handler(operand)
                     else:
                         handler(operand)
+                    if trace_ip_range and trace_ip_range[0] <= current_ip <= trace_ip_range[1]:
+                        print(f"[VM TRACE] ip={current_ip} op={op_detail} post_stack={len(stack)}")
                     if not running:
                         break
                     continue

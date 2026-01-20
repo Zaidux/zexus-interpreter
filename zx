@@ -4,16 +4,29 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 PY="${PYTHON:-python3}"
 export PYTHONPATH="$DIR/src:$PYTHONPATH"
 
-# Check for --debug flag
+# Check for --debug flag/value
 DEBUG_MODE=""
-if [[ " $* " =~ " --debug " ]]; then
-  export ZEXUS_DEBUG=1
-  DEBUG_MODE="--debug"
-  echo "🐛 [DEBUG MODE] Enabled"
-fi
+ARGS=("$@")
+for ((i=0; i<${#ARGS[@]}; i++)); do
+  if [[ "${ARGS[$i]}" == "--debug" ]]; then
+    next_val="${ARGS[$((i+1))]}"
+    case "$next_val" in
+      off|none|false|0)
+        export ZEXUS_DEBUG=0
+        DEBUG_MODE=""
+        ;;
+      *)
+        export ZEXUS_DEBUG=1
+        DEBUG_MODE="--debug"
+        echo "🐛 [DEBUG MODE] Enabled"
+        ;;
+    esac
+    break
+  fi
+done
 
 if [ "$#" -ge 1 ] && [[ "$1" == *.zx ]]; then
-  exec "$PY" "$DIR/scripts/main.py" --syntax-style=auto --advanced-parsing run "$1" $DEBUG_MODE
+  exec "$PY" "$DIR/scripts/main.py" --syntax-style=auto --advanced-parsing run "$1" "${@:2}" $DEBUG_MODE
 else
   exec "$PY" "$DIR/scripts/main.py" "$@"
 fi

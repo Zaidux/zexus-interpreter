@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Optional
 
 from .bytecode import Bytecode
 
+CACHE_VERSION = 2
+
 
 @dataclass
 class FileMetadata:
@@ -175,7 +177,10 @@ class BytecodeCache:
         try:
             # Convert AST to hashable representation
             ast_repr = self._ast_to_dict(ast_node)
-            ast_json = json.dumps(ast_repr, sort_keys=True)
+            ast_json = json.dumps(
+                {"__cache_version__": CACHE_VERSION, "ast": ast_repr},
+                sort_keys=True,
+            )
             return hashlib.md5(ast_json.encode()).hexdigest()
         except Exception as e:
             # Fallback to string representation
@@ -580,7 +585,8 @@ class BytecodeCache:
             cached = self._file_cache[file_key]
             # Validate: file hasn't been modified
             if (cached.get('mtime') == metadata.mtime and 
-                cached.get('content_hash') == metadata.content_hash):
+                cached.get('content_hash') == metadata.content_hash and
+                cached.get('version') == CACHE_VERSION):
                 self.stats.file_hits += 1
                 if self.debug:
                     print(f"✅ FileCache: HIT {file_path} ({len(cached.get('bytecodes', []))} entries)")
@@ -623,6 +629,7 @@ class BytecodeCache:
             'mtime': metadata.mtime,
             'size': metadata.size,
             'content_hash': metadata.content_hash,
+            'version': CACHE_VERSION,
             'bytecodes': bytecodes,
             'cached_at': time.time()
         }
@@ -661,7 +668,8 @@ class BytecodeCache:
                     'file_path': metadata.file_path,
                     'mtime': metadata.mtime,
                     'size': metadata.size,
-                    'content_hash': metadata.content_hash
+                    'content_hash': metadata.content_hash,
+                    'version': CACHE_VERSION,
                 },
                 'bytecodes': bytecodes,
                 'cached_at': time.time()
@@ -691,7 +699,8 @@ class BytecodeCache:
             cached_meta = data.get('metadata', {})
             # Validate metadata matches
             if (cached_meta.get('mtime') == current_metadata.mtime and
-                cached_meta.get('content_hash') == current_metadata.content_hash):
+                cached_meta.get('content_hash') == current_metadata.content_hash and
+                cached_meta.get('version') == CACHE_VERSION):
                 
                 bytecodes = data.get('bytecodes', [])
                 # Store in memory cache too

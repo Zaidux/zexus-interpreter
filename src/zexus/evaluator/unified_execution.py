@@ -575,7 +575,11 @@ class UnifiedExecutor:
                     "full_loop": bool(full_loop),
                     "ops_preview": ops_preview
                 }
-                if bool(self.vm_config.get("vm_dump_bytecode", False)):
+                dump_flag = bool(self.vm_config.get("vm_dump_bytecode", False))
+                env_dump = os.environ.get("ZEXUS_VM_DUMP_BYTECODE")
+                if env_dump and env_dump.lower() not in ("0", "false", "off"):
+                    dump_flag = True
+                if dump_flag:
                     try:
                         dump_lines = []
                         dump_lines.append(f"Loop {loop_id} | full_loop={bool(full_loop)}")
