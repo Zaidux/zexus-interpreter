@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import argparse
 import cProfile
+import faulthandler
 import json
 import os
 import pstats
+import signal
 import sys
 import time
 import tracemalloc
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -61,12 +64,14 @@ class ProfileConfig:
     syntax_style: str
     top_n: int
     enable_memory: bool
+    timeout_seconds: Optional[int]
     enable_vm_profiler: bool
     vm_profiler_level: str
     vm_profiler_sample_rate: float
     enable_opcode_profile: bool
     enable_gas_metering: bool
     gas_limit: Optional[int]
+    max_operations: Optional[int]
     perf_fast_dispatch: bool
     vm_single_shot: bool
     single_shot_max_instructions: int
@@ -142,14 +147,61 @@ def _extract_top(stats: pstats.Stats, sort_key: str, top_n: int) -> List[Dict[st
     return results
 
 
-def _profile_call(fn, enable_memory: bool) -> Tuple[float, float, pstats.Stats]:
+def _start_heartbeat(label: str, interval_seconds: int = 10) -> threading.Event:
+    stop_event = threading.Event()
+
+    def _loop():
+        last = time.perf_counter()
+        while not stop_event.is_set():
+            stop_event.wait(interval_seconds)
+            if stop_event.is_set():
+                break
+            now = time.perf_counter()
+            elapsed = now - last
+            last = now
+            print(f"[profile] still running: {label} (+{elapsed:.1f}s)")
+
+    thread = threading.Thread(target=_loop, daemon=True)
+    thread.start()
+    return stop_event
+
+
+def _profile_call(
+    fn,
+    enable_memory: bool,
+    timeout_seconds: Optional[int],
+    label: str
+) -> Tuple[float, float, pstats.Stats]:
     if enable_memory:
         tracemalloc.start()
+
     profiler = cProfile.Profile()
     start = time.perf_counter()
-    profiler.enable()
-    fn()
-    profiler.disable()
+
+    def _handle_timeout(_signum, _frame):
+        raise TimeoutError("Execution timed out")
+
+    previous_handler = None
+    timeout_limit = None
+    heartbeat_stop = _start_heartbeat(label)
+    if timeout_seconds is not None:
+        timeout_limit = max(1, int(timeout_seconds))
+        previous_handler = signal.signal(signal.SIGALRM, _handle_timeout)
+        signal.alarm(timeout_limit)
+        faulthandler.dump_traceback_later(timeout_limit, repeat=True)
+
+    try:
+        profiler.enable()
+        fn()
+        profiler.disable()
+    finally:
+        heartbeat_stop.set()
+        if timeout_limit is not None:
+            signal.alarm(0)
+            faulthandler.cancel_dump_traceback_later()
+            if previous_handler is not None:
+                signal.signal(signal.SIGALRM, previous_handler)
+
     elapsed_ms = (time.perf_counter() - start) * 1000
     memory_peak = 0.0
     if enable_memory:
@@ -179,7 +231,12 @@ def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> Profil
     def run():
         evaluator.eval_node(program, env)
 
-    elapsed_ms, memory_peak_mb, stats = _profile_call(run, cfg.enable_memory)
+    elapsed_ms, memory_peak_mb, stats = _profile_call(
+        run,
+        cfg.enable_memory,
+        cfg.timeout_seconds,
+        f"interpreter::{file_path.name}"
+    )
     return ProfileSummary(
         name="interpreter",
         elapsed_ms=elapsed_ms,
@@ -193,11 +250,15 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
     env = _build_env(file_path)
     evaluator = Evaluator(use_vm=True)
 
+    # FORCE gas metering ON to prevent infinite loops (override file flags)
+    force_gas_metering = True
+    effective_gas_metering = force_gas_metering or cfg.enable_gas_metering
+
     vm_profiler_level = getattr(ProfilingLevel, cfg.vm_profiler_level, ProfilingLevel.DETAILED)
     vm = VM(
         use_jit=True,
         jit_threshold=100,
-        enable_gas_metering=cfg.enable_gas_metering,
+        enable_gas_metering=effective_gas_metering,
         gas_limit=cfg.gas_limit,
         enable_profiling=cfg.enable_vm_profiler,
         profiling_level=vm_profiler_level.name,
@@ -207,10 +268,17 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
         single_shot_max_instructions=cfg.single_shot_max_instructions,
     )
     vm._perf_fast_dispatch = bool(cfg.perf_fast_dispatch)
-    if isinstance(file_flags, dict):
-        vm_config = file_flags.get("vm_config")
-        if isinstance(vm_config, dict):
-            apply_vm_config(vm, vm_config)
+    if vm.gas_metering and cfg.max_operations is not None:
+        try:
+            vm.gas_metering.max_operations = max(1, int(cfg.max_operations))
+            print(f"[profile] VM gas metering FORCED ON: max_ops={vm.gas_metering.max_operations}")
+        except Exception:
+            pass
+    # DO NOT apply file flags that might disable gas metering for profiling
+    # if isinstance(file_flags, dict):
+    #     vm_config = file_flags.get("vm_config")
+    #     if isinstance(vm_config, dict):
+    #         apply_vm_config(vm, vm_config)
     evaluator.vm_instance = vm
     evaluator.use_vm = True
 
@@ -220,11 +288,22 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
     if cfg.enable_opcode_profile:
         os.environ[opcode_env_key] = "1"
 
+    if cfg.max_operations is not None:
+        print(f"[profile] VM guard: max_operations={cfg.max_operations} gas_limit={cfg.gas_limit}")
+        print(f"[profile] VM gas metering enabled: {vm.enable_gas_metering}")
+        if vm.gas_metering:
+            print(f"[profile] VM gas metering actual limit: {vm.gas_metering.max_operations}")
+
     def run():
         evaluator.eval_with_vm_support(program, env)
 
     try:
-        elapsed_ms, memory_peak_mb, stats = _profile_call(run, cfg.enable_memory)
+        elapsed_ms, memory_peak_mb, stats = _profile_call(
+            run,
+            cfg.enable_memory,
+            cfg.timeout_seconds,
+            f"vm::{file_path.name}"
+        )
     finally:
         if cfg.enable_opcode_profile:
             if prev_opcode is None:
@@ -308,12 +387,14 @@ def main() -> int:
     parser.add_argument("--syntax-style", default="auto", choices=["auto", "universal", "tolerable"])
     parser.add_argument("--top", type=int, default=25, help="Top N functions/opcodes to report")
     parser.add_argument("--no-memory", action="store_true", help="Disable memory profiling")
+    parser.add_argument("--timeout-seconds", type=int, default=120, help="Stop execution after N seconds")
     parser.add_argument("--no-vm-profiler", action="store_true", help="Disable VM instruction profiler")
     parser.add_argument("--vm-profiler-level", default="DETAILED", choices=["BASIC", "DETAILED", "FULL"])
     parser.add_argument("--vm-profiler-sample-rate", type=float, default=1.0)
     parser.add_argument("--no-opcode-profile", action="store_true", help="Disable VM opcode counting")
     parser.add_argument("--no-gas", action="store_true", help="Disable gas metering in VM")
     parser.add_argument("--gas-limit", type=int, default=None, help="Override gas limit for VM")
+    parser.add_argument("--max-operations", type=int, default=200_000, help="Abort VM after N ops")
     parser.add_argument("--perf-fast-dispatch", action="store_true", help="Use VM fast synchronous dispatch")
     parser.add_argument("--vm-single-shot", action="store_true", help="Enable VM single-shot execution")
     parser.add_argument("--single-shot-max", type=int, default=64, help="Max instructions for single-shot mode")
@@ -334,12 +415,14 @@ def main() -> int:
         syntax_style=args.syntax_style,
         top_n=args.top,
         enable_memory=not args.no_memory,
+        timeout_seconds=args.timeout_seconds,
         enable_vm_profiler=not args.no_vm_profiler,
         vm_profiler_level=args.vm_profiler_level,
         vm_profiler_sample_rate=args.vm_profiler_sample_rate,
         enable_opcode_profile=not args.no_opcode_profile,
         enable_gas_metering=not args.no_gas,
         gas_limit=args.gas_limit,
+        max_operations=args.max_operations,
         perf_fast_dispatch=args.perf_fast_dispatch,
         vm_single_shot=args.vm_single_shot,
         single_shot_max_instructions=args.single_shot_max,
@@ -366,6 +449,7 @@ def main() -> int:
             continue
 
         try:
+            print(f"[profile] parsing {path}")
             program, _, parse_time_ms, file_flags = _parse_file(
                 path, cfg.syntax_style, args.transaction_count
             )
@@ -398,12 +482,14 @@ def main() -> int:
 
         if not args.skip_interpreter:
             try:
+                print(f"[profile] interpreter run: {path.name}")
                 interpreter_summary = _profile_interpreter(program, path, cfg)
             except Exception as exc:
                 errors.append(f"Interpreter error: {exc}")
 
         if not args.skip_vm:
             try:
+                print(f"[profile] VM run: {path.name}")
                 vm_summary, vm_extras = _profile_vm(program, path, cfg, file_flags)
             except Exception as exc:
                 errors.append(f"VM error: {exc}")

@@ -1036,10 +1036,16 @@ class VM:
             
             # 3. Fast synchronous path for performance mode (no async overhead)
             elif getattr(self, '_perf_fast_dispatch', False):
+                perf_verbose = os.environ.get("ZEXUS_PERF_VERBOSE")
+                if perf_verbose and perf_verbose.lower() not in ("0", "false", "off"):
+                    print(f"[PERF] Using sync fast dispatch")
                 result = self._run_stack_bytecode_sync(code, debug)
             
             # 4. Stack Mode (Standard/Fallback + Async Support)
             else:
+                perf_verbose = os.environ.get("ZEXUS_PERF_VERBOSE")
+                if perf_verbose and perf_verbose.lower() not in ("0", "false", "off"):
+                    print(f"[PERF] Using async dispatch (_perf_fast_dispatch={getattr(self, '_perf_fast_dispatch', False)})")
                 result = self._run_coroutine_sync(self._execute_stack(code, debug))
             
             # JIT Tracking
@@ -1230,7 +1236,22 @@ class VM:
             and self._opcode_exec_count >= self._native_jit_auto_threshold):
             self._native_jit_auto_enabled = self.jit_compiler.enable_native_backend()
         
-        with self._jit_lock:
+        # OPTIMIZATION: Skip lock for single-threaded execution (47 lock acquisitions cost 37.6s!)
+        use_lock = self._jit_lock is not None
+        
+        if use_lock:
+            with self._jit_lock:
+                hot_path_info = self.jit_compiler.track_execution(bytecode, execution_time)
+                bytecode_hash = getattr(hot_path_info, 'bytecode_hash', None) or self.jit_compiler._hash_bytecode(bytecode)
+                
+                if bytecode_hash not in self._jit_execution_stats:
+                    self._jit_execution_stats[bytecode_hash] = []
+                self._jit_execution_stats[bytecode_hash].append(execution_time)
+                
+                # Check if should compile (outside lock to avoid holding during compilation)
+                should_compile = self.jit_compiler.should_compile(bytecode_hash)
+        else:
+            # Lock-free path for single-threaded execution
             hot_path_info = self.jit_compiler.track_execution(bytecode, execution_time)
             bytecode_hash = getattr(hot_path_info, 'bytecode_hash', None) or self.jit_compiler._hash_bytecode(bytecode)
             
@@ -1238,14 +1259,17 @@ class VM:
                 self._jit_execution_stats[bytecode_hash] = []
             self._jit_execution_stats[bytecode_hash].append(execution_time)
             
-            # Check if should compile (outside lock to avoid holding during compilation)
             should_compile = self.jit_compiler.should_compile(bytecode_hash)
         
         # Compile outside the lock to prevent blocking other executions
         if should_compile:
             if self.debug: print(f"[VM JIT] Compiling hot path: {bytecode_hash[:8]}")
-            with self._jit_lock:
-                # Double-check it hasn't been compiled by another thread
+            if use_lock:
+                with self._jit_lock:
+                    # Double-check it hasn't been compiled by another thread
+                    if self.jit_compiler.should_compile(bytecode_hash):
+                        self.jit_compiler.compile_hot_path(bytecode)
+            else:
                 if self.jit_compiler.should_compile(bytecode_hash):
                     self.jit_compiler.compile_hot_path(bytecode)
 
@@ -2641,8 +2665,8 @@ class VM:
                 if self.enable_profiling and self.profiler and self.profiler.enabled:
                     if self.profiler.level in (ProfilingLevel.DETAILED, ProfilingLevel.FULL):
                         instr_start_time = time.perf_counter()
-                    # Record instruction (count only for BASIC level)
-                    self.profiler.record_instruction(current_ip, op_name, operand, prev_ip, len(stack))
+                    # OPTIMIZATION: Use stack.sp instead of len(stack) to avoid 500k function calls
+                    self.profiler.record_instruction(current_ip, op_name, operand, prev_ip, stack.sp)
                 
                 prev_ip = current_ip
                 ip += 1
@@ -2651,7 +2675,7 @@ class VM:
                     trace_counter += 1
                     if trace_counter % trace_interval == 0:
                         try:
-                            stack_size = len(stack)
+                            stack_size = stack.sp  # OPTIMIZATION: Direct attribute access
                         except Exception:
                             stack_size = -1
                         print(f"[VM TRACE] async ip={current_ip} op={op_name} stack={stack_size}")
@@ -3703,20 +3727,44 @@ class VM:
             # Extract .fn if it's a wrapper
             real_fn = fn_obj.fn if hasattr(fn_obj, "fn") else fn_obj
 
-            # Execute Zexus Action/LambdaFunction via evaluator
+            # Execute Zexus Action/LambdaFunction via VM if possible, fallback to evaluator
             try:
                 from ..object import Action as ZAction, LambdaFunction as ZLambda
                 if isinstance(real_fn, (ZAction, ZLambda)):
-                    from ..evaluator.core import Evaluator
-                    if self._action_evaluator is None:
-                        self._action_evaluator = Evaluator(use_vm=False)
-                    call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
-                    result = self._action_evaluator.apply_function(real_fn, call_args)
-                    trace_errors = os.environ.get("ZEXUS_VM_TRACE_ERRORS")
-                    if trace_errors and trace_errors.lower() not in ("0", "false", "off"):
-                        if isinstance(result, ZEvaluationError):
-                            print(f"[VM TRACE] action error: {result.message}")
-                    return self._unwrap_after_builtin(result)
+                    # Try to compile to bytecode and execute in VM (fast path)
+                    action_bytecode = None
+                    try:
+                        if hasattr(real_fn, '_cached_bytecode'):
+                            action_bytecode = real_fn._cached_bytecode
+                        else:
+                            from ..evaluator.bytecode_compiler import EvaluatorBytecodeCompiler
+                            compiler = EvaluatorBytecodeCompiler(use_cache=False)
+                            action_bytecode = compiler.compile(real_fn.body, optimize=True)
+                            if action_bytecode and not compiler.errors:
+                                real_fn._cached_bytecode = action_bytecode
+                    except Exception:
+                        action_bytecode = None
+                    
+                    if action_bytecode:
+                        # Execute via VM (fast)
+                        call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
+                        params = real_fn.parameters if hasattr(real_fn, 'parameters') else []
+                        local_env = {k.value if hasattr(k, 'value') else k: v for k, v in zip(params, call_args)}
+                        inner_vm = VM.create_child(parent_vm=self, env=local_env)
+                        result = inner_vm._run_stack_bytecode_sync(action_bytecode, debug=False)
+                        return self._unwrap_after_builtin(result)
+                    else:
+                        # Fallback to interpreter (slow)
+                        from ..evaluator.core import Evaluator
+                        if self._action_evaluator is None:
+                            self._action_evaluator = Evaluator(use_vm=False)
+                        call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
+                        result = self._action_evaluator.apply_function(real_fn, call_args)
+                        trace_errors = os.environ.get("ZEXUS_VM_TRACE_ERRORS")
+                        if trace_errors and trace_errors.lower() not in ("0", "false", "off"):
+                            if isinstance(result, ZEvaluationError):
+                                print(f"[VM TRACE] action error: {result.message}")
+                        return self._unwrap_after_builtin(result)
             except Exception:
                 pass
             

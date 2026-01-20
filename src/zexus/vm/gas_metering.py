@@ -102,6 +102,9 @@ class GasMetering:
         self.gas_by_operation: Dict[str, int] = {}
         self.operation_counts: Dict[str, int] = {}
         
+        # OPTIMIZATION: Cache for operation costs to avoid repeated enum lookups
+        self._cost_cache: Dict[str, int] = {}
+        
     def consume(self, operation: str, amount: Optional[int] = None, **kwargs) -> bool:
         """
         Consume gas for an operation
@@ -114,6 +117,11 @@ class GasMetering:
         Returns:
             True if enough gas available, False if out of gas
         """
+        # OPTIMIZATION: Fast path for operation count check (most common failure)
+        self.operation_count += 1
+        if self.operation_count > self.max_operations:
+            return False
+        
         # Calculate gas cost
         if amount is not None:
             cost = amount
@@ -126,15 +134,11 @@ class GasMetering:
         
         # Consume gas
         self.gas_used += cost
-        self.operation_count += 1
         
-        # Track for profiling
-        self.gas_by_operation[operation] = self.gas_by_operation.get(operation, 0) + cost
-        self.operation_counts[operation] = self.operation_counts.get(operation, 0) + 1
-        
-        # Check operation count limit (prevents infinite loops even with high gas)
-        if self.operation_count > self.max_operations:
-            return False
+        # Track for profiling (only if needed)
+        if self.gas_by_operation is not None:  # Allow disabling profiling
+            self.gas_by_operation[operation] = self.gas_by_operation.get(operation, 0) + cost
+            self.operation_counts[operation] = self.operation_counts.get(operation, 0) + 1
         
         return True
     
@@ -149,6 +153,10 @@ class GasMetering:
         Returns:
             Gas cost for the operation
         """
+        # OPTIMIZATION: Check cache first for static costs (no kwargs)
+        if not kwargs and operation in self._cost_cache:
+            return self._cost_cache[operation]
+        
         # Try to get cost from GasCost enum
         try:
             base_cost = GasCost[operation].value
@@ -176,6 +184,10 @@ class GasMetering:
             # Cost scales with number of arguments
             arg_count = kwargs.get('arg_count', 0)
             return base_cost + (arg_count * 2)
+        
+        # Cache static costs
+        if not kwargs:
+            self._cost_cache[operation] = base_cost
         
         return base_cost
     
