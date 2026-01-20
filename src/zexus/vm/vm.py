@@ -2053,6 +2053,9 @@ class VM:
                 return self.data[:self.sp]
 
         stack = _EvalStack(len(instrs) * 2 if instrs else 32)
+        stack_append = stack.append
+        stack_pop = stack.pop
+        call_cache: Dict[str, Tuple[Any, int]] = {}
 
         def const(idx):
             if isinstance(idx, int):
@@ -2131,6 +2134,14 @@ class VM:
             self.env[name] = value
             self._bump_env_version(name, value)
 
+        def _resolve_callable(name):
+            cached = call_cache.get(name)
+            if cached and cached[1] == self._env_version:
+                return cached[0]
+            fn = _resolve(name) or self.builtins.get(name)
+            call_cache[name] = (fn, self._env_version)
+            return fn
+
         def _unwrap(value):
             if isinstance(value, ZNull):
                 return None
@@ -2171,18 +2182,22 @@ class VM:
 
         async def _op_call_name(operand):
             if not operand:
-                stack.append(None)
+                stack_append(None)
                 return
             name_idx, arg_count = operand
             func_name = const(name_idx)
-            args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
-            fn = _resolve(func_name) or self.builtins.get(func_name)
+            if arg_count:
+                args = [stack_pop() if stack else None for _ in range(arg_count)]
+                args.reverse()
+            else:
+                args = []
+            fn = _resolve_callable(func_name)
             if fn is None:
                 fallback_res = self._call_fallback_builtin(func_name, args)
-                stack.append(fallback_res)
+                stack_append(fallback_res)
                 return
             res = await self._invoke_callable_or_funcdesc(fn, args)
-            stack.append(res)
+            stack_append(res)
 
         async def _op_call_top(arg_count):
             count = arg_count or 0
@@ -2403,7 +2418,14 @@ class VM:
         def _op_store_name(idx):
             name = const(idx)
             val = stack_pop() if stack else None
-            _store(name, val)
+            if name in self.env and not isinstance(self.env.get(name), Cell):
+                self.env[name] = val
+                self._bump_env_version(name, val)
+            elif name in self._closure_cells:
+                self._closure_cells[name].value = val
+                self._bump_env_version(name, val)
+            else:
+                _store(name, val)
             if self.use_memory_manager and val is not None:
                 self._allocate_managed(val, name=name, root=True)
 
