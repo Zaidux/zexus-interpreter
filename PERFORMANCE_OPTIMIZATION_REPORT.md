@@ -199,3 +199,27 @@ The `_perf_fast_dispatch` flag only affects direct bytecode execution, not:
 - The interpreter-side changes reduced parsing overhead in `_parse_block_statements` and improved module reuse.
 - VM changes did not improve runtime in this pass; further VM optimizations should target lock/wait overhead and opcode dispatch costs.
 - The shared event-loop experiment for `_run_coroutine_sync` was **reverted** after showing a slowdown.
+
+---
+
+## Round 4 (Current Work): VM + Interpreter Pair Fixes (500 tx)
+**Profiler run**: `scripts/profile_full_network_components.py` on `perf_full_network_10k.zx` with 500 tx, max ops 200k.
+
+### Changes Applied
+
+**VM (2 issues):**
+1. **Precomputed dispatch metadata**: prebuilt handler/async/gas-kind tuples for each instruction to reduce per-iteration dict lookups.
+2. **Gas kwargs avoidance**: removed per-iteration `gas_kwargs` dict creation by using structured gas-kind handling.
+
+**Interpreter (2 issues):**
+1. **Block statement LRU cache**: cached parsed block statements by token signature (bounded to 256 entries).
+2. **Meaningful-token check**: moved meaningful token types to a module-level constant and avoided per-call closures.
+
+### Results (Round 4, 500 tx)
+- **Interpreter**: 14.36s
+- **VM**: 34.35s
+- **Parse time**: 36.53ms
+
+### Notes
+- Interpreter parsing costs dropped slightly; `_parse_block_statements` is still a hotspot but now with fewer calls (590 vs 606).
+- VM core loop cost is still dominated by `_run_stack_bytecode`, with `dict.get` and gas metering as persistent costs.

@@ -6,6 +6,7 @@ from ..zexus_token import *
 from ..zexus_ast import *
 from ..config import config as zexus_config
 from types import SimpleNamespace # Helper for AST node creation
+from collections import OrderedDict
 
 STATEMENT_STARTERS = {
     LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION,
@@ -16,6 +17,18 @@ STATEMENT_STARTERS = {
     REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
     PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE
 }
+
+_MEANINGFUL_TOKEN_TYPES = {
+    IDENT, STRING, INT, FLOAT, LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET,
+    RBRACKET, COMMA, DOT, SEMICOLON, ASSIGN, LAMBDA
+}
+
+_BLOCK_STATEMENTS_CACHE: "OrderedDict[tuple, tuple]" = OrderedDict()
+_BLOCK_STATEMENTS_CACHE_MAX = 256
+
+
+def _block_tokens_signature(tokens):
+    return tuple((t.type, t.literal) for t in tokens)
 
 # Import Parser for nested parsing (needed for LOG statement)
 # Note: This is imported at runtime to avoid circular dependency
@@ -178,14 +191,17 @@ class ContextStackParser:
         try:
             # Early exit: if a block has no meaningful tokens, skip parsing it
             tokens = block_info.get('tokens', []) or []
-            def _meaningful(tok):
+            meaningful = False
+            for tok in tokens:
+                if tok.type in _MEANINGFUL_TOKEN_TYPES:
+                    meaningful = True
+                    break
                 lit = getattr(tok, 'literal', None)
-                # treat identifiers, strings, numbers and structural tokens as meaningful
-                if tok.type in {IDENT, STRING, INT, FLOAT, LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COMMA, DOT, SEMICOLON, ASSIGN, LAMBDA}:
-                    return True
-                return not (lit is None or lit == '')
+                if lit is not None and lit != '':
+                    meaningful = True
+                    break
 
-            if not any(_meaningful(t) for t in tokens):
+            if not meaningful:
                 ctx_debug(f"Skipping empty/insignificant block tokens for {block_type}", level='debug')
                 return None
             # Use appropriate parsing strategy for this context
@@ -2280,6 +2296,15 @@ class ContextStackParser:
         """Parse statements from a block of tokens"""
         if not tokens:
             return []
+
+        cache_key = None
+        try:
+            cache_key = _block_tokens_signature(tokens)
+            cached = _BLOCK_STATEMENTS_CACHE.get(cache_key)
+            if cached is not None:
+                return list(cached)
+        except Exception:
+            cache_key = None
         
         statements = []
         i = 0
@@ -4005,6 +4030,14 @@ class ContextStackParser:
                     i = j
 
         # print(f"    ✅ Parsed {len(statements)} statements from block")
+        if cache_key is not None:
+            try:
+                _BLOCK_STATEMENTS_CACHE[cache_key] = tuple(statements)
+                if len(_BLOCK_STATEMENTS_CACHE) > _BLOCK_STATEMENTS_CACHE_MAX:
+                    _BLOCK_STATEMENTS_CACHE.popitem(last=False)
+            except Exception:
+                pass
+
         return statements
 
     # === MAP LITERAL PARSING ===

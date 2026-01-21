@@ -2741,20 +2741,30 @@ class VM:
             "STORE_FUNC": _op_store_func,
         }
         async_dispatch_ops = {"CALL_NAME", "CALL_TOP", "CALL_METHOD"}
+        gas_kwarg_ops = {"BUILD_LIST", "BUILD_MAP", "MERKLE_ROOT", "CALL_NAME", "CALL_TOP", "CALL_METHOD", "CALL_BUILTIN"}
+
+        prepared_instrs: List[Tuple[str, Any, Optional[Callable[[Any], Any]], bool, int]] = []
+        for instr in instrs:
+            op_name, operand = instr
+            handler = dispatch_table.get(op_name)
+            is_async = op_name in async_dispatch_ops
+            gas_kind = 0
+            if op_name in gas_kwarg_ops:
+                if op_name in ("BUILD_LIST", "BUILD_MAP"):
+                    gas_kind = 1
+                elif op_name == "MERKLE_ROOT":
+                    gas_kind = 2
+                else:
+                    gas_kind = 3
+            prepared_instrs.append((op_name, operand, handler, is_async, gas_kind))
 
         # 3. Execution Loop
         prev_ip = None
         try_stack: List[int] = []
-        while running and ip < len(instrs):
+        while running and ip < len(prepared_instrs):
             try:
                 current_ip = ip
-                op, operand = instrs[current_ip]
-                
-                # Handle Opcode enum: convert to name for comparison
-                if hasattr(op, 'name'):  # Opcode IntEnum
-                    op_name = op.name
-                else:  # Already a string
-                    op_name = op
+                op_name, operand, handler, is_async, gas_kind = prepared_instrs[current_ip]
     
                 if profile_ops:
                     opcode_counts[op_name] = opcode_counts.get(op_name, 0) + 1
@@ -2783,22 +2793,25 @@ class VM:
     
                 # === GAS METERING ===
                 if gas_enabled:
-                    # Determine gas cost parameters
-                    gas_kwargs = {}
-                    if op_name in ("BUILD_LIST", "BUILD_MAP"):
-                        gas_kwargs['count'] = operand if operand is not None else 0
-                    elif op_name == "MERKLE_ROOT":
-                        gas_kwargs['leaf_count'] = operand if operand is not None else 0
-                    elif op_name in ("CALL_NAME", "CALL_TOP", "CALL_METHOD", "CALL_BUILTIN"):
+                    if gas_kind == 1:
+                        count = operand if operand is not None else 0
+                        ok = gas_consume(op_name, count=count)
+                    elif gas_kind == 2:
+                        leaf_count = operand if operand is not None else 0
+                        ok = gas_consume(op_name, leaf_count=leaf_count)
+                    elif gas_kind == 3:
                         if op_name == "CALL_NAME":
-                            gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
+                            arg_count = operand[1] if isinstance(operand, tuple) else 0
                         elif op_name == "CALL_TOP":
-                            gas_kwargs['arg_count'] = operand if operand is not None else 0
+                            arg_count = operand if operand is not None else 0
                         else:
-                            gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
-                    
+                            arg_count = operand[1] if isinstance(operand, tuple) else 0
+                        ok = gas_consume(op_name, arg_count=arg_count)
+                    else:
+                        ok = gas_consume(op_name)
+
                     # Consume gas for operation
-                    if not gas_consume(op_name, **gas_kwargs):
+                    if not ok:
                         # Out of gas!
                         if gas_metering.operation_count > gas_metering.max_operations:
                             raise OperationLimitExceededError(
@@ -2812,7 +2825,6 @@ class VM:
                                 op_name
                             )
     
-                handler = dispatch_table.get(op_name)
                 if trace_ip_range and trace_ip_range[0] <= current_ip <= trace_ip_range[1]:
                     op_detail = op_name
                     if op_name in ("LOAD_NAME", "STORE_NAME"):
@@ -2827,7 +2839,7 @@ class VM:
                             op_detail = op_name
                     print(f"[VM TRACE] ip={current_ip} op={op_detail} pre_stack={len(stack)}")
                 if handler is not None:
-                    if op_name in async_dispatch_ops:
+                    if is_async:
                         await handler(operand)
                     else:
                         handler(operand)
