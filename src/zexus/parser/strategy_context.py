@@ -7,6 +7,16 @@ from ..zexus_ast import *
 from ..config import config as zexus_config
 from types import SimpleNamespace # Helper for AST node creation
 
+STATEMENT_STARTERS = {
+    LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION,
+    TRY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+    EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
+    STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
+    SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
+    REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
+    PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE
+}
+
 # Import Parser for nested parsing (needed for LOG statement)
 # Note: This is imported at runtime to avoid circular dependency
 def get_parser_class():
@@ -2274,15 +2284,7 @@ class ContextStackParser:
         statements = []
         i = 0
         # Common statement-starter tokens used by several heuristics and fallbacks
-        statement_starters = {
-            LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION,
-            TRY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
-            EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
-            STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
-            SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
-            REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
-            PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE
-        }
+        statement_starters = STATEMENT_STARTERS
         
         # Safety: track loop iterations to prevent infinite loops
         max_iterations = len(tokens) * 10  # Very generous limit

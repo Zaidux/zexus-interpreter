@@ -904,6 +904,14 @@ class VM:
 
         importer_file = self._get_importer_file()
         candidates = get_module_candidates(file_path, importer_file)
+        for candidate in candidates:
+            try:
+                cached = get_cached_module(normalize_path(candidate))
+                if cached:
+                    module_env, bytecode, ast = cached
+                    return module_env
+            except Exception:
+                continue
         module_env = Environment()
         loaded = False
         compiled_bytecode = None
@@ -944,6 +952,7 @@ class VM:
                         self._return_vm_to_pool(child_vm)
                         
                         cache_module(normalized_path, module_env, compiled_bytecode, parsed_ast)
+                        cache_module(normalize_path(candidate), module_env, compiled_bytecode, parsed_ast)
                         loaded = True
                         break
                 except Exception as e:
@@ -956,6 +965,7 @@ class VM:
                     self._action_evaluator = Evaluator(use_vm=False)
                 self._action_evaluator.eval_node(program, module_env)
                 cache_module(normalized_path, module_env, None, parsed_ast)
+                cache_module(normalize_path(candidate), module_env, None, parsed_ast)
                 loaded = True
                 break
             except Exception:
@@ -2093,6 +2103,9 @@ class VM:
         opcode_counts: Optional[Dict[str, int]] = {} if profile_ops else None
         if profile_ops and profile_verbose:
             print(f"[VM DEBUG] opcode profiling enabled; instrs={len(instrs)}")
+        gas_metering = self.gas_metering
+        gas_consume = gas_metering.consume if gas_metering else None
+        gas_enabled = self.enable_gas_metering and gas_metering is not None
         trace_ip_range = None
         trace_ip_env = os.environ.get("ZEXUS_VM_TRACE_IP_RANGE")
         if trace_ip_env:
@@ -2166,34 +2179,42 @@ class VM:
                 return consts[idx] if 0 <= idx < len(consts) else None
             return idx
 
+        missing = object()
+        env_get = self.env.get
+        closure_get = self._closure_cells.get
+
         # Lexical Resolution Helper (Closures/Cells)
         def _resolve(name):
             cached = self._name_cache.get(name)
             if cached and cached[1] == self._env_version:
                 return cached[0]
             # 1. Local
-            if name in self.env:
-                val = self.env[name]
+            val = env_get(name, missing)
+            if val is not missing:
                 resolved = val.value if isinstance(val, Cell) else val
                 self._name_cache[name] = (resolved, self._env_version)
                 return resolved
             # 2. Closure Cells (attached to VM)
-            if name in self._closure_cells:
-                resolved = self._closure_cells[name].value
+            cell = closure_get(name)
+            if cell is not None:
+                resolved = cell.value
                 self._name_cache[name] = (resolved, self._env_version)
                 return resolved
             # 3. Parent Chain
             p = self._parent_env
             while p is not None:
                 if isinstance(p, VM):
-                    if name in p.env:
-                        val = p.env[name]
+                    p_val = p.env.get(name, missing)
+                    if p_val is not missing:
+                        val = p_val
                         return val.value if isinstance(val, Cell) else val
-                    if name in p._closure_cells:
-                        return p._closure_cells[name].value
+                    p_cell = p._closure_cells.get(name)
+                    if p_cell is not None:
+                        return p_cell.value
                     p = p._parent_env
                 else:
-                    if name in p: return p[name]
+                    if name in p:
+                        return p[name]
                     p = None
             return None
 
@@ -2761,7 +2782,7 @@ class VM:
                         print(f"[VM TRACE] async ip={current_ip} op={op_name} stack={stack_size}")
     
                 # === GAS METERING ===
-                if self.enable_gas_metering and self.gas_metering:
+                if gas_enabled:
                     # Determine gas cost parameters
                     gas_kwargs = {}
                     if op_name in ("BUILD_LIST", "BUILD_MAP"):
@@ -2777,17 +2798,17 @@ class VM:
                             gas_kwargs['arg_count'] = operand[1] if isinstance(operand, tuple) else 0
                     
                     # Consume gas for operation
-                    if not self.gas_metering.consume(op_name, **gas_kwargs):
+                    if not gas_consume(op_name, **gas_kwargs):
                         # Out of gas!
-                        if self.gas_metering.operation_count > self.gas_metering.max_operations:
+                        if gas_metering.operation_count > gas_metering.max_operations:
                             raise OperationLimitExceededError(
-                                self.gas_metering.operation_count,
-                                self.gas_metering.max_operations
+                                gas_metering.operation_count,
+                                gas_metering.max_operations
                             )
                         else:
                             raise OutOfGasError(
-                                self.gas_metering.gas_used,
-                                self.gas_metering.gas_limit,
+                                gas_metering.gas_used,
+                                gas_metering.gas_limit,
                                 op_name
                             )
     

@@ -5,6 +5,7 @@
 - **Baseline**: 121.2s (0.83 tx/s)
 - **After Round 1**: 113.6s (0.88 tx/s) - **6.3% faster**
 - **After Round 2**: 112.7s (0.89 tx/s) - **7.0% faster than baseline**
+- **Round 3 (current profiler run)**: VM 34.21s | Interpreter 14.85s | Parse 37.16ms
 
 ### Key Findings
 
@@ -173,3 +174,28 @@ The `_perf_fast_dispatch` flag only affects direct bytecode execution, not:
 5. **Know Your Bottlenecks**: The real issues are module loading and parsing, not async overhead
 
 **Bottom Line**: We achieved 7% improvement with targeted micro-optimizations. The next 20% requires architectural changes (pre-compilation, caching).
+
+---
+
+## Round 3 (Current Work): VM + Interpreter Pair Fixes
+**Profiler run**: `scripts/profile_full_network_components.py` on `perf_full_network_10k.zx` with 100 tx, max ops 200k.
+
+### Changes Applied
+
+**VM (2 issues):**
+1. **Name resolution fast path** (`_resolve`): reduced dict membership checks by using sentinel + cached getters.
+2. **Gas metering locals**: cached `gas_metering` and `consume` references in the hot loop to reduce attribute lookups.
+
+**Interpreter (2 issues):**
+1. **Module cache by resolved path**: reuse cached module env for candidate paths and cache under both import spec and resolved path.
+2. **Statement starter set reuse**: moved statement-starter tokens to module-level constant to avoid rebuilding on every block parse.
+
+### Results (Round 3)
+- **Interpreter**: 14.85s (down from 15.43s in prior run)
+- **VM**: 34.21s (up from 33.70s in prior run) → **regression observed**
+- **Parse time**: 37.16ms
+
+### Notes
+- The interpreter-side changes reduced parsing overhead in `_parse_block_statements` and improved module reuse.
+- VM changes did not improve runtime in this pass; further VM optimizations should target lock/wait overhead and opcode dispatch costs.
+- The shared event-loop experiment for `_run_coroutine_sync` was **reverted** after showing a slowdown.

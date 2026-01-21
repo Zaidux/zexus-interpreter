@@ -1360,10 +1360,10 @@ class StatementEvaluatorMixin:
                 return EvaluationError(f"Builtin module '{file_path}' not available")
         
         normalized_path = normalize_path(file_path)
-        
+
         # 2. Check Cache
         module_env = get_cached_module(normalized_path)
-        
+
         # 3. Load if not cached
         if not module_env:
             # Get the importing file's path for relative resolution
@@ -1374,52 +1374,64 @@ class StatementEvaluatorMixin:
                     importer_file = __file_obj.value
                 elif isinstance(__file_obj, str):
                     importer_file = __file_obj
-            
+
             candidates = get_module_candidates(file_path, importer_file)
-            module_env = Environment()
-            loaded = False
+            for candidate in candidates:
+                try:
+                    cached = get_cached_module(normalize_path(candidate))
+                    if cached:
+                        module_env, _, _ = cached
+                        break
+                except Exception:
+                    continue
+
+            loaded = module_env is not None
+            if not module_env:
+                module_env = Environment()
             parse_errors = []
-            
+
             # Circular dependency placeholder
             try: 
                 cache_module(normalized_path, module_env)
             except Exception: 
                 pass
-            
-            for candidate in candidates:
-                try:
-                    if not os.path.exists(candidate): 
-                        continue
-                    
-                    debug_log("  Found module file", candidate)
-                    with open(candidate, 'r', encoding='utf-8') as f: 
-                        code = f.read()
-                    
-                    from ..lexer import Lexer
-                    from ..parser import Parser
-                    
-                    lexer = Lexer(code)
-                    parser = Parser(lexer)
-                    program = parser.parse_program()
-                    
-                    if getattr(parser, 'errors', None):
-                        parse_errors.append((candidate, parser.errors))
-                        continue
-                    
-                    # Set __file__ in module environment so it can do relative imports
-                    module_env.set("__file__", String(os.path.abspath(candidate)))
-                    # Set __MODULE__ to the module path (not "__main__" since it's imported)
-                    module_env.set("__MODULE__", String(file_path))
-                    
-                    # Recursive evaluation
-                    self.eval_node(program, module_env)
-                    
-                    # Update cache with fully loaded env
-                    cache_module(normalized_path, module_env)
-                    loaded = True
-                    break
-                except Exception as e:
-                    parse_errors.append((candidate, str(e)))
+
+            if not loaded:
+                for candidate in candidates:
+                    try:
+                        if not os.path.exists(candidate): 
+                            continue
+                        
+                        debug_log("  Found module file", candidate)
+                        with open(candidate, 'r', encoding='utf-8') as f: 
+                            code = f.read()
+                        
+                        from ..lexer import Lexer
+                        from ..parser import Parser
+                        
+                        lexer = Lexer(code)
+                        parser = Parser(lexer)
+                        program = parser.parse_program()
+                        
+                        if getattr(parser, 'errors', None):
+                            parse_errors.append((candidate, parser.errors))
+                            continue
+                        
+                        # Set __file__ in module environment so it can do relative imports
+                        module_env.set("__file__", String(os.path.abspath(candidate)))
+                        # Set __MODULE__ to the module path (not "__main__" since it's imported)
+                        module_env.set("__MODULE__", String(file_path))
+                        
+                        # Recursive evaluation
+                        self.eval_node(program, module_env)
+                        
+                        # Update cache with fully loaded env
+                        cache_module(normalized_path, module_env)
+                        cache_module(normalize_path(candidate), module_env)
+                        loaded = True
+                        break
+                    except Exception as e:
+                        parse_errors.append((candidate, str(e)))
             
             if not loaded:
                 try: 
