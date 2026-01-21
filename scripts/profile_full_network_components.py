@@ -23,7 +23,9 @@ import sys
 import time
 import tracemalloc
 import threading
-from dataclasses import asdict, dataclass
+from collections import Counter
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -97,6 +99,13 @@ class VmExtras:
 
 
 @dataclass
+class ModuleUsage:
+    cache_hits: Dict[str, int]
+    cache_misses: Dict[str, int]
+    loaded_modules: Dict[str, int]
+
+
+@dataclass
 class FileReport:
     file: str
     parse_time_ms: float
@@ -104,6 +113,48 @@ class FileReport:
     vm: Optional[ProfileSummary]
     vm_extras: Optional[VmExtras]
     errors: List[str]
+    module_usage: Dict[str, ModuleUsage] = field(default_factory=dict)
+
+
+@contextmanager
+def monitor_module_cache():
+    from zexus import module_cache
+
+    cache_hits = Counter()
+    cache_misses = Counter()
+    loaded_modules = Counter()
+
+    original_get = module_cache.get_cached_module
+    original_cache = module_cache.cache_module
+
+    def _normalize(module_path: str) -> str:
+        try:
+            return module_cache.normalize_path(module_path)
+        except Exception:
+            return str(module_path)
+
+    def wrapped_get(module_path: str):
+        result = original_get(module_path)
+        key = _normalize(module_path)
+        if result is None:
+            cache_misses[key] += 1
+        else:
+            cache_hits[key] += 1
+        return result
+
+    def wrapped_cache(module_path: str, module_env: Any, bytecode: Any = None, ast: Any = None) -> None:
+        key = _normalize(module_path)
+        loaded_modules[key] += 1
+        return original_cache(module_path, module_env, bytecode=bytecode, ast=ast)
+
+    module_cache.get_cached_module = wrapped_get
+    module_cache.cache_module = wrapped_cache
+
+    try:
+        yield cache_hits, cache_misses, loaded_modules
+    finally:
+        module_cache.get_cached_module = original_get
+        module_cache.cache_module = original_cache
 
 
 def _parse_file(
@@ -221,15 +272,24 @@ def _build_env(file_path: Path) -> Environment:
     return env
 
 
-def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> ProfileSummary:
+def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> Tuple[ProfileSummary, ModuleUsage]:
     env = _build_env(file_path)
     setattr(env, "disable_vm", True)
     evaluator = Evaluator(use_vm=False)
     evaluator.use_vm = False
     evaluator.unified_executor = None
 
+    module_usage = ModuleUsage(cache_hits={}, cache_misses={}, loaded_modules={})
+
     def run():
-        evaluator.eval_node(program, env)
+        nonlocal module_usage
+        with monitor_module_cache() as (hits, misses, loads):
+            evaluator.eval_node(program, env)
+        module_usage = ModuleUsage(
+            cache_hits=dict(hits),
+            cache_misses=dict(misses),
+            loaded_modules=dict(loads),
+        )
 
     elapsed_ms, memory_peak_mb, stats = _profile_call(
         run,
@@ -237,16 +297,17 @@ def _profile_interpreter(program, file_path: Path, cfg: ProfileConfig) -> Profil
         cfg.timeout_seconds,
         f"interpreter::{file_path.name}"
     )
-    return ProfileSummary(
+    summary = ProfileSummary(
         name="interpreter",
         elapsed_ms=elapsed_ms,
         memory_peak_mb=memory_peak_mb,
         top_cumulative=_extract_top(stats, "cumulative", cfg.top_n),
         top_self=_extract_top(stats, "time", cfg.top_n),
     )
+    return summary, module_usage
 
 
-def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[str, Any]) -> Tuple[ProfileSummary, VmExtras]:
+def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[str, Any]) -> Tuple[ProfileSummary, VmExtras, ModuleUsage]:
     env = _build_env(file_path)
     evaluator = Evaluator(use_vm=True)
 
@@ -294,8 +355,17 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
         if vm.gas_metering:
             print(f"[profile] VM gas metering actual limit: {vm.gas_metering.max_operations}")
 
+    module_usage = ModuleUsage(cache_hits={}, cache_misses={}, loaded_modules={})
+
     def run():
-        evaluator.eval_with_vm_support(program, env)
+        nonlocal module_usage
+        with monitor_module_cache() as (hits, misses, loads):
+            evaluator.eval_with_vm_support(program, env)
+        module_usage = ModuleUsage(
+            cache_hits=dict(hits),
+            cache_misses=dict(misses),
+            loaded_modules=dict(loads),
+        )
 
     try:
         elapsed_ms, memory_peak_mb, stats = _profile_call(
@@ -343,7 +413,7 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
         vm_opcode_profile=opcode_profile,
     )
 
-    return summary, vm_extras
+    return summary, vm_extras, module_usage
 
 
 def _write_report(output_dir: Path, report: FileReport) -> Path:
@@ -356,6 +426,7 @@ def _write_report(output_dir: Path, report: FileReport) -> Path:
         "vm": asdict(report.vm) if report.vm else None,
         "vm_extras": asdict(report.vm_extras) if report.vm_extras else None,
         "errors": report.errors,
+        "module_usage": {scope: asdict(usage) for scope, usage in report.module_usage.items()},
     }
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return output_path
@@ -373,6 +444,13 @@ def _print_summary(report: FileReport, output_path: Path):
         print("Top VM opcodes:")
         for entry in report.vm_extras.vm_opcode_profile[:10]:
             print(f"  {entry['opcode']}: {entry['count']}")
+    if report.module_usage:
+        print("Module cache usage:")
+        for scope, usage in report.module_usage.items():
+            hit_total = sum(usage.cache_hits.values())
+            miss_total = sum(usage.cache_misses.values())
+            load_total = sum(usage.loaded_modules.values())
+            print(f"  {scope}: hits={hit_total} misses={miss_total} loads={load_total}")
     if report.errors:
         print("Errors:")
         for err in report.errors:
@@ -433,6 +511,7 @@ def main() -> int:
         interpreter_summary = None
         vm_summary = None
         vm_extras = None
+        module_usage_map: Dict[str, ModuleUsage] = {}
         parse_time_ms = 0.0
         if not path.exists():
             errors.append(f"Missing file: {path}")
@@ -443,6 +522,7 @@ def main() -> int:
                 vm=vm_summary,
                 vm_extras=vm_extras,
                 errors=errors,
+                module_usage=module_usage_map,
             )
             output_path = _write_report(output_dir, report)
             _print_summary(report, output_path)
@@ -462,6 +542,7 @@ def main() -> int:
                 vm=vm_summary,
                 vm_extras=vm_extras,
                 errors=errors,
+                module_usage=module_usage_map,
             )
             output_path = _write_report(output_dir, report)
             _print_summary(report, output_path)
@@ -475,6 +556,7 @@ def main() -> int:
                 vm=vm_summary,
                 vm_extras=vm_extras,
                 errors=errors,
+                module_usage=module_usage_map,
             )
             output_path = _write_report(output_dir, report)
             _print_summary(report, output_path)
@@ -483,14 +565,16 @@ def main() -> int:
         if not args.skip_interpreter:
             try:
                 print(f"[profile] interpreter run: {path.name}")
-                interpreter_summary = _profile_interpreter(program, path, cfg)
+                interpreter_summary, interpreter_modules = _profile_interpreter(program, path, cfg)
+                module_usage_map["interpreter"] = interpreter_modules
             except Exception as exc:
                 errors.append(f"Interpreter error: {exc}")
 
         if not args.skip_vm:
             try:
                 print(f"[profile] VM run: {path.name}")
-                vm_summary, vm_extras = _profile_vm(program, path, cfg, file_flags)
+                vm_summary, vm_extras, vm_modules = _profile_vm(program, path, cfg, file_flags)
+                module_usage_map["vm"] = vm_modules
             except Exception as exc:
                 errors.append(f"VM error: {exc}")
 
@@ -501,6 +585,7 @@ def main() -> int:
             vm=vm_summary,
             vm_extras=vm_extras,
             errors=errors,
+            module_usage=module_usage_map,
         )
         output_path = _write_report(output_dir, report)
         _print_summary(report, output_path)

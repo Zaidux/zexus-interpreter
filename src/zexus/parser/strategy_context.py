@@ -1975,7 +1975,11 @@ class ContextStackParser:
     def _parse_export_statement_block(self, block_info, all_tokens):
         """Parse export statement: export { name1, name2, ... } or export const/let X = value"""
         tokens = block_info['tokens']
-        parser_debug(f"    📝 Found export statement: {[t.literal for t in tokens]}")
+        if (
+            (hasattr(zexus_config, 'enable_parser_debug') and zexus_config.enable_parser_debug)
+            or zexus_config.should_log('debug')
+        ):
+            parser_debug(f"    📝 Found export statement: {[t.literal for t in tokens]}")
 
         # Check if this is "export const/let ..." syntax
         if len(tokens) >= 2 and tokens[0].type == EXPORT and tokens[1].type in [CONST, LET]:

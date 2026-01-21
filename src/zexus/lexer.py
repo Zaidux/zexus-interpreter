@@ -2,6 +2,186 @@
 from .zexus_token import *
 from .error_reporter import get_error_reporter, SyntaxError as ZexusSyntaxError
 
+_LITERAL_KEYWORDS = {
+    "true": TRUE,
+    "false": FALSE,
+    "null": NULL,
+}
+
+_STRICT_KEYWORDS = {
+    'if', 'elif', 'else', 'while', 'for', 'each', 'in',
+    'return', 'break', 'continue', 'throw', 'try', 'catch',
+    'await', 'async', 'spawn', 'let', 'const', 'print',
+    'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda',
+    'case', 'default'
+}
+
+_CONTEXTS_ALLOWING_KEYWORD_IDENTS = {
+    LET, CONST, DOT, COMMA, LBRACKET, COLON, ASSIGN
+}
+
+_KEYWORDS = {
+    "let": LET,
+    "const": CONST,
+    "data": DATA,
+    "print": PRINT,
+    "if": IF,
+    "then": THEN,
+    "elif": ELIF,
+    "else": ELSE,
+    "true": TRUE,
+    "false": FALSE,
+    "null": NULL,
+    "return": RETURN,
+    "for": FOR,
+    "each": EACH,
+    "in": IN,
+    "action": ACTION,
+    "function": FUNCTION,
+    "while": WHILE,
+    "use": USE,
+    "find": FIND,
+    "load": LOAD,
+    "exactly": EXACTLY,
+    "embedded": EMBEDDED,
+    "export": EXPORT,
+    "lambda": LAMBDA,
+    "debug": DEBUG,
+    "try": TRY,
+    "catch": CATCH,
+    "continue": CONTINUE,
+    "break": BREAK,
+    "throw": THROW,
+    "external": EXTERNAL,
+    "screen": SCREEN,
+    "component": COMPONENT,
+    "theme": THEME,
+    "color": COLOR,
+    "canvas": CANVAS,
+    "graphics": GRAPHICS,
+    "animation": ANIMATION,
+    "clock": CLOCK,
+    "async": ASYNC,
+    "await": AWAIT,
+    "channel": CHANNEL,
+    "send": SEND,
+    "receive": RECEIVE,
+    "atomic": ATOMIC,
+    "event": EVENT,
+    "emit": EMIT,
+    "enum": ENUM,
+    "protocol": PROTOCOL,
+    "import": IMPORT,
+    "public": PUBLIC,
+    "private": PRIVATE,
+    "sealed": SEALED,
+    "secure": SECURE,
+    "pure": PURE,
+    "view": VIEW,
+    "payable": PAYABLE,
+    "modifier": MODIFIER,
+    "entity": ENTITY,
+    "verify": VERIFY,
+    "contract": CONTRACT,
+    "protect": PROTECT,
+    "implements": IMPLEMENTS,
+    "this": THIS,
+    "as": AS,
+    "interface": INTERFACE,
+    "capability": CAPABILITY,
+    "grant": GRANT,
+    "revoke": REVOKE,
+    "module": MODULE,
+    "package": PACKAGE,
+    "using": USING,
+    "type_alias": TYPE_ALIAS,
+    "seal": SEAL,
+    "audit": AUDIT,
+    "restrict": RESTRICT,
+    "sandbox": SANDBOX,
+    "trail": TRAIL,
+    "middleware": MIDDLEWARE,
+    "auth": AUTH,
+    "throttle": THROTTLE,
+    "cache": CACHE,
+    "ledger": LEDGER,
+    "state": STATE,
+    "revert": REVERT,
+    "limit": LIMIT,
+    "persistent": PERSISTENT,
+    "storage": STORAGE,
+    "require": REQUIRE,
+    "and": AND,
+    "or": OR,
+    "native": NATIVE,
+    "gc": GC,
+    "inline": INLINE,
+    "buffer": BUFFER,
+    "simd": SIMD,
+    "defer": DEFER,
+    "pattern": PATTERN,
+    "match": MATCH,
+    "case": CASE,
+    "default": DEFAULT,
+    "enum": ENUM,
+    "stream": STREAM,
+    "watch": WATCH,
+    "log": LOG,
+    "inject": INJECT,
+    "validate": VALIDATE,
+    "sanitize": SANITIZE,
+}
+
+_FUNCTION_DECL_KEYWORDS = {"action", "function"}
+
+_FUNCTION_STATEMENT_BOUNDARIES = {
+    None,
+    SEMICOLON,
+    LBRACE,
+    RBRACE,
+    RBRACKET,
+    INT,
+    STRING,
+    FLOAT,
+    RPAREN,
+    TRUE,
+    FALSE,
+    NULL,
+    RETURN,
+    ASSIGN,
+    ASYNC,
+    EXPORT,
+    PUBLIC,
+    PRIVATE,
+    SEALED,
+    INLINE,
+    SECURE,
+    PURE,
+    VIEW,
+    PAYABLE,
+    NATIVE,
+}
+
+_DATA_KEYWORD_CONTRACT_CONTEXTS = {
+    SEMICOLON,
+    LBRACE,
+    RBRACE,
+    RBRACKET,
+    STRING,
+    INT,
+    FLOAT,
+    TRUE,
+    FALSE,
+    NULL,
+    PRIVATE,
+    PUBLIC,
+    SEALED,
+    SECURE,
+    PURE,
+    VIEW,
+    PAYABLE,
+}
+
 class Lexer:
     def __init__(self, source_code, filename="<stdin>"):
         self.input = source_code
@@ -491,250 +671,32 @@ class Lexer:
         return number_str
 
     def lookup_ident(self, ident):
-        # Special case: Always treat true, false, and null as keywords
-        if ident in ['true', 'false', 'null']:
-            keywords = {
-                "true": TRUE,
-                "false": FALSE,
-                "null": NULL,
-            }
-            return keywords[ident]
-        
-        # Define strict keywords that should NEVER be treated as identifiers
-        # These are control flow, operators, and modifiers that must always be keywords
-        strict_keywords = {
-            'if', 'elif', 'else', 'while', 'for', 'each', 'in',
-            'return', 'break', 'continue', 'throw', 'try', 'catch',
-            'await', 'async', 'spawn', 'let', 'const', 'print',
-            'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda',
-            'case', 'default'
-        }
-        
-        # If this is a strict keyword, always treat as keyword
-        if ident in strict_keywords:
-            # Fall through to normal keyword lookup at the end
-            pass
-        else:
-            # Only allow relaxed keyword-as-identifier handling when we are not at a statement boundary
-            if not self.at_statement_boundary:
-                # Context-aware keyword recognition: allow non-strict keywords as identifiers in certain contexts
-                # These contexts are where variable names are expected:
-                # - After LET, CONST (variable declarations)
-                # - After DOT (property/method names)
-                # - After COMMA (function parameters, after first param)
-                # - After LBRACKET (map keys when used as identifiers)
-                # - After ASSIGN (right-hand side can use keywords as identifiers: x = data)
-                # - After COLON (map keys, type annotations)
-                contexts_allowing_keywords_as_idents = {
-                    LET, CONST, DOT, COMMA, LBRACKET, COLON, ASSIGN
-                }
+        # Always treat literal keywords as reserved regardless of context.
+        literal_token = _LITERAL_KEYWORDS.get(ident)
+        if literal_token is not None:
+            return literal_token
 
-                if self.last_token_type in contexts_allowing_keywords_as_idents:
-                    # In these contexts, treat non-strict keywords as identifiers
-                    if ident not in {"function", "action"}:
-                        return IDENT
-        
-        # Special case: ACTION and FUNCTION keywords should only be recognized
-        # when they actually start a definition, not when used as variable names in expressions
-        # Allow them as keywords at statement boundaries or after contract/data blocks
-        if ident in ['action', 'function']:
-            # These should be keywords at the start of a statement or after RETURN
-            # Allow after: None, SEMICOLON, LBRACE, RBRACE, INT, STRING, RPAREN (end of previous statement)
-            # Also allow after RETURN for function expressions: return function() {...}
-            # Also allow after ASYNC for async functions: async function name() {...}
-            # Also allow after EXPORT for exported functions: export function name() {...}
-            statement_boundaries = {
-                None,
-                SEMICOLON,
-                LBRACE,
-                RBRACE,
-                RBRACKET,
-                INT,
-                STRING,
-                FLOAT,
-                RPAREN,
-                TRUE,
-                FALSE,
-                NULL,
-                RETURN,
-                ASSIGN,
-                ASYNC,
-                EXPORT,
-                PUBLIC,
-                PRIVATE,
-                SEALED,
-                INLINE,
-                SECURE,
-                PURE,
-                VIEW,
-                PAYABLE,
-                NATIVE,
-            }
-            if self.last_token_type in statement_boundaries:
-                # Treat as keyword
-                pass  # Fall through to keyword lookup
-            else:
-                # In expression context, treat as identifier
-                return IDENT
-        
-        # Special case: DATA keyword should only be recognized in contract storage contexts
-        # When used as a parameter name, variable name, or in expressions, treat as identifier
-        if ident == 'data':
-            # Allow as keyword only in contract contexts (after CONTRACT or in contract body)
-            # In all other contexts (parameters, variables, expressions), treat as identifier
-            # Safe contexts for DATA keyword: after statement boundaries and value literals in contracts
-            # This includes: LBRACE (contract start), RBRACE (after Map {}), RBRACKET (after List []),
-            # STRING, INT, FLOAT, TRUE, FALSE (after literal values), SEMICOLON
-            contract_contexts = {
-                SEMICOLON,
-                LBRACE,
-                RBRACE,
-                RBRACKET,
-                STRING,
-                INT,
-                FLOAT,
-                TRUE,
-                FALSE,
-                NULL,
-                PRIVATE,
-                PUBLIC,
-                SEALED,
-                SECURE,
-                PURE,
-                VIEW,
-                PAYABLE,
-            }
-            if self.last_token_type in contract_contexts:
-                # Might be a data declaration in contract, allow as keyword
-                pass  # Fall through to keyword lookup
-            else:
-                # In expression context, parameter list, or other contexts, treat as identifier
-                return IDENT
-        
-        # keyword lookup mapping (string -> token constant)
-        keywords = {
-            "let": LET,
-            "const": CONST,             # NEW: Const keyword for immutable variables
-            "data": DATA,               # NEW: Data keyword for dataclass definitions
-            "print": PRINT,
-            "if": IF,
-            "then": THEN,              # NEW: Then keyword for if-then-else expressions
-            "elif": ELIF,               # NEW: Elif keyword for else-if conditionals
-            "else": ELSE,
-            "true": TRUE,
-            "false": FALSE,
-            "null": NULL,
-            "return": RETURN,
-            "for": FOR,
-            "each": EACH,
-            "in": IN,
-            "action": ACTION,
-            "function": FUNCTION,
-            "while": WHILE,
-            "use": USE,
-            "find": FIND,
-            "load": LOAD,
-            "exactly": EXACTLY,
-            "embedded": EMBEDDED,
-            "export": EXPORT,
-            "lambda": LAMBDA,
-            "debug": DEBUG,      # DUAL-MODE: Works as both statement (debug x;) and function (debug(x))
-            "try": TRY,          # NEW: Try keyword  
-            "catch": CATCH,      # NEW: Catch keyword
-            "continue": CONTINUE, # NEW: Continue on error keyword
-            "break": BREAK,      # NEW: Break loop keyword
-            "throw": THROW,      # NEW: Throw error keyword
-            "external": EXTERNAL, # NEW: External keyword
-            # "from": FROM,        # NOT a keyword - only recognized contextually in import statements
-            "screen": SCREEN,         # NEW: renderer keyword
-            "component": COMPONENT,   # NEW: renderer keyword
-            "theme": THEME,           # NEW: renderer keyword
-            "color": COLOR,           # NEW: renderer keyword
-            "canvas": CANVAS,         # NEW (optional recognition)
-            "graphics": GRAPHICS,     # NEW (optional recognition)
-            "animation": ANIMATION,   # NEW (optional recognition)
-            "clock": CLOCK,           # NEW (optional recognition)
-            "async": ASYNC,
-            "await": AWAIT,
-            "channel": CHANNEL,       # NEW: Channel for concurrent communication
-            "send": SEND,             # NEW: Send to channel
-            "receive": RECEIVE,       # NEW: Receive from channel
-            "atomic": ATOMIC,         # NEW: Atomic operations
-            "event": EVENT,
-            "emit": EMIT,
-            "enum": ENUM,
-            "protocol": PROTOCOL,
-            "import": IMPORT,
-            # Modifiers
-            "public": PUBLIC,
-            "private": PRIVATE,
-            "sealed": SEALED,
-            "secure": SECURE,
-            "pure": PURE,
-            "view": VIEW,
-            "payable": PAYABLE,
-            "modifier": MODIFIER,
-            # NEW: Entity, Verify, Contract, Protect
-            "entity": ENTITY,
-            "verify": VERIFY,
-            "contract": CONTRACT,
-            "protect": PROTECT,
-            "implements": IMPLEMENTS,
-            "this": THIS,
-            "as": AS,
-            "interface": INTERFACE,
-            "capability": CAPABILITY,  # NEW: Capability keyword for security
-            "grant": GRANT,             # NEW: Grant keyword for capability grants
-            "revoke": REVOKE,           # NEW: Revoke keyword for capability revocation
-            "module": MODULE,           # NEW: Module keyword for code organization
-            "package": PACKAGE,         # NEW: Package keyword for package definition
-            "using": USING,             # NEW: Using keyword for resource management
-            "type_alias": TYPE_ALIAS,   # NEW: Type alias keyword for type definitions
-            "seal": SEAL,               # NEW: Seal keyword for immutable objects
-            "audit": AUDIT,             # NEW: Audit keyword for compliance logging
-            "restrict": RESTRICT,       # NEW: Restrict keyword for field-level access control
-            "sandbox": SANDBOX,         # NEW: Sandbox keyword for isolated execution
-            "trail": TRAIL,             # NEW: Trail keyword for real-time logging
-            # Advanced features
-            "middleware": MIDDLEWARE,
-            "auth": AUTH,
-            "throttle": THROTTLE,
-            "cache": CACHE,
-            # Blockchain & Smart Contract keywords
-            "ledger": LEDGER,           # Immutable state ledger
-            "state": STATE,             # State management
-            "revert": REVERT,           # Revert transaction
-            # NOTE: "tx" removed as keyword - users can use it as variable name
-            # Only uppercase "TX" is reserved for transaction context
-            "limit": LIMIT,             # Gas/resource limit
-            # NOTE: hash, signature, verify_sig, gas are BUILTINS, not keywords
-            # NEW: Persistent storage keywords
-            "persistent": PERSISTENT,   # NEW: Persistent keyword
-            "storage": STORAGE,         # NEW: Storage keyword
-            "require": REQUIRE,         # Already defined in zexus_token.py
-            # Logical operators as keywords (alternative to && and ||)
-            "and": AND,                 # Logical AND (alternative to &&)
-            "or": OR,                   # Logical OR (alternative to ||)
-            # Performance optimization keywords
-            "native": NATIVE,           # Performance: call C/C++ code
-            "gc": GC,                   # Performance: control garbage collection
-            "inline": INLINE,           # Performance: function inlining
-            "buffer": BUFFER,           # Performance: direct memory access
-            "simd": SIMD,               # Performance: vector operations
-            "defer": DEFER,             # Convenience: cleanup code execution
-            "pattern": PATTERN,         # Convenience: pattern matching
-            "match": MATCH,             # Match expression for pattern matching
-            "case": CASE,               # Case clause in match/pattern
-            "default": DEFAULT,         # Default case in match
-            "enum": ENUM,               # Advanced: type-safe enumerations
-            "stream": STREAM,           # Advanced: event streaming
-            "watch": WATCH,             # Advanced: reactive state management
-            "log": LOG,                 # Output logging to file
-            "inject": INJECT,           # Advanced: dependency injection
-            "validate": VALIDATE,       # Data validation
-            "sanitize": SANITIZE,       # Data sanitization
-        }
-        return keywords.get(ident, IDENT)
+        token = _KEYWORDS.get(ident)
+        if token is None:
+            return IDENT
+
+        if ident in _FUNCTION_DECL_KEYWORDS:
+            if self.last_token_type in _FUNCTION_STATEMENT_BOUNDARIES:
+                return token
+            return IDENT
+
+        if ident == "data":
+            if self.last_token_type in _DATA_KEYWORD_CONTRACT_CONTEXTS:
+                return token
+            return IDENT
+
+        if ident in _STRICT_KEYWORDS:
+            return token
+
+        if not self.at_statement_boundary and self.last_token_type in _CONTEXTS_ALLOWING_KEYWORD_IDENTS:
+            return IDENT
+
+        return token
 
     def is_letter(self, char):
         return 'a' <= char <= 'z' or 'A' <= char <= 'Z' or char == '_'

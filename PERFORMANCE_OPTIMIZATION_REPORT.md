@@ -223,3 +223,77 @@ The `_perf_fast_dispatch` flag only affects direct bytecode execution, not:
 ### Notes
 - Interpreter parsing costs dropped slightly; `_parse_block_statements` is still a hotspot but now with fewer calls (590 vs 606).
 - VM core loop cost is still dominated by `_run_stack_bytecode`, with `dict.get` and gas metering as persistent costs.
+
+---
+
+## Round 5 (Current Work): VM + Interpreter Pair Fixes (500 tx)
+**Profiler run**: `scripts/profile_full_network_components.py` on `perf_full_network_10k.zx` with 500 tx, max ops 200k.
+
+### Changes Applied
+
+**VM (2 issues):**
+1. **Call op stack helpers**: use cached `stack_append`/`stack_pop` in call handlers to reduce attribute lookups.
+2. **Callable lookup cache**: cached `builtins.get` in `_resolve_callable` to reduce repeated attribute access.
+
+**Interpreter (2 issues):**
+1. **Lexer input length cache**: store `_input_len` and reuse it in `read_char`/`peek_char`.
+2. **Comment skipping loop**: replaced recursive `next_token` comment skipping with a loop.
+
+### Results (Round 5, 500 tx)
+- **Interpreter**: 14.37s
+- **VM**: 34.25s
+- **Parse time**: 35.11ms
+
+### Notes
+- Lexer optimizations trimmed `next_token` overhead slightly; parser still dominates interpreter time.
+- VM changes are neutral so far; `dict.get` and gas metering remain top contributors.
+
+---
+
+## Round 6 (Current Work): VM + Interpreter Pair Fixes (1000 tx)
+**Profiler run**: `scripts/profile_full_network_components.py` on `perf_full_network_10k.zx` with 1000 tx, max ops 200k.
+
+### Changes Applied
+
+**VM (2 issues):**
+1. **Stack `pop_n` for call ops**: added a fast `pop_n()` to `EvalStack` and used it in call handlers to reduce per-arg pops and reverse.
+2. **Call handler stack helpers**: ensured call ops use cached stack helpers consistently.
+
+**Interpreter (2 issues):**
+1. **Keyword set hoisting**: moved keyword/context sets in `lookup_ident` to module-level constants.
+2. **Lexer keyword lookup**: reduced per-call dict allocations by using cached keyword maps.
+
+### Results (Round 6, 1000 tx)
+- **Interpreter**: 14.08s
+- **VM**: 35.74s
+- **Parse time**: 35.85ms
+
+### Notes
+- Interpreter time dropped ~2% vs the 1000-tx baseline (14.36s → 14.08s).
+- VM time improved ~1.8% vs the 1000-tx baseline (36.41s → 35.74s).
+
+## Round 7 (Validation): Lexer Keyword Hoisting Retest (1000 tx)
+**Profiler runs**: `scripts/profile_full_network_components.py` on `perf_full_network_10k.zx` (report `tmp/perf_reports/20260121_145311/perf_full_network_10k_profile.json`) and `blockchain_test/full_network_chain/full_network_blockchain.zx` (report `tmp/perf_reports/20260121_145311/full_network_blockchain_profile.json`).
+
+### Observed Metrics (vs 20260121_044449)
+- Parse time: 32.13ms vs 38.38ms (**−16.3%**).
+- `next_token` self time in [src/zexus/lexer.py](src/zexus/lexer.py#L235): 1.59s vs 1.66s (**−4.1%**).
+- Interpreter total: 14.80s vs 14.66s (**+0.9%**, likely noise but monitor).
+- `_parse_export_statement_block` in [src/zexus/parser/strategy_context.py](src/zexus/parser/strategy_context.py#L1975): 0.35s vs 0.04s (spike likely caused by cache churn during this run).
+
+### Notes
+- Lexer keyword hoisting delivers the expected reduction in tokenization cost without correctness regressions.
+- Parser export-block spike needs confirmation; schedule a repeat run to see if the jump is noise or an LRU regression.
+- Captured a fresh `full_network_blockchain` baseline (Interpreter 278ms, VM 69ms) for future spot checks of small-chain workloads.
+
+### Follow-ups
+1. Re-run the profiler to validate `_parse_export_statement_block` cost and inspect cache eviction behaviour if the spike persists.
+2. Evaluate whether the keyword hoist enables simplifying `lookup_ident` branching in [src/zexus/lexer.py](src/zexus/lexer.py#L648-L720).
+
+#### Follow-up run (20260121_151143)
+- `_parse_export_statement_block` self time dropped to 3.0ms, confirming the prior 0.35s+ spike was transient noise.
+- `parse_block` self time still elevated (5.96s) and `_parse_block_statements` remains the dominant parser cost at 4.96s.
+- Module cache telemetry recorded by [`scripts/profile_full_network_components.py`](scripts/profile_full_network_components.py#L132-L184):
+   - Interpreter loaded full_network_blockchain twice with four cache lookups (three misses, one cached hit on rerun path).
+   - VM reused the cached module once but performed no new module loads, corroborating the interpreter/VM divergence (VM 37.15s vs interpreter 14.39s).
+- Small-chain baseline shows no module usage, indicating the instrumentation adds negligible overhead for lightweight workloads.
