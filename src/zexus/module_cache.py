@@ -7,21 +7,26 @@ re-parsing and re-evaluating modules that have already been loaded.
 
 import os
 import threading
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, Tuple
 from .object import Environment
 
-_MODULE_CACHE: Dict[str, Environment] = {}
+# Module cache stores: (environment, bytecode, ast)
+_MODULE_CACHE: Dict[str, Tuple[Environment, Any, Any]] = {}
 _MODULE_CACHE_LOCK = threading.Lock()
 
-def get_cached_module(module_path: str) -> Optional[Environment]:
-    """Get a cached module environment if available"""
+# Contract AST cache by source hash
+_CONTRACT_AST_CACHE: Dict[str, Any] = {}
+_CONTRACT_AST_LOCK = threading.Lock()
+
+def get_cached_module(module_path: str) -> Optional[Tuple[Environment, Any, Any]]:
+    """Get a cached module (environment, bytecode, ast) if available"""
     with _MODULE_CACHE_LOCK:
         return _MODULE_CACHE.get(module_path)
 
-def cache_module(module_path: str, module_env: Environment) -> None:
-    """Cache a loaded module environment"""
+def cache_module(module_path: str, module_env: Environment, bytecode: Any = None, ast: Any = None) -> None:
+    """Cache a loaded module environment with optional bytecode and AST"""
     with _MODULE_CACHE_LOCK:
-        _MODULE_CACHE[module_path] = module_env
+        _MODULE_CACHE[module_path] = (module_env, bytecode, ast)
 
 def clear_module_cache() -> None:
     """Clear the entire module cache"""
@@ -39,6 +44,36 @@ def list_cached_modules() -> list[str]:
     """Return a list of normalized module paths currently cached"""
     with _MODULE_CACHE_LOCK:
         return list(_MODULE_CACHE.keys())
+
+def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
+    """Get a cached contract AST by source hash"""
+    with _CONTRACT_AST_LOCK:
+        return _CONTRACT_AST_CACHE.get(source_hash)
+
+def cache_contract_ast(source_hash: str, ast: Any) -> None:
+    """Cache a parsed contract AST"""
+    with _CONTRACT_AST_LOCK:
+        _CONTRACT_AST_CACHE[source_hash] = ast
+
+def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
+    """Get a cached contract AST by source hash"""
+    with _CONTRACT_AST_LOCK:
+        return _CONTRACT_AST_CACHE.get(source_hash)
+
+def cache_contract_ast(source_hash: str, ast: Any) -> None:
+    """Cache a parsed contract AST"""
+    with _CONTRACT_AST_LOCK:
+        _CONTRACT_AST_CACHE[source_hash] = ast
+
+def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
+    """Get a cached contract AST by source hash"""
+    with _CONTRACT_AST_LOCK:
+        return _CONTRACT_AST_CACHE.get(source_hash)
+
+def cache_contract_ast(source_hash: str, ast: Any) -> None:
+    """Cache a parsed contract AST"""
+    with _CONTRACT_AST_LOCK:
+        _CONTRACT_AST_CACHE[source_hash] = ast
 
 def get_module_candidates(file_path: str, importer_file: str = None) -> list[str]:
     """Get candidate paths for a module, checking zpm_modules etc.

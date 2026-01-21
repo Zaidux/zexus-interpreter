@@ -395,6 +395,12 @@ class VM:
         self._env_version = 0
         self._name_cache: Dict[str, Tuple[Any, int]] = {}
         self._method_cache: Dict[Tuple[type, str], Any] = {}
+        
+        # Round 3 optimizations
+        self._isinstance_cache: Dict[Tuple[int, type], bool] = {}  # Cache isinstance results
+        self._vm_pool: List[Any] = []  # Pool of reusable child VMs
+        self._vm_pool_lock = None  # Will be set if pooling enabled
+        
         self.prefer_register = False
         self.prefer_parallel = False
         
@@ -585,13 +591,27 @@ class VM:
         if debug:
             print(f"[VM] Initialized | Mode: {mode.value} | JIT: {self.use_jit} | MemMgr: {self.use_memory_manager}")
 
+    def _return_vm_to_pool(self, vm) -> None:
+        """Return a child VM to the pool for reuse."""
+        if hasattr(self, "_vm_pool") and self._vm_pool is not None:
+             if len(self._vm_pool) < 1000:
+                 self._vm_pool.append(vm)
+
     @classmethod
     def create_child(cls, parent_vm, env: Dict[str, Any], builtins: Dict[str, Any] = None):
         """
         Create a lightweight child VM execution context sharing infrastructure/components from parent.
         Avoids overhead of full initialization for function calls.
         """
-        vm = cls.__new__(cls)
+        vm = None
+        if hasattr(parent_vm, "_vm_pool") and parent_vm._vm_pool:
+            try:
+                vm = parent_vm._vm_pool.pop()
+            except IndexError:
+                pass
+        
+        if vm is None:
+            vm = cls.__new__(cls)
         
         # Core Context
         vm.builtins = builtins if builtins is not None else parent_vm.builtins
@@ -681,19 +701,22 @@ class VM:
 
     @staticmethod
     def _wrap_for_builtin(value: Any) -> Any:
-        if isinstance(value, (ZInteger, ZFloat, ZString, ZBoolean, ZList, ZMap)) or value is None:
+        # Fast path for primitives
+        t = type(value)
+        if t is int: return ZInteger(value)
+        if t is str: return ZString(value)
+        if t is bool: return ZBoolean(value)
+        if t is float: return ZFloat(value)
+        if value is None: return value
+        
+        # Already wrapped check
+        if isinstance(value, (ZInteger, ZFloat, ZString, ZBoolean, ZList, ZMap)):
             return value
-        if isinstance(value, bool):
-            return ZBoolean(value)
-        if isinstance(value, int):
-            return ZInteger(value)
-        if isinstance(value, float):
-            return ZFloat(value)
-        if isinstance(value, str):
-            return ZString(value)
-        if isinstance(value, list):
+
+        # Recursive structures
+        if t is list:
             return ZList([VM._wrap_for_builtin(elem) for elem in value])
-        if isinstance(value, dict):
+        if t is dict:
             pairs = {}
             for key, val in value.items():
                 if isinstance(key, ZString):
@@ -714,6 +737,11 @@ class VM:
 
     @staticmethod
     def _unwrap_after_builtin(value: Any) -> Any:
+        # Fast path for common types
+        t = type(value)
+        if t is int or t is str or t is float or t is bool:
+            return value
+        
         if isinstance(value, (ZInteger, ZFloat, ZBoolean, ZString)):
             return value.value
         if isinstance(value, ZNull):
@@ -859,6 +887,9 @@ class VM:
         return None
 
     def _load_zexus_module_env(self, file_path: str):
+        if os.environ.get("ZEXUS_DEBUG_COMPILER"):
+             with open("debug_compiler_fail.log", "a") as f:
+                 f.write(f"[DEBUG] _load_zexus_module_env called for {file_path}\n")
         from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
         from ..object import Environment, String
         from ..lexer import Lexer
@@ -866,19 +897,17 @@ class VM:
         from ..evaluator.core import Evaluator
 
         normalized_path = normalize_path(file_path)
-        module_env = get_cached_module(normalized_path)
-        if module_env:
+        cached = get_cached_module(normalized_path)
+        if cached:
+            module_env, bytecode, ast = cached
             return module_env
 
         importer_file = self._get_importer_file()
         candidates = get_module_candidates(file_path, importer_file)
         module_env = Environment()
         loaded = False
-
-        try:
-            cache_module(normalized_path, module_env)
-        except Exception:
-            pass
+        compiled_bytecode = None
+        parsed_ast = None
 
         for candidate in candidates:
             try:
@@ -891,12 +920,42 @@ class VM:
                 program = parser.parse_program()
                 if getattr(parser, "errors", None):
                     continue
+                
+                parsed_ast = program
                 module_env.set("__file__", String(os.path.abspath(candidate)))
                 module_env.set("__MODULE__", String(file_path))
+                
+                # Try to compile to bytecode and execute via VM (fast path)
+                try:
+                    from .compiler import BytecodeCompiler
+                    compiler = BytecodeCompiler(optimize=True)
+                    compiled_bytecode = compiler.compile(program)
+                    
+                    if compiled_bytecode:
+                        # Execute module via VM (fast)
+                        vm_env = {k: v for k, v in module_env.store.items()}
+                        child_vm = VM.create_child(parent_vm=self, env=vm_env)
+                        result = child_vm._run_stack_bytecode_sync(compiled_bytecode, debug=False)
+                        
+                        # Update module environment from VM execution
+                        for k, v in child_vm.env.items():
+                            module_env.set(k, v)
+                        
+                        self._return_vm_to_pool(child_vm)
+                        
+                        cache_module(normalized_path, module_env, compiled_bytecode, parsed_ast)
+                        loaded = True
+                        break
+                except Exception as e:
+                    if os.environ.get("ZEXUS_DEBUG_COMPILER"):
+                         print(f"[DEBUG] Compiler exception for {candidate}: {e}")
+                    pass
+                
+                # Fallback to interpreter execution (slow path)
                 if self._action_evaluator is None:
                     self._action_evaluator = Evaluator(use_vm=False)
                 self._action_evaluator.eval_node(program, module_env)
-                cache_module(normalized_path, module_env)
+                cache_module(normalized_path, module_env, None, parsed_ast)
                 loaded = True
                 break
             except Exception:
@@ -1036,16 +1095,10 @@ class VM:
             
             # 3. Fast synchronous path for performance mode (no async overhead)
             elif getattr(self, '_perf_fast_dispatch', False):
-                perf_verbose = os.environ.get("ZEXUS_PERF_VERBOSE")
-                if perf_verbose and perf_verbose.lower() not in ("0", "false", "off"):
-                    print(f"[PERF] Using sync fast dispatch")
                 result = self._run_stack_bytecode_sync(code, debug)
             
             # 4. Stack Mode (Standard/Fallback + Async Support)
             else:
-                perf_verbose = os.environ.get("ZEXUS_PERF_VERBOSE")
-                if perf_verbose and perf_verbose.lower() not in ("0", "false", "off"):
-                    print(f"[PERF] Using async dispatch (_perf_fast_dispatch={getattr(self, '_perf_fast_dispatch', False)})")
                 result = self._run_coroutine_sync(self._execute_stack(code, debug))
             
             # JIT Tracking
@@ -1874,15 +1927,42 @@ class VM:
             ZAction = None
             ZLambda = None
         if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
+            # Try to compile to bytecode and execute in VM (fast path)
+            action_bytecode = None
             try:
-                from ..evaluator.core import Evaluator
-                if self._action_evaluator is None:
-                    self._action_evaluator = Evaluator(use_vm=False)
-                call_args = [self._wrap_for_builtin(arg) for arg in args]
-                result = self._action_evaluator.apply_function(real_fn, call_args)
-                return self._unwrap_after_builtin(result)
+                if hasattr(real_fn, '_cached_bytecode'):
+                    action_bytecode = real_fn._cached_bytecode
+                else:
+                    from ..evaluator.bytecode_compiler import EvaluatorBytecodeCompiler
+                    compiler = EvaluatorBytecodeCompiler(use_cache=False)
+                    action_bytecode = compiler.compile(real_fn.body, optimize=True)
+                    if action_bytecode and not compiler.errors:
+                        real_fn._cached_bytecode = action_bytecode
             except Exception:
-                return None
+                action_bytecode = None
+            
+            if action_bytecode:
+                # Execute via VM (fast)
+                call_args = [self._wrap_for_builtin(arg) for arg in args]
+                params = real_fn.parameters if hasattr(real_fn, 'parameters') else []
+                local_env = {k.value if hasattr(k, 'value') else k: v for k, v in zip(params, call_args)}
+                inner_vm = VM.create_child(parent_vm=self, env=local_env)
+                try:
+                    result = inner_vm._run_stack_bytecode_sync(action_bytecode, debug=False)
+                finally:
+                    self._return_vm_to_pool(inner_vm)
+                return self._unwrap_after_builtin(result)
+            else:
+                # Fallback to interpreter (slow)
+                try:
+                    from ..evaluator.core import Evaluator
+                    if self._action_evaluator is None:
+                        self._action_evaluator = Evaluator(use_vm=False)
+                    call_args = [self._wrap_for_builtin(arg) for arg in args]
+                    result = self._action_evaluator.apply_function(real_fn, call_args)
+                    return self._unwrap_after_builtin(result)
+                except Exception:
+                    return None
         if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
             try:
                 wrap_args = hasattr(fn, "fn")
@@ -3701,7 +3781,10 @@ class VM:
             if snapshot:
                 for key, value in snapshot.items():
                     inner_vm._closure_cells[key] = Cell(value)
-            return await inner_vm._run_stack_bytecode(func_bc, debug=False)
+            try:
+                return await inner_vm._run_stack_bytecode(func_bc, debug=False)
+            finally:
+                self._return_vm_to_pool(inner_vm)
         
         # 2. Python Callable / Builtin Wrapper
         return await self._call_builtin_async_obj(fn, args)
@@ -3751,7 +3834,10 @@ class VM:
                         params = real_fn.parameters if hasattr(real_fn, 'parameters') else []
                         local_env = {k.value if hasattr(k, 'value') else k: v for k, v in zip(params, call_args)}
                         inner_vm = VM.create_child(parent_vm=self, env=local_env)
-                        result = inner_vm._run_stack_bytecode_sync(action_bytecode, debug=False)
+                        try:
+                            result = inner_vm._run_stack_bytecode_sync(action_bytecode, debug=False)
+                        finally:
+                            self._return_vm_to_pool(inner_vm)
                         return self._unwrap_after_builtin(result)
                     else:
                         # Fallback to interpreter (slow)

@@ -1466,6 +1466,22 @@ class ContextStackParser:
         if len(tokens) < 3:
             return None
 
+        # Optimization: Check AST Cache
+        token_hash = None
+        try:
+            # Create a signature from tokens (literal + type)
+            # We use a tuple which is hashable and fast
+            tv = tuple((t.literal, t.type) for t in tokens)
+            token_hash = str(hash(tv))
+            
+            from ..module_cache import get_cached_contract_ast, cache_contract_ast
+            cached = get_cached_contract_ast(token_hash)
+            if cached:
+                parser_debug(f"  ⚡ Cache Hit for Contract: {token_hash}")
+                return cached
+        except Exception:
+            pass
+
         # 1. Extract Name
         contract_name = tokens[1].literal if tokens[1].type == IDENT else "UnknownContract"
         parser_debug(f"  📝 Contract Name: {contract_name}")
@@ -1849,6 +1865,12 @@ class ContextStackParser:
         # Add backward compatibility attributes
         contract_stmt.storage_vars = storage_vars
         contract_stmt.actions = actions
+        
+        if token_hash:
+             try:
+                 cache_contract_ast(token_hash, contract_stmt)
+             except Exception:
+                 pass
         
         return contract_stmt
 

@@ -1,133 +1,175 @@
-# Performance Optimization Report
+# Performance Optimization Report - Round 2 Complete
 ## Test: 100 transactions on perf_full_network_10k.zx
 
-### Baseline Performance
-- **Total time**: 121.2 seconds
-- **Transactions/second**: 0.83 tx/s
+### Performance Summary
+- **Baseline**: 121.2s (0.83 tx/s)
+- **After Round 1**: 113.6s (0.88 tx/s) - **6.3% faster**
+- **After Round 2**: 112.7s (0.89 tx/s) - **7.0% faster than baseline**
 
-### Profiling Results - Top Bottlenecks
+### Key Findings
 
-#### Before Optimizations:
-1. **Thread lock contention**: 37.6s (31%) - JIT/memory manager locks
-2. **dict.get()**: 16.5s (14%) - 2.2M calls for environment lookups
-3. **threading.wait**: 16.2s (13%) - async overhead
-4. **len()**: 13.9s (11%) - 2M stack size checks
-5. **gas_metering.consume**: 5.3s (4%) - 500k gas checks
-6. **_run_stack_bytecode**: 5.3s (4%) - Core VM loop
-7. **time.perf_counter**: 5.0s (4%) - Profiler timing overhead
-8. **profiler.record_instruction**: 3.2s (3%) - Profiler recording
+**✅ Successful Optimizations:**
+1. **Thread locks**: 37.6s → 15.5s (59% improvement) - Lock-free execution path
+2. **len() calls**: 13.9s → 9.5s (32% improvement) - Direct stack.sp access
+3. **dict.get**: 16.5s → 11.4s (31% improvement) - Better name caching
 
-#### After Round 1 Optimizations (without --perf-fast-dispatch):
-- **Total time**: 113.6 seconds (**6.3% improvement**)
-- **Transactions/second**: 0.88 tx/s
+**⚠️ Attempted But Ineffective:**
+- **Sync fast dispatch**: Added ~1% improvement but increased lock contention
+- **Bytecode compilation for sync path**: Actions already use bytecode in async path
 
-1. **Thread lock contention**: 15.5s (14%) - **59% faster** ✅
-2. **dict.get()**: 11.4s (10%) - **31% faster** ✅  
-3. **threading.wait**: 18.0s (16%) - **11% slower** ❌
-4. **eval_node**: 9.8s (9%) - NEW bottleneck (interpreter fallback)
-5. **len()**: 9.5s (8%) - **32% faster** ✅
-6. **isinstance()**: 6.7s (6%) - 2.7M type checks
-7. **consume**: 6.0s (5%) - **13% slower** (profiling overhead)
-8. **_run_stack_bytecode**: 4.8s (4%) - **9% faster** ✅
+**❌ Persistent Bottlenecks:**
+- **eval_node**: 9.8-10.0s (110k calls) - Interpreter fallback from imports/modules
+- **_parse_block_statements**: 6.7-6.8s (606 calls) - Runtime contract parsing
+- **isinstance**: 6.7-6.8s (2.7M calls) - Type checking overhead
+- **Thread coordination**: 15-26s - Async event loop and child VM creation
 
-#### After Round 2 Optimizations (with --perf-fast-dispatch):
-- **Total time**: 112.4 seconds (**7.3% improvement from baseline, 1.1% from Round 1**)
-- **Transactions/second**: 0.89 tx/s
+### Optimization Details
 
-1. **Thread lock contention**: 20.7s (18%) - Increased due to different execution path
-2. **_run_stack_bytecode**: 11.5s (10%) - Sync path used for most calls (38 async calls vs 513 before)
-3. **dict.get()**: 11.3s (10%) - Stable
-4. **eval_node**: 9.8s (9%) - CRITICAL: Interpreter fallback still happening
-5. **len()**: 9.5s (8%) - Stable
-6. **_parse_block_statements**: 6.8s (6%) - Runtime parsing bottleneck
-7. **isinstance()**: 6.7s (6%) - Type checking overhead
+#### Round 1: Low-Hanging Fruit (121.2s → 113.6s, 6.3% improvement)
 
-### Optimizations Implemented
+1. **Thread Lock Optimization** (`src/zexus/vm/vm.py` line ~1225)
+   ```python
+   # Before: Always acquired locks
+   # After: Skip locks in single-threaded mode
+   if self._jit_lock is None:
+       # Lock-free path...
+   ```
+   **Result**: 37.6s → 15.5s
 
-#### Round 1: Lock and Stack Optimizations
+2. **Stack Size Optimization** (`src/zexus/vm/vm.py` line ~2663)
+   ```python
+   # Before: len(stack) - 2M function calls
+   # After: stack.sp - Direct attribute access
+   ```
+   **Result**: 13.9s → 9.5s
 
-1. **✅ Thread Lock Optimization** (`src/zexus/vm/vm.py`)
-   - Made JIT locks conditional on multi-threading
-   - Added lock-free path for single-threaded execution
-   - **Result**: 37.6s → 15.5s (59% improvement)
+3. **Gas Metering Optimization** (`src/zexus/vm/gas_metering.py`)
+   - Added `_cost_cache` for static operation costs
+   - Reordered checks to test operation count first
+   **Result**: Marginal improvement
 
-2. **✅ Stack Size Optimization** (`src/zexus/vm/vm.py`)
-   - Use `stack.sp` instead of `len(stack)` for profiler
-   - Direct attribute access for trace logging
-   - **Result**: 13.9s → 9.5s (32% improvement)
+#### Round 2: Async Overhead Investigation (113.6s → 112.7s, 0.9% improvement)
 
-3. **✅ Gas Metering Optimization** (`src/zexus/vm/gas_metering.py`)
-   - Added cost cache for repeated operations
-   - Fast-path operation count check
-   - Made profiling tracking optional
-   - **Result**: Marginal improvement
+4. **Synchronous Fast Dispatch** (`--perf-fast-dispatch` flag)
+   - Enabled `_run_stack_bytecode_sync` to bypass asyncio
+   - **Unexpected Result**: Minimal improvement, sometimes slower
+   - **Analysis**: async overhead is only ~6s, not 33s as initially thought
+   - Async calls are necessary for legitimate concurrency (event handlers, futures)
 
-4. **✅ Action Bytecode Compilation** (`src/zexus/vm/vm.py`)
-   - Compile Actions to bytecode on first call
-   - Cache compiled bytecode on Action objects
-   - Execute via VM instead of interpreter fallback
-   - **Status**: Implemented but not activating (Actions called via different path)
+5. **Bytecode Compilation in Sync Path** (`src/zexus/vm/vm.py` line ~1866)
+   - Added Action→bytecode compilation to `_invoke_callable_sync`
+   - Mirrors async path implementation at line ~3730
+   - **Result**: No improvement - sync path rarely used; async path already had it
 
-#### Round 2: Async Overhead Reduction
+### Root Cause Analysis
 
-5. **⚠️ Synchronous Fast Dispatch** (`--perf-fast-dispatch` flag)
-   - Enabled synchronous VM execution path bypassing asyncio overhead
-   - **Result**: Only 1.1% improvement (112.4s vs 113.6s)
-   - **Analysis**: Async overhead is real but smaller than expected (~6s). Most execution already uses efficient async primitives.
-   - The sync path works but only affects direct VM calls; child VMs and evaluator-created VMs still use async for legitimate async operations.
+**Why is eval_node still at 10s?**
 
-### Remaining Bottlenecks (Priority Order)
+The 110k `eval_node` calls are NOT from Actions (those use bytecode), but from:
+1. **Module imports** - Modules are executed via interpreter (line ~896 in vm.py)
+2. **Dynamic code evaluation** - `eval`, `exec`, runtime introspection
+3. **Contract method compilation** - Parser called during execution
 
-1. **CRITICAL: Interpreter Fallback (9.8s - 9% of total time)**
-   - `eval_node` being called 110k times during VM execution
-   - Actions/LambdaFunctions falling back to interpreter instead of using VM
-   - Module imports triggering interpreter execution
-   - **Fix**: Ensure bytecode compilation activates for all Actions, pre-compile imports
+**Why didn't sync dispatch help?**
 
-2. **HIGH: Runtime Parsing (6.8s - 6% of total time)**
-   - `_parse_block_statements` called 606 times during execution
-   - Contract declarations and modules being parsed at runtime
-   - **Fix**: Pre-parse all contracts and modules, cache parsed ASTs
+The async overhead is mostly from:
+- **Necessary async operations**: Event handlers, futures, promises (can't be eliminated)
+- **Threading coordination**: Child VM creation, message passing (architectural)
+- **Lock contention**: Even with fast path, locks protect shared JIT/memory state
 
-3. **MEDIUM: Type Checks (6.7s - 6% of total time)**
-   - `isinstance` called 2.7M times
-   - **Fix**: Cache isinstance results, use duck typing where possible
+The `_perf_fast_dispatch` flag only affects direct bytecode execution, not:
+- High-level ops (always async)
+- Builtin calls that spawn tasks
+- Module imports
+- Child VM creation
 
-4. **MEDIUM: Async Coordination (18s - 16% of total time)**
-   - `threading.wait` overhead from event loop coordination
-   - Child VM creation overhead
-   - **Fix**: Reduce VM recreation, optimize event loop usage
+### Remaining Optimization Opportunities
 
-5. **LOW: dict.get lookups (11.3s - 10% of total time)**
-   - 2M calls for variable resolution
-   - Name cache exists but still expensive
-   - **Fix**: Pre-resolve common names, use local variables more
+**High Impact (estimated 15-20s savings):**
 
-### Next Steps
+1. **Pre-compile Modules** (6.7s potential)
+   - Currently: Modules parsed and evaluated during runtime imports
+   - Fix: Parse all modules during initialization, cache ASTs and bytecode
+   - Implementation: Module loader pre-compilation phase
 
-**Round 3 Target: Fix Interpreter Fallback**
-- Debug why Actions still use `eval_node` instead of VM bytecode
-- Add logging to trace execution path for contract methods
-- Ensure bytecode compilation succeeds for all Actions
-- Pre-compile modules during import phase
+2. **Cache Parsed Contracts** (6.7s potential)
+   - Currently: `_parse_block_statements` called 606 times during execution
+   - Fix: Parse contracts once, store in global registry
+   - Implementation: Contract AST cache keyed by source hash
 
-**Round 4 Target: Eliminate Runtime Parsing**
-- Move contract parsing to compile-time
-- Cache parsed modules globally
-- Pre-load common dependencies
+3. **Reduce Module Eval Overhead** (3-5s potential)
+   - Currently: Modules use interpreter even with VM available
+   - Fix: Compile module bodies to bytecode, execute in VM
+   - Implementation: Extend module cache to store bytecode
 
-### Estimated Performance After All Fixes
-- **Current**: 112.4s (0.89 tx/s)
-- **After interpreter fallback fix**: ~100s (1.0 tx/s) - **21% faster**
-- **After parsing fix**: ~93s (1.08 tx/s) - **36% faster than baseline**
-- **After all fixes**: ~75-85s (1.2-1.3 tx/s) - **60% faster than baseline**
+**Medium Impact (estimated 5-10s savings):**
+
+4. **Optimize isinstance Checks** (3-4s potential)
+   - 2.7M isinstance calls for type validation
+   - Fix: Type cache, duck typing where safe
+   - Implementation: `_type_cache` dict, skip checks for trusted objects
+
+5. **Reduce VM Recreation** (2-3s potential)
+   - Child VMs created frequently for function calls
+   - Fix: VM pool, reuse VMs for similar scopes
+   - Implementation: VM object pool with reset() method
+
+**Low Impact (estimated 2-5s savings):**
+
+6. **Further dict.get Optimization** (2-3s potential)
+   - Still 11.4s spent on 2M environment lookups
+   - Fix: Scope-local variable caching, closure optimization
+   - Implementation: Compiler pass to identify hot variables
+
+### Estimated Final Performance
+
+**Conservative estimate (implementing high-impact items):**
+- Current: 112.7s
+- After module pre-compilation: ~106s (5.9% improvement)
+- After contract caching: ~99s (12.2% improvement)  
+- After module bytecode: ~94s (16.6% improvement)
+- **Total potential**: ~94s (22% faster than current, 28% faster than baseline)
+
+**Optimistic estimate (all optimizations):**
+- With isinstance optimization: ~91s
+- With VM pooling: ~89s
+- With dict.get optimization: ~86s
+- **Total potential**: ~86s (24% faster than current, 29% faster than baseline)
 
 ### Code Changes Summary
 
-**Modified Files:**
-1. `src/zexus/vm/vm.py` - Lock optimization, stack.sp usage, Action bytecode compilation, sync fast dispatch logging
-2. `src/zexus/vm/gas_metering.py` - Cost caching, fast-path checks
+**Files Modified:**
+1. `src/zexus/vm/vm.py` - Lock optimization, stack.sp, bytecode in sync path
+2. `src/zexus/vm/gas_metering.py` - Cost caching
 3. `scripts/profile_full_network_components.py` - Profiling infrastructure
 
-**Lines Changed**: ~160 lines across 3 files
-**Test Coverage**: Validated with 100-transaction blockchain test
+**Lines Changed**: ~180 lines
+**Performance Gain**: 7.0% (121.2s → 112.7s)
+**Effort**: Medium (2-3 hours of profiling and optimization)
+
+### Next Steps
+
+1. **Implement Module Pre-compilation**
+   - Add `--precompile-modules` flag to profiler
+   - Parse all imports before execution
+   - Store in global module registry
+
+2. **Contract AST Cache**
+   - Hash contract source
+   - Cache parsed AST globally
+   - Reuse on repeated parses
+
+3. **Module Bytecode Execution**
+   - Compile module bodies to bytecode
+   - Execute in VM instead of interpreter
+   - Store in module cache
+
+### Lessons Learned
+
+1. **Profile First**: Initial assumption about async overhead (33s) was wrong (actually ~6s)
+2. **Understand the Path**: Sync dispatch didn't help because most code uses async for valid reasons
+3. **Check Both Paths**: Adding bytecode compilation to sync path didn't help because it was already in async path
+4. **Measure Everything**: Small optimizations compound, but only if they're on the hot path
+5. **Know Your Bottlenecks**: The real issues are module loading and parsing, not async overhead
+
+**Bottom Line**: We achieved 7% improvement with targeted micro-optimizations. The next 20% requires architectural changes (pre-compilation, caching).
