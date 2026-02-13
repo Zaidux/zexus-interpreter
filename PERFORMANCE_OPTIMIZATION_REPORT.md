@@ -297,3 +297,63 @@ The `_perf_fast_dispatch` flag only affects direct bytecode execution, not:
    - Interpreter loaded full_network_blockchain twice with four cache lookups (three misses, one cached hit on rerun path).
    - VM reused the cached module once but performed no new module loads, corroborating the interpreter/VM divergence (VM 37.15s vs interpreter 14.39s).
 - Small-chain baseline shows no module usage, indicating the instrumentation adds negligible overhead for lightweight workloads.
+
+---
+
+## Session Update (2026-01-21): VM Fallbacks, Gas Modes, and Fast Loop
+
+### What we changed
+1. **VM fallback visibility**
+   - Added VM fallback stats in profiler output and JSON reports.
+   - Added `ZEXUS_VM_FALLBACK_DEBUG=1` to print compile/exec fallback reasons.
+
+2. **Module execution via VM in imports**
+   - `use`/`from` imports now try to compile+execute module bytecode in VM before falling back to interpreter.
+   - Cached bytecode/AST stored in module cache.
+
+3. **Operation limit adjustment**
+   - Increased profiler default max ops from 200k → 2,000,000 to avoid forced fallback.
+
+4. **Gas controls for profiling**
+   - Default profiling now runs with gas **off** unless `--force-gas` is specified.
+   - Added **gas-light** mode to keep gas accounting while preserving fast loop (`--gas-light`).
+
+5. **Fast loop and hybrid dispatch**
+   - Added fast loop dispatch path with auto-activation when loop opcodes are present.
+   - Added fast loop stats to profiling output.
+   - Added sync fast paths for CALL_NAME/CALL_TOP/CALL_METHOD when targets are not coroutines.
+
+6. **Opcode hot-path tweaks**
+   - CALL_NAME builtins shortcut + sync path.
+   - CALL_TOP sync path; CALL_METHOD stack helper usage.
+   - LOAD_NAME/STORE_NAME optimized lookup sequence.
+   - BUILD_MAP/DUP/POP use cached stack helpers.
+
+### Results (perf_full_network_10k.zx)
+All runs are with gas-light unless noted.
+
+**Baseline (gas off, fast loop auto):**
+- VM: ~36.61s (report: tmp/perf_reports/20260121_191500/perf_full_network_10k_profile.json)
+
+**Gas on (full gas, fast loop disabled):**
+- VM: ~46.30s (report: tmp/perf_reports/20260121_191653/perf_full_network_10k_profile.json)
+
+**Gas-light (fast loop enabled):**
+- VM: ~37.60s (report: tmp/perf_reports/20260121_192613/perf_full_network_10k_profile.json)
+
+**After CALL_NAME/LOAD_NAME/STORE_NAME/BUILD_MAP/DUP/POP + CALL_TOP sync path:**
+- VM: ~37.44s (report: tmp/perf_reports/20260121_193906/perf_full_network_10k_profile.json)
+
+**After CALL_METHOD stack helper update:**
+- VM: ~36.92s (report: tmp/perf_reports/20260121_194825/perf_full_network_10k_profile.json)
+
+Interpreter remained ~14.0–14.6s on the same workload (parser still dominates).
+
+### Current Hot Ops (opcode profile)
+Top ops remain: LOAD_CONST, LOAD_NAME, STORE_NAME, POP, BUILD_MAP, CALL_NAME, JUMP_IF_FALSE, JUMP, DUP, PRINT.
+Report: tmp/perf_reports/20260121_192717/perf_full_network_10k_profile.json
+
+### Notes & Next Focus
+- Gas metering adds ~9–10s without gas-light; gas-light brings gas overhead close to gas-off.
+- VM still slower than interpreter; next gains likely from deeper `_run_stack_bytecode` loop reductions and call overhead.
+- Interpreter improvements should continue targeting parsing hot spots (`parse_block`, `_parse_block_statements`).

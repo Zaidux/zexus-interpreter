@@ -141,6 +141,17 @@ class GasMetering:
             self.operation_counts[operation] = self.operation_counts.get(operation, 0) + 1
         
         return True
+
+    def consume_light(self, amount: int = 1) -> bool:
+        """Lightweight gas accounting: only counts operations with a fixed cost."""
+        self.operation_count += 1
+        if self.operation_count > self.max_operations:
+            return False
+        if self.gas_limit is not None:
+            self.gas_used += amount
+            if self.gas_used > self.gas_limit:
+                return False
+        return True
     
     def _get_operation_cost(self, operation: str, **kwargs) -> int:
         """

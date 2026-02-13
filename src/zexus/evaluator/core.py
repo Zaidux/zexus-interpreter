@@ -1027,6 +1027,12 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             if bytecode is None or self.bytecode_compiler.errors:
                 debug_log("VM Execution", f"Compilation failed: {self.bytecode_compiler.errors}")
+                if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
+                    print(
+                        "[VM FALLBACK] compile_failed "
+                        f"node={type(node).__name__} file={file_path} "
+                        f"errors={self.bytecode_compiler.errors}"
+                    )
                 self.vm_stats['vm_fallbacks'] += 1
                 return None  # Signal fallback
             
@@ -1073,6 +1079,11 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
         except Exception as e:
             debug_log("VM Execution", f"VM execution error: {e}")
+            if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
+                print(
+                    "[VM FALLBACK] execute_failed "
+                    f"node={type(node).__name__} file={file_path} error={e}"
+                )
             self.vm_stats['vm_fallbacks'] += 1
             return None  # Signal fallback
 
@@ -1108,6 +1119,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             return self._vm_result_to_evaluator(result)
         except Exception as e:
             debug_log("VM Execution", f"VM cached execution error: {e}")
+            if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
+                print(f"[VM FALLBACK] cached_execute_failed error={e}")
             self.vm_stats['vm_fallbacks'] += 1
             return None
     
@@ -1408,7 +1421,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             'evaluator': self.vm_stats.copy(),
             'cache': None,
             'jit': None,
-            'optimizer': None
+            'optimizer': None,
+            'fast_loop': None
         }
         
         # Cache statistics
@@ -1418,6 +1432,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         # JIT statistics
         if self.vm_instance:
             stats['jit'] = self.vm_instance.get_jit_stats()
+            stats['fast_loop'] = getattr(self.vm_instance, "_fast_loop_stats", None)
         
         return stats
 

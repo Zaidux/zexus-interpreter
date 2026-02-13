@@ -340,7 +340,11 @@ class VM:
         num_allocator_registers: int = 16,
         enable_gas_metering: bool = True,
         gas_limit: int = None,
-        enable_timeout: bool = True
+        enable_timeout: bool = True,
+        enable_fast_loop: bool = False,
+        fast_loop_threshold: int = 512,
+        enable_gas_light: bool = False,
+        gas_light_cost: int = 1
     ):
         """
         Initialize the enhanced VM.
@@ -354,6 +358,8 @@ class VM:
         
         # --- Gas Metering (Security) ---
         self.enable_gas_metering = enable_gas_metering and _GAS_METERING_AVAILABLE
+        self.enable_gas_light = bool(enable_gas_light)
+        self.gas_light_cost = max(1, int(gas_light_cost))
         self.gas_metering = None
         if self.enable_gas_metering:
             self.gas_metering = GasMetering(gas_limit=gas_limit, enable_timeout=enable_timeout)
@@ -395,6 +401,15 @@ class VM:
         self._env_version = 0
         self._name_cache: Dict[str, Tuple[Any, int]] = {}
         self._method_cache: Dict[Tuple[type, str], Any] = {}
+        self.enable_fast_loop = bool(enable_fast_loop)
+        try:
+            env_threshold = os.environ.get("ZEXUS_VM_FAST_LOOP_THRESHOLD")
+            if env_threshold is not None:
+                fast_loop_threshold = int(env_threshold)
+        except Exception:
+            pass
+        self.fast_loop_threshold = max(1, int(fast_loop_threshold))
+        self._fast_loop_stats: Dict[str, Any] = {"used": False, "reason": ""}
         
         # Round 3 optimizations
         self._isinstance_cache: Dict[Tuple[int, type], bool] = {}  # Cache isinstance results
@@ -632,6 +647,8 @@ class VM:
         
         vm.enable_gas_metering = parent_vm.enable_gas_metering
         vm.gas_metering = parent_vm.gas_metering
+        vm.enable_gas_light = getattr(parent_vm, "enable_gas_light", False)
+        vm.gas_light_cost = getattr(parent_vm, "gas_light_cost", 1)
         
         vm.enable_profiling = parent_vm.enable_profiling
         vm.profiler = parent_vm.profiler
@@ -686,6 +703,9 @@ class VM:
         vm._native_jit_auto_enabled = parent_vm._native_jit_auto_enabled
         vm._native_jit_auto_threshold = parent_vm._native_jit_auto_threshold
         vm._perf_fast_dispatch = getattr(parent_vm, "_perf_fast_dispatch", False)
+        vm.enable_fast_loop = getattr(parent_vm, "enable_fast_loop", False)
+        vm.fast_loop_threshold = getattr(parent_vm, "fast_loop_threshold", 512)
+        vm._fast_loop_stats = {"used": False, "reason": ""}
         
         # Settings
         vm.worker_count = parent_vm.worker_count
@@ -2104,7 +2124,9 @@ class VM:
         if profile_ops and profile_verbose:
             print(f"[VM DEBUG] opcode profiling enabled; instrs={len(instrs)}")
         gas_metering = self.gas_metering
+        gas_light = self.enable_gas_light and gas_metering is not None
         gas_consume = gas_metering.consume if gas_metering else None
+        gas_consume_light = gas_metering.consume_light if gas_metering else None
         gas_enabled = self.enable_gas_metering and gas_metering is not None
         trace_ip_range = None
         trace_ip_env = os.environ.get("ZEXUS_VM_TRACE_IP_RANGE")
@@ -2182,23 +2204,25 @@ class VM:
         missing = object()
         env_get = self.env.get
         closure_get = self._closure_cells.get
+        builtins_get = self.builtins.get
+        name_cache = self._name_cache
 
         # Lexical Resolution Helper (Closures/Cells)
         def _resolve(name):
-            cached = self._name_cache.get(name)
+            cached = name_cache.get(name)
             if cached and cached[1] == self._env_version:
                 return cached[0]
             # 1. Local
             val = env_get(name, missing)
             if val is not missing:
                 resolved = val.value if isinstance(val, Cell) else val
-                self._name_cache[name] = (resolved, self._env_version)
+                name_cache[name] = (resolved, self._env_version)
                 return resolved
             # 2. Closure Cells (attached to VM)
             cell = closure_get(name)
             if cell is not None:
                 resolved = cell.value
-                self._name_cache[name] = (resolved, self._env_version)
+                name_cache[name] = (resolved, self._env_version)
                 return resolved
             # 3. Parent Chain
             p = self._parent_env
@@ -2263,7 +2287,13 @@ class VM:
             cached = call_cache.get(name)
             if cached and cached[1] == self._env_version:
                 return cached[0]
-            fn = _resolve(name) or self.builtins.get(name)
+            fn = None
+            try:
+                fn = builtins_get(name)
+            except Exception:
+                fn = None
+            if fn is None:
+                fn = _resolve(name)
             call_cache[name] = (fn, self._env_version)
             return fn
 
@@ -2316,10 +2346,21 @@ class VM:
                 args.reverse()
             else:
                 args = []
-            fn = _resolve_callable(func_name)
+            fn = None
+            try:
+                fn = builtins_get(func_name)
+            except Exception:
+                fn = None
+            if fn is None:
+                fn = _resolve_callable(func_name)
             if fn is None:
                 fallback_res = self._call_fallback_builtin(func_name, args)
                 stack_append(fallback_res)
+                return
+            real_fn = fn.fn if hasattr(fn, "fn") else fn
+            if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+                res = self._invoke_callable_sync(fn, args)
+                stack_append(res)
                 return
             res = await self._invoke_callable_or_funcdesc(fn, args)
             stack_append(res)
@@ -2329,6 +2370,11 @@ class VM:
             # Use stack_pop to avoid crash on empty stack
             args = [stack_pop() for _ in range(count)][::-1] if count else []
             fn_obj = stack_pop()
+            real_fn = fn_obj.fn if hasattr(fn_obj, "fn") else fn_obj
+            if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+                res = self._invoke_callable_sync(fn_obj, args)
+                stack.append(res)
+                return
             res = await self._invoke_callable_or_funcdesc(fn_obj, args)
             stack.append(res)
 
@@ -2372,9 +2418,9 @@ class VM:
             if len(stack) < arg_count + 1:
                 missing = (arg_count + 1) - len(stack)
                 for _ in range(missing):
-                    stack.append(None)
-            args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
-            target = stack.pop() if stack else None
+                    stack_append(None)
+            args = [stack_pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
+            target = stack_pop() if stack else None
             method_name = const(method_idx)
             trace_methods = os.environ.get("ZEXUS_VM_TRACE_METHOD_OPS")
             if trace_methods:
@@ -2427,7 +2473,7 @@ class VM:
                             stack_size = len(stack) if hasattr(stack, "__len__") else -1
                             print(f"[VM TRACE] {method_name} target None; env.blockchain={env_type} arg_count={arg_count} stack={stack_size}")
                             self._method_target_trace_count += 1
-                stack.append(None)
+                stack_append(None)
                 return
 
             result = None
@@ -2506,12 +2552,17 @@ class VM:
                         result = attr
                 if verbose_active and self._call_method_trace_count <= 25:
                     print(f"[VM TRACE] CALL_METHOD {method_name} result={result}")
+                if asyncio.iscoroutine(result) or isinstance(result, asyncio.Future):
+                    if self.async_optimizer:
+                        result = await self.async_optimizer.await_optimized(result)
+                    else:
+                        result = await result
             except Exception as exc:
                 if debug:
                     print(f"[VM] CALL_METHOD failed for {method_name}: {exc}")
                 raise
 
-            stack.append(self._unwrap_after_builtin(result))
+            stack_append(self._unwrap_after_builtin(result))
 
         stack_append = stack.append
         stack_pop = stack.pop
@@ -2543,24 +2594,27 @@ class VM:
         def _op_store_name(idx):
             name = const(idx)
             val = stack_pop() if stack else None
-            if name in self.env and not isinstance(self.env.get(name), Cell):
+            existing = env_get(name, missing)
+            if existing is not missing and not isinstance(existing, Cell):
                 self.env[name] = val
                 self._bump_env_version(name, val)
-            elif name in self._closure_cells:
-                self._closure_cells[name].value = val
-                self._bump_env_version(name, val)
             else:
-                _store(name, val)
+                cell = closure_get(name)
+                if cell is not None:
+                    cell.value = val
+                    self._bump_env_version(name, val)
+                else:
+                    _store(name, val)
             if self.use_memory_manager and val is not None:
                 self._allocate_managed(val, name=name, root=True)
-
+            return
         def _op_pop(_):
             if stack:
-                stack.pop()
+                stack_pop()
 
         def _op_dup(_):
             if stack:
-                stack.append(stack[-1])
+                stack_append(stack.peek())
 
         def _op_neg(_):
             a = _unwrap(stack.pop() if stack else 0)
@@ -2619,10 +2673,10 @@ class VM:
             total = count if count is not None else 0
             result = {}
             for _ in range(total):
-                val = stack.pop() if stack else None
-                key = stack.pop() if stack else None
+                val = stack_pop() if stack else None
+                key = stack_pop() if stack else None
                 result[key] = val
-            stack.append(result)
+            stack_append(result)
 
         def _op_index(_):
             idx = stack.pop() if stack else None
@@ -2706,6 +2760,10 @@ class VM:
             func = const(func_idx)
             _store(name, func)
 
+        def _op_print(_):
+            val = stack_pop() if stack else None
+            print(val)
+
         dispatch_table: Dict[str, Callable[[Any], Any]] = {
             "LOAD_CONST": _op_load_const,
             "LOAD_NAME": _op_load_name,
@@ -2739,15 +2797,23 @@ class VM:
             "GET_LENGTH": _op_get_length,
             "READ": _op_read,
             "STORE_FUNC": _op_store_func,
+            "PRINT": _op_print,
         }
         async_dispatch_ops = {"CALL_NAME", "CALL_TOP", "CALL_METHOD"}
         gas_kwarg_ops = {"BUILD_LIST", "BUILD_MAP", "MERKLE_ROOT", "CALL_NAME", "CALL_TOP", "CALL_METHOD", "CALL_BUILTIN"}
 
         prepared_instrs: List[Tuple[str, Any, Optional[Callable[[Any], Any]], bool, int]] = []
+        has_async_ops = False
+        has_loop_ops = False
+        loop_ops = {"JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "FOR_ITER"}
         for instr in instrs:
             op_name, operand = instr
             handler = dispatch_table.get(op_name)
             is_async = op_name in async_dispatch_ops
+            if is_async:
+                has_async_ops = True
+            if op_name in loop_ops:
+                has_loop_ops = True
             gas_kind = 0
             if op_name in gas_kwarg_ops:
                 if op_name in ("BUILD_LIST", "BUILD_MAP"):
@@ -2761,6 +2827,73 @@ class VM:
         # 3. Execution Loop
         prev_ip = None
         try_stack: List[int] = []
+        auto_fast_loop = (
+            len(prepared_instrs) >= getattr(self, "fast_loop_threshold", 512)
+            or has_loop_ops
+        )
+        fast_loop_allowed = (
+            (self.enable_fast_loop or auto_fast_loop)
+            and not profile_ops
+            and not (gas_enabled and not gas_light)
+            and not trace_interval
+            and trace_ip_range is None
+            and not trace_loads_active
+            and not trace_calls_active
+            and not trace_targets_active
+            and not self.enable_profiling
+        )
+        missing_handlers = any(handler is None for _, _, handler, _, _ in prepared_instrs)
+        if self.enable_fast_loop or auto_fast_loop:
+            reasons = []
+            if auto_fast_loop and not self.enable_fast_loop:
+                reasons.append("auto")
+            if profile_ops:
+                reasons.append("opcode_profile")
+            if gas_enabled and not gas_light:
+                reasons.append("gas")
+            if trace_interval:
+                reasons.append("trace_interval")
+            if trace_ip_range is not None:
+                reasons.append("trace_ip_range")
+            if trace_loads_active:
+                reasons.append("trace_loads")
+            if trace_calls_active:
+                reasons.append("trace_calls")
+            if trace_targets_active:
+                reasons.append("trace_targets")
+            if self.enable_profiling:
+                reasons.append("profiler")
+            if missing_handlers:
+                reasons.append("missing_handlers")
+            self._fast_loop_stats = {
+                "used": False,
+                "reason": ",".join(reasons) if reasons else "conditions",
+                "auto": auto_fast_loop,
+                "threshold": getattr(self, "fast_loop_threshold", 512),
+                "instr_count": len(prepared_instrs),
+            }
+
+        if fast_loop_allowed and not missing_handlers:
+            self._fast_loop_stats = {
+                "used": True,
+                "reason": "",
+                "auto": auto_fast_loop,
+                "threshold": getattr(self, "fast_loop_threshold", 512),
+                "instr_count": len(prepared_instrs),
+            }
+            local_prepared = prepared_instrs
+            while running and ip < len(local_prepared):
+                op_name, operand, handler, is_async, _gas_kind = local_prepared[ip]
+                prev_ip = ip
+                ip += 1
+                if is_async:
+                    await handler(operand)
+                else:
+                    handler(operand)
+                if not running:
+                    break
+            if not running:
+                return return_value
         while running and ip < len(prepared_instrs):
             try:
                 current_ip = ip
@@ -2795,10 +2928,16 @@ class VM:
                 if gas_enabled:
                     if gas_kind == 1:
                         count = operand if operand is not None else 0
-                        ok = gas_consume(op_name, count=count)
+                        if gas_light:
+                            ok = gas_consume_light(self.gas_light_cost)
+                        else:
+                            ok = gas_consume(op_name, count=count)
                     elif gas_kind == 2:
                         leaf_count = operand if operand is not None else 0
-                        ok = gas_consume(op_name, leaf_count=leaf_count)
+                        if gas_light:
+                            ok = gas_consume_light(self.gas_light_cost)
+                        else:
+                            ok = gas_consume(op_name, leaf_count=leaf_count)
                     elif gas_kind == 3:
                         if op_name == "CALL_NAME":
                             arg_count = operand[1] if isinstance(operand, tuple) else 0
@@ -2806,9 +2945,15 @@ class VM:
                             arg_count = operand if operand is not None else 0
                         else:
                             arg_count = operand[1] if isinstance(operand, tuple) else 0
-                        ok = gas_consume(op_name, arg_count=arg_count)
+                        if gas_light:
+                            ok = gas_consume_light(self.gas_light_cost)
+                        else:
+                            ok = gas_consume(op_name, arg_count=arg_count)
                     else:
-                        ok = gas_consume(op_name)
+                        if gas_light:
+                            ok = gas_consume_light(self.gas_light_cost)
+                        else:
+                            ok = gas_consume(op_name)
 
                     # Consume gas for operation
                     if not ok:

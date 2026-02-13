@@ -1294,6 +1294,32 @@ class StatementEvaluatorMixin:
             return False
         
         return False
+
+    def _try_vm_module_exec(self, program, module_env, candidate_path: str):
+        """Attempt to execute a module via VM bytecode for faster imports.
+
+        Returns compiled bytecodes if VM execution succeeds, else None.
+        """
+        if not getattr(self, "use_vm", False):
+            return None
+        bytecode_compiler = getattr(self, "bytecode_compiler", None)
+        if bytecode_compiler is None:
+            return None
+        try:
+            if getattr(self, "vm_instance", None) is None and hasattr(self, "_initialize_vm"):
+                self._initialize_vm()
+        except Exception:
+            return None
+        try:
+            compiled = bytecode_compiler.compile_file(candidate_path, program, optimize=True)
+            if not compiled:
+                return None
+            result = self._execute_bytecode_sequence(compiled, module_env, debug_mode=False)
+            if result is None:
+                return None
+            return compiled
+        except Exception:
+            return None
     
     def eval_use_statement(self, node, env, stack_trace):
         from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
@@ -1363,6 +1389,8 @@ class StatementEvaluatorMixin:
 
         # 2. Check Cache
         module_env = get_cached_module(normalized_path)
+        if isinstance(module_env, tuple):
+            module_env = module_env[0] if module_env else None
 
         # 3. Load if not cached
         if not module_env:
@@ -1421,13 +1449,20 @@ class StatementEvaluatorMixin:
                         module_env.set("__file__", String(os.path.abspath(candidate)))
                         # Set __MODULE__ to the module path (not "__main__" since it's imported)
                         module_env.set("__MODULE__", String(file_path))
-                        
-                        # Recursive evaluation
+
+                        compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
+                        if compiled:
+                            cache_module(normalized_path, module_env, compiled, program)
+                            cache_module(normalize_path(candidate), module_env, compiled, program)
+                            loaded = True
+                            break
+
+                        # Recursive evaluation (interpreter fallback)
                         self.eval_node(program, module_env)
-                        
+
                         # Update cache with fully loaded env
-                        cache_module(normalized_path, module_env)
-                        cache_module(normalize_path(candidate), module_env)
+                        cache_module(normalized_path, module_env, None, program)
+                        cache_module(normalize_path(candidate), module_env, None, program)
                         loaded = True
                         break
                     except Exception as e:
@@ -1526,6 +1561,8 @@ class StatementEvaluatorMixin:
         
         normalized_path = normalize_path(file_path)
         module_env = get_cached_module(normalized_path)
+        if isinstance(module_env, tuple):
+            module_env = module_env[0] if module_env else None
         
         # 2. Load Logic (Explicitly repeated to ensure isolation)
         if not module_env:
@@ -1569,9 +1606,15 @@ class StatementEvaluatorMixin:
                     module_env.set("__file__", String(os.path.abspath(candidate)))
                     # Set __MODULE__ to the module path (not "__main__" since it's imported)
                     module_env.set("__MODULE__", String(file_path))
-                    
+
+                    compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
+                    if compiled:
+                        cache_module(normalized_path, module_env, compiled, program)
+                        loaded = True
+                        break
+
                     self.eval_node(program, module_env)
-                    cache_module(normalized_path, module_env)
+                    cache_module(normalized_path, module_env, None, program)
                     loaded = True
                     break
                 except Exception:

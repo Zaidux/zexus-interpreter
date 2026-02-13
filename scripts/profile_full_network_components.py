@@ -72,11 +72,14 @@ class ProfileConfig:
     vm_profiler_sample_rate: float
     enable_opcode_profile: bool
     enable_gas_metering: bool
+    enable_gas_light: bool
+    gas_light_cost: int
     gas_limit: Optional[int]
     max_operations: Optional[int]
     perf_fast_dispatch: bool
     vm_single_shot: bool
     single_shot_max_instructions: int
+    vm_fast_loop: bool
 
 
 @dataclass
@@ -96,6 +99,7 @@ class VmExtras:
     vm_slowest_instructions: List[Dict[str, Any]]
     vm_hot_loops: List[Dict[str, Any]]
     vm_opcode_profile: List[Dict[str, Any]]
+    vm_fallback_stats: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -311,9 +315,8 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
     env = _build_env(file_path)
     evaluator = Evaluator(use_vm=True)
 
-    # FORCE gas metering ON to prevent infinite loops (override file flags)
-    force_gas_metering = True
-    effective_gas_metering = force_gas_metering or cfg.enable_gas_metering
+    # Default to no gas metering in profiler unless explicitly forced
+    effective_gas_metering = bool(cfg.enable_gas_metering)
 
     vm_profiler_level = getattr(ProfilingLevel, cfg.vm_profiler_level, ProfilingLevel.DETAILED)
     vm = VM(
@@ -321,18 +324,21 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
         jit_threshold=100,
         enable_gas_metering=effective_gas_metering,
         gas_limit=cfg.gas_limit,
+        enable_gas_light=cfg.enable_gas_light,
+        gas_light_cost=cfg.gas_light_cost,
         enable_profiling=cfg.enable_vm_profiler,
         profiling_level=vm_profiler_level.name,
         profiling_sample_rate=cfg.vm_profiler_sample_rate,
         profiling_track_overhead=False,
         fast_single_shot=cfg.vm_single_shot,
         single_shot_max_instructions=cfg.single_shot_max_instructions,
+        enable_fast_loop=cfg.vm_fast_loop,
     )
     vm._perf_fast_dispatch = bool(cfg.perf_fast_dispatch)
     if vm.gas_metering and cfg.max_operations is not None:
         try:
             vm.gas_metering.max_operations = max(1, int(cfg.max_operations))
-            print(f"[profile] VM gas metering FORCED ON: max_ops={vm.gas_metering.max_operations}")
+            print(f"[profile] VM gas metering enabled: max_ops={vm.gas_metering.max_operations}")
         except Exception:
             pass
     # DO NOT apply file flags that might disable gas metering for profiling
@@ -404,13 +410,33 @@ def _profile_vm(program, file_path: Path, cfg: ProfileConfig, file_flags: Dict[s
         for op_name, count in vm._last_opcode_profile[: cfg.top_n]:
             opcode_profile.append({"opcode": op_name, "count": count})
 
+    vm_stats = evaluator.get_full_vm_statistics()
+    fallback_stats: Dict[str, Any] = {}
+    try:
+        evaluator_stats = vm_stats.get("evaluator", {}) if isinstance(vm_stats, dict) else {}
+        vm_execs = int(evaluator_stats.get("vm_executions", 0) or 0)
+        vm_fallbacks = int(evaluator_stats.get("vm_fallbacks", 0) or 0)
+        direct_evals = int(evaluator_stats.get("direct_evals", 0) or 0)
+        total_vm_attempts = vm_execs + vm_fallbacks
+        fallback_rate = (vm_fallbacks / total_vm_attempts) if total_vm_attempts else 0.0
+        fallback_stats = {
+            "vm_executions": vm_execs,
+            "vm_fallbacks": vm_fallbacks,
+            "direct_evals": direct_evals,
+            "fallback_rate": fallback_rate,
+            "total_vm_attempts": total_vm_attempts,
+        }
+    except Exception:
+        fallback_stats = {}
+
     vm_extras = VmExtras(
-        vm_stats=evaluator.get_full_vm_statistics(),
+        vm_stats=vm_stats,
         vm_profiler_summary=profiler_summary,
         vm_hottest_instructions=hottest,
         vm_slowest_instructions=slowest,
         vm_hot_loops=hot_loops,
         vm_opcode_profile=opcode_profile,
+        vm_fallback_stats=fallback_stats,
     )
 
     return summary, vm_extras, module_usage
@@ -444,6 +470,21 @@ def _print_summary(report: FileReport, output_path: Path):
         print("Top VM opcodes:")
         for entry in report.vm_extras.vm_opcode_profile[:10]:
             print(f"  {entry['opcode']}: {entry['count']}")
+    if report.vm_extras and report.vm_extras.vm_stats:
+        fast_loop = report.vm_extras.vm_stats.get("fast_loop") if isinstance(report.vm_extras.vm_stats, dict) else None
+        if fast_loop:
+            used = fast_loop.get("used")
+            reason = fast_loop.get("reason")
+            print(f"VM fast loop: used={used} reason={reason}")
+    if report.vm_extras and report.vm_extras.vm_fallback_stats:
+        stats = report.vm_extras.vm_fallback_stats
+        total_vm_attempts = stats.get("total_vm_attempts", 0)
+        fallback_rate = stats.get("fallback_rate", 0.0)
+        print(
+            "VM fallback: "
+            f"{stats.get('vm_fallbacks', 0)}/{total_vm_attempts} "
+            f"({fallback_rate:.1%}) | direct_evals={stats.get('direct_evals', 0)}"
+        )
     if report.module_usage:
         print("Module cache usage:")
         for scope, usage in report.module_usage.items():
@@ -471,11 +512,15 @@ def main() -> int:
     parser.add_argument("--vm-profiler-sample-rate", type=float, default=1.0)
     parser.add_argument("--no-opcode-profile", action="store_true", help="Disable VM opcode counting")
     parser.add_argument("--no-gas", action="store_true", help="Disable gas metering in VM")
+    parser.add_argument("--force-gas", action="store_true", help="Force-enable gas metering in VM")
     parser.add_argument("--gas-limit", type=int, default=None, help="Override gas limit for VM")
-    parser.add_argument("--max-operations", type=int, default=200_000, help="Abort VM after N ops")
+    parser.add_argument("--gas-light", action="store_true", help="Enable lightweight gas mode (fast loop compatible)")
+    parser.add_argument("--gas-light-cost", type=int, default=1, help="Fixed gas cost per op in light mode")
+    parser.add_argument("--max-operations", type=int, default=2_000_000, help="Abort VM after N ops")
     parser.add_argument("--perf-fast-dispatch", action="store_true", help="Use VM fast synchronous dispatch")
     parser.add_argument("--vm-single-shot", action="store_true", help="Enable VM single-shot execution")
     parser.add_argument("--single-shot-max", type=int, default=64, help="Max instructions for single-shot mode")
+    parser.add_argument("--vm-fast-loop", action="store_true", help="Enable VM fast loop dispatch path")
     parser.add_argument("--skip-interpreter", action="store_true", help="Skip interpreter profiling")
     parser.add_argument("--skip-vm", action="store_true", help="Skip VM profiling")
     parser.add_argument("--parse-only", action="store_true", help="Only parse files (no execution)")
@@ -498,12 +543,15 @@ def main() -> int:
         vm_profiler_level=args.vm_profiler_level,
         vm_profiler_sample_rate=args.vm_profiler_sample_rate,
         enable_opcode_profile=not args.no_opcode_profile,
-        enable_gas_metering=not args.no_gas,
+        enable_gas_metering=bool(args.force_gas) and not args.no_gas,
+        enable_gas_light=bool(args.gas_light),
+        gas_light_cost=args.gas_light_cost,
         gas_limit=args.gas_limit,
         max_operations=args.max_operations,
         perf_fast_dispatch=args.perf_fast_dispatch,
         vm_single_shot=args.vm_single_shot,
         single_shot_max_instructions=args.single_shot_max,
+        vm_fast_loop=args.vm_fast_loop,
     )
 
     for path in targets:
