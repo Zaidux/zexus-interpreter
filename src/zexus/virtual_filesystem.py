@@ -1,7 +1,7 @@
 """
 Virtual filesystem and memory layer for sandboxed execution.
 
-Provides isolated file access and memory quotas for plugins.
+Provides isolated file access, memory quotas, and a read cache for plugins.
 Each plugin operates in a restricted filesystem namespace.
 """
 
@@ -11,6 +11,8 @@ from pathlib import Path
 from enum import Enum
 import os
 import sys
+import threading
+import time
 
 
 class FileAccessMode(Enum):
@@ -166,12 +168,174 @@ class SandboxFileSystem:
         """Get filesystem access log."""
         return self.access_log.copy()
 
+    # ------------------------------------------------------------------
+    # Actual I/O operations (sandboxed)
+    # ------------------------------------------------------------------
+
+    def read_file(self, virtual_path: str) -> str:
+        """Read file contents through VFS access control.
+
+        Raises PermissionError or FileNotFoundError on failure.
+        """
+        result = self.resolve_path(virtual_path)
+        if result is None:
+            self.log_access("read", virtual_path, False, "path not mounted")
+            raise PermissionError(f"Path not accessible: {virtual_path}")
+        real_path, mode = result
+        if mode not in (FileAccessMode.READ, FileAccessMode.READ_WRITE):
+            self.log_access("read", virtual_path, False, "no read permission")
+            raise PermissionError(f"Read access denied: {virtual_path}")
+        self.log_access("read", virtual_path, True)
+        with open(real_path, "r") as f:
+            return f.read()
+
+    def write_file(self, virtual_path: str, content: str) -> None:
+        """Write file contents through VFS access control."""
+        result = self.resolve_path(virtual_path)
+        if result is None:
+            self.log_access("write", virtual_path, False, "path not mounted")
+            raise PermissionError(f"Path not accessible: {virtual_path}")
+        real_path, mode = result
+        if mode not in (FileAccessMode.WRITE, FileAccessMode.READ_WRITE):
+            self.log_access("write", virtual_path, False, "no write permission")
+            raise PermissionError(f"Write access denied: {virtual_path}")
+        self.log_access("write", virtual_path, True)
+        os.makedirs(os.path.dirname(real_path), exist_ok=True)
+        with open(real_path, "w") as f:
+            f.write(content)
+
+    def append_file(self, virtual_path: str, content: str) -> None:
+        """Append to a file through VFS access control."""
+        result = self.resolve_path(virtual_path)
+        if result is None:
+            self.log_access("append", virtual_path, False, "path not mounted")
+            raise PermissionError(f"Path not accessible: {virtual_path}")
+        real_path, mode = result
+        if mode not in (FileAccessMode.WRITE, FileAccessMode.READ_WRITE):
+            self.log_access("append", virtual_path, False, "no write permission")
+            raise PermissionError(f"Append access denied: {virtual_path}")
+        self.log_access("append", virtual_path, True)
+        with open(real_path, "a") as f:
+            f.write(content)
+
+    def file_exists(self, virtual_path: str) -> bool:
+        """Check if a virtual path references an existing file."""
+        result = self.resolve_path(virtual_path)
+        if result is None:
+            return False
+        return os.path.exists(result[0])
+
+    def list_dir(self, virtual_path: str) -> List[str]:
+        """List directory contents through VFS."""
+        result = self.resolve_path(virtual_path)
+        if result is None:
+            raise PermissionError(f"Path not accessible: {virtual_path}")
+        real_path, mode = result
+        if mode not in (FileAccessMode.READ, FileAccessMode.READ_WRITE):
+            raise PermissionError(f"Read access denied for directory: {virtual_path}")
+        return os.listdir(real_path)
+
+
+# ---------------------------------------------------------------------------
+# File content cache — avoids repeated disk reads for hot paths
+# ---------------------------------------------------------------------------
+
+class FileContentCache:
+    """Thread-safe LRU-ish read cache for file contents.
+
+    Speeds up repeated reads to the same path (e.g. ``use "utils.zx"``
+    imported by many modules).  Cached entries are invalidated when the
+    file's mtime changes.
+    """
+
+    def __init__(self, max_entries: int = 256, max_bytes: int = 32 * 1024 * 1024):
+        self._lock = threading.Lock()
+        self._max_entries = max_entries
+        self._max_bytes = max_bytes
+        self._current_bytes = 0
+        # path -> (content, mtime, size)
+        self._cache: Dict[str, Tuple[str, float, int]] = {}
+        self._hits = 0
+        self._misses = 0
+
+    def get(self, real_path: str) -> Optional[str]:
+        """Return cached content if still valid, else None."""
+        with self._lock:
+            entry = self._cache.get(real_path)
+            if entry is None:
+                self._misses += 1
+                return None
+            content, cached_mtime, size = entry
+            try:
+                current_mtime = os.path.getmtime(real_path)
+            except OSError:
+                # File gone — evict
+                self._evict(real_path)
+                self._misses += 1
+                return None
+            if current_mtime != cached_mtime:
+                self._evict(real_path)
+                self._misses += 1
+                return None
+            self._hits += 1
+            return content
+
+    def put(self, real_path: str, content: str) -> None:
+        """Store file content in cache."""
+        size = len(content.encode("utf-8", errors="replace"))
+        if size > self._max_bytes // 2:
+            return  # Don't cache files larger than half the budget
+        with self._lock:
+            # Evict old entry if present
+            self._evict(real_path)
+            # Evict LRU entries if over budget
+            while (len(self._cache) >= self._max_entries
+                   or self._current_bytes + size > self._max_bytes) and self._cache:
+                oldest_key = next(iter(self._cache))
+                self._evict(oldest_key)
+            try:
+                mtime = os.path.getmtime(real_path)
+            except OSError:
+                return
+            self._cache[real_path] = (content, mtime, size)
+            self._current_bytes += size
+
+    def invalidate(self, real_path: str) -> None:
+        """Remove a specific path from cache (e.g. after write)."""
+        with self._lock:
+            self._evict(real_path)
+
+    def clear(self) -> None:
+        """Flush the entire cache."""
+        with self._lock:
+            self._cache.clear()
+            self._current_bytes = 0
+
+    def stats(self) -> Dict[str, Any]:
+        """Return cache statistics."""
+        with self._lock:
+            total = self._hits + self._misses
+            return {
+                "entries": len(self._cache),
+                "bytes": self._current_bytes,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": self._hits / total if total else 0.0,
+            }
+
+    # internal
+    def _evict(self, key: str):
+        entry = self._cache.pop(key, None)
+        if entry:
+            self._current_bytes -= entry[2]
+
 
 class VirtualFileSystemManager:
     """
     Manages virtual filesystems for multiple sandboxes.
     
-    Coordinates sandbox creation, isolation, and resource cleanup.
+    Coordinates sandbox creation, isolation, resource cleanup, and
+    provides a global file content cache shared across sandboxes.
     """
     
     def __init__(self):
@@ -179,6 +343,7 @@ class VirtualFileSystemManager:
         self.sandboxes: Dict[str, SandboxFileSystem] = {}
         self.memory_quotas: Dict[str, MemoryQuota] = {}
         self.default_memory_quota = 1024 * 1024 * 100  # 100MB default
+        self.file_cache = FileContentCache()
     
     def create_sandbox(self, sandbox_id: str, memory_quota_mb: int = 100) -> SandboxFileSystem:
         """
@@ -244,6 +409,28 @@ class VirtualFileSystemManager:
     def list_sandboxes(self) -> List[str]:
         """List all active sandboxes."""
         return list(self.sandboxes.keys())
+
+    def get_sandbox_filesystem(self, context: str = "default") -> Optional[SandboxFileSystem]:
+        """Get sandbox filesystem by context name (alias for get_sandbox)."""
+        return self.sandboxes.get(context)
+
+    # ------------------------------------------------------------------
+    # Cached file I/O helpers (used by builtins when no sandbox is active)
+    # ------------------------------------------------------------------
+
+    def cached_read(self, real_path: str) -> str:
+        """Read a file, using the content cache when possible."""
+        content = self.file_cache.get(real_path)
+        if content is not None:
+            return content
+        with open(real_path, "r") as f:
+            content = f.read()
+        self.file_cache.put(real_path, content)
+        return content
+
+    def invalidate_cache(self, real_path: str):
+        """Invalidate cache entry after a write."""
+        self.file_cache.invalidate(real_path)
 
 
 class StandardMounts:

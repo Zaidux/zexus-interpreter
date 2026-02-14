@@ -1431,8 +1431,13 @@ class StatementEvaluatorMixin:
                             continue
                         
                         debug_log("  Found module file", candidate)
-                        with open(candidate, 'r', encoding='utf-8') as f: 
-                            code = f.read()
+                        # Use VFS cache for module reads (hot path)
+                        try:
+                            from .integration import get_integration
+                            code = get_integration().vfs_manager.cached_read(candidate)
+                        except Exception:
+                            with open(candidate, 'r', encoding='utf-8') as f: 
+                                code = f.read()
                         
                         from ..lexer import Lexer
                         from ..parser import Parser
@@ -1870,7 +1875,8 @@ class StatementEvaluatorMixin:
         
         Syntax: sandbox { code }
         
-        Creates a new isolated environment and executes code within it.
+        Creates a new isolated environment with VFS-backed file access
+        and restricted capability policy, then executes code within it.
         """
 
         # Create isolated environment (child of current)
@@ -1880,6 +1886,26 @@ class StatementEvaluatorMixin:
         # Allow caller to specify a policy on the node (future enhancement)
         sandbox_policy = getattr(node, 'policy', None) or 'default'
         sandbox_env.set('__sandbox_policy__', sandbox_policy)
+
+        # --- VFS integration: create a per-sandbox VFS with temp-only write ---
+        sandbox_id = f"sandbox_{id(node)}_{id(env)}"
+        try:
+            from .integration import get_integration
+            integration = get_integration()
+            from ..virtual_filesystem import SandboxBuilder, FileAccessMode
+            builder = SandboxBuilder(integration.vfs_manager, sandbox_id)
+            builder.with_temp_access()  # /tmp read-write
+            # Mount CWD as read-only so sandbox can read source files
+            import os
+            cwd = os.getcwd()
+            if os.path.isdir(cwd):
+                builder.add_mount("/workspace", cwd, FileAccessMode.READ)
+            sandbox_fs = builder.build()
+            sandbox_env.set('__sandbox_vfs__', sandbox_fs)
+            sandbox_env.set('__sandbox_id__', sandbox_id)
+        except Exception:
+            pass
+
         # Ensure default sandbox policy exists
         try:
             sec = get_security_context()
@@ -1899,10 +1925,16 @@ class StatementEvaluatorMixin:
 
         result = self.eval_node(node.body, sandbox_env, stack_trace)
 
+        # --- Cleanup VFS sandbox ---
+        try:
+            integration = get_integration()
+            integration.vfs_manager.delete_sandbox(sandbox_id)
+        except Exception:
+            pass
+
         # Register sandbox run for observability
         try:
             ctx = get_security_context()
-            # store a minimal summary (stringified result) for now
             result_summary = None
             try:
                 result_summary = str(result)

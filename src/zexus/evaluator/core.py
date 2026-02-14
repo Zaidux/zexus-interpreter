@@ -371,7 +371,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         handler = self._node_handlers.get(node_type)
         if handler:
             return handler(node, env, stack_trace)
-            return handler(node, env, stack_trace)
 
         try:
             # === STATEMENTS ===

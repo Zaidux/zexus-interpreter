@@ -60,6 +60,81 @@ class UltimateParser:
         else:
             self.use_advanced_parsing = False
 
+        # Statement dispatch table (O(1) lookup replacing if/elif chain)
+        self._statement_dispatch = {
+            LET: self.parse_let_statement,
+            CONST: self.parse_const_statement,
+            DATA: self.parse_data_statement,
+            RETURN: self.parse_return_statement,
+            CONTINUE: self.parse_continue_statement,
+            BREAK: self.parse_break_statement,
+            THROW: self.parse_throw_statement,
+            PRINT: self.parse_print_statement,
+            FOR: self.parse_for_each_statement,
+            SCREEN: self.parse_screen_statement,
+            COLOR: self.parse_color_statement,
+            CANVAS: self.parse_canvas_statement,
+            GRAPHICS: self.parse_graphics_statement,
+            ANIMATION: self.parse_animation_statement,
+            CLOCK: self.parse_clock_statement,
+            ACTION: self.parse_action_statement,
+            FUNCTION: self.parse_function_statement,
+            IF: self.parse_if_statement,
+            WHILE: self.parse_while_statement,
+            USE: self.parse_use_statement,
+            EXACTLY: self.parse_exactly_statement,
+            EXPORT: self.parse_export_statement,
+            DEBUG: self.parse_debug_statement,
+            TRY: self.parse_try_catch_statement,
+            EXTERNAL: self.parse_external_declaration,
+            ENTITY: self.parse_entity_statement,
+            VERIFY: self.parse_verify_statement,
+            CONTRACT: self.parse_contract_statement,
+            PROTECT: self.parse_protect_statement,
+            SEAL: self.parse_seal_statement,
+            AUDIT: self.parse_audit_statement,
+            RESTRICT: self.parse_restrict_statement,
+            SANDBOX: self.parse_sandbox_statement,
+            TRAIL: self.parse_trail_statement,
+            TX: self.parse_tx_statement,
+            NATIVE: self.parse_native_statement,
+            GC: self.parse_gc_statement,
+            INLINE: self.parse_inline_statement,
+            BUFFER: self.parse_buffer_statement,
+            SIMD: self.parse_simd_statement,
+            DEFER: self.parse_defer_statement,
+            PATTERN: self.parse_pattern_statement,
+            ENUM: self.parse_enum_statement,
+            STREAM: self.parse_stream_statement,
+            WATCH: self.parse_watch_statement,
+            EMIT: self.parse_emit_statement,
+            MODIFIER: self.parse_modifier_declaration,
+            # Security statements
+            CAPABILITY: self.parse_capability_statement,
+            GRANT: self.parse_grant_statement,
+            REVOKE: self.parse_revoke_statement,
+            VALIDATE: self.parse_validate_statement,
+            SANITIZE: self.parse_sanitize_statement,
+            INJECT: self.parse_inject_statement,
+            IMMUTABLE: self.parse_immutable_statement,
+            # Complexity statements
+            INTERFACE: self.parse_interface_statement,
+            TYPE_ALIAS: self.parse_type_alias_statement,
+            MODULE: self.parse_module_statement,
+            PACKAGE: self.parse_package_statement,
+            USING: self.parse_using_statement,
+            CHANNEL: self.parse_channel_statement,
+            SEND: self.parse_send_statement,
+            RECEIVE: self.parse_receive_statement,
+            ATOMIC: self.parse_atomic_statement,
+            # Blockchain statements
+            LEDGER: self.parse_ledger_statement,
+            STATE: self.parse_state_statement,
+            REQUIRE: self.parse_require_statement,
+            REVERT: self.parse_revert_statement,
+            LIMIT: self.parse_limit_statement,
+        }
+
         # Traditional parser setup (fallback)
         self.prefix_parse_fns = {
             IDENT: self.parse_identifier,
@@ -563,195 +638,11 @@ class UltimateParser:
             return None
         try:
             node = None
-            debug_enabled = config.enable_debug_logs
-            if self.cur_token_is(LET):
-                node = self.parse_let_statement()
-            elif self.cur_token_is(CONST):
-                node = self.parse_const_statement()
-            elif self.cur_token_is(DATA):
-                node = self.parse_data_statement()
-            elif self.cur_token_is(RETURN):
-                node = self.parse_return_statement()
-            elif self.cur_token_is(CONTINUE):
-                node = self.parse_continue_statement()
-            elif self.cur_token_is(BREAK):
-                node = self.parse_break_statement()
-            elif self.cur_token_is(THROW):
-                node = self.parse_throw_statement()
-            elif self.cur_token_is(PRINT):
-                node = self.parse_print_statement()
-            elif self.cur_token_is(FOR):
-                node = self.parse_for_each_statement()
-            elif self.cur_token_is(SCREEN):
-                node = self.parse_screen_statement()
-            elif self.cur_token_is(COLOR):
-                node = self.parse_color_statement()
-            elif self.cur_token_is(CANVAS):
-                node = self.parse_canvas_statement()
-            elif self.cur_token_is(GRAPHICS):
-                node = self.parse_graphics_statement()
-            elif self.cur_token_is(ANIMATION):
-                node = self.parse_animation_statement()
-            elif self.cur_token_is(CLOCK):
-                node = self.parse_clock_statement()
-            elif self.cur_token_is(ACTION):
-                node = self.parse_action_statement()
-            elif self.cur_token_is(FUNCTION):
-                node = self.parse_function_statement()
-            elif self.cur_token_is(IF):
-                node = self.parse_if_statement()
-            elif self.cur_token_is(WHILE):
-                node = self.parse_while_statement()
-            elif self.cur_token_is(USE):
-                node = self.parse_use_statement()
-            elif self.cur_token_is(EXACTLY):
-                node = self.parse_exactly_statement()
-            elif self.cur_token_is(EXPORT):
-                node = self.parse_export_statement()
-            elif self.cur_token_is(DEBUG):
-                node = self.parse_debug_statement()
-            elif self.cur_token_is(TRY):
-                node = self.parse_try_catch_statement()
-            elif self.cur_token_is(EXTERNAL):
-                node = self.parse_external_declaration()
-            elif self.cur_token_is(ENTITY):
-                node = self.parse_entity_statement()
-            elif self.cur_token_is(VERIFY):
-                node = self.parse_verify_statement()
-            elif self.cur_token_is(CONTRACT):
-                node = self.parse_contract_statement()
-            elif self.cur_token_is(PROTECT):
-                node = self.parse_protect_statement()
-            elif self.cur_token_is(SEAL):
-                node = self.parse_seal_statement()
-            elif self.cur_token_is(AUDIT):
-                node = self.parse_audit_statement()
-            elif self.cur_token_is(RESTRICT):
-                node = self.parse_restrict_statement()
-            elif self.cur_token_is(SANDBOX):
-                node = self.parse_sandbox_statement()
-            elif self.cur_token_is(TRAIL):
-                node = self.parse_trail_statement()
-            elif self.cur_token_is(TX):
-                node = self.parse_tx_statement()
-            elif self.cur_token_is(NATIVE):
-                node = self.parse_native_statement()
-            elif self.cur_token_is(GC):
-                node = self.parse_gc_statement()
-            elif self.cur_token_is(INLINE):
-                node = self.parse_inline_statement()
-            elif self.cur_token_is(BUFFER):
-                node = self.parse_buffer_statement()
-            elif self.cur_token_is(SIMD):
-                node = self.parse_simd_statement()
-            elif self.cur_token_is(DEFER):
-                node = self.parse_defer_statement()
-            elif self.cur_token_is(PATTERN):
-                node = self.parse_pattern_statement()
-            elif self.cur_token_is(ENUM):
-                node = self.parse_enum_statement()
-            elif self.cur_token_is(STREAM):
-                node = self.parse_stream_statement()
-            elif self.cur_token_is(WATCH):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched WATCH", file=sys.stderr, flush=True)
-                node = self.parse_watch_statement()
-            elif self.cur_token_is(EMIT):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched EMIT", file=sys.stderr, flush=True)
-                node = self.parse_emit_statement()
-            elif self.cur_token_is(MODIFIER):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched MODIFIER", file=sys.stderr, flush=True)
-                node = self.parse_modifier_declaration()
-            # === SECURITY STATEMENT HANDLERS ===
-            elif self.cur_token_is(CAPABILITY):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched CAPABILITY", file=sys.stderr, flush=True)
-                node = self.parse_capability_statement()
-            elif self.cur_token_is(GRANT):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched GRANT", file=sys.stderr, flush=True)
-                node = self.parse_grant_statement()
-            elif self.cur_token_is(REVOKE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched REVOKE", file=sys.stderr, flush=True)
-                node = self.parse_revoke_statement()
-            elif self.cur_token_is(VALIDATE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched VALIDATE", file=sys.stderr, flush=True)
-                node = self.parse_validate_statement()
-            elif self.cur_token_is(SANITIZE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched SANITIZE", file=sys.stderr, flush=True)
-                node = self.parse_sanitize_statement()
-            elif self.cur_token_is(INJECT):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched INJECT", file=sys.stderr, flush=True)
-                node = self.parse_inject_statement()
-            elif self.cur_token_is(IMMUTABLE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched IMMUTABLE", file=sys.stderr, flush=True)
-                node = self.parse_immutable_statement()
-            # === COMPLEXITY STATEMENT HANDLERS ===
-            elif self.cur_token_is(INTERFACE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched INTERFACE", file=sys.stderr, flush=True)
-                node = self.parse_interface_statement()
-            elif self.cur_token_is(TYPE_ALIAS):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched TYPE_ALIAS", file=sys.stderr, flush=True)
-                node = self.parse_type_alias_statement()
-            elif self.cur_token_is(MODULE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched MODULE", file=sys.stderr, flush=True)
-                node = self.parse_module_statement()
-            elif self.cur_token_is(PACKAGE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched PACKAGE", file=sys.stderr, flush=True)
-                node = self.parse_package_statement()
-            elif self.cur_token_is(USING):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched USING", file=sys.stderr, flush=True)
-                node = self.parse_using_statement()
-            elif self.cur_token_is(CHANNEL):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched CHANNEL", file=sys.stderr, flush=True)
-                node = self.parse_channel_statement()
-            elif self.cur_token_is(SEND):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched SEND", file=sys.stderr, flush=True)
-                node = self.parse_send_statement()
-            elif self.cur_token_is(RECEIVE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched RECEIVE", file=sys.stderr, flush=True)
-                node = self.parse_receive_statement()
-            elif self.cur_token_is(ATOMIC):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched ATOMIC", file=sys.stderr, flush=True)
-                node = self.parse_atomic_statement()
-            # === BLOCKCHAIN STATEMENT HANDLERS ===
-            elif self.cur_token_is(LEDGER):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched LEDGER", file=sys.stderr, flush=True)
-                node = self.parse_ledger_statement()
-            elif self.cur_token_is(STATE):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched STATE", file=sys.stderr, flush=True)
-                node = self.parse_state_statement()
-            elif self.cur_token_is(REQUIRE):
-                node = self.parse_require_statement()
-            elif self.cur_token_is(REVERT):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched REVERT", file=sys.stderr, flush=True)
-                node = self.parse_revert_statement()
-            elif self.cur_token_is(LIMIT):
-                if debug_enabled:
-                    print(f"[PARSE_STMT] Matched LIMIT", file=sys.stderr, flush=True)
-                node = self.parse_limit_statement()
+            tok_type = self.cur_token.type
+            handler = self._statement_dispatch.get(tok_type)
+            if handler is not None:
+                node = handler()
             else:
-                if debug_enabled:
-                    print(f"[PARSE_STMT] No match, falling back to expression statement", file=sys.stderr, flush=True)
                 node = self.parse_expression_statement()
 
             if node is not None:

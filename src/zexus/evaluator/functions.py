@@ -932,16 +932,56 @@ class FunctionEvaluatorMixin:
             except Exception as e:
                 return EvaluationError(f"constant_time_compare() error: {str(e)}")
         
-        # File I/O
+        # File I/O  — VFS-aware helpers
+        # The VFS manager (with its file cache) is obtained lazily so the
+        # evaluator can function even when the integration layer is not loaded.
+        _vfs_mgr = None
+        def _get_vfs_manager():
+            nonlocal _vfs_mgr
+            if _vfs_mgr is None:
+                try:
+                    from .integration import get_integration
+                    _vfs_mgr = get_integration().vfs_manager
+                except Exception:
+                    pass
+            return _vfs_mgr
+
+        def _resolve_read_path(path_str):
+            """Resolve a path for reading – uses VFS cache when available."""
+            import os
+            if not os.path.isabs(path_str):
+                path_str = os.path.join(os.getcwd(), path_str)
+            return os.path.normpath(path_str)
+
+        def _cached_read(real_path):
+            """Read via VFS cache (skips disk if file unchanged)."""
+            mgr = _get_vfs_manager()
+            if mgr is not None:
+                return mgr.cached_read(real_path)
+            with open(real_path, 'r') as f:
+                return f.read()
+
+        def _invalidate_file_cache(real_path):
+            """Invalidate VFS cache after a write."""
+            mgr = _get_vfs_manager()
+            if mgr is not None:
+                mgr.invalidate_cache(real_path)
+
         def _read_text(*a): 
+            cap_err = _check_io_read_capability()
+            if cap_err: return cap_err
             if len(a) != 1 or not isinstance(a[0], String): 
                 return EvaluationError("file_read_text() takes exactly 1 string argument")
             return File.read_text(a[0])
         
         def _write_text(*a): 
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 2 or not all(isinstance(x, String) for x in a): 
                 return EvaluationError("file_write_text() takes exactly 2 string arguments")
-            return File.write_text(a[0], a[1])
+            result = File.write_text(a[0], a[1])
+            _invalidate_file_cache(_resolve_read_path(a[0].value))
+            return result
         
         def _exists(*a): 
             if len(a) != 1 or not isinstance(a[0], String): 
@@ -949,26 +989,38 @@ class FunctionEvaluatorMixin:
             return File.exists(a[0])
         
         def _read_json(*a): 
+            cap_err = _check_io_read_capability()
+            if cap_err: return cap_err
             if len(a) != 1 or not isinstance(a[0], String): 
                 return EvaluationError("file_read_json() takes exactly 1 string argument")
             return File.read_json(a[0])
         
         def _write_json(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 2 or not isinstance(a[0], String): 
                 return EvaluationError("file_write_json() takes path string and data")
-            return File.write_json(a[0], a[1])
+            result = File.write_json(a[0], a[1])
+            _invalidate_file_cache(_resolve_read_path(a[0].value))
+            return result
         
         def _file_append(*a): 
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 2 or not all(isinstance(x, String) for x in a): 
                 return EvaluationError("file_append() takes exactly 2 string arguments")
-            return File.append_text(a[0], a[1])
+            result = File.append_text(a[0], a[1])
+            _invalidate_file_cache(_resolve_read_path(a[0].value))
+            return result
         
         def _list_dir(*a): 
+            cap_err = _check_io_read_capability()
+            if cap_err: return cap_err
             if len(a) != 1 or not isinstance(a[0], String): 
                 return EvaluationError("file_list_dir() takes exactly 1 string argument")
             return File.list_directory(a[0])
         
-        # Extended File System Operations
+        # Extended File System Operations (with capability checks)
         def _fs_is_file(*a):
             if len(a) != 1 or not isinstance(a[0], String):
                 return EvaluationError("fs_is_file() takes exactly 1 string argument")
@@ -982,6 +1034,8 @@ class FunctionEvaluatorMixin:
             return BooleanObj(os.path.isdir(a[0].value))
         
         def _fs_mkdir(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) < 1 or not isinstance(a[0], String):
                 return EvaluationError("fs_mkdir() takes path string and optional parents boolean")
             from pathlib import Path
@@ -995,16 +1049,21 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"fs_mkdir() error: {str(e)}")
         
         def _fs_remove(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 1 or not isinstance(a[0], String):
                 return EvaluationError("fs_remove() takes exactly 1 string argument")
             import os
             try:
                 os.remove(a[0].value)
+                _invalidate_file_cache(_resolve_read_path(a[0].value))
                 return BooleanObj(True)
             except Exception as e:
                 return EvaluationError(f"fs_remove() error: {str(e)}")
         
         def _fs_rmdir(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) < 1 or not isinstance(a[0], String):
                 return EvaluationError("fs_rmdir() takes path string and optional recursive boolean")
             import os
@@ -1022,6 +1081,8 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"fs_rmdir() error: {str(e)}")
         
         def _fs_rename(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 2 or not all(isinstance(x, String) for x in a):
                 return EvaluationError("fs_rename() takes exactly 2 string arguments: old_path, new_path")
             import os
@@ -1032,6 +1093,8 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"fs_rename() error: {str(e)}")
         
         def _fs_copy(*a):
+            cap_err = _check_io_write_capability()
+            if cap_err: return cap_err
             if len(a) != 2 or not all(isinstance(x, String) for x in a):
                 return EvaluationError("fs_copy() takes exactly 2 string arguments: src, dst")
             import shutil
@@ -1052,6 +1115,8 @@ class FunctionEvaluatorMixin:
         # Socket/TCP Primitives
         def _socket_create_server(*a):
             """Create TCP server: socket_create_server(host, port, handler, backlog?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 3:
                 return EvaluationError("socket_create_server() requires at least 3 arguments: host, port, handler")
             
@@ -1141,6 +1206,8 @@ class FunctionEvaluatorMixin:
         
         def _socket_create_connection(*a):
             """Create TCP client: socket_create_connection(host, port, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 2:
                 return EvaluationError("socket_create_connection() requires at least 2 arguments: host, port")
             
@@ -1791,9 +1858,42 @@ class FunctionEvaluatorMixin:
             except Exception as e:
                 return EvaluationError(f"mongo_connect() error: {str(e)}")
         
+        # Capability-checked helpers
+        def _check_network_capability():
+            """Check if network operations are allowed in current context."""
+            try:
+                from .integration import CapabilityChecker
+                if not CapabilityChecker.check_network():
+                    return EvaluationError("Network access denied: missing 'network.tcp' capability")
+            except Exception:
+                pass  # If capability system isn't loaded, allow by default
+            return None
+
+        def _check_io_read_capability():
+            """Check if file read operations are allowed."""
+            try:
+                from .integration import CapabilityChecker
+                if not CapabilityChecker.check_io_read():
+                    return EvaluationError("File read access denied: missing 'io.read' capability")
+            except Exception:
+                pass
+            return None
+
+        def _check_io_write_capability():
+            """Check if file write operations are allowed."""
+            try:
+                from .integration import CapabilityChecker
+                if not CapabilityChecker.check_io_write():
+                    return EvaluationError("File write access denied: missing 'io.write' capability")
+            except Exception:
+                pass
+            return None
+
         # HTTP Client
         def _http_get(*a):
             """HTTP GET request: http_get(url, headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 1:
                 return EvaluationError("http_get() requires at least 1 argument: url")
             
@@ -1819,6 +1919,8 @@ class FunctionEvaluatorMixin:
         
         def _http_post(*a):
             """HTTP POST request: http_post(url, data, headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 2:
                 return EvaluationError("http_post() requires at least 2 arguments: url, data")
             
@@ -1847,6 +1949,8 @@ class FunctionEvaluatorMixin:
         
         def _http_put(*a):
             """HTTP PUT request: http_put(url, data, headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 2:
                 return EvaluationError("http_put() requires at least 2 arguments: url, data")
             
@@ -1872,6 +1976,8 @@ class FunctionEvaluatorMixin:
         
         def _http_delete(*a):
             """HTTP DELETE request: http_delete(url, headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
             if len(a) < 1:
                 return EvaluationError("http_delete() requires at least 1 argument: url")
             
@@ -1892,6 +1998,62 @@ class FunctionEvaluatorMixin:
                 return _python_to_zexus(result, mark_untrusted=True)
             except Exception as e:
                 return EvaluationError(f"HTTP DELETE error: {str(e)}")
+
+        def _http_request(*a):
+            """Generic HTTP request: http_request(method, url, data?, headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
+            if len(a) < 2:
+                return EvaluationError("http_request() requires at least 2 arguments: method, url")
+            method_str = a[0].value if isinstance(a[0], String) else str(a[0])
+            url = a[1].value if isinstance(a[1], String) else str(a[1])
+            data = _zexus_to_python(a[2]) if len(a) >= 3 and a[2] != NULL else None
+            headers = _zexus_to_python(a[3]) if len(a) >= 4 and isinstance(a[3], Map) else None
+            timeout = a[4].value if len(a) >= 5 and isinstance(a[4], Integer) else 30
+            try:
+                from ..stdlib.http import HttpModule
+                result = HttpModule.request(method_str, url, data, headers, timeout)
+                return _python_to_zexus(result, mark_untrusted=True)
+            except Exception as e:
+                return EvaluationError(f"HTTP {method_str} error: {str(e)}")
+
+        def _http_parallel_get(*a):
+            """Parallel GET requests: http_parallel_get([url1, url2, ...], headers?, timeout?)"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
+            if len(a) < 1 or not isinstance(a[0], List):
+                return EvaluationError("http_parallel_get() requires a list of URLs as first argument")
+            urls = [e.value if isinstance(e, String) else str(e) for e in a[0].elements]
+            headers = _zexus_to_python(a[1]) if len(a) >= 2 and isinstance(a[1], Map) else None
+            timeout = a[2].value if len(a) >= 3 and isinstance(a[2], Integer) else 30
+            try:
+                from ..stdlib.http import HttpModule
+                results = HttpModule.parallel_get(urls, headers, timeout)
+                return List([_python_to_zexus(r, mark_untrusted=True) for r in results])
+            except Exception as e:
+                return EvaluationError(f"http_parallel_get() error: {str(e)}")
+
+        def _http_async_get(*a):
+            """Non-blocking HTTP GET: http_async_get(url, headers?, timeout?) -> Future"""
+            cap_err = _check_network_capability()
+            if cap_err: return cap_err
+            if len(a) < 1:
+                return EvaluationError("http_async_get() requires at least 1 argument: url")
+            url = a[0].value if isinstance(a[0], String) else str(a[0])
+            headers = _zexus_to_python(a[1]) if len(a) >= 2 and isinstance(a[1], Map) else None
+            timeout = a[2].value if len(a) >= 3 and isinstance(a[2], Integer) else 30
+            try:
+                from ..stdlib.http import HttpModule
+                future = HttpModule.async_get(url, headers, timeout)
+                # Wrap future so await_result() works from Zexus
+                from ..object import Map as ZMap
+                return ZMap({
+                    "type": String("HttpFuture"),
+                    "done": Builtin(lambda *_: BooleanObj(future.done()), "done"),
+                    "result": Builtin(lambda *_: _python_to_zexus(future.result(), mark_untrusted=True), "result"),
+                })
+            except Exception as e:
+                return EvaluationError(f"http_async_get() error: {str(e)}")
         
         # Debug
         def _debug(*a):
@@ -2336,6 +2498,28 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("filter(arr, fn)")
             return self._array_filter(a[0], a[1])
         
+        def _vfs_stats(*a):
+            """Return VFS file cache statistics as a Map: vfs_stats()"""
+            mgr = _get_vfs_manager()
+            if mgr is None:
+                return Map({"error": String("VFS not initialized")})
+            stats = mgr.file_cache.stats()
+            return Map({
+                "entries": Integer(stats["entries"]),
+                "bytes": Integer(stats["bytes"]),
+                "hits": Integer(stats["hits"]),
+                "misses": Integer(stats["misses"]),
+                "hit_rate": Float(round(stats["hit_rate"], 4)),
+            })
+
+        def _vfs_clear_cache(*a):
+            """Flush the VFS file content cache: vfs_clear_cache()"""
+            mgr = _get_vfs_manager()
+            if mgr is None:
+                return NULL
+            mgr.file_cache.clear()
+            return NULL
+        
         # File object creation (for RAII using statements)
         def _file(*a):
             if len(a) == 0 or len(a) > 2:
@@ -2355,22 +2539,18 @@ class FunctionEvaluatorMixin:
                 return EvaluationError(f"file() error: {str(e)}")
         
         def _read_file(*a):
-            """Read entire file contents as string"""
+            """Read entire file contents as string (VFS-cached)"""
+            cap_err = _check_io_read_capability()
+            if cap_err: return cap_err
             if len(a) != 1:
                 return EvaluationError("read_file() takes exactly 1 argument: path")
             if not isinstance(a[0], String):
                 return EvaluationError("read_file() path must be a string")
             
-            import os
-            path = a[0].value
-            
-            # Normalize path
-            if not os.path.isabs(path):
-                path = os.path.join(os.getcwd(), path)
+            path = _resolve_read_path(a[0].value)
             
             try:
-                with open(path, 'r') as f:
-                    content = f.read()
+                content = _cached_read(path)
                 return String(content)
             except FileNotFoundError:
                 return EvaluationError(f"File not found: {path}")
@@ -2636,8 +2816,13 @@ class FunctionEvaluatorMixin:
             "http_post": Builtin(_http_post, "http_post"),
             "http_put": Builtin(_http_put, "http_put"),
             "http_delete": Builtin(_http_delete, "http_delete"),
+            "http_request": Builtin(_http_request, "http_request"),
+            "http_parallel_get": Builtin(_http_parallel_get, "http_parallel_get"),
+            "http_async_get": Builtin(_http_async_get, "http_async_get"),
             "read_file": Builtin(_read_file, "read_file"),
             "eval_file": Builtin(_eval_file, "eval_file"),
+            "vfs_stats": Builtin(_vfs_stats, "vfs_stats"),
+            "vfs_clear_cache": Builtin(_vfs_clear_cache, "vfs_clear_cache"),
             "debug": Builtin(_debug, "debug"),
             "debug_log": Builtin(_debug_log, "debug_log"),
             "debug_trace": Builtin(_debug_trace, "debug_trace"),
