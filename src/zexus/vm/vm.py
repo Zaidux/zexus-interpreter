@@ -101,6 +101,33 @@ except ImportError:
     _BYTECODE_OPTIMIZER_AVAILABLE = False
     BytecodeOptimizer = None
 
+# Cached Action/Lambda types for hot-path sync checks
+_ZAction = None
+_ZLambda = None
+_security_mod = None
+_iscoroutinefunction = asyncio.iscoroutinefunction
+
+def _get_action_types():
+    global _ZAction, _ZLambda
+    if _ZAction is None:
+        try:
+            from ..object import Action as _A, LambdaFunction as _L
+            _ZAction = _A
+            _ZLambda = _L
+        except Exception:
+            pass
+    return _ZAction, _ZLambda
+
+def _get_security_mod():
+    global _security_mod
+    if _security_mod is None:
+        try:
+            from .. import security as _s
+            _security_mod = _s
+        except Exception:
+            pass
+    return _security_mod
+
 # Cython fast-path (optional)
 try:
     from . import fastops as _fastops
@@ -1951,11 +1978,7 @@ class VM:
         if fn is None:
             return None
         real_fn = fn.fn if hasattr(fn, "fn") else fn
-        try:
-            from ..object import Action as ZAction, LambdaFunction as ZLambda
-        except Exception:
-            ZAction = None
-            ZLambda = None
+        ZAction, ZLambda = _get_action_types()
         if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
             # Try to compile to bytecode and execute in VM (fast path)
             action_bytecode = None
@@ -1993,7 +2016,7 @@ class VM:
                     return self._unwrap_after_builtin(result)
                 except Exception:
                     return None
-        if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+        if callable(real_fn) and not _iscoroutinefunction(real_fn):
             try:
                 wrap_args = hasattr(fn, "fn")
                 call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
@@ -2023,7 +2046,7 @@ class VM:
                     child_vm.env[pname] = args[i] if i < len(args) else None
                 return child_vm._run_stack_bytecode_sync(bytecode, debug=False)
         # Fallback for async callables
-        if asyncio.iscoroutinefunction(real_fn):
+        if _iscoroutinefunction(real_fn):
             return self._run_coroutine_sync(real_fn(*args))
         return None
 
@@ -2144,6 +2167,24 @@ class VM:
         trace_calls_active = trace_calls_flag and trace_calls_flag.lower() not in ("0", "false", "off")
         trace_targets_flag = os.environ.get("ZEXUS_VM_TRACE_METHOD_TARGETS")
         trace_targets_active = trace_targets_flag and trace_targets_flag.lower() not in ("0", "false", "off")
+        # Hoist CALL_METHOD env lookups (were computed per-call)
+        _trace_stack_flag = os.environ.get("ZEXUS_VM_TRACE_STACK")
+        _trace_stack_active = bool(_trace_stack_flag and _trace_stack_flag.lower() not in ("0", "false", "off"))
+        _trace_method_ops_flag = os.environ.get("ZEXUS_VM_TRACE_METHOD_OPS")
+        _trace_method_ops_targets = None
+        if _trace_method_ops_flag:
+            try:
+                _trace_method_ops_targets = [m.strip() for m in _trace_method_ops_flag.split(",") if m.strip()]
+            except Exception:
+                _trace_method_ops_targets = None
+        _verbose_active = profile_verbose
+        # Cached local ref to iscoroutinefunction (avoids asyncio.X attribute lookup)
+        _iscoroutinefunction_local = _iscoroutinefunction
+
+        # Pre-resolve security module for CALL_METHOD
+        _cached_security = _get_security_mod()
+        # Pre-resolve Action/Lambda types for _invoke_callable_sync
+        _cached_ZAction, _cached_ZLambda = _get_action_types()
 
         class _EvalStack:
             __slots__ = ("data", "sp")
@@ -2358,7 +2399,7 @@ class VM:
                 stack_append(fallback_res)
                 return
             real_fn = fn.fn if hasattr(fn, "fn") else fn
-            if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+            if callable(real_fn) and not _iscoroutinefunction_local(real_fn):
                 res = self._invoke_callable_sync(fn, args)
                 stack_append(res)
                 return
@@ -2371,7 +2412,7 @@ class VM:
             args = [stack_pop() for _ in range(count)][::-1] if count else []
             fn_obj = stack_pop()
             real_fn = fn_obj.fn if hasattr(fn_obj, "fn") else fn_obj
-            if callable(real_fn) and not asyncio.iscoroutinefunction(real_fn):
+            if callable(real_fn) and not _iscoroutinefunction_local(real_fn):
                 res = self._invoke_callable_sync(fn_obj, args)
                 stack.append(res)
                 return
@@ -2384,8 +2425,7 @@ class VM:
                 return
 
             method_idx, arg_count = operand
-            trace_stack = os.environ.get("ZEXUS_VM_TRACE_STACK")
-            if trace_stack and trace_stack.lower() not in ("0", "false", "off"):
+            if _trace_stack_active:
                 if len(stack) < arg_count + 1:
                     try:
                         window = []
@@ -2422,13 +2462,8 @@ class VM:
             args = [stack_pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
             target = stack_pop() if stack else None
             method_name = const(method_idx)
-            trace_methods = os.environ.get("ZEXUS_VM_TRACE_METHOD_OPS")
-            if trace_methods:
-                try:
-                    targets = [m.strip() for m in trace_methods.split(",") if m.strip()]
-                except Exception:
-                    targets = []
-                if method_name in targets:
+            if _trace_method_ops_targets:
+                if method_name in _trace_method_ops_targets:
                     try:
                         window = []
                         start = max(0, ip - 10)
@@ -2477,9 +2512,7 @@ class VM:
                 return
 
             result = None
-            verbose_flag = os.environ.get("ZEXUS_VM_PROFILE_VERBOSE")
-            verbose_active = verbose_flag and verbose_flag.lower() not in ("0", "false", "off")
-            if verbose_active and self._call_method_trace_count < 25:
+            if _verbose_active and self._call_method_trace_count < 25:
                 target_type = type(target).__name__
                 preview = []
                 for item in args[:3]:
@@ -2528,17 +2561,17 @@ class VM:
                         result = target.get(args[0])
                 elif hasattr(target, "call_method"):
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
-                    try:
-                        from .. import security as _security
-                        _security._set_vm_action_context(True)
-                    except Exception:
-                        _security = None
+                    if _cached_security is not None:
+                        try:
+                            _cached_security._set_vm_action_context(True)
+                        except Exception:
+                            pass
                     try:
                         result = target.call_method(method_name, wrapped_args)
                     finally:
-                        if _security is not None:
+                        if _cached_security is not None:
                             try:
-                                _security._set_vm_action_context(False)
+                                _cached_security._set_vm_action_context(False)
                             except Exception:
                                 pass
                 else:
@@ -2550,9 +2583,11 @@ class VM:
                         result = candidate(*args) if callable(candidate) else candidate
                     else:
                         result = attr
-                if verbose_active and self._call_method_trace_count <= 25:
+                if _verbose_active and self._call_method_trace_count <= 25:
                     print(f"[VM TRACE] CALL_METHOD {method_name} result={result}")
-                if asyncio.iscoroutine(result) or isinstance(result, asyncio.Future):
+                # Only check for coroutine/future on paths that can produce them
+                # set/get paths are always sync; call_method/getattr may return coroutines
+                if result is not None and (asyncio.iscoroutine(result) or isinstance(result, asyncio.Future)):
                     if self.async_optimizer:
                         result = await self.async_optimizer.await_optimized(result)
                     else:
@@ -3990,8 +4025,8 @@ class VM:
 
             # Execute Zexus Action/LambdaFunction via VM if possible, fallback to evaluator
             try:
-                from ..object import Action as ZAction, LambdaFunction as ZLambda
-                if isinstance(real_fn, (ZAction, ZLambda)):
+                ZAction, ZLambda = _get_action_types()
+                if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
                     # Try to compile to bytecode and execute in VM (fast path)
                     action_bytecode = None
                     try:

@@ -4,7 +4,7 @@ import asyncio
 import os
 import sys
 from .. import zexus_ast
-from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue, Builtin
+from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue, Builtin, Integer, Float
 from .utils import is_error, debug_log, EVAL_SUMMARY, NULL
 from ..config import config as zexus_config
 from .expressions import ExpressionEvaluatorMixin
@@ -131,6 +131,25 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 zexus_ast.PropertyAccessExpression: self._handle_property_access_expression,
                 zexus_ast.MethodCallExpression: self._handle_method_call_expression,
                 zexus_ast.ListLiteral: self._handle_list_literal,
+                # Extended dispatch (avoid isinstance chain for common types)
+                zexus_ast.StringLiteral: self._handle_string_literal,
+                zexus_ast.FloatLiteral: self._handle_float_literal,
+                zexus_ast.MapLiteral: self._handle_map_literal,
+                zexus_ast.LambdaExpression: self._handle_lambda_expression,
+                zexus_ast.ActionLiteral: self._handle_action_literal,
+                zexus_ast.ForEachStatement: self._handle_foreach_statement,
+                zexus_ast.PrintStatement: self._handle_print_statement,
+                zexus_ast.DataStatement: self._handle_data_statement,
+                zexus_ast.TryCatchStatement: self._handle_try_catch_statement,
+                zexus_ast.ThrowStatement: self._handle_throw_statement,
+                zexus_ast.ContractStatement: self._handle_contract_statement,
+                zexus_ast.ExportStatement: self._handle_export_statement,
+                zexus_ast.UseStatement: self._handle_use_statement,
+                zexus_ast.FromStatement: self._handle_from_statement,
+                zexus_ast.IfExpression: self._handle_if_expression,
+                zexus_ast.TernaryExpression: self._handle_ternary_expression,
+                zexus_ast.ContinueStatement: self._handle_continue_statement,
+                zexus_ast.BreakStatement: self._handle_break_statement,
             }
         except AttributeError:
             # AST variants may omit certain nodes; keep table empty in that case
@@ -184,14 +203,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         return self.eval_identifier(node, env)
 
     def _handle_integer_literal(self, node, env, stack_trace):
-        debug_log("  IntegerLiteral node", node.value)
-        from ..object import Integer
         return Integer(node.value)
 
     def _handle_boolean_literal(self, node, env, stack_trace):
-        debug_log("  Boolean node", f"value: {node.value}")
-        from ..object import Boolean
-        return Boolean(node.value)
+        return BooleanObj(node.value)
 
     def _handle_null_literal(self, node, env, stack_trace):
         debug_log("  NullLiteral node")
@@ -222,92 +237,140 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         return self.eval_method_call_expression(node, env, stack_trace)
 
     def _handle_list_literal(self, node, env, stack_trace):
-        debug_log("  ListLiteral node", f"{len(node.elements)} elements")
         elems = self.eval_expressions(node.elements, env)
         if is_error(elems):
             return elems
         return List(elems)
-    
+
+    # --- VM statement wrappers (moved out of eval_node for performance) ---
+
+    @staticmethod
+    def _wrap_vm_statement(statement, expected_type):
+        if isinstance(statement, expected_type):
+            return statement
+        if isinstance(statement, dict):
+            try:
+                if expected_type is zexus_ast.GCStatement:
+                    return zexus_ast.GCStatement(statement.get("action"))
+                if expected_type is zexus_ast.InlineStatement:
+                    return zexus_ast.InlineStatement(statement.get("function_name") or statement.get("name"))
+                if expected_type is zexus_ast.DeferStatement:
+                    return zexus_ast.DeferStatement(statement.get("code"))
+                if expected_type is zexus_ast.NativeStatement:
+                    return zexus_ast.NativeStatement(
+                        statement.get("library_name") or statement.get("library"),
+                        statement.get("function_name") or statement.get("function"),
+                        args=statement.get("args"),
+                        alias=statement.get("alias")
+                    )
+                if expected_type is zexus_ast.BufferStatement:
+                    return zexus_ast.BufferStatement(
+                        statement.get("buffer_name") or statement.get("name"),
+                        statement.get("operation"),
+                        statement.get("arguments"),
+                    )
+                if expected_type is zexus_ast.SIMDStatement:
+                    return zexus_ast.SIMDStatement(
+                        statement.get("operation"),
+                        operands=statement.get("operands")
+                    )
+                if expected_type is zexus_ast.PatternStatement:
+                    return zexus_ast.PatternStatement(
+                        statement.get("expression"),
+                        statement.get("cases") or []
+                    )
+            except Exception as exc:
+                return EvaluationError(str(exc))
+        return EvaluationError(f"Invalid payload for {expected_type.__name__}")
+
+    # --- Extended dispatch handlers (avoid isinstance chain) ---
+
+    def _handle_string_literal(self, node, env, stack_trace):
+        value = node.value
+        value = value.replace('\\n', '\n')
+        value = value.replace('\\t', '\t')
+        value = value.replace('\\r', '\r')
+        value = value.replace('\\\\', '\\')
+        value = value.replace('\\"', '"')
+        value = value.replace("\\'", "'")
+        return String(value, is_trusted=True)
+
+    def _handle_float_literal(self, node, env, stack_trace):
+        try:
+            return Float(node.value)
+        except Exception:
+            return EvaluationError(f"Invalid float literal: {getattr(node, 'value', None)}")
+
+    def _handle_map_literal(self, node, env, stack_trace):
+        pairs = {}
+        for k, v in node.pairs:
+            if isinstance(k, zexus_ast.Identifier):
+                key_str = k.value
+            else:
+                key = self.eval_node(k, env, stack_trace)
+                if is_error(key):
+                    return key
+                key_str = key.inspect()
+            val = self.eval_node(v, env, stack_trace)
+            if is_error(val):
+                return val
+            pairs[key_str] = val
+        return Map(pairs)
+
+    def _handle_lambda_expression(self, node, env, stack_trace):
+        return LambdaFunction(node.parameters, node.body, env)
+
+    def _handle_action_literal(self, node, env, stack_trace):
+        return Action(node.parameters, node.body, env)
+
+    def _handle_foreach_statement(self, node, env, stack_trace):
+        return self.eval_foreach_statement(node, env, stack_trace)
+
+    def _handle_print_statement(self, node, env, stack_trace):
+        return self.eval_print_statement(node, env, stack_trace)
+
+    def _handle_data_statement(self, node, env, stack_trace):
+        return self.eval_data_statement(node, env, stack_trace)
+
+    def _handle_try_catch_statement(self, node, env, stack_trace):
+        return self.eval_try_catch_statement(node, env, stack_trace)
+
+    def _handle_throw_statement(self, node, env, stack_trace):
+        return self.eval_throw_statement(node, env, stack_trace)
+
+    def _handle_contract_statement(self, node, env, stack_trace):
+        return self.eval_contract_statement(node, env, stack_trace)
+
+    def _handle_export_statement(self, node, env, stack_trace):
+        return self.eval_export_statement(node, env, stack_trace)
+
+    def _handle_use_statement(self, node, env, stack_trace):
+        return self.eval_use_statement(node, env, stack_trace)
+
+    def _handle_from_statement(self, node, env, stack_trace):
+        return self.eval_from_statement(node, env, stack_trace)
+
+    def _handle_if_expression(self, node, env, stack_trace):
+        return self.eval_if_expression(node, env, stack_trace)
+
+    def _handle_ternary_expression(self, node, env, stack_trace):
+        return self.eval_ternary_expression(node, env, stack_trace)
+
+    def _handle_continue_statement(self, node, env, stack_trace):
+        return self.eval_continue_statement(node, env, stack_trace)
+
+    def _handle_break_statement(self, node, env, stack_trace):
+        return self.eval_break_statement(node, env, stack_trace)
+
     def eval_node(self, node, env, stack_trace=None):
         if node is None: 
-            debug_log("eval_node", "Node is None, returning NULL")
             return NULL
         
-        stack_trace = stack_trace or []
         node_type = type(node)
-        def _wrap_statement(statement, expected_type):
-            if isinstance(statement, expected_type):
-                return statement
-            if isinstance(statement, dict):
-                try:
-                    if expected_type is zexus_ast.GCStatement:
-                        return zexus_ast.GCStatement(statement.get("action"))
-                    if expected_type is zexus_ast.InlineStatement:
-                        return zexus_ast.InlineStatement(statement.get("function_name") or statement.get("name"))
-                    if expected_type is zexus_ast.DeferStatement:
-                        return zexus_ast.DeferStatement(statement.get("code"))
-                    if expected_type is zexus_ast.NativeStatement:
-                        return zexus_ast.NativeStatement(
-                            statement.get("library_name") or statement.get("library"),
-                            statement.get("function_name") or statement.get("function"),
-                            args=statement.get("args"),
-                            alias=statement.get("alias")
-                        )
-                    if expected_type is zexus_ast.BufferStatement:
-                        return zexus_ast.BufferStatement(
-                            statement.get("buffer_name") or statement.get("name"),
-                            statement.get("operation"),
-                            statement.get("arguments"),
-                        )
-                    if expected_type is zexus_ast.SIMDStatement:
-                        return zexus_ast.SIMDStatement(
-                            statement.get("operation"),
-                            operands=statement.get("operands")
-                        )
-                    if expected_type is zexus_ast.PatternStatement:
-                        return zexus_ast.PatternStatement(
-                            statement.get("expression"),
-                            statement.get("cases") or []
-                        )
-                except Exception as exc:
-                    return EvaluationError(str(exc))
-            return EvaluationError(f"Invalid payload for {expected_type.__name__}")
-
-        def _vm_native_statement(node, env):
-            stmt = _wrap_statement(node, zexus_ast.NativeStatement)
-            if isinstance(stmt, EvaluationError):
-                return stmt
-            return self.eval_native_statement(stmt, env, stack_trace=[])
-
-        def _vm_gc_statement(node, env):
-            stmt = _wrap_statement(node, zexus_ast.GCStatement)
-            if isinstance(stmt, EvaluationError):
-                return stmt
-            return self.eval_gc_statement(stmt, env, stack_trace=[])
-
-        def _vm_inline_statement(node, env):
-            stmt = _wrap_statement(node, zexus_ast.InlineStatement)
-            if isinstance(stmt, EvaluationError):
-                return stmt
-            return self.eval_inline_statement(stmt, env, stack_trace=[])
-
-        def _vm_buffer_statement(node, env):
-            stmt = _wrap_statement(node, zexus_ast.BufferStatement)
-            if isinstance(stmt, EvaluationError):
-                return stmt
-            return self.eval_buffer_statement(stmt, env, stack_trace=[])
-
-        def _vm_simd_statement(node, env):
-            stmt = _wrap_statement(node, zexus_ast.SIMDStatement)
-            if isinstance(stmt, EvaluationError):
-                return stmt
-            return self.eval_simd_statement(stmt, env, stack_trace=[])
-
-        if zexus_config.fast_debug_enabled:
-            debug_log("eval_node", f"Processing {node_type.__name__}")
 
         handler = self._node_handlers.get(node_type)
         if handler:
+            return handler(node, env, stack_trace)
             return handler(node, env, stack_trace)
 
         try:

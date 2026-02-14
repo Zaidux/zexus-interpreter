@@ -397,7 +397,8 @@ class Lexer:
                 i = self.position
                 depth = 0
                 found = False
-                while i < len(src):
+                scan_limit = min(len(src), i + 300)
+                while i < scan_limit:
                     c = src[i]
                     if c == '(':
                         depth += 1

@@ -357,3 +357,99 @@ Report: tmp/perf_reports/20260121_192717/perf_full_network_10k_profile.json
 - Gas metering adds ~9–10s without gas-light; gas-light brings gas overhead close to gas-off.
 - VM still slower than interpreter; next gains likely from deeper `_run_stack_bytecode` loop reductions and call overhead.
 - Interpreter improvements should continue targeting parsing hot spots (`parse_block`, `_parse_block_statements`).
+
+---
+
+## Session Update (2026-02-14): Sync Path Tightening, Interpreter Dispatch, I/O Concurrency Analysis
+
+### VM Changes — CALL_METHOD/CALL_NAME Sync Path Tightening
+
+1. **Module-level cached imports** ([vm.py](src/zexus/vm/vm.py#L104-L130))
+   - Added `_get_action_types()` and `_get_security_mod()` as module-level lazy caches
+   - Avoids repeated `from ..object import Action, LambdaFunction` in `_invoke_callable_sync` (was called on every sync invocation)
+   - Avoids repeated `from .. import security` in `_op_call_method` `call_method` path
+
+2. **Hoisted env var lookups from CALL_METHOD** ([vm.py](src/zexus/vm/vm.py#L2170-L2185))
+   - Moved `ZEXUS_VM_TRACE_STACK`, `ZEXUS_VM_TRACE_METHOD_OPS`, `ZEXUS_VM_PROFILE_VERBOSE` lookups from _op_call_method body to outer _run_stack_bytecode scope
+   - Eliminates 3 `os.environ.get()` calls + string comparisons per CALL_METHOD invocation
+
+3. **Cached `asyncio.iscoroutinefunction` reference** ([vm.py](src/zexus/vm/vm.py#L2183))
+   - Local `_iscoroutinefunction_local` reference avoids `asyncio.iscoroutinefunction` attribute chain
+   - Applied in `_op_call_name`, `_op_call_top`, `_invoke_callable_sync`
+
+4. **Guarded async result check in CALL_METHOD** ([vm.py](src/zexus/vm/vm.py#L2585))
+   - Added `result is not None` guard before `asyncio.iscoroutine(result)` check
+   - Skips the expensive type check for the common case (None/primitive results)
+
+### Interpreter Changes — Dispatch Table Extension & eval_node Optimization
+
+5. **Moved 6 nested function defs out of `eval_node`** ([core.py](src/zexus/evaluator/core.py#L226-L340))
+   - `_wrap_statement`, `_vm_native_statement`, `_vm_gc_statement`, `_vm_inline_statement`, `_vm_buffer_statement`, `_vm_simd_statement` → class methods
+   - Eliminates ~6 function object allocations per `eval_node` call (100k+ calls per program)
+
+6. **Extended dispatch table from 23 to 40+ entries** ([core.py](src/zexus/evaluator/core.py#L110-L153))
+   - Added: `StringLiteral`, `FloatLiteral`, `MapLiteral`, `LambdaExpression`, `ActionLiteral`, `ForEachStatement`, `PrintStatement`, `DataStatement`, `TryCatchStatement`, `ThrowStatement`, `ContractStatement`, `ExportStatement`, `UseStatement`, `FromStatement`, `IfExpression`, `TernaryExpression`, `ContinueStatement`, `BreakStatement`
+   - These types previously fell through to a ~80-branch isinstance chain; now they're O(1) dict lookups
+
+7. **Hoisted `Integer` and `Float` imports to module level** ([core.py](src/zexus/evaluator/core.py#L7))
+   - Were imported per-call in `_handle_integer_literal` and the isinstance fallback
+   - Removed per-handler `from ..object import Integer/Boolean` calls
+
+8. **Removed debug_log from hot dispatch handlers**
+   - `_handle_integer_literal`, `_handle_boolean_literal`, `_handle_list_literal` no longer call `debug_log()` (avoids f-string construction)
+
+### Lexer Changes
+
+9. **Limited lambda lookahead scan** ([lexer.py](src/zexus/lexer.py#L400))
+   - Capped lookahead from unlimited `while i < len(src)` to `i + 300` characters
+   - Lambda parameter lists are always short; no need to scan thousands of characters
+
+### Results (perf_full_network_10k.zx, 100 tx, interpreter-only)
+System under heavy load (~2.5 load avg) so absolute numbers are inflated, but A/B comparison:
+- **Baseline (stashed)**: Interpreter 28.41s, Parse 77ms
+- **With changes**: Interpreter 25.21s, Parse 56ms
+- **Improvement**: ~11% faster interpreter, ~27% faster parse
+
+### Zexus Network Capabilities Analysis
+
+**What exists:**
+- **HTTP client**: `http_get`, `http_post`, `http_put`, `http_delete` — all synchronous via `urllib.request` ([stdlib/http.py](src/zexus/stdlib/http.py))
+- **TCP sockets**: `socket_create_server`, `socket_create_connection` — thread-per-connection via `socket` module ([stdlib/sockets.py](src/zexus/stdlib/sockets.py))
+- **HTTP server**: Raw socket HTTP server with routing, thread-based ([stdlib/http_server.py](src/zexus/stdlib/http_server.py))
+- **Capability system**: `network.tcp` and `network.http` capabilities defined but **not enforced** at call boundary
+
+**What's missing:**
+- No async network I/O (all blocking)
+- No `aiohttp`/`httpx` async HTTP client
+- No WebSocket support
+- No connection pooling or keep-alive
+- No async TCP (`asyncio.open_connection`/`asyncio.start_server`)
+- Capability enforcement not wired to actual builtins
+
+### virtual_filesystem.py Analysis
+
+**Current state**: [virtual_filesystem.py](src/zexus/virtual_filesystem.py) (356 lines) is a **pure in-memory sandbox abstraction** — it provides:
+- Path mounting with access modes (READ/WRITE/READ_WRITE/EXECUTE)
+- Memory quotas per sandbox
+- Access logging
+- Sandbox builder with presets (plugin, isolated, trusted, read_only)
+
+**Key finding**: It does **zero actual I/O**. All file operations go through the existing synchronous builtins (`read_file`, `write_file` in [functions.py](src/zexus/evaluator/functions.py#L2357)). The VFS only resolves virtual paths to real paths and checks permissions.
+
+### I/O Concurrency Opportunities
+
+| Opportunity | Where | Impact | Effort |
+|-------------|-------|--------|--------|
+| **Async HTTP client** — Replace `urllib.request` with `aiohttp` or `httpx` async | [stdlib/http.py](src/zexus/stdlib/http.py) | High for network-bound programs | Medium |
+| **Concurrent spawned HTTP** — Make `http_get` return a `Promise` from thread pool; enable `spawn http_get(url1); spawn http_get(url2); await` patterns | [functions.py](src/zexus/evaluator/functions.py#L1795-L1898) | Medium | Low |
+| **Async TCP sockets** — Replace thread-per-connection with `asyncio.start_server` | [stdlib/sockets.py](src/zexus/stdlib/sockets.py) | Medium for server workloads | Medium-High |
+| **Async file I/O** — Use `aiofiles` or thread pool for `read_file`/`write_file` | [functions.py](src/zexus/evaluator/functions.py#L2357) | Low-Medium | Low |
+| **Connection pooling** — Add `urllib3` or `httpx.Client` for repeated HTTP calls | [stdlib/http.py](src/zexus/stdlib/http.py) | Medium for repeated requests | Low |
+| **Capability enforcement** — Wire `check_network()` to actual HTTP/socket builtins | [functions.py](src/zexus/evaluator/functions.py) | Security improvement | Low |
+
+### Recommended Next Steps
+
+1. **Lowest-effort / highest-impact**: Make `http_get`/`http_post` return Promises via `concurrent.futures.ThreadPoolExecutor` — enables parallel HTTP without touching the VM's async infrastructure
+2. **Parser dispatch dict** for `parse_statement` (60-branch if/elif → O(1) dict lookup) — next interpreter optimization target
+3. **Extend eval_node dispatch table** further to cover the remaining ~40 isinstance branches
+4. **Connection pooling** with `urllib3.PoolManager` in stdlib/http.py
