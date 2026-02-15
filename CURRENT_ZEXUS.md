@@ -183,14 +183,14 @@
 
 ## 4. What Can Be Implemented (Priority Recommendations)
 
-### Quick Wins (Low Effort, High Value)
-1. **Compound assignment** (`+=`, `-=`, `*=`, `/=`, `%=`) — add 5 tokens + infix parse rule + eval handler
-2. **String interpolation** — `"Hello ${name}"` → extend lexer's `read_string()`
-3. **Block comments** (`/* */`) — extend `skip_whitespace()` in lexer
-4. **`finally` clause** — add to `TryCatchStatement` AST node + evaluator
-5. **Multiline strings** — triple-quote `"""..."""` style
-6. **Single-quoted strings** — extend lexer
-7. **Exponentiation** `**` — token exists in VM (`POW`), just need lexer + parser
+### Quick Wins (Low Effort, High Value) — ✅ ALL COMPLETED
+1. ~~**Compound assignment** (`+=`, `-=`, `*=`, `/=`, `%=`)~~ ✅ — tokens, parser infix rules, eval handler
+2. ~~**String interpolation** (`"Hello ${name}"`)~~ ✅ — lexer `read_string()` extended
+3. ~~**Block comments** (`/* */`)~~ ✅ — lexer `skip_whitespace()` extended
+4. ~~**`finally` clause** in try/catch~~ ✅ — `TryCatchStatement` AST node + evaluator
+5. ~~**Multiline strings** (`"""..."""`)~~ ✅ — triple-quote support
+6. ~~**Single-quoted strings**~~ ✅ — lexer extended
+7. ~~**Exponentiation** `**` operator~~ ✅ — lexer + parser + VM `POW` opcode
 
 ### Medium Effort, High Impact
 8. **Destructuring** — `let {a, b} = map; let [x, y] = list`
@@ -566,16 +566,16 @@ This is a **local simulation** — no networking, no consensus, no peer discover
 
 ## 16. Implementation Status Tracker
 
-### Quick Wins
+### Quick Wins — ✅ ALL COMPLETED
 | # | Feature | Status |
 |---|---------|--------|
-| 1 | Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`) | ⬜ Not started |
-| 2 | String interpolation (`"Hello ${name}"`) | ⬜ Not started |
-| 3 | Block comments (`/* */`) | ⬜ Not started |
-| 4 | `finally` clause in try/catch | ⬜ Not started |
-| 5 | Multiline strings (`"""..."""`) | ⬜ Not started |
-| 6 | Single-quoted strings | ⬜ Not started |
-| 7 | Exponentiation `**` operator | ⬜ Not started |
+| 1 | Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`) | ✅ Implemented |
+| 2 | String interpolation (`"Hello ${name}"`) | ✅ Implemented |
+| 3 | Block comments (`/* */`) | ✅ Implemented |
+| 4 | `finally` clause in try/catch | ✅ Implemented |
+| 5 | Multiline strings (`"""..."""`) | ✅ Implemented |
+| 6 | Single-quoted strings | ✅ Implemented |
+| 7 | Exponentiation `**` operator | ✅ Implemented |
 
 ### Medium Effort
 | # | Feature | Status |

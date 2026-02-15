@@ -15,9 +15,53 @@ from .object import Environment
 _MODULE_CACHE: Dict[str, Tuple[Environment, Any, Any]] = {}
 _MODULE_CACHE_LOCK = threading.Lock()
 
+# Circular-import detection: set of normalized paths currently being loaded
+_LOADING_SET: Set[str] = set()
+_LOADING_SET_LOCK = threading.Lock()
+
 # Contract AST cache by source hash
 _CONTRACT_AST_CACHE: Dict[str, Any] = {}
 _CONTRACT_AST_LOCK = threading.Lock()
+
+
+class CircularImportError(Exception):
+    """Raised when a circular import dependency is detected."""
+    def __init__(self, path: str, chain: Optional[list] = None):
+        self.path = path
+        self.chain = chain or []
+        if chain:
+            cycle = " -> ".join(chain + [path])
+            msg = f"Circular import detected: {cycle}"
+        else:
+            msg = f"Circular import detected while loading: {path}"
+        super().__init__(msg)
+
+
+def begin_loading(module_path: str) -> None:
+    """Mark *module_path* as currently being loaded.
+    
+    Raises ``CircularImportError`` if the module is already in the loading set
+    (i.e. a circular dependency has been encountered).
+    """
+    norm = normalize_path(module_path)
+    with _LOADING_SET_LOCK:
+        if norm in _LOADING_SET:
+            raise CircularImportError(norm, list(_LOADING_SET))
+        _LOADING_SET.add(norm)
+
+
+def end_loading(module_path: str) -> None:
+    """Remove *module_path* from the loading set after it has finished loading."""
+    norm = normalize_path(module_path)
+    with _LOADING_SET_LOCK:
+        _LOADING_SET.discard(norm)
+
+
+def is_loading(module_path: str) -> bool:
+    """Check whether *module_path* is currently being loaded."""
+    norm = normalize_path(module_path)
+    with _LOADING_SET_LOCK:
+        return norm in _LOADING_SET
 
 def get_cached_module(module_path: str) -> Optional[Tuple[Environment, Any, Any]]:
     """Get a cached module (environment, bytecode, ast) if available"""
@@ -196,6 +240,12 @@ def precompile_modules(program, main_file: str, compile_bytecode: bool = True) -
         for cand in candidates:
             norm = normalize_path(cand)
             if norm in visited:
+                import warnings
+                warnings.warn(
+                    f"Circular import detected during pre-compilation: {import_path} "
+                    f"(resolved to {norm})",
+                    stacklevel=2,
+                )
                 return  # Already processed (or in progress — avoids cycles)
             if os.path.isfile(cand):
                 resolved = cand

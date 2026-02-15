@@ -188,7 +188,53 @@ class BytecodeCompiler:
             self._emit(Opcode.PRINT)
     
     def _compile_LetStatement(self, node):
-        """Compile let/const declaration"""
+        """Compile let/const declaration, including destructuring patterns."""
+        from ..zexus_ast import DestructurePattern
+        
+        if isinstance(node.name, DestructurePattern):
+            # Compile the RHS value expression — leaves it on the stack
+            self._compile_node(node.value)
+            pattern = node.name
+            
+            if pattern.kind == 'map':
+                for source_key, target_name in pattern.bindings:
+                    # DUP the map on the stack so we can index multiple times
+                    self._emit(Opcode.DUP)
+                    # Push the key string
+                    key_idx = self._add_constant(source_key)
+                    self._emit(Opcode.LOAD_CONST, key_idx)
+                    # Index into the map: map[key]
+                    self._emit(Opcode.INDEX)
+                    # Store to local name
+                    name_idx = self._add_constant(target_name)
+                    self._emit(Opcode.STORE_NAME, name_idx)
+                # Pop the original map off the stack
+                self._emit(Opcode.POP)
+            elif pattern.kind == 'list':
+                for idx, target_name in pattern.bindings:
+                    self._emit(Opcode.DUP)
+                    idx_const = self._add_constant(idx)
+                    self._emit(Opcode.LOAD_CONST, idx_const)
+                    self._emit(Opcode.INDEX)
+                    name_idx = self._add_constant(target_name)
+                    self._emit(Opcode.STORE_NAME, name_idx)
+                # Handle rest element: ..rest captures remaining items
+                if pattern.rest:
+                    rest_start = len(pattern.bindings)
+                    # SLICE expects stack: [obj, start, end]
+                    self._emit(Opcode.DUP)                              # list
+                    start_idx = self._add_constant(rest_start)
+                    self._emit(Opcode.LOAD_CONST, start_idx)            # start
+                    none_idx = self._add_constant(None)
+                    self._emit(Opcode.LOAD_CONST, none_idx)             # end (None = to end)
+                    self._emit(Opcode.SLICE)
+                    rest_name_idx = self._add_constant(pattern.rest)
+                    self._emit(Opcode.STORE_NAME, rest_name_idx)
+                # Pop the original list off the stack
+                self._emit(Opcode.POP)
+            return
+        
+        # Normal (non-destructuring) let/const
         # Compile value
         self._compile_node(node.value)
         

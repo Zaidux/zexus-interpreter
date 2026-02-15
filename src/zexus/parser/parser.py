@@ -1037,9 +1037,96 @@ class UltimateParser:
 
         return FunctionStatement(name=name, parameters=parameters, body=body, return_type=return_type)
 
+    def _parse_destructure_pattern(self):
+        """Parse a destructuring pattern: {a, b: renamed} or [x, y, ..rest]"""
+        from ..zexus_ast import DestructurePattern
+        if self.cur_token_is(LBRACE):
+            # Map destructuring: {a, b, c: renamed}
+            bindings = []
+            self.next_token()  # skip {
+            while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                if self.cur_token_is(COMMA):
+                    self.next_token()
+                    continue
+                if not self.cur_token_is(IDENT):
+                    self.errors.append(f"Expected identifier in map destructure, got {self.cur_token.type}")
+                    return None
+                source_key = self.cur_token.literal
+                target_name = source_key  # default: same name
+                if self.peek_token_is(COLON):
+                    self.next_token()  # skip :
+                    self.next_token()  # move to target name
+                    if not self.cur_token_is(IDENT):
+                        self.errors.append("Expected identifier after ':' in map destructure")
+                        return None
+                    target_name = self.cur_token.literal
+                bindings.append((source_key, target_name))
+                self.next_token()
+            # cur_token should be RBRACE
+            return DestructurePattern(kind='map', bindings=bindings)
+        elif self.cur_token_is(LBRACKET):
+            # List destructuring: [x, y, ..rest]
+            bindings = []
+            rest = None
+            idx = 0
+            self.next_token()  # skip [
+            while not self.cur_token_is(RBRACKET) and not self.cur_token_is(EOF):
+                if self.cur_token_is(COMMA):
+                    self.next_token()
+                    continue
+                # Check for rest element: ..rest (lexed as DOT DOT IDENT)
+                if self.cur_token.literal == '.':
+                    # Consume second dot
+                    self.next_token()
+                    if self.cur_token.literal == '.':
+                        self.next_token()  # move to rest identifier
+                        if self.cur_token_is(IDENT):
+                            rest = self.cur_token.literal
+                            self.next_token()
+                            continue
+                    # If not a valid ..rest, skip
+                    continue
+                if self.cur_token_is(IDENT) and self.cur_token.literal.startswith('..'):
+                    rest = self.cur_token.literal[2:]
+                    self.next_token()
+                    continue
+                if not self.cur_token_is(IDENT):
+                    self.errors.append(f"Expected identifier in list destructure, got {self.cur_token.type}")
+                    return None
+                bindings.append((idx, self.cur_token.literal))
+                idx += 1
+                self.next_token()
+            # cur_token should be RBRACKET
+            return DestructurePattern(kind='list', bindings=bindings, rest=rest)
+        return None
+
     def parse_let_statement(self):
-        """Tolerant let statement parser"""
+        """Tolerant let statement parser with destructuring support
+        
+        let x = value
+        let {a, b} = map_expr
+        let [x, y] = list_expr
+        """
         stmt = LetStatement(name=None, value=None)
+
+        # Check for destructuring pattern
+        if self.peek_token_is(LBRACE) or self.peek_token_is(LBRACKET):
+            self.next_token()  # move to { or [
+            pattern = self._parse_destructure_pattern()
+            if pattern is None:
+                return None
+            stmt.name = pattern
+            # Expect = after pattern
+            if self.peek_token_is(ASSIGN):
+                self.next_token()
+            else:
+                self.errors.append("Expected '=' after destructuring pattern")
+                return None
+            self.next_token()
+            stmt.value = self.parse_expression(LOWEST)
+            if self.peek_token_is(SEMICOLON):
+                self.next_token()
+            return stmt
 
         if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
             self.next_token()
@@ -1069,11 +1156,31 @@ class UltimateParser:
         return stmt
 
     def parse_const_statement(self):
-        """Tolerant const statement parser - immutable variable declaration
+        """Tolerant const statement parser with destructuring support
         
-        Syntax: const NAME = value;
+        const NAME = value;
+        const {a, b} = map_expr;
+        const [x, y] = list_expr;
         """
         stmt = ConstStatement(name=None, value=None)
+
+        # Check for destructuring pattern
+        if self.peek_token_is(LBRACE) or self.peek_token_is(LBRACKET):
+            self.next_token()  # move to { or [
+            pattern = self._parse_destructure_pattern()
+            if pattern is None:
+                return None
+            stmt.name = pattern
+            if self.peek_token_is(ASSIGN):
+                self.next_token()
+            else:
+                self.errors.append("Expected '=' after destructuring pattern")
+                return None
+            self.next_token()
+            stmt.value = self.parse_expression(LOWEST)
+            if self.peek_token_is(SEMICOLON):
+                self.next_token()
+            return stmt
 
         if self.peek_token_is(IDENT) or self.peek_token_is(EVENT):
             self.next_token()

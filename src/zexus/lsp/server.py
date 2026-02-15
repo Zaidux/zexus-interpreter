@@ -107,10 +107,18 @@ if PYGLS_AVAILABLE:
         
         # Parse the document
         try:
-            lexer = Lexer(text)
-            tokens = lexer.tokenize()
-            parser = Parser(tokens)
-            ast = parser.parse()
+            lexer = Lexer(text, filename=uri)
+            # Collect tokens for position mapping (used by providers)
+            tokens = []
+            while True:
+                tok = lexer.next_token()
+                tokens.append(tok)
+                if getattr(tok, 'type', '') == 'EOF':
+                    break
+            # Re-lex for the parser (parser consumes the lexer)
+            parse_lexer = Lexer(text, filename=uri)
+            parser = Parser(parse_lexer)
+            ast = parser.parse_program()
             ls.documents[uri] = {
                 'text': text,
                 'ast': ast,
@@ -136,10 +144,16 @@ if PYGLS_AVAILABLE:
             text = changes[0].text
             # Re-parse the document
             try:
-                lexer = Lexer(text)
-                tokens = lexer.tokenize()
-                parser = Parser(tokens)
-                ast = parser.parse()
+                lexer = Lexer(text, filename=uri)
+                tokens = []
+                while True:
+                    tok = lexer.next_token()
+                    tokens.append(tok)
+                    if getattr(tok, 'type', '') == 'EOF':
+                        break
+                parse_lexer = Lexer(text, filename=uri)
+                parser = Parser(parse_lexer)
+                ast = parser.parse_program()
                 ls.documents[uri] = {
                     'text': text,
                     'ast': ast,

@@ -825,8 +825,10 @@ class StructuralAnalyzer:
                     # Track nesting level BEFORE dedent check (so we don't break inside {...} or [...] or (...))
                     if tj.type in {LPAREN, LBRACE, LBRACKET}:
                         # Only mark as brace block if NOT already in colon block (to distinguish code blocks from data literals)
+                        # ALSO: Don't mark as brace block for destructuring patterns in LET/CONST before '='
                         if tj.type == LBRACE and not found_colon_block:
-                            found_brace_block = True
+                            if not (in_assignment and not seen_assign):
+                                found_brace_block = True
                         nesting += 1
                     elif tj.type in {RPAREN, RBRACE, RBRACKET}:
                         nesting -= 1

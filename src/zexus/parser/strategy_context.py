@@ -182,6 +182,35 @@ class ContextStackParser:
         """Get the current parsing context"""
         return self.current_context[-1] if self.current_context else 'global'
 
+    def _parse_destructure_via_traditional(self, tokens):
+        """Delegate destructuring let/const parsing to the traditional parser.
+        
+        This re-lexes the token stream through a mini UltimateParser instance so
+        that ``parse_let_statement`` / ``parse_const_statement`` (which already
+        understand ``{`` / ``[`` destructure patterns) handle the work.
+        """
+        from ..lexer import Lexer
+        from .parser import UltimateParser
+        # Reconstruct source code faithfully — STRING tokens must be re-quoted
+        # so the re-lexer doesn't treat them as identifiers.
+        parts = []
+        for t in tokens:
+            if not t.literal:
+                continue
+            if t.type == 'STRING':
+                # Escape inner double-quotes and wrap in quotes
+                escaped = t.literal.replace('\\', '\\\\').replace('"', '\\"')
+                parts.append(f'"{escaped}"')
+            else:
+                parts.append(t.literal)
+        code = ' '.join(parts)
+        mini_lexer = Lexer(code)
+        mini_parser = UltimateParser(mini_lexer, 'universal', False)
+        mini_program = mini_parser.parse_program()
+        if mini_program and mini_program.statements:
+            return mini_program.statements[0]
+        return None
+
     def parse_block(self, block_info, all_tokens):
         """Parse a block with context awareness"""
         block_type = block_info.get('subtype', block_info['type'])
@@ -286,6 +315,10 @@ class ContextStackParser:
         if len(tokens) < 4:
             parser_debug("  ❌ Invalid let statement: too few tokens")
             return None
+
+        # Destructuring pattern: let {a, b} = expr  or  let [x, y] = expr
+        if tokens[1].type in (LBRACE, LBRACKET):
+            return self._parse_destructure_via_traditional(tokens)
 
         if tokens[1].type != IDENT:
             parser_debug("  ❌ Invalid let statement: expected identifier after 'let'")
@@ -496,6 +529,10 @@ class ContextStackParser:
         if len(tokens) < 4:
             parser_debug("  ❌ Invalid const statement: too few tokens")
             return None
+
+        # Destructuring pattern: const {a, b} = expr  or  const [x, y] = expr
+        if tokens[1].type in (LBRACE, LBRACKET):
+            return self._parse_destructure_via_traditional(tokens)
 
         if tokens[1].type != IDENT:
             parser_debug("  ❌ Invalid const statement: expected identifier after 'const'")

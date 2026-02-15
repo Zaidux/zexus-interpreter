@@ -304,7 +304,59 @@ class StatementEvaluatorMixin:
     
     # === VARIABLE & CONTROL FLOW ===
     
+    def _eval_destructure(self, pattern, value, env, stack_trace):
+        """Bind variables from a DestructurePattern against a runtime value.
+        
+        let {a, b} = {"a": 1, "b": 2}   -> env.a=1, env.b=2
+        let [x, y] = [10, 20]             -> env.x=10, env.y=20
+        """
+        from ..zexus_ast import DestructurePattern
+        if pattern.kind == 'map':
+            # Value must be a Map or dict-like
+            if not hasattr(value, 'pairs'):
+                return EvaluationError(
+                    f"Cannot destructure {type(value).__name__} as map — expected a Map"
+                )
+            pairs = value.pairs
+            for source_key, target_name in pattern.bindings:
+                # Map keys are stored as strings
+                val = pairs.get(source_key)
+                if val is None:
+                    # Try with String wrapper
+                    val = pairs.get(f'"{source_key}"')
+                if val is None:
+                    val = NULL
+                env.set(target_name, val)
+        elif pattern.kind == 'list':
+            # Value must be a List with .elements
+            if not hasattr(value, 'elements'):
+                return EvaluationError(
+                    f"Cannot destructure {type(value).__name__} as list — expected a List"
+                )
+            elements = value.elements
+            for idx, target_name in pattern.bindings:
+                if idx < len(elements):
+                    env.set(target_name, elements[idx])
+                else:
+                    env.set(target_name, NULL)
+            # Handle rest element
+            if pattern.rest:
+                rest_start = len(pattern.bindings)
+                from ..object import List as ListObj
+                env.set(pattern.rest, ListObj(elements[rest_start:]))
+        return NULL
+
     def eval_let_statement(self, node, env, stack_trace):
+        from ..zexus_ast import DestructurePattern
+        
+        # Handle destructuring: let {a, b} = expr  or  let [x, y] = expr
+        if isinstance(node.name, DestructurePattern):
+            debug_log("eval_let_statement", f"let destructure ({node.name.kind})")
+            value = self.eval_node(node.value, env, stack_trace)
+            if is_error(value):
+                return value
+            return self._eval_destructure(node.name, value, env, stack_trace)
+        
         debug_log("eval_let_statement", f"let {node.name.value}")
         
         # FIXED: Evaluate value FIRST to prevent recursion issues
@@ -359,6 +411,16 @@ class StatementEvaluatorMixin:
         return value_type in expected_types
     
     def eval_const_statement(self, node, env, stack_trace):
+        from ..zexus_ast import DestructurePattern
+        
+        # Handle destructuring: const {a, b} = expr  or  const [x, y] = expr
+        if isinstance(node.name, DestructurePattern):
+            debug_log("eval_const_statement", f"const destructure ({node.name.kind})")
+            value = self.eval_node(node.value, env, stack_trace)
+            if is_error(value):
+                return value
+            return self._eval_destructure(node.name, value, env, stack_trace)
+        
         debug_log("eval_const_statement", f"const {node.name.value}")
         
         # Evaluate value FIRST
@@ -1329,7 +1391,10 @@ class StatementEvaluatorMixin:
             return None
     
     def eval_use_statement(self, node, env, stack_trace):
-        from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
+        from ..module_cache import (get_cached_module, cache_module, get_module_candidates,
+                                     normalize_path, invalidate_module,
+                                     begin_loading, end_loading, CircularImportError,
+                                     is_loading)
         from ..builtin_modules import is_builtin_module, get_builtin_module
         from ..stdlib_integration import is_stdlib_module, get_stdlib_module
         
@@ -1393,6 +1458,13 @@ class StatementEvaluatorMixin:
                 return EvaluationError(f"Builtin module '{file_path}' not available")
         
         normalized_path = normalize_path(file_path)
+
+        # 1c. Circular import detection — check before cache lookup
+        # because the cache may contain a partially-loaded placeholder env
+        if is_loading(normalized_path):
+            return EvaluationError(
+                f"Circular import detected: {file_path} is already being loaded"
+            )
 
         # 2. Check Cache
         module_env = None
@@ -1476,60 +1548,70 @@ class StatementEvaluatorMixin:
                 module_env = Environment()
             parse_errors = []
 
+            # Circular import detection — register this path as in-progress
+            try:
+                begin_loading(normalized_path)
+            except CircularImportError as e:
+                return EvaluationError(str(e))
+
             # Circular dependency placeholder
             try: 
                 cache_module(normalized_path, module_env)
             except Exception: 
                 pass
 
-            if not loaded:
-                for candidate in candidates:
-                    try:
-                        if not os.path.exists(candidate): 
-                            continue
-                        
-                        debug_log("  Found module file", candidate)
-                        # Use VFS cache for module reads (hot path)
+            try:
+                if not loaded:
+                    for candidate in candidates:
                         try:
-                            from .integration import get_integration
-                            code = get_integration().vfs_manager.cached_read(candidate)
-                        except Exception:
-                            with open(candidate, 'r', encoding='utf-8') as f: 
-                                code = f.read()
-                        
-                        from ..lexer import Lexer
-                        from ..parser import Parser
-                        
-                        lexer = Lexer(code)
-                        parser = Parser(lexer)
-                        program = parser.parse_program()
-                        
-                        if getattr(parser, 'errors', None):
-                            parse_errors.append((candidate, parser.errors))
-                            continue
-                        
-                        # Set __file__ in module environment so it can do relative imports
-                        module_env.set("__file__", String(os.path.abspath(candidate)))
-                        # Set __MODULE__ to the module path (not "__main__" since it's imported)
-                        module_env.set("__MODULE__", String(file_path))
+                            if not os.path.exists(candidate): 
+                                continue
+                            
+                            debug_log("  Found module file", candidate)
+                            # Use VFS cache for module reads (hot path)
+                            try:
+                                from .integration import get_integration
+                                code = get_integration().vfs_manager.cached_read(candidate)
+                            except Exception:
+                                with open(candidate, 'r', encoding='utf-8') as f: 
+                                    code = f.read()
+                            
+                            from ..lexer import Lexer
+                            from ..parser import Parser
+                            
+                            lexer = Lexer(code)
+                            parser = Parser(lexer)
+                            program = parser.parse_program()
+                            
+                            if getattr(parser, 'errors', None):
+                                parse_errors.append((candidate, parser.errors))
+                                continue
+                            
+                            # Set __file__ in module environment so it can do relative imports
+                            module_env.set("__file__", String(os.path.abspath(candidate)))
+                            # Set __MODULE__ to the module path (not "__main__" since it's imported)
+                            module_env.set("__MODULE__", String(file_path))
 
-                        compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
-                        if compiled:
-                            cache_module(normalized_path, module_env, compiled, program)
-                            cache_module(normalize_path(candidate), module_env, compiled, program)
+                            compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
+                            if compiled:
+                                cache_module(normalized_path, module_env, compiled, program)
+                                cache_module(normalize_path(candidate), module_env, compiled, program)
+                                loaded = True
+                                break
+
+                            # Recursive evaluation (interpreter fallback)
+                            self.eval_node(program, module_env)
+
+                            # Update cache with fully loaded env
+                            cache_module(normalized_path, module_env, None, program)
+                            cache_module(normalize_path(candidate), module_env, None, program)
                             loaded = True
                             break
-
-                        # Recursive evaluation (interpreter fallback)
-                        self.eval_node(program, module_env)
-
-                        # Update cache with fully loaded env
-                        cache_module(normalized_path, module_env, None, program)
-                        cache_module(normalize_path(candidate), module_env, None, program)
-                        loaded = True
-                        break
-                    except Exception as e:
-                        parse_errors.append((candidate, str(e)))
+                        except Exception as e:
+                            parse_errors.append((candidate, str(e)))
+            finally:
+                # Always unmark, even if loading threw
+                end_loading(normalized_path)
             
             if not loaded:
                 try: 
@@ -1615,7 +1697,9 @@ class StatementEvaluatorMixin:
     
     def eval_from_statement(self, node, env, stack_trace):
         """Full implementation of FromStatement."""
-        from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
+        from ..module_cache import (get_cached_module, cache_module, get_module_candidates,
+                                     normalize_path, invalidate_module,
+                                     begin_loading, end_loading, is_loading)
         
         # 1. Resolve Path
         file_path = node.file_path
@@ -1623,6 +1707,13 @@ class StatementEvaluatorMixin:
             return EvaluationError("from: missing file path")
         
         normalized_path = normalize_path(file_path)
+
+        # Circular import detection
+        if is_loading(normalized_path):
+            return EvaluationError(
+                f"Circular import detected: {file_path} is already being loaded"
+            )
+
         module_env = get_cached_module(normalized_path)
         if isinstance(module_env, tuple):
             module_env = module_env[0] if module_env else None
@@ -1641,47 +1732,55 @@ class StatementEvaluatorMixin:
             candidates = get_module_candidates(file_path, importer_file)
             module_env = Environment()
             loaded = False
+
+            try:
+                begin_loading(normalized_path)
+            except Exception:
+                return EvaluationError(f"Circular import detected while loading {file_path}")
             
             try: 
                 cache_module(normalized_path, module_env)
             except Exception: 
                 pass
             
-            for candidate in candidates:
-                try:
-                    if not os.path.exists(candidate): 
-                        continue
-                    
-                    with open(candidate, 'r', encoding='utf-8') as f: 
-                        code = f.read()
-                    
-                    from ..lexer import Lexer
-                    from ..parser import Parser
-                    
-                    lexer = Lexer(code)
-                    parser = Parser(lexer)
-                    program = parser.parse_program()
-                    
-                    if getattr(parser, 'errors', None): 
-                        continue
-                    
-                    # Set __file__ in module environment so it can do relative imports
-                    module_env.set("__file__", String(os.path.abspath(candidate)))
-                    # Set __MODULE__ to the module path (not "__main__" since it's imported)
-                    module_env.set("__MODULE__", String(file_path))
+            try:
+                for candidate in candidates:
+                    try:
+                        if not os.path.exists(candidate): 
+                            continue
+                        
+                        with open(candidate, 'r', encoding='utf-8') as f: 
+                            code = f.read()
+                        
+                        from ..lexer import Lexer
+                        from ..parser import Parser
+                        
+                        lexer = Lexer(code)
+                        parser = Parser(lexer)
+                        program = parser.parse_program()
+                        
+                        if getattr(parser, 'errors', None): 
+                            continue
+                        
+                        # Set __file__ in module environment so it can do relative imports
+                        module_env.set("__file__", String(os.path.abspath(candidate)))
+                        # Set __MODULE__ to the module path (not "__main__" since it's imported)
+                        module_env.set("__MODULE__", String(file_path))
 
-                    compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
-                    if compiled:
-                        cache_module(normalized_path, module_env, compiled, program)
+                        compiled = self._try_vm_module_exec(program, module_env, os.path.abspath(candidate))
+                        if compiled:
+                            cache_module(normalized_path, module_env, compiled, program)
+                            loaded = True
+                            break
+
+                        self.eval_node(program, module_env)
+                        cache_module(normalized_path, module_env, None, program)
                         loaded = True
                         break
-
-                    self.eval_node(program, module_env)
-                    cache_module(normalized_path, module_env, None, program)
-                    loaded = True
-                    break
-                except Exception:
-                    continue
+                    except Exception:
+                        continue
+            finally:
+                end_loading(normalized_path)
             
             if not loaded:
                 try: 

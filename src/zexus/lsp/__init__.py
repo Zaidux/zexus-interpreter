@@ -4,6 +4,6 @@
 try:
     from .server import ZexusLanguageServer
     __all__ = ['ZexusLanguageServer']
-except ImportError:
+except (ImportError, NameError, RuntimeError):
     # pygls not available, LSP features won't work
     __all__ = []

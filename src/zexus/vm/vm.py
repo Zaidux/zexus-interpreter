@@ -937,7 +937,9 @@ class VM:
         if os.environ.get("ZEXUS_DEBUG_COMPILER"):
              with open("debug_compiler_fail.log", "a") as f:
                  f.write(f"[DEBUG] _load_zexus_module_env called for {file_path}\n")
-        from ..module_cache import get_cached_module, cache_module, get_module_candidates, normalize_path, invalidate_module
+        from ..module_cache import (get_cached_module, cache_module, get_module_candidates,
+                                      normalize_path, invalidate_module,
+                                      begin_loading, end_loading, CircularImportError)
         from ..object import Environment, String
         from ..lexer import Lexer
         from ..parser import Parser
@@ -959,64 +961,74 @@ class VM:
                     return module_env
             except Exception:
                 continue
+
+        # Circular import detection
+        try:
+            begin_loading(normalized_path)
+        except CircularImportError as e:
+            raise RuntimeError(str(e)) from e
+
         module_env = Environment()
         loaded = False
         compiled_bytecode = None
         parsed_ast = None
 
-        for candidate in candidates:
-            try:
-                if not os.path.exists(candidate):
-                    continue
-                with open(candidate, "r", encoding="utf-8") as handle:
-                    code = handle.read()
-                lexer = Lexer(code)
-                parser = Parser(lexer)
-                program = parser.parse_program()
-                if getattr(parser, "errors", None):
-                    continue
-                
-                parsed_ast = program
-                module_env.set("__file__", String(os.path.abspath(candidate)))
-                module_env.set("__MODULE__", String(file_path))
-                
-                # Try to compile to bytecode and execute via VM (fast path)
+        try:
+            for candidate in candidates:
                 try:
-                    from .compiler import BytecodeCompiler
-                    compiler = BytecodeCompiler(optimize=True)
-                    compiled_bytecode = compiler.compile(program)
+                    if not os.path.exists(candidate):
+                        continue
+                    with open(candidate, "r", encoding="utf-8") as handle:
+                        code = handle.read()
+                    lexer = Lexer(code)
+                    parser = Parser(lexer)
+                    program = parser.parse_program()
+                    if getattr(parser, "errors", None):
+                        continue
                     
-                    if compiled_bytecode:
-                        # Execute module via VM (fast)
-                        vm_env = {k: v for k, v in module_env.store.items()}
-                        child_vm = VM.create_child(parent_vm=self, env=vm_env)
-                        result = child_vm._run_stack_bytecode_sync(compiled_bytecode, debug=False)
+                    parsed_ast = program
+                    module_env.set("__file__", String(os.path.abspath(candidate)))
+                    module_env.set("__MODULE__", String(file_path))
+                    
+                    # Try to compile to bytecode and execute via VM (fast path)
+                    try:
+                        from .compiler import BytecodeCompiler
+                        compiler = BytecodeCompiler(optimize=True)
+                        compiled_bytecode = compiler.compile(program)
                         
-                        # Update module environment from VM execution
-                        for k, v in child_vm.env.items():
-                            module_env.set(k, v)
-                        
-                        self._return_vm_to_pool(child_vm)
-                        
-                        cache_module(normalized_path, module_env, compiled_bytecode, parsed_ast)
-                        cache_module(normalize_path(candidate), module_env, compiled_bytecode, parsed_ast)
-                        loaded = True
-                        break
-                except Exception as e:
-                    if os.environ.get("ZEXUS_DEBUG_COMPILER"):
-                         print(f"[DEBUG] Compiler exception for {candidate}: {e}")
-                    pass
-                
-                # Fallback to interpreter execution (slow path)
-                if self._action_evaluator is None:
-                    self._action_evaluator = Evaluator(use_vm=False)
-                self._action_evaluator.eval_node(program, module_env)
-                cache_module(normalized_path, module_env, None, parsed_ast)
-                cache_module(normalize_path(candidate), module_env, None, parsed_ast)
-                loaded = True
-                break
-            except Exception:
-                continue
+                        if compiled_bytecode:
+                            # Execute module via VM (fast)
+                            vm_env = {k: v for k, v in module_env.store.items()}
+                            child_vm = VM.create_child(parent_vm=self, env=vm_env)
+                            result = child_vm._run_stack_bytecode_sync(compiled_bytecode, debug=False)
+                            
+                            # Update module environment from VM execution
+                            for k, v in child_vm.env.items():
+                                module_env.set(k, v)
+                            
+                            self._return_vm_to_pool(child_vm)
+                            
+                            cache_module(normalized_path, module_env, compiled_bytecode, parsed_ast)
+                            cache_module(normalize_path(candidate), module_env, compiled_bytecode, parsed_ast)
+                            loaded = True
+                            break
+                    except Exception as e:
+                        if os.environ.get("ZEXUS_DEBUG_COMPILER"):
+                             print(f"[DEBUG] Compiler exception for {candidate}: {e}")
+                        pass
+                    
+                    # Fallback to interpreter execution (slow path)
+                    if self._action_evaluator is None:
+                        self._action_evaluator = Evaluator(use_vm=False)
+                    self._action_evaluator.eval_node(program, module_env)
+                    cache_module(normalized_path, module_env, None, parsed_ast)
+                    cache_module(normalize_path(candidate), module_env, None, parsed_ast)
+                    loaded = True
+                    break
+                except Exception:
+                    continue
+        finally:
+            end_loading(normalized_path)
 
         if not loaded:
             try:

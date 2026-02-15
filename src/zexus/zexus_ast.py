@@ -534,6 +534,25 @@ class ThisExpression(Expression):
         return "ThisExpression()"
 
 
+class DestructurePattern(Expression):
+    """Destructuring pattern for let/const assignments.
+    
+    kind='map':  let {a, b} = expr  or  let {a: x, b: y} = expr
+    kind='list': let [x, y, z] = expr
+    
+    bindings: list of (source_key, target_name) tuples
+      - map:  [("a", "a"), ("b", "renamed")] for {a, b: renamed}
+      - list: [(0, "x"), (1, "y")] for [x, y]
+    rest: optional name for rest element (..rest)
+    """
+    def __init__(self, kind, bindings, rest=None):
+        self.kind = kind          # 'map' or 'list'
+        self.bindings = bindings  # list of (source, target_name_str)
+        self.rest = rest          # optional rest variable name
+
+    def __repr__(self):
+        return f"DestructurePattern(kind={self.kind}, bindings={len(self.bindings)}, rest={self.rest})"
+
 class ListLiteral(Expression):
     def __init__(self, elements): 
         self.elements = elements
