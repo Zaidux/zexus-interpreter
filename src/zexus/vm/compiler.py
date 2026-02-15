@@ -721,47 +721,16 @@ class BytecodeCompiler:
 
     
     def _compile_ContractStatement(self, node):
-        """Compile smart contract definition"""
-        contract_name = node.name.value
-        name_idx = self._add_constant(contract_name)
+        """Contract compilation requires interpreter for full SmartContract lifecycle.
         
-        # Push contract name onto stack
-        self._emit(Opcode.LOAD_CONST, name_idx)
-        
-        # Compile body members
-        member_count = 0
-        if hasattr(node.body, 'statements'):
-            for stmt in node.body.statements:
-                stmt_type = type(stmt).__name__
-                
-                if stmt_type == 'StateStatement':
-                    # Value
-                    if getattr(stmt, 'initial_value', None):
-                        self._compile_node(stmt.initial_value)
-                    else:
-                        self._emit(Opcode.LOAD_CONST, self._add_constant(None))
-                    
-                    # Name
-                    self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
-                    member_count += 1
-                
-                elif stmt_type == 'ActionStatement':
-                    # Compile action (stores it in current env)
-                    self._compile_node(stmt)
-                    
-                    # Load it back to stack
-                    self._emit(Opcode.LOAD_NAME, self._add_constant(stmt.name.value))
-                    
-                    # Push name
-                    self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
-                    member_count += 1
-
-        # Define Contract (pops name + values/keys * count)
-        # Arg is member_count
-        self._emit(Opcode.DEFINE_CONTRACT, member_count)
-        
-        # Store contract class/object
-        self._emit(Opcode.STORE_NAME, name_idx)
+        Contracts need: SmartContract objects, ContractStorage, deploy lifecycle,
+        this-binding, action environment setup, and storage sync — none of which
+        the VM currently implements.  Signal unsupported to trigger interpreter fallback.
+        """
+        raise UnsupportedNodeError(
+            "ContractStatement",
+            "Contract declarations require the interpreter for full SmartContract lifecycle support"
+        )
 
     def _compile_BreakStatement(self, node):
         """Compile break statement"""

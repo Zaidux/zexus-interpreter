@@ -321,10 +321,32 @@ class UltimateParser:
             all_tokens = self._cached_tokens
 
             # Arrow lambdas currently parse reliably via the traditional engine.
-            # When the token stream contains the '=>' literal, switch to the
-            # classic parser immediately to keep AST output deterministic.
-            if any(t.type == LAMBDA and getattr(t, 'literal', None) == '=>'
-                   for t in all_tokens):
+            # When the token stream contains the '=>' literal OUTSIDE of a match
+            # block, switch to the classic parser to keep AST output deterministic.
+            # Match blocks use '=>' for case arms (e.g. 42 => "answer") so we
+            # must NOT bail out when arrows only appear inside match bodies.
+            has_non_match_arrow = False
+            in_match_brace = False
+            match_brace_depth = 0
+            for idx, t in enumerate(all_tokens):
+                if t.type == MATCH:
+                    # Look ahead for opening brace
+                    for k in range(idx + 1, min(idx + 10, len(all_tokens))):
+                        if all_tokens[k].type == LBRACE:
+                            in_match_brace = True
+                            match_brace_depth = 1
+                            break
+                elif in_match_brace:
+                    if t.type == LBRACE:
+                        match_brace_depth += 1
+                    elif t.type == RBRACE:
+                        match_brace_depth -= 1
+                        if match_brace_depth == 0:
+                            in_match_brace = False
+                elif t.type == LAMBDA and getattr(t, 'literal', None) == '=>':
+                    has_non_match_arrow = True
+                    break
+            if has_non_match_arrow:
                 self.use_advanced_parsing = False
                 return self._parse_traditional()
 
@@ -350,11 +372,18 @@ class UltimateParser:
 
             if self._should_verify_with_traditional(program, all_tokens):
                 fallback_program, fallback_errors = self._parse_traditional_copy()
-                if fallback_program and len(fallback_program.statements) > len(program.statements):
-                    self._log("🔁 Traditional parser produced a richer AST; switching to fallback result", "normal")
-                    self.errors = list(fallback_errors or [])
-                    self.use_advanced_parsing = False
-                    return fallback_program
+                # Only prefer the traditional parser if it produces significantly more
+                # statements (>50% more). A small difference often means the advanced
+                # parser correctly merged compound constructs (e.g. let x = match {...})
+                # that the traditional parser fragments into separate pieces.
+                if fallback_program:
+                    adv_count = len(program.statements)
+                    trad_count = len(fallback_program.statements)
+                    if adv_count > 0 and trad_count > adv_count * 1.5:
+                        self._log("🔁 Traditional parser produced a richer AST; switching to fallback result", "normal")
+                        self.errors = list(fallback_errors or [])
+                        self.use_advanced_parsing = False
+                        return fallback_program
 
             self._log(f"✅ Parsing Complete: {len(program.statements)} statements, {len(self.errors)} errors", "minimal")
             return program
@@ -3506,60 +3535,68 @@ class UltimateParser:
         return None
 
     def parse_match_expression(self):
-        """Parse match expression: match value { case p: r, ... }"""
-        # MatchExpression in zexus_ast.py takes (value, cases), no token argument
-        print(f"DEBUG: Entering parse_match_expression, cur={self.cur_token}, peek={self.peek_token}")
+        """Parse match expression: match value { case p: r, ... } or match value { p => r, ... }"""
         expression = MatchExpression(value=None, cases=[])
         
         self.next_token() # Consume MATCH
         
         expression.value = self.parse_expression(LOWEST)
-        print(f"DEBUG: Parsed match value: {expression.value}, peek={self.peek_token}")
         
         if not self.expect_peek(LBRACE):
-            print("DEBUG: Expected LBRACE failed")
             return None
-            
+
         while not self.peek_token_is(RBRACE) and not self.peek_token_is(EOF):
             if self.peek_token_is(CASE):
+                # case pattern: result syntax
                 self.next_token() # Consume CASE
-
-                # Move to pattern token
                 if not self.peek_token_is(COLON):
                     self.next_token()
-
-                # Pattern expression (e.g. 1, "text", or _)
                 pattern = self.parse_expression(LOWEST)
-                
                 if not self.expect_peek(COLON):
                     return None
-                
-                # Result
                 result = None
                 if self.peek_token_is(LBRACE):
                     if not self.expect_peek(LBRACE):
                         return None
                     result = self.parse_block_statement()
                 else:
-                    # Move to result expression
                     self.next_token()
                     result = self.parse_expression(LOWEST)
-                    # Optional separator
                     if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
                         self.next_token()
-                
-                # Add case
-                # Note: MatchCase class in AST needs to be instantiated.
-                # Assuming MatchCase is imported from zexus_ast
+                case = MatchCase(pattern=pattern, result=result)
+                expression.cases.append(case)
+            elif self.peek_token_is(DEFAULT):
+                # default: result syntax
+                self.next_token() # Consume DEFAULT
+                if not self.expect_peek(COLON):
+                    return None
+                self.next_token()
+                result = self.parse_expression(LOWEST)
+                if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                    self.next_token()
+                pattern = Identifier(value="_")
                 case = MatchCase(pattern=pattern, result=result)
                 expression.cases.append(case)
             else:
-                # Skip invalid tokens or comments?
-                print(f"DEBUG: Skipping unexpected token inside match: {self.peek_token}")
-                self.next_token()
+                # Arrow syntax: pattern => result
+                self.next_token()  # Move to pattern token
+                pattern = self.parse_expression(LOWEST)
+                
+                # Expect => (LAMBDA token with literal '=>')
+                if self.peek_token_is(LAMBDA):
+                    self.next_token()  # Consume =>
+                    self.next_token()  # Move to result
+                    result = self.parse_expression(LOWEST)
+                    if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                        self.next_token()
+                    case = MatchCase(pattern=pattern, result=result)
+                    expression.cases.append(case)
+                else:
+                    # Skip unexpected tokens
+                    pass
         
         if not self.expect_peek(RBRACE):
-            print("DEBUG: Expected RBRACE failed")
             return None
             
         return expression

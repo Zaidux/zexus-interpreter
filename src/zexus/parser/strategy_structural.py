@@ -43,7 +43,7 @@ class StructuralAnalyzer:
               SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
               EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
-              DEFER, PATTERN, ENUM, STREAM, WATCH,
+              DEFER, PATTERN, ENUM, STREAM, WATCH, MATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
               CHANNEL, ATOMIC,
@@ -857,10 +857,10 @@ class StructuralAnalyzer:
                                 # We're still parsing the condition - don't break yet
                                 pass
                             else:
-                                # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE as RHS (expressions)
+                                # For LET/CONST, allow FUNCTION, SANDBOX, SANITIZE, MATCH as RHS (expressions)
                                 # Also allow DEBUG when followed by ( for debug(x) function calls in assignments
                                 # Also allow IF when followed by THEN (if-then-else expression)
-                                allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE}
+                                allow_in_assignment = tj.type in {FUNCTION, SANDBOX, SANITIZE, MATCH}
                                 if in_assignment and allow_in_assignment and stmt_tokens:
                                     prev_token = stmt_tokens[-1]
                                     prev_line = getattr(prev_token, 'line', None)
