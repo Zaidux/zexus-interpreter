@@ -444,6 +444,20 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
             except Exception as e:
                 console.print(f" [yellow]warning:[/yellow] {e}")
 
+        # Static type checking pass
+        try:
+            from ..type_checker import StaticTypeChecker
+            _tc = StaticTypeChecker()
+            _type_diags = _tc.check(program)
+            if _type_diags:
+                for _d in _type_diags:
+                    if _d.level == "error":
+                        console.print(f"  [bold red]✗ {_d}[/bold red]")
+                    else:
+                        console.print(f"  [yellow]⚠ {_d}[/yellow]")
+        except Exception:
+            pass  # type checker should never block execution
+
         # Use the evaluator package
         env = Environment()
         

@@ -33,13 +33,16 @@ class ConstStatement(Statement):
     """Const statement - immutable variable declaration
     
     const MAX_VALUE = 100;
+    const PI: float = 3.14;
     """
-    def __init__(self, name, value):
+    def __init__(self, name, value, type_annotation=None):
         self.name = name
         self.value = value
+        self.type_annotation = type_annotation
 
     def __repr__(self):
-        return f"ConstStatement(name={self.name}, value={self.value})"
+        type_str = f", type={self.type_annotation}" if self.type_annotation else ""
+        return f"ConstStatement(name={self.name}, value={self.value}{type_str})"
 
 class DataStatement(Statement):
     """Data statement - dataclass definition
@@ -466,11 +469,13 @@ class TrailStatement(Statement):
 
 # Expression Nodes
 class Identifier(Expression):
-    def __init__(self, value): 
+    def __init__(self, value, type_annotation=None): 
         self.value = value
+        self.type_annotation = type_annotation  # Optional[str] for typed parameters
 
     def __repr__(self):
-        return f"Identifier('{self.value}')"
+        type_str = f": {self.type_annotation}" if self.type_annotation else ""
+        return f"Identifier('{self.value}{type_str}')"
     
     def __str__(self):
         return self.value

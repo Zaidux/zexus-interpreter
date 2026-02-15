@@ -1101,9 +1101,10 @@ class UltimateParser:
         return None
 
     def parse_let_statement(self):
-        """Tolerant let statement parser with destructuring support
+        """Tolerant let statement parser with destructuring and type annotation support
         
         let x = value
+        let x: int = value      (type annotation)
         let {a, b} = map_expr
         let [x, y] = list_expr
         """
@@ -1139,8 +1140,33 @@ class UltimateParser:
 
         stmt.name = Identifier(value=self.cur_token.literal)
 
-        # TOLERANT: Allow both = and : for assignment
-        if self.peek_token_is(ASSIGN) or (self.peek_token_is(COLON) and self.peek_token.literal == ":"):
+        # Disambiguate `:` — could be type annotation (let x: int = ...) or
+        # old-style assignment (let x: value).  If `:` is followed by an
+        # IDENT and then `=`, treat it as a type annotation.
+        if self.peek_token_is(COLON) and self.peek_token.literal == ":":
+            # Peek two ahead to see if this is `name: TYPE = value`
+            saved_pos = getattr(self, '_saved_pos', None)
+            # Manual two-token lookahead
+            self.next_token()  # move to :
+            if self.peek_token_is(IDENT):
+                # Could be type annotation — check if IDENT is followed by =
+                type_tok = self.peek_token
+                self.next_token()  # move to potential type token
+                if self.peek_token_is(ASSIGN):
+                    # It IS a type annotation: let x: int = value
+                    stmt.type_annotation = self.cur_token.literal
+                    self.next_token()  # move to =
+                else:
+                    # It's old-style assignment: let x: value
+                    # cur_token is the first token of the value expression
+                    stmt.value = self.parse_expression(LOWEST)
+                    if self.peek_token_is(SEMICOLON):
+                        self.next_token()
+                    return stmt
+            else:
+                # Not IDENT after `:` — old-style assignment
+                pass  # fall through to parse value
+        elif self.peek_token_is(ASSIGN):
             self.next_token()
         else:
             self.errors.append("Expected '=' or ':' after variable name")
@@ -1156,9 +1182,10 @@ class UltimateParser:
         return stmt
 
     def parse_const_statement(self):
-        """Tolerant const statement parser with destructuring support
+        """Tolerant const statement parser with destructuring and type annotation support
         
         const NAME = value;
+        const PI: float = 3.14;
         const {a, b} = map_expr;
         const [x, y] = list_expr;
         """
@@ -1190,8 +1217,24 @@ class UltimateParser:
 
         stmt.name = Identifier(value=self.cur_token.literal)
 
-        # TOLERANT: Allow both = and : for assignment
-        if self.peek_token_is(ASSIGN) or (self.peek_token_is(COLON) and self.peek_token.literal == ":"):
+        # Disambiguate `:` — type annotation vs old-style assignment
+        if self.peek_token_is(COLON) and self.peek_token.literal == ":":
+            self.next_token()  # move to :
+            if self.peek_token_is(IDENT):
+                type_tok = self.peek_token
+                self.next_token()  # move to potential type token
+                if self.peek_token_is(ASSIGN):
+                    stmt.type_annotation = self.cur_token.literal
+                    self.next_token()  # move to =
+                else:
+                    # Old-style assignment: const x: value
+                    stmt.value = self.parse_expression(LOWEST)
+                    if self.peek_token_is(SEMICOLON):
+                        self.next_token()
+                    return stmt
+            else:
+                pass  # fall through to parse value
+        elif self.peek_token_is(ASSIGN):
             self.next_token()
         else:
             self.errors.append("Expected '=' or ':' after variable name in const declaration")
@@ -2853,12 +2896,16 @@ class UltimateParser:
             self.errors.append("Expected parameter name")
             return None
 
-        params.append(Identifier(self.cur_token.literal))
+        param_name = self.cur_token.literal
+        param_type = None
         
-        # Skip optional type annotation: : type
+        # Capture optional type annotation: : type
         if self.peek_token_is(COLON):
             self.next_token()  # Move to :
-            self.next_token()  # Move to type (skip it)
+            self.next_token()  # Move to type
+            param_type = self.cur_token.literal
+
+        params.append(Identifier(param_name, type_annotation=param_type))
 
         while self.peek_token_is(COMMA):
             self.next_token()
@@ -2866,12 +2913,16 @@ class UltimateParser:
             if not self.cur_token_is(IDENT):
                 self.errors.append("Expected parameter name after comma")
                 return None
-            params.append(Identifier(self.cur_token.literal))
+            param_name = self.cur_token.literal
+            param_type = None
             
-            # Skip optional type annotation: : type
+            # Capture optional type annotation: : type
             if self.peek_token_is(COLON):
                 self.next_token()  # Move to :
-                self.next_token()  # Move to type (skip it)
+                self.next_token()  # Move to type
+                param_type = self.cur_token.literal
+
+            params.append(Identifier(param_name, type_annotation=param_type))
 
         if not self.expect_peek(RPAREN):
             self.errors.append("Expected ')' after parameters")

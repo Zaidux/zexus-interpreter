@@ -193,11 +193,11 @@
 7. ~~**Exponentiation** `**` operator~~ ✅ — lexer + parser + VM `POW` opcode
 
 ### Medium Effort, High Impact
-8. **Destructuring** — `let {a, b} = map; let [x, y] = list`
-9. **Circular import detection** — visited set in module manager
-10. **LSP go-to-definition** — build symbol table from AST
-11. **Remote ZPM registry** — real HTTP-based package publishing/download
-12. **Static type checking pass** — optional analysis before runtime
+8. ~~**Destructuring** — `let {a, b} = map; let [x, y] = list`~~ ✅ — map, list, rename, rest patterns in parser + evaluator + VM
+9. ~~**Circular import detection** — visited set in module manager~~ ✅ — `_LOADING_SET` with `begin_loading`/`end_loading` in evaluator + VM
+10. ~~**LSP go-to-definition** — build symbol table from AST~~ ✅ — recursive AST walker, symbol provider, server parsing fix
+11. ~~**Remote ZPM registry** — real HTTP-based package publishing/download~~ ✅ — HTTP client, auth, tarball download/extraction in registry + installer
+12. ~~**Static type checking pass** — optional analysis before runtime~~ ✅ — `StaticTypeChecker` AST walker with scoped symbol table, param/return/assignment checking
 
 ### Significant Effort
 13. **Debug Adapter Protocol** — step-through debugging
@@ -580,11 +580,11 @@ This is a **local simulation** — no networking, no consensus, no peer discover
 ### Medium Effort
 | # | Feature | Status |
 |---|---------|--------|
-| 8 | Destructuring assignment | ⬜ Not started |
-| 9 | Circular import detection | ⬜ Not started |
-| 10 | LSP go-to-definition | ⬜ Not started |
-| 11 | Remote ZPM registry | ⬜ Not started |
-| 12 | Static type checking pass | ⬜ Not started |
+| 8 | Destructuring assignment | ✅ Implemented |
+| 9 | Circular import detection | ✅ Implemented |
+| 10 | LSP go-to-definition | ✅ Implemented |
+| 11 | Remote ZPM registry | ✅ Implemented |
+| 12 | Static type checking pass | ✅ Implemented |
 
 ### Significant Effort
 | # | Feature | Status |

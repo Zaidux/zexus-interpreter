@@ -5997,14 +5997,18 @@ class ContextStackParser:
                 while i < len(tokens) and tokens[i].type != RPAREN:
                     if tokens[i].type == IDENT:
                         # This is a parameter name
-                        params.append(Identifier(tokens[i].literal))
+                        param_name = tokens[i].literal
+                        param_type = None
                         i += 1
                         
                         # Check for type annotation: : type
                         if i < len(tokens) and tokens[i].type == COLON:
                             i += 1  # Skip COLON
                             if i < len(tokens) and tokens[i].type == IDENT:
+                                param_type = tokens[i].literal
                                 i += 1  # Skip type name
+                        
+                        params.append(Identifier(param_name, type_annotation=param_type))
                         
                         # Check for comma (more parameters)
                         if i < len(tokens) and tokens[i].type == COMMA:
