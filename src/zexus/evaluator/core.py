@@ -133,6 +133,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 zexus_ast.ListLiteral: self._handle_list_literal,
                 # Extended dispatch (avoid isinstance chain for common types)
                 zexus_ast.StringLiteral: self._handle_string_literal,
+                zexus_ast.StringInterpolationExpression: self._handle_string_interpolation,
                 zexus_ast.FloatLiteral: self._handle_float_literal,
                 zexus_ast.MapLiteral: self._handle_map_literal,
                 zexus_ast.LambdaExpression: self._handle_lambda_expression,
@@ -294,6 +295,24 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         value = value.replace('\\"', '"')
         value = value.replace("\\'", "'")
         return String(value, is_trusted=True)
+
+    def _handle_string_interpolation(self, node, env, stack_trace):
+        """Evaluate string interpolation: "hello ${name}" """
+        result_parts = []
+        for part_type, part_value in node.parts:
+            if part_type == "str":
+                result_parts.append(part_value)
+            elif part_type == "expr":
+                val = self.eval_node(part_value, env, stack_trace)
+                if is_error(val):
+                    return val
+                if hasattr(val, 'value'):
+                    result_parts.append(str(val.value))
+                elif val is None:
+                    result_parts.append("null")
+                else:
+                    result_parts.append(str(val))
+        return String(''.join(result_parts))
 
     def _handle_float_literal(self, node, env, stack_trace):
         try:

@@ -206,6 +206,12 @@ class ExpressionEvaluatorMixin:
                     suggestion="Check your divisor value. Modulo operation requires a non-zero divisor."
                 )
             return Integer(left_val % right_val)
+        elif operator == "**":
+            if right_val < 0:
+                # Negative exponent returns float
+                return Float(left_val ** right_val)
+            result = left_val ** right_val
+            return check_overflow(result, "exponentiation")
         elif operator == "<": 
             return TRUE if left_val < right_val else FALSE
         elif operator == ">": 
@@ -247,6 +253,11 @@ class ExpressionEvaluatorMixin:
             return TRUE if left_val == right_val else FALSE
         elif operator == "!=": 
             return TRUE if left_val != right_val else FALSE
+        elif operator == "**":
+            try:
+                return Float(left_val ** right_val)
+            except (OverflowError, ValueError) as e:
+                return EvaluationError(f"Exponentiation error: {e}")
         
         return EvaluationError(f"Unknown float operator: {operator}")
     
@@ -413,7 +424,7 @@ class ExpressionEvaluatorMixin:
         
         # SECURITY FIX #8: Strict Type Checking for Arithmetic
         # All arithmetic operations require numeric types (Integer or Float)
-        elif operator in ("*", "-", "/", "%"):
+        elif operator in ("*", "-", "/", "%", "**"):
             # Get type names for error messages
             left_type = type(left).__name__.replace("Obj", "").upper()
             right_type = type(right).__name__.replace("Obj", "").upper()
@@ -450,9 +461,11 @@ class ExpressionEvaluatorMixin:
                         if r_val == 0:
                             return EvaluationError("Modulo by zero")
                         result = l_val % r_val
+                    elif operator == "**":
+                        result = l_val ** r_val
                     
                     # Return Integer if result is whole number, Float otherwise
-                    if result == int(result) and operator != "/":  # Division always returns float
+                    if result == int(result) and operator not in ("/", "**"):  # Division/power always returns float
                         return Integer(int(result))
                     return Float(result)
                 except Exception as e:

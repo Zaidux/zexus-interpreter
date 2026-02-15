@@ -20,12 +20,19 @@ LOWEST, TERNARY, ASSIGN_PREC, NULLISH_PREC, LOGICAL, EQUALS, LESSGREATER, SUM, P
 precedences = {
     QUESTION: TERNARY,  # condition ? true : false (very low precedence)
     ASSIGN: ASSIGN_PREC,
+    PLUS_ASSIGN: ASSIGN_PREC,
+    MINUS_ASSIGN: ASSIGN_PREC,
+    STAR_ASSIGN: ASSIGN_PREC,
+    SLASH_ASSIGN: ASSIGN_PREC,
+    MOD_ASSIGN: ASSIGN_PREC,
+    POWER_ASSIGN: ASSIGN_PREC,
     NULLISH: NULLISH_PREC,  # value ?? default
     OR: LOGICAL, AND: LOGICAL,
     EQ: EQUALS, NOT_EQ: EQUALS,
     LT: LESSGREATER, GT: LESSGREATER, LTE: LESSGREATER, GTE: LESSGREATER,
     PLUS: SUM, MINUS: SUM,
     SLASH: PRODUCT, STAR: PRODUCT, MOD: PRODUCT,
+    POWER: PREFIX,  # ** has higher precedence than * and /
     LPAREN: CALL,
     LBRACKET: CALL,
     LBRACE: CALL,  # Entity{...} constructor syntax
@@ -142,6 +149,7 @@ class UltimateParser:
             INT: self.parse_integer_literal,
             FLOAT: self.parse_float_literal,
             STRING: self.parse_string_literal,
+            INTERP_STRING: self.parse_interpolated_string,
             BANG: self.parse_prefix_expression,
             MINUS: self.parse_prefix_expression,
             TRUE: self.parse_boolean,
@@ -172,6 +180,7 @@ class UltimateParser:
             SLASH: self.parse_infix_expression,
             STAR: self.parse_infix_expression,
             MOD: self.parse_infix_expression,
+            POWER: self.parse_infix_expression,
             EQ: self.parse_infix_expression,
             NOT_EQ: self.parse_infix_expression,
             LT: self.parse_infix_expression,
@@ -183,6 +192,12 @@ class UltimateParser:
             QUESTION: self.parse_ternary_expression,  # condition ? true : false
             NULLISH: self.parse_nullish_expression,  # value ?? default
             ASSIGN: self.parse_assignment_expression,
+            PLUS_ASSIGN: self.parse_compound_assignment_expression,
+            MINUS_ASSIGN: self.parse_compound_assignment_expression,
+            STAR_ASSIGN: self.parse_compound_assignment_expression,
+            SLASH_ASSIGN: self.parse_compound_assignment_expression,
+            MOD_ASSIGN: self.parse_compound_assignment_expression,
+            POWER_ASSIGN: self.parse_compound_assignment_expression,
             LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
             LPAREN: self.parse_call_expression,
             LBRACE: self.parse_constructor_call_expression,  # Entity{field: value} syntax
@@ -1488,10 +1503,17 @@ class UltimateParser:
         if not catch_block:
             return None
 
+        # Check for optional 'finally' block
+        finally_block = None
+        if self.peek_token_is(FINALLY):
+            self.next_token()  # consume 'finally'
+            finally_block = self.parse_block("finally")
+
         return TryCatchStatement(
             try_block=try_block,
             error_variable=error_var,
-            catch_block=catch_block
+            catch_block=catch_block,
+            finally_block=finally_block
         )
 
     def parse_debug_statement(self):
@@ -1710,6 +1732,29 @@ class UltimateParser:
         self.next_token()
         expression.value = self.parse_expression(LOWEST)
         return expression
+
+    def parse_compound_assignment_expression(self, left):
+        """Parse compound assignment: x += 5  →  x = x + 5"""
+        if not isinstance(left, (Identifier, PropertyAccessExpression)):
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Cannot use compound assignment on {type(left).__name__}, only identifiers and properties allowed")
+            return None
+
+        # Map compound operator token to the underlying arithmetic operator
+        op_map = {
+            PLUS_ASSIGN: "+",
+            MINUS_ASSIGN: "-",
+            STAR_ASSIGN: "*",
+            SLASH_ASSIGN: "/",
+            MOD_ASSIGN: "%",
+            POWER_ASSIGN: "**",
+        }
+        operator = op_map.get(self.cur_token.type, "+")
+        self.next_token()
+        right = self.parse_expression(LOWEST)
+
+        # Desugar: x += expr  →  x = x + expr
+        infix = InfixExpression(left=left, operator=operator, right=right)
+        return AssignmentExpression(name=left, value=infix)
 
     def parse_method_call_expression(self, left):
         if not self.cur_token_is(DOT):
@@ -3226,6 +3271,30 @@ class UltimateParser:
 
     def parse_string_literal(self):
         return StringLiteral(value=self.cur_token.literal)
+
+    def parse_interpolated_string(self):
+        """Parse a string with ${expr} interpolation.
+        
+        The token literal is a list of ("str", text) or ("expr", source) tuples
+        produced by the lexer. For each "expr" part, we create a sub-lexer and
+        sub-parser to parse the expression source into an AST node.
+        """
+        raw_parts = self.cur_token.literal
+        parsed_parts = []
+        for part_type, part_value in raw_parts:
+            if part_type == "str":
+                parsed_parts.append(("str", part_value))
+            elif part_type == "expr":
+                # Parse the expression using a sub-parser
+                sub_lexer = Lexer(part_value)
+                sub_parser = Parser(sub_lexer)
+                expr_node = sub_parser.parse_expression(LOWEST)
+                if expr_node is None:
+                    # Fallback: treat as empty string
+                    parsed_parts.append(("str", ""))
+                else:
+                    parsed_parts.append(("expr", expr_node))
+        return StringInterpolationExpression(parts=parsed_parts)
 
     def parse_boolean(self):
         lit = getattr(self.cur_token, 'literal', '')

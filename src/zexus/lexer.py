@@ -49,6 +49,7 @@ _KEYWORDS = {
     "debug": DEBUG,
     "try": TRY,
     "catch": CATCH,
+    "finally": FINALLY,
     "continue": CONTINUE,
     "break": BREAK,
     "throw": THROW,
@@ -240,9 +241,14 @@ class Lexer:
             self.skip_comment()
             return self.next_token()
 
-        # NEW: Handle // style comments
+        # NEW: Handle // style comments and /* */ block comments
         if self.ch == '/' and self.peek_char() == '/':
             self.skip_double_slash_comment()
+            return self.next_token()
+
+        # Block comments: /* ... */
+        if self.ch == '/' and self.peek_char() == '*':
+            self.skip_block_comment()
             return self.next_token()
 
         tok = None
@@ -372,7 +378,24 @@ class Lexer:
                 tok.line = current_line
                 tok.column = current_column
         elif self.ch == '"':
-            string_literal = self.read_string()
+            # Check for triple-quote multiline string
+            if self.peek_char() == '"' and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == '"':
+                string_literal = self.read_multiline_string()
+            else:
+                string_literal = self.read_string()
+            # If read_string returned a list, it's an interpolated string
+            if isinstance(string_literal, list):
+                tok = Token(INTERP_STRING, string_literal)
+            else:
+                tok = Token(STRING, string_literal)
+            tok.line = current_line
+            tok.column = current_column
+        elif self.ch == "'":
+            # Single-quoted strings
+            if self.peek_char() == "'" and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == "'":
+                string_literal = self.read_multiline_string(quote_char="'")
+            else:
+                string_literal = self.read_single_quoted_string()
             tok = Token(STRING, string_literal)
             tok.line = current_line
             tok.column = current_column
@@ -451,31 +474,79 @@ class Lexer:
             tok.line = current_line
             tok.column = current_column
         elif self.ch == '+':
-            tok = Token(PLUS, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            if self.peek_char() == '=':
+                ch = self.ch
+                self.read_char()
+                tok = Token(PLUS_ASSIGN, ch + self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                tok = Token(PLUS, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '-':
-            tok = Token(MINUS, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            if self.peek_char() == '=':
+                ch = self.ch
+                self.read_char()
+                tok = Token(MINUS_ASSIGN, ch + self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                tok = Token(MINUS, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '*':
-            tok = Token(STAR, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            if self.peek_char() == '*':
+                ch = self.ch
+                self.read_char()
+                if self.peek_char() == '=':
+                    self.read_char()
+                    tok = Token(POWER_ASSIGN, '**=')
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(POWER, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.peek_char() == '=':
+                ch = self.ch
+                self.read_char()
+                tok = Token(STAR_ASSIGN, ch + self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                tok = Token(STAR, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '/':
             # Check if this is division or comment
             if self.peek_char() == '/':
-                # It's a // comment, handle above
                 self.skip_double_slash_comment()
                 return self.next_token()
+            elif self.peek_char() == '*':
+                self.skip_block_comment()
+                return self.next_token()
+            elif self.peek_char() == '=':
+                ch = self.ch
+                self.read_char()
+                tok = Token(SLASH_ASSIGN, ch + self.ch)
+                tok.line = current_line
+                tok.column = current_column
             else:
                 tok = Token(SLASH, self.ch)
                 tok.line = current_line
                 tok.column = current_column
         elif self.ch == '%':
-            tok = Token(MOD, self.ch)
-            tok.line = current_line
-            tok.column = current_column
+            if self.peek_char() == '=':
+                ch = self.ch
+                self.read_char()
+                tok = Token(MOD_ASSIGN, ch + self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                tok = Token(MOD, self.ch)
+                tok.line = current_line
+                tok.column = current_column
         elif self.ch == '.':
             tok = Token(DOT, self.ch)
             tok.line = current_line
@@ -603,6 +674,8 @@ class Lexer:
         start_line = self.line
         start_column = self.column
         result = []
+        has_interpolation = False
+        parts = []  # list of ("str", text) or ("expr", text)
         while True:
             self.read_char()
             if self.ch == "":
@@ -636,15 +709,169 @@ class Lexer:
                     'r': '\r',
                     '\\': '\\',
                     '"': '"',
-                    "'": "'"
+                    "'": "'",
+                    '$': '$'
                 }
                 result.append(escape_map.get(self.ch, self.ch))
+            elif self.ch == '$' and self.peek_char() == '{':
+                # String interpolation: ${expr}
+                has_interpolation = True
+                # Save current string part
+                if result:
+                    parts.append(("str", ''.join(result)))
+                    result = []
+                else:
+                    parts.append(("str", ""))
+                # Skip the '{'
+                self.read_char()
+                # Read expression until matching '}'
+                expr_chars = []
+                brace_depth = 1
+                while brace_depth > 0:
+                    self.read_char()
+                    if self.ch == "":
+                        error = self.error_reporter.report_error(
+                            ZexusSyntaxError,
+                            "Unterminated interpolation expression in string",
+                            line=start_line,
+                            column=start_column,
+                            filename=self.filename,
+                            suggestion="Add a closing } to terminate the interpolation."
+                        )
+                        raise error
+                    elif self.ch == '{':
+                        brace_depth += 1
+                        expr_chars.append(self.ch)
+                    elif self.ch == '}':
+                        brace_depth -= 1
+                        if brace_depth > 0:
+                            expr_chars.append(self.ch)
+                    else:
+                        expr_chars.append(self.ch)
+                parts.append(("expr", ''.join(expr_chars)))
             elif self.ch == '"':
                 # End of string
                 break
             else:
                 result.append(self.ch)
+
+        if has_interpolation:
+            # Add trailing string part
+            parts.append(("str", ''.join(result)))
+            return parts  # Return list of parts for interpolation
         return ''.join(result)
+
+    def read_single_quoted_string(self):
+        """Read a single-quoted string literal ('...')"""
+        start_line = self.line
+        start_column = self.column
+        result = []
+        while True:
+            self.read_char()
+            if self.ch == "":
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Unterminated string literal",
+                    line=start_line,
+                    column=start_column,
+                    filename=self.filename,
+                    suggestion="Add a closing quote ' to terminate the string."
+                )
+                raise error
+            elif self.ch == '\\':
+                self.read_char()
+                if self.ch == '':
+                    error = self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        "Incomplete escape sequence at end of file",
+                        line=self.line,
+                        column=self.column,
+                        filename=self.filename,
+                        suggestion="Remove the backslash or complete the escape sequence."
+                    )
+                    raise error
+                escape_map = {
+                    'n': '\n', 't': '\t', 'r': '\r',
+                    '\\': '\\', "'": "'", '"': '"'
+                }
+                result.append(escape_map.get(self.ch, self.ch))
+            elif self.ch == "'":
+                break
+            else:
+                result.append(self.ch)
+        return ''.join(result)
+
+    def read_multiline_string(self, quote_char='"'):
+        """Read a triple-quoted multiline string (\"\"\"...\"\"\" or '''...''')"""
+        start_line = self.line
+        start_column = self.column
+        # Skip the three opening quotes
+        self.read_char()  # skip 2nd quote
+        self.read_char()  # skip 3rd quote
+        result = []
+        while True:
+            self.read_char()
+            if self.ch == "":
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Unterminated multiline string literal",
+                    line=start_line,
+                    column=start_column,
+                    filename=self.filename,
+                    suggestion=f"Add closing {quote_char}{quote_char}{quote_char} to terminate the multiline string."
+                )
+                raise error
+            elif self.ch == '\\':
+                self.read_char()
+                if self.ch == '':
+                    break
+                escape_map = {
+                    'n': '\n', 't': '\t', 'r': '\r',
+                    '\\': '\\', quote_char: quote_char
+                }
+                result.append(escape_map.get(self.ch, self.ch))
+            elif self.ch == quote_char:
+                # Check for triple close
+                if self.peek_char() == quote_char and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == quote_char:
+                    self.read_char()  # skip 2nd closing quote
+                    self.read_char()  # skip 3rd closing quote
+                    break
+                else:
+                    result.append(self.ch)
+            else:
+                result.append(self.ch)
+        return ''.join(result)
+
+    def skip_block_comment(self):
+        """Skip /* ... */ block comments (can be nested)"""
+        start_line = self.line
+        start_column = self.column
+        # Skip the opening /*
+        self.read_char()  # skip *
+        self.read_char()  # move past *
+        depth = 1
+        while depth > 0:
+            if self.ch == "":
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Unterminated block comment",
+                    line=start_line,
+                    column=start_column,
+                    filename=self.filename,
+                    suggestion="Add closing */ to terminate the block comment."
+                )
+                raise error
+            elif self.ch == '/' and self.peek_char() == '*':
+                depth += 1
+                self.read_char()
+                self.read_char()
+            elif self.ch == '*' and self.peek_char() == '/':
+                depth -= 1
+                self.read_char()
+                self.read_char()
+            else:
+                self.read_char()
+        self.skip_whitespace()
 
     def read_identifier(self):
         start_position = self.position

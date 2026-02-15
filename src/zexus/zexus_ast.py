@@ -386,13 +386,15 @@ class DebugStatement(Statement):
 
 # NEW: Try-catch statement  
 class TryCatchStatement(Statement):
-    def __init__(self, try_block, error_variable, catch_block):
+    def __init__(self, try_block, error_variable, catch_block, finally_block=None):
         self.try_block = try_block
         self.error_variable = error_variable
         self.catch_block = catch_block
+        self.finally_block = finally_block
 
     def __repr__(self):
-        return f"TryCatchStatement(error_var={self.error_variable})"
+        has_finally = " +finally" if self.finally_block else ""
+        return f"TryCatchStatement(error_var={self.error_variable}{has_finally})"
 
 # NEW: External function declaration
 class ExternalDeclaration(Statement):
@@ -496,6 +498,19 @@ class StringLiteral(Expression):
     
     def __str__(self):
         return self.value
+
+class StringInterpolationExpression(Expression):
+    """String interpolation: "hello ${name}, you are ${age} years old"
+    
+    parts is a list of (type, value) where type is "str" or "expr".
+    For "str" parts, value is a string literal.
+    For "expr" parts, value is a parsed Expression AST node.
+    """
+    def __init__(self, parts):
+        self.parts = parts  # list of ("str", string) or ("expr", Expression)
+    
+    def __repr__(self):
+        return f"StringInterpolation({len(self.parts)} parts)"
 
 class Boolean(Expression):
     def __init__(self, value): 

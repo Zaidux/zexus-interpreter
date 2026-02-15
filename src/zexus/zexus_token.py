@@ -32,6 +32,16 @@ OR = "||"
 QUESTION = "?"          # Ternary operator: condition ? true_val : false_val
 NULLISH = "??"          # Nullish coalescing: value ?? default
 
+# Compound Assignment Operators
+PLUS_ASSIGN = "+="      # Addition assignment: x += 5
+MINUS_ASSIGN = "-="     # Subtraction assignment: x -= 5
+STAR_ASSIGN = "*="      # Multiplication assignment: x *= 5
+SLASH_ASSIGN = "/="     # Division assignment: x /= 5
+MOD_ASSIGN = "%="       # Modulo assignment: x %= 5
+POWER = "**"            # Exponentiation: x ** 2
+POWER_ASSIGN = "**="    # Exponentiation assignment: x **= 2
+INTERP_STRING = "INTERP_STRING"  # String interpolation: "hello ${name}"
+
 # Delimiters
 COMMA = ","
 SEMICOLON = ";"
@@ -87,6 +97,7 @@ LAMBDA = "LAMBDA"
 DEBUG = "DEBUG"      # NEW: Debug token
 TRY = "TRY"          # NEW: Try token
 CATCH = "CATCH"      # NEW: Catch token
+FINALLY = "FINALLY"  # NEW: Finally token
 CONTINUE = "CONTINUE" # NEW: Continue on error token
 BREAK = "BREAK"      # NEW: Break loop statement
 THROW = "THROW"      # NEW: Throw error statement

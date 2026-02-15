@@ -1022,6 +1022,9 @@ class StatementEvaluatorMixin:
         # as the protected block defines a new execution context
         self._tolerant_skip_counts = {}
 
+        finally_block = getattr(node, 'finally_block', None)
+        result = None
+
         try:
             result = self.eval_node(node.try_block, env, stack_trace)
             if is_error(result):
@@ -1029,11 +1032,11 @@ class StatementEvaluatorMixin:
                 var_name = node.error_variable.value if node.error_variable else "error"
                 catch_env.set(var_name, String(str(result)))
                 print(f"[TRY_CATCH] caught error: {result}")
-                catch_result = self.eval_node(node.catch_block, catch_env, stack_trace)
+                result = self.eval_node(node.catch_block, catch_env, stack_trace)
                 self._tolerant_skip_counts = {}
                 self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
                 self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
-                return catch_result
+                return result
             self._tolerant_skip_counts = {}
             self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
             self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
@@ -1042,11 +1045,15 @@ class StatementEvaluatorMixin:
             catch_env = Environment(outer=env)
             var_name = node.error_variable.value if node.error_variable else "error"
             catch_env.set(var_name, String(str(e)))
-            catch_result = self.eval_node(node.catch_block, catch_env, stack_trace)
+            result = self.eval_node(node.catch_block, catch_env, stack_trace)
             self._tolerant_skip_counts = {}
             self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
             self._enqueue_tolerant_duplicates(getattr(node.catch_block, "statements", []))
-            return catch_result
+            return result
+        finally:
+            # Always execute the finally block if present
+            if finally_block is not None:
+                self.eval_node(finally_block, env, stack_trace)
     
     def eval_if_statement(self, node, env, stack_trace):
         cond = self.eval_node(node.condition, env, stack_trace)
