@@ -93,6 +93,7 @@ def show_all_commands():
     
     commands = [
         ("zx run <file>", "Execute a Zexus program"),
+        ("zx -r \"<code>\"", "Run inline Zexus code (like python -c)"),
         ("zx run --zexus", "Show this command list"),
         ("zx check <file>", "Check syntax with detailed validation"),
         ("zx validate <file>", "Validate and auto-fix syntax errors"),
@@ -125,6 +126,8 @@ def show_all_commands():
         ("zx check --debug program.zx", "Check syntax with debug info"),
         ("zx profile myapp.zx", "Profile with memory tracking"),
         ("zx profile --no-memory --top 10 app.zx", "Profile without memory, show top 10"),
+        ("zx -r \"print(42)\"", "Execute inline code directly"),
+        ("zx -r \"let x = 10; print(x * 2)\"", "Run multi-statement inline code"),
         ("", ""),
         ("[bold]Built-in Functions:[/bold]", "100+ functions available"),
         ("", "Memory: persist_set, persist_get, track_memory"),
@@ -164,11 +167,14 @@ def show_all_commands():
               help='Enable/disable debug logging (on/off/minimal/full)')
 @click.option('--no-debug', is_flag=True, help='Disable debug logging')
 @click.option('--zexus', is_flag=True, help='Show all available Zexus commands')
+@click.option('-r', '--run-code', type=str, default=None,
+              help='Execute inline Zexus code (like python -c)')
 @click.pass_context
-def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, zexus):
+def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, zexus, run_code):
     """Zexus Programming Language - Hybrid Interpreter/Compiler
     
     Use 'zx run --zexus' or 'zx --zexus' to see all available commands.
+    Use 'zx -r "<code>"' to execute inline Zexus code.
     """
     
     if zexus:
@@ -195,6 +201,11 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, ze
         config.enable_debug_logs = True
         ctx.obj['DEBUG'] = True
 
+    # Handle inline code execution: zx -r "<code>"
+    if run_code is not None:
+        _execute_inline_code(ctx, run_code)
+        return
+
     # If no command provided, show help
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -203,6 +214,119 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, ze
         config.use_hybrid_compiler = True
     elif execution_mode == 'interpreter':
         config.use_hybrid_compiler = False
+
+
+def _execute_inline_code(ctx, source_code):
+    """Execute inline Zexus code passed via -r flag.
+    
+    Examples:
+        zx -r "print(42)"
+        zx -r "let x = 10; print(x * 2)"
+        zx -r "action greet(name) { print(\"Hello \" + name) }; greet(\"World\")"
+    """
+    error_reporter = get_error_reporter()
+
+    try:
+        # Register source for error reporting
+        error_reporter.register_source("<inline>", source_code)
+
+        syntax_style = ctx.obj['SYNTAX_STYLE']
+        advanced_parsing = ctx.obj['ADVANCED_PARSING']
+        debug_mode = ctx.obj.get('DEBUG', False)
+        validator = SyntaxValidator()
+
+        # Auto-detect syntax style if needed
+        if syntax_style == 'auto':
+            syntax_style = validator.suggest_syntax_style(source_code)
+
+        # Parse the program
+        lexer = Lexer(source_code, filename="<inline>")
+        parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
+        program = parser.parse_program()
+
+        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+            console.print("[bold red]❌ Parse error in inline code:[/bold red]")
+            for error in parser.errors:
+                console.print(f"  ❌ {error}")
+            sys.exit(1)
+
+        # Set up environment
+        env = Environment()
+        env.set("__file__", String("<inline>"))
+        env.set("__FILE__", String("<inline>"))
+        env.set("__MODULE__", String("__main__"))
+        env.set("__DIR__", String(os.getcwd()))
+
+        from ..object import List as ZList
+        env.set("__ARGS__", ZList([]))
+        env.set("__ARGV__", ZList([]))
+        env.set("__PACKAGE__", String(""))
+
+        # Attempt VM execution first, fall back to interpreter
+        bytecode = None
+        fallback_reason = None
+
+        try:
+            bytecode = compile_ast_to_bytecode(program, optimize=True)
+        except UnsupportedNodeError as e:
+            fallback_reason = str(e)
+        except Exception as e:
+            fallback_reason = str(e)
+
+        if bytecode is not None and fallback_reason is None:
+            vm = VM(
+                mode=VMMode.AUTO,
+                use_jit=True,
+                max_heap_mb=512,
+                debug=debug_mode,
+                gas_limit=10000000
+            )
+            # Load builtins into VM
+            try:
+                builtin_evaluator = Evaluator(use_vm=False)
+                vm.builtins.update(dict(builtin_evaluator.builtins))
+            except Exception:
+                pass
+
+            vm.env["__file__"] = "<inline>"
+            vm.env["__FILE__"] = "<inline>"
+            vm.env["__MODULE__"] = "__main__"
+            vm.env["__DIR__"] = os.getcwd()
+            vm.env["__ARGS__"] = ()
+            vm.env["__ARGV__"] = ()
+            vm.env["__PACKAGE__"] = ""
+
+            try:
+                result = vm.execute(bytecode, debug=debug_mode)
+            except Exception as e:
+                if debug_mode:
+                    import traceback
+                    traceback.print_exc()
+                fallback_reason = str(e)
+
+        if fallback_reason is not None:
+            result = evaluate(program, env, debug_mode=debug_mode, use_vm=False)
+        elif bytecode is None:
+            result = evaluate(program, env, debug_mode=debug_mode, use_vm=False)
+
+        # Print result if meaningful
+        if result and hasattr(result, 'inspect') and result.inspect() != 'null':
+            console.print(result.inspect())
+        elif isinstance(result, str) and result:
+            console.print(result)
+        elif hasattr(result, 'value') and result.value is not None:
+            console.print(str(result.value))
+
+    except ZexusError as e:
+        print_error(e)
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if ctx.obj.get('DEBUG'):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
 
 @cli.command()
 @click.argument('file', type=click.Path(exists=True))
