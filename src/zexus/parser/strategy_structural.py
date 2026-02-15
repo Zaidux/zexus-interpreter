@@ -39,7 +39,7 @@ class StructuralAnalyzer:
         # Statement starters (keywords that begin a new statement)
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL,
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, FINALLY, EXTERNAL,
               SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
               EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, PERSISTENT, AUDIT,
               RESTRICT, SANDBOX, TRAIL, GC, BUFFER, SIMD,
@@ -508,8 +508,16 @@ class StructuralAnalyzer:
                     catch_tokens = [catch_token] + pre_brace_tokens + catch_block_tokens
                     final_idx = after_catch_idx
                 
+                # Check for finally block
+                finally_tokens = []
+                if final_idx < n and tokens[final_idx].type == FINALLY:
+                    finally_token = tokens[final_idx]
+                    finally_block_tokens, after_finally_idx = self._collect_brace_block(tokens, final_idx + 1)
+                    finally_tokens = [finally_token] + finally_block_tokens
+                    final_idx = after_finally_idx
+                
                 # Combine all tokens
-                full_tokens = [t] + try_block_tokens + catch_tokens
+                full_tokens = [t] + try_block_tokens + catch_tokens + finally_tokens
                 full_tokens = [tk for tk in full_tokens if not _is_empty_token(tk)]
                 
                 # Create the main try-catch block
@@ -1175,7 +1183,7 @@ class StructuralAnalyzer:
         stop_types = {SEMICOLON, RBRACE}
         # NOTE: SEND and RECEIVE removed - they can be used as function calls in expressions
         statement_starters = {
-              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, EXTERNAL, 
+              LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION, TRY, FINALLY, EXTERNAL, 
               SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
               EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, SEAL, AUDIT,
               RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER, SIMD,

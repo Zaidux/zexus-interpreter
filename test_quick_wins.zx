@@ -1,0 +1,50 @@
+/* Quick Win Tests */
+
+/* 1. Compound Assignment */
+let a = 10;
+a += 5;
+print(a);
+
+a -= 3;
+print(a);
+
+a *= 4;
+print(a);
+
+a /= 6;
+print(a);
+
+a %= 5;
+print(a);
+
+/* 2. Exponentiation */
+print(2 ** 10);
+print(3 ** 3);
+let b = 2;
+b **= 8;
+print(b);
+
+/* 3. Block Comments */
+/* This is a block comment */
+print("after block comment");
+/* Nested /* comments */ should work */
+print("after nested comment");
+
+/* 4. String Interpolation */
+let name = "Zexus";
+let version = 2;
+print("Hello from ${name} v${version}!");
+print("2 + 3 = ${2 + 3}");
+
+/* 5. Single-Quoted Strings */
+let msg = 'Hello single quotes';
+print(msg);
+
+/* 6. Finally Clause */
+try {
+    print("in try");
+} catch(e) {
+    print("in catch");
+} finally {
+    print("in finally");
+}

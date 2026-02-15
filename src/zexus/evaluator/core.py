@@ -750,6 +750,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 # String literals are trusted (not from external input)
                 return String(value, is_trusted=True)
             
+            elif isinstance(node, zexus_ast.StringInterpolationExpression):
+                return self._handle_string_interpolation(node, env, stack_trace)
+            
             elif isinstance(node, zexus_ast.Boolean):
                 debug_log("  Boolean node", f"value: {node.value}")
                 from ..object import Boolean

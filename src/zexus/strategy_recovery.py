@@ -54,6 +54,8 @@ class ErrorRecoveryEngine:
             return 'missing_parenthesis'
         elif "missing }" in error_msg or "brace" in error_msg:
             return 'missing_brace'
+        elif "finally" in error_msg:
+            return 'expected_catch'
         else:
             return 'syntax_error'
 
@@ -160,8 +162,8 @@ class ErrorRecoveryEngine:
 
         # Look for catch blocks in current block or parent blocks
         for block_id, block in blocks.items():
-            if block.get('subtype') == 'try_catch':
-                if block.get('catch_section'):
+            if block.get('subtype') in ('try_catch', 'try_catch_statement'):
+                if block.get('catch_section') or block.get('finally_section'):
                     return block
             # Check nested blocks
             for nested in block.get('nested_blocks', []):
@@ -195,7 +197,8 @@ class ErrorRecoveryEngine:
         return TryCatchStatement(
             try_block=BlockStatement(),
             error_variable=Identifier("error"),
-            catch_block=BlockStatement()
+            catch_block=BlockStatement(),
+            finally_block=None
         )
 
     def _create_synthetic_catch_block(self):

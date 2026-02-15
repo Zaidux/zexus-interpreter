@@ -9,8 +9,8 @@ from types import SimpleNamespace # Helper for AST node creation
 from collections import OrderedDict
 
 STATEMENT_STARTERS = {
-    LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, FUNCTION,
-    TRY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
+    LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION,
+    TRY, FINALLY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
     EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
     STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
     SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
@@ -19,8 +19,9 @@ STATEMENT_STARTERS = {
 }
 
 _MEANINGFUL_TOKEN_TYPES = {
-    IDENT, STRING, INT, FLOAT, LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET,
-    RBRACKET, COMMA, DOT, SEMICOLON, ASSIGN, LAMBDA
+    IDENT, STRING, INTERP_STRING, INT, FLOAT, LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET,
+    RBRACKET, COMMA, DOT, SEMICOLON, ASSIGN, LAMBDA,
+    POWER, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN
 }
 
 _BLOCK_STATEMENTS_CACHE: "OrderedDict[tuple, tuple]" = OrderedDict()
@@ -424,7 +425,7 @@ class ContextStackParser:
                 
                 # Check for statement starters that should break
                 # Context-sensitive: IF followed by THEN is an expression, not a statement
-                if t.type in {LET, PRINT, FOR, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL,
+                if t.type in {LET, CONST, DATA, PRINT, FOR, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, TRY, FINALLY, EXTERNAL,
                               SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
                               EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
@@ -566,7 +567,7 @@ class ContextStackParser:
                     j += 1  # Skip the semicolon
                     break
                 # Allow method chains but stop at other statement starters
-                if t.type in {LET, CONST, PRINT, FOR, IF, WHILE, RETURN, ACTION, TRY, EXTERNAL,
+                if t.type in {LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, BREAK, THROW, ACTION, TRY, FINALLY, EXTERNAL,
                               SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
                               EXPORT, USE, DEBUG}:
                     prev = tokens[j-1] if j > 0 else None
@@ -784,7 +785,7 @@ class ContextStackParser:
                 operator_symbol = None
                 if i < len(tokens):
                     # Could be +, -, *, /, ==, etc.
-                    if tokens[i].type in {PLUS, MINUS, STAR, SLASH, MOD, EQ, NOT_EQ, LT, GT, LTE, GTE}:
+                    if tokens[i].type in {PLUS, MINUS, STAR, SLASH, MOD, EQ, NOT_EQ, LT, GT, LTE, GTE, POWER}:
                         operator_symbol = tokens[i].literal
                         parser_debug(f"      Operator: {operator_symbol}")
                         i += 1
@@ -1164,15 +1165,27 @@ class ContextStackParser:
         parser_debug("🔧 [Context] Parsing assignment statement")
         tokens = block_info['tokens']
 
-        # Find the ASSIGN operator
+        # Find the ASSIGN operator or compound assignment token
         assign_idx = None
-        compound_operator = None  # Track if this is +=, -=, *=, /=, %=
+        compound_operator = None  # Track if this is +=, -=, *=, /=, %=, **=
+        
+        # Map compound assignment token types to their operator strings
+        _compound_assign_map = {
+            PLUS_ASSIGN: "+", MINUS_ASSIGN: "-", STAR_ASSIGN: "*",
+            SLASH_ASSIGN: "/", MOD_ASSIGN: "%", POWER_ASSIGN: "**"
+        }
         
         for i, tok in enumerate(tokens):
-            if tok.type == ASSIGN:
+            # Check for single-token compound assignments (+=, -=, *=, /=, %=, **=)
+            if tok.type in _compound_assign_map:
                 assign_idx = i
-                # Check for compound assignment: operator immediately before =
-                if i > 0 and tokens[i-1].type in {PLUS, MINUS, STAR, SLASH, MOD}:
+                compound_operator = _compound_assign_map[tok.type]
+                parser_debug(f"  🔍 Detected compound assignment token: {compound_operator}= at position {i}")
+                break
+            elif tok.type == ASSIGN:
+                assign_idx = i
+                # Legacy check: operator immediately before = (in case of split tokens)
+                if i > 0 and tokens[i-1].type in {PLUS, MINUS, STAR, SLASH, MOD, POWER}:
                     compound_operator = tokens[i-1].literal
                     parser_debug(f"  🔍 Detected compound operator: {compound_operator}= at position {i-1}")
                     assign_idx = i  # Keep assign_idx at the = position
@@ -1183,11 +1196,11 @@ class ContextStackParser:
             return None
 
         # Parse the left-hand side (could be identifier or property access)
-        # For compound operators (+=), exclude the operator token from LHS
-        if compound_operator:
+        # For compound operators with split tokens (op + =), exclude the operator token from LHS
+        if compound_operator and tokens[assign_idx].type == ASSIGN:
             lhs_tokens = tokens[:assign_idx-1]  # Exclude the operator before =
         else:
-            lhs_tokens = tokens[:assign_idx]
+            lhs_tokens = tokens[:assign_idx]  # For single-token compound assignments
         
         # Check if this is a property access (e.g., obj.property or obj["key"])
         target_expr = None
@@ -1207,9 +1220,9 @@ class ContextStackParser:
         value_tokens = []
         stop_types = {SEMICOLON}  # RBRACE removed - handle with nesting instead
         statement_starters = {
-            LET, CONST, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, ACTION, TRY, EXTERNAL,
+            LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, TRY, FINALLY, EXTERNAL,
             SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
-            EXPORT, USE, DEBUG, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE,
+            EXPORT, USE, DEBUG, ENTITY, CONTRACT, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE,
             BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT,
             REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
             PACKAGE, USING
@@ -2207,8 +2220,13 @@ class ContextStackParser:
             return self._parse_generic_statement_block(block_info, all_tokens)
 
     def _parse_generic_statement_block(self, block_info, all_tokens):
-        """Parse generic statement block - RETURNS ExpressionStatement"""
+        """Parse generic statement block - RETURNS ExpressionStatement or AssignmentExpression"""
         tokens = block_info['tokens']
+        # Check for compound assignment tokens (+=, -=, *=, /=, %=, **=)
+        _compound_types = {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+        for tok in tokens:
+            if tok.type in _compound_types or tok.type == ASSIGN:
+                return self._parse_assignment_statement(block_info, all_tokens)
         expression = self._parse_expression(tokens)
         if expression:
             return ExpressionStatement(expression)
@@ -2225,11 +2243,13 @@ class ContextStackParser:
         try_block = self._parse_try_block(tokens)
         error_var = self._extract_catch_variable(tokens)
         catch_block = self._parse_catch_block(tokens)
+        finally_block = self._parse_finally_block(tokens)
 
         return TryCatchStatement(
             try_block=try_block,
             error_variable=error_var,
-            catch_block=catch_block
+            catch_block=catch_block,
+            finally_block=finally_block
         )
 
     def _parse_try_block(self, tokens):
@@ -2295,6 +2315,35 @@ class ContextStackParser:
 
         parser_debug("  ⚠️ [Catch] Could not find catch block content")
         return BlockStatement()
+
+    def _parse_finally_block(self, tokens):
+        """Parse the finally block from tokens, if present. Returns BlockStatement or None."""
+        finally_start = -1
+        finally_end = -1
+        brace_count = 0
+        in_finally = False
+
+        for i, token in enumerate(tokens):
+            if token.type == FINALLY:
+                in_finally = True
+            elif in_finally and token.type == LBRACE:
+                if brace_count == 0:
+                    finally_start = i + 1
+                brace_count += 1
+            elif in_finally and token.type == RBRACE:
+                brace_count -= 1
+                if brace_count == 0:
+                    finally_end = i
+                    break
+
+        if finally_start != -1 and finally_end != -1 and finally_end > finally_start:
+            finally_tokens = tokens[finally_start:finally_end]
+            finally_block_statements = self._parse_block_statements(finally_tokens)
+            block = BlockStatement()
+            block.statements = finally_block_statements
+            return block
+
+        return None
 
     def _parse_block_statements(self, tokens):
         """Parse statements from a block of tokens"""
@@ -2510,7 +2559,7 @@ class ContextStackParser:
                                 prev_tok = tokens[j-1] if j > 0 else None
                                 is_method_call_continuation = prev_tok and prev_tok.type == DOT
                                 is_expression_continuation = prev_tok and prev_tok.type in {
-                                    PLUS, MINUS, STAR, SLASH, MOD,  # Arithmetic operators
+                                    PLUS, MINUS, STAR, SLASH, MOD, POWER,  # Arithmetic operators
                                     EQ, NOT_EQ, LT, GT, LTE, GTE,    # Comparison operators
                                     AND, OR,                          # Logical operators
                                     COMMA,                            # List separator
@@ -4726,7 +4775,7 @@ class ContextStackParser:
                 continue
 
             # Binary operators (comparisons and arithmetic - but NOT AND/OR which are handled above)
-            if t.type in {PLUS, MINUS, ASTERISK, SLASH, MOD,
+            if t.type in {PLUS, MINUS, ASTERISK, SLASH, MOD, POWER,
                          LT, GT, EQ, NOT_EQ, LTE, GTE}:
                 # Get operator precedence
                 op_precedence = self._get_operator_precedence(t.type)
@@ -4752,7 +4801,7 @@ class ContextStackParser:
                             break
                     
                     # If we're not nested and we hit an operator with same or lower precedence, stop
-                    if depth == 0 and tt.type in {PLUS, MINUS, ASTERISK, SLASH, MOD, LT, GT, EQ, NOT_EQ, LTE, GTE}:
+                    if depth == 0 and tt.type in {PLUS, MINUS, ASTERISK, SLASH, MOD, POWER, LT, GT, EQ, NOT_EQ, LTE, GTE}:
                         next_precedence = self._get_operator_precedence(tt.type)
                         # For left-associative operators, stop if next has same or lower precedence
                         if next_precedence <= op_precedence:
@@ -4784,12 +4833,15 @@ class ContextStackParser:
         Higher numbers = higher precedence (evaluated first)
         """
         # Precedence levels (matching parser.py conventions)
+        POWER_PREC = 10  # ** (exponentiation)
         PRODUCT = 9   # *, /, %
         SUM = 8       # +, -
         COMPARISON = 7  # <, >, <=, >=
         EQUALITY = 6    # ==, !=
         
-        if token_type in {ASTERISK, SLASH, MOD}:
+        if token_type == POWER:
+            return POWER_PREC
+        elif token_type in {ASTERISK, SLASH, MOD}:
             return PRODUCT
         elif token_type in {PLUS, MINUS}:
             return SUM
@@ -4804,6 +4856,21 @@ class ContextStackParser:
         """Parse a single token into an expression"""
         if token.type == STRING:
             return StringLiteral(token.literal)
+        elif token.type == INTERP_STRING:
+            # Interpolated string — delegate to sub-parser for each expr part
+            from ..lexer import Lexer as _Lexer
+            raw_parts = token.literal  # list of ("str", text) | ("expr", source)
+            parsed_parts = []
+            for part_type, part_value in raw_parts:
+                if part_type == "str":
+                    parsed_parts.append(("str", part_value))
+                elif part_type == "expr":
+                    sub_lexer = _Lexer(part_value)
+                    from .parser import Parser as _Parser, LOWEST as _LOWEST
+                    sub_parser = _Parser(sub_lexer)
+                    expr_node = sub_parser.parse_expression(_LOWEST)
+                    parsed_parts.append(("expr", expr_node if expr_node else StringLiteral("")))
+            return StringInterpolationExpression(parts=parsed_parts)
         elif token.type == INT:
             try:
                 return IntegerLiteral(int(token.literal))
@@ -6277,11 +6344,12 @@ class ContextStackParser:
                 return statements[0]  # Return the first (and likely only) statement
             return None
         
-        # Check if this is an assignment statement (identifier = value OR property.access = value)
-        # Look for ASSIGN token anywhere in the statement
+        # Check if this is an assignment statement (identifier = value, +=, -=, *=, /=, %=, **=)
+        # Look for ASSIGN or compound assignment token anywhere in the statement
+        _compound_types = {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
         assign_idx = None
         for i, tok in enumerate(tokens):
-            if tok.type == ASSIGN:
+            if tok.type == ASSIGN or tok.type in _compound_types:
                 assign_idx = i
                 break
         
