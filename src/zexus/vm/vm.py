@@ -1967,11 +1967,114 @@ class VM:
                             stack_append(getattr(obj, attr_name, None))
                     except Exception:
                         stack_append(None)
+            elif op_name == "DEFINE_CONTRACT":
+                contract_obj = self._build_smart_contract(operand, stack, stack_pop, const, env)
+                stack_append(contract_obj)
             else:
                 # Fallback to async path for unsupported ops
                 return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
         
         return stack_pop() if stack else None
+
+    def _build_smart_contract(self, operand, stack, stack_pop, const, env):
+        """Create a real SmartContract from DEFINE_CONTRACT bytecode.
+
+        This mirrors the interpreter's eval_contract_statement logic:
+        1. Pop evaluated storage initial values from the stack
+        2. Create Action objects from the AST action nodes
+        3. Construct a SmartContract with proper storage, deploy lifecycle
+        4. Run the constructor if one exists
+        """
+        from ..environment import Environment
+        from ..object import Action, Null, Map, String, Integer
+        from ..security import SmartContract
+
+        # Unpack operand: (ast_constant_index, storage_var_count)
+        if isinstance(operand, tuple):
+            ast_idx, storage_count = operand
+        else:
+            # Legacy single-int operand — treat as member_count with no AST
+            ast_idx = None
+            storage_count = operand or 0
+
+        # Pop contract name (pushed last, popped first)
+        contract_name_raw = stack_pop()
+        contract_name = contract_name_raw.value if hasattr(contract_name_raw, 'value') else str(contract_name_raw)
+
+        # Pop storage values (name, value pairs) in reverse push order
+        storage = {}
+        for _ in range(storage_count):
+            raw_val = stack_pop()
+            raw_name = stack_pop()
+            var_name = raw_name.value if hasattr(raw_name, 'value') else str(raw_name)
+            storage[var_name] = self._wrap_for_builtin(raw_val)
+
+        # Retrieve the AST node from the constants pool
+        ast_node = const(ast_idx) if ast_idx is not None else None
+        if ast_node is None:
+            # Can't build a proper contract without the AST — return a Map fallback
+            return ZMap({})
+
+        # Build a bridge Environment so Action closures can resolve outer vars
+        bridge_env = Environment()
+        if isinstance(env, dict):
+            for k, v in env.items():
+                bridge_env.set(k, self._wrap_for_builtin(v))
+        elif hasattr(env, 'items'):
+            for k, v in env.items():
+                bridge_env.set(k, self._wrap_for_builtin(v))
+
+        # Create Action objects from AST action nodes
+        actions = {}
+        for act in getattr(ast_node, 'actions', []):
+            act_name = act.name.value if hasattr(act.name, 'value') else str(act.name)
+            action_obj = Action(act.parameters, act.body, bridge_env)
+            actions[act_name] = action_obj
+
+        # Retrieve storage_vars AST nodes for SmartContract metadata
+        storage_vars = getattr(ast_node, 'storage_vars', [])
+
+        # Create the real SmartContract
+        contract = SmartContract(contract_name, storage_vars, actions)
+        contract.deploy(evaluated_storage_values=storage)
+
+        # Run constructor if present
+        if 'constructor' in actions:
+            constructor = actions['constructor']
+            contract_env = Environment(outer=bridge_env)
+
+            # Set up TX context
+            import time as _time
+            tx_context = Map({
+                String("caller"): String("system"),
+                String("timestamp"): Integer(int(_time.time())),
+            })
+            contract_env.set("TX", tx_context)
+
+            # Pre-populate environment with storage variables
+            for sv in storage_vars:
+                var_name = sv.name.value if hasattr(sv.name, 'value') else str(getattr(sv, 'name', ''))
+                initial_val = contract.storage.get(var_name)
+                if initial_val is not None:
+                    contract_env.set(var_name, initial_val)
+
+            # Execute constructor body via the evaluator
+            try:
+                from ..evaluator.core import Evaluator
+                if self._action_evaluator is None:
+                    self._action_evaluator = Evaluator(use_vm=False)
+                self._action_evaluator.eval_node(constructor.body, contract_env, [])
+            except Exception:
+                pass  # Constructor errors are non-fatal for contract creation
+
+            # Sync modified variables back to storage
+            for sv in storage_vars:
+                var_name = sv.name.value if hasattr(sv.name, 'value') else str(getattr(sv, 'name', ''))
+                val = contract_env.get(var_name)
+                if val is not None:
+                    contract.storage.set(var_name, val)
+
+        return contract
 
     def _invoke_callable_sync(self, fn, args):
         """Synchronous callable invocation for fast dispatch."""
@@ -3856,16 +3959,12 @@ class VM:
                         raise ZEvaluationError(f"Requirement failed: {message}")
     
                 elif op_name == "DEFINE_CONTRACT":
-                    member_count = operand
-                    members = {}
-                    for _ in range(member_count):
-                        key_obj = stack.pop() if stack else None
-                        val_obj = stack.pop() if stack else None
-                        key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
-                        members[key_str] = val_obj
-                    
-                    name_obj = stack.pop() if stack else None
-                    stack.append(ZMap(members))
+                    contract_obj = self._build_smart_contract(
+                        operand, stack, lambda: stack.pop() if stack else None,
+                        lambda idx: consts[idx] if isinstance(idx, int) and 0 <= idx < len(consts) else idx,
+                        self.env
+                    )
+                    stack.append(contract_obj)
     
                 elif op_name == "DEFINE_ENTITY":
                     member_count = operand

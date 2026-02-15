@@ -721,16 +721,48 @@ class BytecodeCompiler:
 
     
     def _compile_ContractStatement(self, node):
-        """Contract compilation requires interpreter for full SmartContract lifecycle.
-        
-        Contracts need: SmartContract objects, ContractStorage, deploy lifecycle,
-        this-binding, action environment setup, and storage sync — none of which
-        the VM currently implements.  Signal unsupported to trigger interpreter fallback.
+        """Compile smart contract definition into bytecode that creates a real
+        SmartContract object at runtime.
+
+        Stack layout at DEFINE_CONTRACT execution (top → bottom):
+            contract_name
+            value_N, name_N   ← last storage var
+            ...
+            value_1, name_1   ← first storage var
+
+        The AST node is stored in the constants pool so the VM can create
+        Action objects (which hold the AST body + closure environment) and
+        access storage_vars metadata for SmartContract construction.
         """
-        raise UnsupportedNodeError(
-            "ContractStatement",
-            "Contract declarations require the interpreter for full SmartContract lifecycle support"
-        )
+        contract_name = node.name.value
+
+        # Store the full AST node in constants so the VM has access to
+        # action definitions (parameters, body) and storage_vars metadata.
+        ast_idx = self._add_constant(node)
+
+        # Compile storage initial values to bytecode.
+        # Each var pushes (name, value) onto the stack.
+        storage_vars = getattr(node, 'storage_vars', [])
+        for sv in storage_vars:
+            # Push var name
+            var_name = sv.name.value if hasattr(sv, 'name') and hasattr(sv.name, 'value') else str(getattr(sv, 'name', ''))
+            self._emit(Opcode.LOAD_CONST, self._add_constant(var_name))
+            # Push initial value (or None)
+            if getattr(sv, 'initial_value', None):
+                self._compile_node(sv.initial_value)
+            else:
+                self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+
+        # Push contract name
+        name_idx = self._add_constant(contract_name)
+        self._emit(Opcode.LOAD_CONST, name_idx)
+
+        # Emit DEFINE_CONTRACT with (ast_idx, storage_count) so the VM can
+        # reconstruct the full SmartContract.
+        self._emit(Opcode.DEFINE_CONTRACT, (ast_idx, len(storage_vars)))
+
+        # Store the contract in the environment
+        self._emit(Opcode.STORE_NAME, name_idx)
 
     def _compile_BreakStatement(self, node):
         """Compile break statement"""
