@@ -449,7 +449,55 @@ def create_stdlib_module(module_name, evaluator=None):
         env.set("validate_address", Builtin(_blockchain_validate_address))
         env.set("calculate_merkle_root", Builtin(_blockchain_calculate_merkle_root))
         env.set("create_genesis_block", Builtin(_blockchain_create_genesis_block))
-    
+
+    elif module_name == "websocket" or module_name == "stdlib/websocket":
+        try:
+            from .stdlib.websockets import WebSocketModule
+        except ImportError:
+            return env  # websockets package not installed
+
+        def _ws_create_server(*args):
+            if len(args) < 3:
+                return EvaluationError("ws_create_server() requires 3 args: host, port, handler")
+            host = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            port = int(args[1].value if hasattr(args[1], 'value') else args[1])
+            handler = args[2]  # Zexus Action/Builtin — caller wraps
+            path = args[3].value if len(args) > 3 and hasattr(args[3], 'value') else None
+            try:
+                server = WebSocketModule.create_server(host, port, handler, path)
+                server.start()
+                stop_fn = Builtin(lambda *_a: (server.stop(), Boolean(True))[1])
+                is_running_fn = Builtin(lambda *_a: Boolean(server.is_running()))
+                return Map({
+                    String("stop"): stop_fn,
+                    String("is_running"): is_running_fn,
+                })
+            except Exception as e:
+                return EvaluationError(f"ws_create_server error: {e}")
+
+        def _ws_connect(*args):
+            if len(args) < 1:
+                return EvaluationError("ws_connect() requires 1 arg: url")
+            url = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            timeout = float(args[1].value if len(args) > 1 and hasattr(args[1], 'value') else 10)
+            try:
+                client = WebSocketModule.connect(url, timeout)
+                send_fn = Builtin(lambda *a: (client.send(a[0].value if hasattr(a[0], 'value') else str(a[0])), Boolean(True))[1])
+                recv_fn = Builtin(lambda *a: String(client.receive(float(a[0].value) if a else 30)))
+                close_fn = Builtin(lambda *_a: (client.close(), Boolean(True))[1])
+                connected_fn = Builtin(lambda *_a: Boolean(client.is_connected()))
+                return Map({
+                    String("send"): send_fn,
+                    String("receive"): recv_fn,
+                    String("close"): close_fn,
+                    String("is_connected"): connected_fn,
+                })
+            except Exception as e:
+                return EvaluationError(f"ws_connect error: {e}")
+
+        env.set("create_server", Builtin(_ws_create_server))
+        env.set("connect", Builtin(_ws_connect))
+
     return env
 
 
@@ -485,7 +533,7 @@ def _zexus_to_python(obj):
 
 def is_stdlib_module(module_name):
     """Check if a module name refers to a stdlib module."""
-    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain', 'perf']
+    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain', 'perf', 'websocket']
     
     # Handle both "fs" and "stdlib/fs" formats
     if module_name in stdlib_modules:

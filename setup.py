@@ -116,6 +116,11 @@ setup(
             'llvmlite>=0.41.0',
             'Cython>=0.29',
         ],
+        'network': [
+            'websockets>=12.0',
+            'aiohttp>=3.9',
+            'httpx>=0.27',
+        ],
     },
     entry_points={
         'console_scripts': [

@@ -1395,9 +1395,37 @@ class StatementEvaluatorMixin:
         normalized_path = normalize_path(file_path)
 
         # 2. Check Cache
-        module_env = get_cached_module(normalized_path)
-        if isinstance(module_env, tuple):
-            module_env = module_env[0] if module_env else None
+        module_env = None
+        cached_bytecode = None
+        cached_ast = None
+        _cache_entry = get_cached_module(normalized_path)
+        if isinstance(_cache_entry, tuple) and _cache_entry:
+            module_env, cached_bytecode, cached_ast = _cache_entry
+
+        # 2a. Handle pre-compiled but not-yet-evaluated modules
+        if module_env and getattr(module_env, '_precompiled', False):
+            module_env._precompiled = False  # Clear flag to prevent re-entrant eval
+            if cached_bytecode is not None:
+                # Execute pre-compiled bytecode into module env (fastest)
+                try:
+                    self._execute_bytecode_sequence(
+                        cached_bytecode if isinstance(cached_bytecode, (list, tuple)) else [cached_bytecode],
+                        module_env, debug_mode=False)
+                    cache_module(normalized_path, module_env, cached_bytecode, cached_ast)
+                    debug_log("  Pre-compiled module bytecode executed:", file_path)
+                except Exception:
+                    # Bytecode execution failed — fall through to AST eval
+                    module_env._precompiled = True
+                    module_env = None
+            elif cached_ast is not None:
+                # Fall back to evaluating pre-parsed AST
+                try:
+                    self.eval_node(cached_ast, module_env)
+                    cache_module(normalized_path, module_env, None, cached_ast)
+                    debug_log("  Pre-compiled module AST evaluated:", file_path)
+                except Exception:
+                    module_env._precompiled = True
+                    module_env = None
 
         # 3. Load if not cached
         if not module_env:
@@ -1415,8 +1443,31 @@ class StatementEvaluatorMixin:
                 try:
                     cached = get_cached_module(normalize_path(candidate))
                     if cached:
-                        module_env, _, _ = cached
-                        break
+                        _env, _bc, _ast = cached
+                        if getattr(_env, '_precompiled', False):
+                            # Pre-compiled but not evaluated — try executing
+                            _env._precompiled = False
+                            if _bc is not None:
+                                try:
+                                    self._execute_bytecode_sequence(
+                                        _bc if isinstance(_bc, (list, tuple)) else [_bc],
+                                        _env, debug_mode=False)
+                                    cache_module(normalize_path(candidate), _env, _bc, _ast)
+                                    module_env = _env
+                                    break
+                                except Exception:
+                                    _env._precompiled = True
+                            elif _ast is not None:
+                                try:
+                                    self.eval_node(_ast, _env)
+                                    cache_module(normalize_path(candidate), _env, None, _ast)
+                                    module_env = _env
+                                    break
+                                except Exception:
+                                    _env._precompiled = True
+                        else:
+                            module_env = _env
+                            break
                 except Exception:
                     continue
 

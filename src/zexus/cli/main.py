@@ -335,8 +335,10 @@ def _execute_inline_code(ctx, source_code):
 @click.option('--vm-mode', type=click.Choice(['auto', 'stack', 'register', 'parallel']),
               default='auto', help='VM execution mode (auto=best performance)')
 @click.option('--no-optimize', is_flag=True, default=False, help='Disable bytecode optimizations')
+@click.option('--precompile-modules', is_flag=True, default=False,
+              help='Pre-parse and cache all imported modules before execution')
 @click.pass_context
-def run(ctx, file, args, use_vm, vm_mode, no_optimize):
+def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
     """Run a Zexus program with hybrid execution"""
     # Register source for error reporting
     error_reporter = get_error_reporter()
@@ -358,6 +360,8 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
                 vm_mode = str(file_flags.get('vm_mode')).lower()
             if 'no_optimize' in file_flags:
                 no_optimize = bool(file_flags.get('no_optimize'))
+            if 'precompile_modules' in file_flags:
+                precompile_modules = bool(file_flags.get('precompile_modules'))
             if 'syntax_style' in file_flags:
                 ctx.obj['SYNTAX_STYLE'] = str(file_flags.get('syntax_style'))
             if 'advanced_parsing' in file_flags:
@@ -424,6 +428,21 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize):
             for error in parser.errors:
                 console.print(f"  ❌ {error}")
             sys.exit(1)
+
+        # Pre-compile imported modules (parse + optional bytecode) before execution
+        if precompile_modules:
+            console.print("[dim]Pre-compiling imported modules...[/dim]", end="")
+            try:
+                from ..module_cache import precompile_modules as _precompile
+                import os as _os
+                _abs = _os.path.abspath(file)
+                precompiled = _precompile(program, _abs, compile_bytecode=use_vm)
+                if precompiled:
+                    console.print(f" [green]done[/green] ({len(precompiled)} module(s) cached)")
+                else:
+                    console.print(" [green]done[/green] (no external modules)")
+            except Exception as e:
+                console.print(f" [yellow]warning:[/yellow] {e}")
 
         # Use the evaluator package
         env = Environment()

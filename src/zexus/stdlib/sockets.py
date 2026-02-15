@@ -1,9 +1,50 @@
-"""Socket/TCP primitives module for Zexus standard library."""
+"""Socket/TCP primitives module for Zexus standard library.
 
+Uses ``asyncio`` for non-blocking I/O instead of one-thread-per-connection.
+A background event-loop thread is shared across all sockets so callers that
+aren't themselves running inside an asyncio loop get synchronous-looking
+wrappers automatically.
+"""
+
+import asyncio
 import socket
 import threading
 import time
 from typing import Callable, Optional, Dict, Any
+
+
+# ---------------------------------------------------------------------------
+# Shared background event loop (lazily created, one per interpreter)
+# ---------------------------------------------------------------------------
+_BG_LOOP: Optional[asyncio.AbstractEventLoop] = None
+_BG_LOOP_LOCK = threading.Lock()
+
+
+def _get_bg_loop() -> asyncio.AbstractEventLoop:
+    """Return the shared background asyncio event loop, starting it if needed."""
+    global _BG_LOOP
+    if _BG_LOOP is not None and _BG_LOOP.is_running():
+        return _BG_LOOP
+    with _BG_LOOP_LOCK:
+        if _BG_LOOP is not None and _BG_LOOP.is_running():
+            return _BG_LOOP
+        loop = asyncio.new_event_loop()
+
+        def _run(l: asyncio.AbstractEventLoop):
+            asyncio.set_event_loop(l)
+            l.run_forever()
+
+        t = threading.Thread(target=_run, args=(loop,), daemon=True)
+        t.start()
+        _BG_LOOP = loop
+        return loop
+
+
+def _run_async(coro, timeout=10):
+    """Submit *coro* to the background loop and block until it finishes."""
+    loop = _get_bg_loop()
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=timeout)
 
 
 class SocketModule:
@@ -40,214 +81,217 @@ class SocketModule:
 
 
 class TCPServer:
-    """TCP server that accepts connections and handles them with a callback."""
-    
+    """TCP server backed by ``asyncio.start_server``."""
+
     def __init__(self, host: str, port: int, handler: Callable, backlog: int = 5):
         self.host = host
         self.port = port
         self.handler = handler
         self.backlog = backlog
-        self.socket: Optional[socket.socket] = None
         self.running = False
-        self.thread: Optional[threading.Thread] = None
-    
+        self._server: Optional[asyncio.AbstractServer] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
     def start(self) -> None:
-        """Start the server in a background thread."""
+        """Start the server on the background event loop."""
         if self.running:
             raise RuntimeError("Server is already running")
-        
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(self.backlog)
+        self._loop = _get_bg_loop()
+        _run_async(self._async_start())
+
+    def stop(self) -> None:
+        """Gracefully stop the server."""
+        if not self.running:
+            return
+        self.running = False
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(self._async_stop(), self._loop).result(timeout=5)
+
+    def is_running(self) -> bool:
+        return self.running
+
+    def get_address(self) -> Dict[str, Any]:
+        return {'host': self.host, 'port': self.port, 'running': self.running}
+
+    # -- async internals ----------------------------------------------------
+
+    async def _async_start(self):
+        server = await asyncio.start_server(
+            self._async_handle,
+            self.host,
+            self.port,
+            backlog=self.backlog,
+            reuse_address=True,
+        )
+        self._server = server
         self.running = True
+
+    async def _async_stop(self):
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+        self.running = False
+
+    async def _async_handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        """Handle a single incoming connection.
         
-        # Start accept loop in background thread
-        self.thread = threading.Thread(target=self._accept_loop, daemon=True)
-        self.thread.start()
-    
-    def _accept_loop(self):
-        """Accept connections and spawn handler threads."""
-        while self.running:
-            try:
-                self.socket.settimeout(1.0)  # Allow checking self.running
-                client_socket, address = self.socket.accept()
-                
-                # Spawn handler in new thread
-                handler_thread = threading.Thread(
-                    target=self._handle_connection,
-                    args=(client_socket, address),
-                    daemon=True
-                )
-                handler_thread.start()
-                
-            except socket.timeout:
-                continue
-            except Exception as e:
-                if self.running:  # Only log if we're not shutting down
-                    print(f"Server accept error: {e}")
-                break
-    
-    def _handle_connection(self, client_socket: socket.socket, address: tuple):
-        """Handle a single client connection."""
+        The user-supplied handler is synchronous (Zexus Action), so we run it
+        in a thread executor.  This avoids the send/receive → _run_async
+        deadlock because the handler thread is NOT the event-loop thread.
+        """
+        addr = writer.get_extra_info('peername') or ('unknown', 0)
+        conn = TCPConnection._from_streams(reader, writer, addr[0], addr[1])
+        loop = asyncio.get_running_loop()
         try:
-            connection = TCPConnection.from_socket(client_socket, address)
-            self.handler(connection)
+            await loop.run_in_executor(None, self.handler, conn)
         except Exception as e:
             print(f"Connection handler error: {e}")
         finally:
+            # Ensure connection is marked closed (handler may have already closed it)
+            conn.connected = False
             try:
-                client_socket.close()
-            except:
+                if not writer.is_closing():
+                    writer.close()
+            except Exception:
                 pass
-    
-    def stop(self) -> None:
-        """Stop the server."""
-        self.running = False
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
-        if self.thread:
-            self.thread.join(timeout=2.0)
-    
-    def is_running(self) -> bool:
-        """Check if server is running."""
-        return self.running
-    
-    def get_address(self) -> Dict[str, Any]:
-        """Get server address info."""
-        return {
-            'host': self.host,
-            'port': self.port,
-            'running': self.running
-        }
 
 
 class TCPConnection:
-    """Represents a TCP connection (client or server-side)."""
-    
+    """TCP connection using asyncio streams.
+
+    All public methods are **synchronous** (for Zexus evaluator compat)
+    but internally schedule asyncio coroutines on the background loop.
+    """
+
     def __init__(self, host: str, port: int, timeout: float = 5.0):
-        """Create a new client connection."""
+        """Create a new client connection (blocking)."""
         self.host = host
         self.port = port
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(timeout)
-        self.socket.connect((host, port))
+        self.connected = False
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._loop = _get_bg_loop()
+
+        async def _open():
+            return await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=timeout)
+
+        self._reader, self._writer = _run_async(_open())
         self.connected = True
-    
+
     @classmethod
-    def from_socket(cls, sock: socket.socket, address: tuple):
-        """Create TCPConnection from existing socket (for server-side)."""
+    def _from_streams(cls, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                      host: str, port: int) -> 'TCPConnection':
+        """Wrap existing asyncio streams (used by TCPServer for accepted conns)."""
         conn = cls.__new__(cls)
-        conn.socket = sock
-        conn.host = address[0]
-        conn.port = address[1]
+        conn.host = host
+        conn.port = port
+        conn._reader = reader
+        conn._writer = writer
+        conn._loop = _get_bg_loop()
         conn.connected = True
         return conn
-    
-    def send(self, data: bytes) -> int:
-        """Send data over the connection.
-        
-        Args:
-            data: Bytes to send
-            
-        Returns:
-            Number of bytes sent
-        """
-        if not self.connected:
-            raise RuntimeError("Connection is closed")
-        return self.socket.sendall(data) or len(data)
-    
-    def send_string(self, text: str, encoding: str = 'utf-8') -> int:
-        """Send string over the connection.
-        
-        Args:
-            text: String to send
-            encoding: Text encoding
-            
-        Returns:
-            Number of bytes sent
-        """
-        return self.send(text.encode(encoding))
-    
-    def receive(self, buffer_size: int = 4096) -> bytes:
-        """Receive data from the connection.
-        
-        Args:
-            buffer_size: Maximum bytes to receive
-            
-        Returns:
-            Received bytes (empty if connection closed)
-        """
-        if not self.connected:
-            raise RuntimeError("Connection is closed")
-        
+
+    @classmethod
+    def from_socket(cls, sock: socket.socket, address: tuple) -> 'TCPConnection':
+        """Create from a raw socket (backward-compat shim)."""
+        conn = cls.__new__(cls)
+        conn.host = address[0]
+        conn.port = address[1]
+        conn._reader = None
+        conn._writer = None
+        conn._loop = _get_bg_loop()
+        conn.connected = True
+        conn._raw_sock = sock
+
+        async def _wrap():
+            return await asyncio.open_connection(sock=sock)
+
         try:
-            data = self.socket.recv(buffer_size)
-            if not data:
-                self.connected = False
-            return data
-        except socket.timeout:
-            return b''
-    
+            conn._reader, conn._writer = _run_async(_wrap())
+        except Exception:
+            pass
+        return conn
+
+    # -- send ---------------------------------------------------------------
+
+    def send(self, data: bytes) -> int:
+        if not self.connected:
+            raise RuntimeError("Connection is closed")
+
+        async def _send():
+            self._writer.write(data)
+            await self._writer.drain()
+
+        _run_async(_send())
+        return len(data)
+
+    def send_string(self, text: str, encoding: str = 'utf-8') -> int:
+        return self.send(text.encode(encoding))
+
+    # -- receive ------------------------------------------------------------
+
+    def receive(self, buffer_size: int = 4096) -> bytes:
+        if not self.connected:
+            raise RuntimeError("Connection is closed")
+
+        async def _recv():
+            try:
+                return await asyncio.wait_for(self._reader.read(buffer_size), timeout=5.0)
+            except asyncio.TimeoutError:
+                return b''
+
+        data = _run_async(_recv())
+        if not data:
+            self.connected = False
+        return data
+
     def receive_string(self, buffer_size: int = 4096, encoding: str = 'utf-8') -> str:
-        """Receive string from the connection.
-        
-        Args:
-            buffer_size: Maximum bytes to receive
-            encoding: Text encoding
-            
-        Returns:
-            Received string
-        """
         data = self.receive(buffer_size)
         return data.decode(encoding) if data else ''
-    
+
     def receive_all(self, timeout: float = 5.0) -> bytes:
-        """Receive all available data until connection closes or timeout.
-        
-        Args:
-            timeout: Maximum time to wait
-            
-        Returns:
-            All received bytes
-        """
-        chunks = []
-        start_time = time.time()
-        self.socket.settimeout(0.1)  # Small timeout for checking
-        
-        while time.time() - start_time < timeout:
+        async def _recv_all():
+            chunks = []
             try:
-                chunk = self.socket.recv(4096)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            except socket.timeout:
-                if chunks:  # If we got some data, we're done
-                    break
-                continue
-        
-        return b''.join(chunks)
-    
-    def close(self) -> None:
-        """Close the connection."""
-        if self.connected:
-            try:
-                self.socket.close()
-            except:
+                while True:
+                    chunk = await asyncio.wait_for(self._reader.read(4096), timeout=0.1)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+            except asyncio.TimeoutError:
                 pass
-            self.connected = False
-    
+            return b''.join(chunks)
+
+        return _run_async(_recv_all())
+
+    # -- close --------------------------------------------------------------
+
+    def close(self) -> None:
+        if not self.connected:
+            return
+        self.connected = False
+        if self._writer:
+            try:
+                async def _close():
+                    if not self._writer.is_closing():
+                        self._writer.close()
+                        try:
+                            await asyncio.wait_for(self._writer.wait_closed(), timeout=2.0)
+                        except (asyncio.TimeoutError, Exception):
+                            pass
+                _run_async(_close(), timeout=3)
+            except Exception:
+                pass
+        raw = getattr(self, '_raw_sock', None)
+        if raw:
+            try:
+                raw.close()
+            except Exception:
+                pass
+
     def is_connected(self) -> bool:
-        """Check if connection is still open."""
         return self.connected
-    
+
     def get_address(self) -> Dict[str, Any]:
-        """Get connection address info."""
-        return {
-            'host': self.host,
-            'port': self.port,
-            'connected': self.connected
-        }
+        return {'host': self.host, 'port': self.port, 'connected': self.connected}

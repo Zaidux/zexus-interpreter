@@ -6,8 +6,9 @@ re-parsing and re-evaluating modules that have already been loaded.
 """
 
 import os
+import hashlib
 import threading
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Any, Tuple, Set
 from .object import Environment
 
 # Module cache stores: (environment, bytecode, ast)
@@ -44,26 +45,6 @@ def list_cached_modules() -> list[str]:
     """Return a list of normalized module paths currently cached"""
     with _MODULE_CACHE_LOCK:
         return list(_MODULE_CACHE.keys())
-
-def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
-    """Get a cached contract AST by source hash"""
-    with _CONTRACT_AST_LOCK:
-        return _CONTRACT_AST_CACHE.get(source_hash)
-
-def cache_contract_ast(source_hash: str, ast: Any) -> None:
-    """Cache a parsed contract AST"""
-    with _CONTRACT_AST_LOCK:
-        _CONTRACT_AST_CACHE[source_hash] = ast
-
-def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
-    """Get a cached contract AST by source hash"""
-    with _CONTRACT_AST_LOCK:
-        return _CONTRACT_AST_CACHE.get(source_hash)
-
-def cache_contract_ast(source_hash: str, ast: Any) -> None:
-    """Cache a parsed contract AST"""
-    with _CONTRACT_AST_LOCK:
-        _CONTRACT_AST_CACHE[source_hash] = ast
 
 def get_cached_contract_ast(source_hash: str) -> Optional[Any]:
     """Get a cached contract AST by source hash"""
@@ -124,3 +105,161 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
 def normalize_path(path: str) -> str:
     """Normalize a path for consistent cache keys"""
     return os.path.abspath(os.path.expanduser(path))
+
+
+# ---------------------------------------------------------------------------
+# Module Pre-compilation
+# ---------------------------------------------------------------------------
+
+def _extract_import_paths(node) -> list:
+    """Recursively walk an AST and return all import file paths."""
+    from . import zexus_ast
+    paths = []
+    if isinstance(node, zexus_ast.Program):
+        for stmt in getattr(node, 'statements', []):
+            paths.extend(_extract_import_paths(stmt))
+    elif isinstance(node, zexus_ast.UseStatement):
+        fp = node.file_path
+        if hasattr(fp, 'value'):
+            fp = fp.value
+        if isinstance(fp, str):
+            paths.append(fp)
+    elif isinstance(node, zexus_ast.FromStatement):
+        fp = node.file_path
+        if hasattr(fp, 'value'):
+            fp = fp.value
+        if isinstance(fp, str):
+            paths.append(fp)
+    elif isinstance(node, (zexus_ast.BlockStatement,)):
+        for stmt in getattr(node, 'statements', []):
+            paths.extend(_extract_import_paths(stmt))
+    elif isinstance(node, zexus_ast.IfStatement):
+        paths.extend(_extract_import_paths(node.consequence))
+        if node.alternative:
+            paths.extend(_extract_import_paths(node.alternative))
+        for cond, body in getattr(node, 'elif_parts', []):
+            paths.extend(_extract_import_paths(body))
+    elif isinstance(node, (zexus_ast.WhileStatement, zexus_ast.ForEachStatement)):
+        paths.extend(_extract_import_paths(getattr(node, 'body', None) or getattr(node, 'block', None)))
+    elif isinstance(node, zexus_ast.FunctionStatement):
+        paths.extend(_extract_import_paths(getattr(node, 'body', None)))
+    elif isinstance(node, zexus_ast.ActionStatement):
+        paths.extend(_extract_import_paths(getattr(node, 'body', None)))
+    elif isinstance(node, zexus_ast.TryCatchStatement):
+        paths.extend(_extract_import_paths(getattr(node, 'try_body', None)))
+        paths.extend(_extract_import_paths(getattr(node, 'catch_body', None)))
+        if getattr(node, 'finally_body', None):
+            paths.extend(_extract_import_paths(node.finally_body))
+    return [p for p in paths if p]
+
+
+def precompile_modules(program, main_file: str, compile_bytecode: bool = True) -> dict:
+    """Pre-compile all imported modules before execution.
+    
+    Walks the AST of *program*, resolves every ``use`` / ``from`` import,
+    lexes + parses each module file, optionally compiles to bytecode, and
+    stores everything in the global ``_MODULE_CACHE``.  Processes modules
+    recursively so transitive dependencies are also cached.
+    
+    Args:
+        program: The parsed AST (Program node) of the main file.
+        main_file: Absolute path of the main source file.
+        compile_bytecode: If True, also compile each module to VM bytecode.
+    
+    Returns:
+        dict mapping normalised module path → (ast, bytecode_or_None).
+    """
+    from .lexer import Lexer
+    from .parser import Parser
+    from .stdlib_integration import is_stdlib_module
+    from .builtin_modules import is_builtin_module
+
+    compiler_mod = None
+    if compile_bytecode:
+        try:
+            from .vm.compiler import compile_ast_to_bytecode
+            compiler_mod = compile_ast_to_bytecode
+        except Exception:
+            compiler_mod = None
+
+    results: Dict[str, Any] = {}
+    visited: Set[str] = set()
+
+    def _resolve_and_cache(import_path: str, importer_file: str):
+        """Resolve a single import and cache it, then recurse."""
+        # Skip stdlib / builtin modules — they aren't file-based
+        if is_stdlib_module(import_path) or is_builtin_module(import_path):
+            return
+
+        candidates = get_module_candidates(import_path, importer_file)
+        resolved = None
+        for cand in candidates:
+            norm = normalize_path(cand)
+            if norm in visited:
+                return  # Already processed (or in progress — avoids cycles)
+            if os.path.isfile(cand):
+                resolved = cand
+                break
+
+        if resolved is None:
+            return  # Unresolvable — runtime will report the error
+
+        norm = normalize_path(resolved)
+        if norm in visited:
+            return
+        visited.add(norm)
+
+        # Already cached from a previous run?
+        cached = get_cached_module(norm)
+        if cached is not None:
+            results[norm] = (cached[2], cached[1])  # (ast, bytecode)
+            # Still recurse into dependencies of the cached module
+            if cached[2] is not None:
+                sub_paths = _extract_import_paths(cached[2])
+                for sp in sub_paths:
+                    _resolve_and_cache(sp, resolved)
+            return
+
+        # Read, lex, parse
+        try:
+            with open(resolved, 'r', encoding='utf-8') as f:
+                source = f.read()
+        except (OSError, IOError):
+            return
+
+        try:
+            lexer = Lexer(source, filename=resolved)
+            parser = Parser(lexer, 'universal', enable_advanced_strategies=True)
+            mod_ast = parser.parse_program()
+        except Exception:
+            return  # Parse failure — runtime will handle
+
+        # Optionally compile to bytecode
+        mod_bytecode = None
+        if compiler_mod is not None:
+            try:
+                mod_bytecode = compiler_mod(mod_ast, optimize=True)
+            except Exception:
+                pass  # Compilation failure is non-fatal; interpreter fallback
+
+        # Cache a placeholder env + ast + bytecode so runtime finds them.
+        # Mark the env as pre-compiled but not yet evaluated — the runtime
+        # will execute the bytecode/AST to populate it on first use.
+        mod_env = Environment()
+        mod_env.set("__file__", resolved)
+        mod_env.set("__MODULE__", os.path.splitext(os.path.basename(resolved))[0])
+        mod_env._precompiled = True  # Marker for eval_use_statement
+        cache_module(norm, mod_env, mod_bytecode, mod_ast)
+        results[norm] = (mod_ast, mod_bytecode)
+
+        # Recurse into sub-imports
+        sub_paths = _extract_import_paths(mod_ast)
+        for sp in sub_paths:
+            _resolve_and_cache(sp, resolved)
+
+    # Kick off from the main program's imports
+    import_paths = _extract_import_paths(program)
+    for ip in import_paths:
+        _resolve_and_cache(ip, main_file)
+
+    return results
