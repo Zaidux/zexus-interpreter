@@ -113,6 +113,9 @@
 - **C-level extensions** — `fastops.c`, `cabi.c` compiled to `.so` for critical paths
 - **Memory pool** and **register allocator** for VM-level optimizations
 - **Gas metering** for resource-bounded execution
+- **Dispatch table** — 113-entry direct dispatch (covers all AST node types, eliminates isinstance chains)
+- **Module pre-compilation** — `--precompile-modules` flag recursively lexes/parses/compiles imports before execution
+- **Module bytecode execution** — precompiled modules execute cached bytecode on first use
 
 ### Ecosystem & Tooling
 - **ZPM package manager** — init, install, uninstall, publish, search (4 built-in packages)
@@ -125,9 +128,10 @@
 
 ### I/O & Networking
 - **File system** — full CRUD with path traversal protection
-- **HTTP client** — GET/POST/PUT/DELETE with connection pooling, async variants
+- **HTTP client** — GET/POST/PUT/DELETE via `httpx` (connection pooling, true async) with `urllib` fallback
 - **HTTP server** — routing with GET/POST/PUT/DELETE handlers
-- **Socket/TCP** — low-level server/client creation
+- **TCP sockets** — asyncio-based server/client (`asyncio.start_server`/`open_connection`)
+- **WebSocket** — client/server module (`websocket` stdlib) with `create_server`/`connect`
 - **Database drivers** — SQLite, PostgreSQL, MySQL, MongoDB
 
 ### Concurrency & Async

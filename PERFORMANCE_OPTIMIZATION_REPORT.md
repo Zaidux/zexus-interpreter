@@ -516,9 +516,12 @@ System under heavy load (~2.5 load avg) so absolute numbers are inflated, but A/
 - `vfs_stats()` — file cache statistics
 - `vfs_clear_cache()` — flush file cache
 
-### Recommended Next Steps
+### Recommended Next Steps — ✅ ALL COMPLETED (2025-02-15)
 
-1. **Async TCP sockets** — Replace thread-per-connection TCP with `asyncio.start_server`
-2. **WebSocket support** — Adding a WebSocket client/server module
-3. **Extend eval_node dispatch table** further — cover remaining ~40 isinstance branches
-4. **aiohttp/httpx integration** — Replace urllib for true event-loop async HTTP
+1. ~~**Async TCP sockets**~~ ✅ — Rewrote `stdlib/sockets.py` from threading to `asyncio.start_server`/`open_connection` with shared background event loop
+2. ~~**WebSocket support**~~ ✅ — New `stdlib/websockets.py` module with `WebSocketServer`, `WebSocketClient`, `WebSocketConnection`; registered as `'websocket'` stdlib module
+3. ~~**Extend eval_node dispatch table**~~ ✅ — Expanded from 43 → 113 entries (73 new AST types covering security, blockchain, UI, concurrency, language features, expressions)
+4. ~~**aiohttp/httpx integration**~~ ✅ — Rewrote `stdlib/http.py` with `httpx` as primary backend (connection pooling, true async via `AsyncClient`), `urllib` fallback
+5. ~~**Module pre-compilation**~~ ✅ — `--precompile-modules` CLI flag, recursive import resolution, bytecode caching
+6. ~~**Contract AST cache cleanup**~~ ✅ — Removed duplicate definitions in `module_cache.py`
+7. ~~**Module bytecode execution**~~ ✅ — Precompiled modules execute cached bytecode on first use via `_precompiled` marker
