@@ -49,11 +49,11 @@ export contract ZexusToken {
         require(!paused, "Token is paused")
         require(amount > 0, "Amount must be positive")
 
-        let from_balance = balance_of(from_addr)
+        let from_balance = this.balance_of(from_addr)
         require(from_balance >= amount, "Insufficient balance")
 
         balances[from_addr] = from_balance - amount
-        let to_balance = balance_of(to_addr)
+        let to_balance = this.balance_of(to_addr)
         balances[to_addr] = to_balance + amount
 
         // Log the transfer
@@ -79,10 +79,10 @@ export contract ZexusToken {
     action transfer_from(spender, from_addr, to_addr, amount) {
         require(!paused, "Token is paused")
         require(amount > 0, "Amount must be positive")
-        let allowed = get_allowance(from_addr, spender)
+        let allowed = this.get_allowance(from_addr, spender)
         require(allowed >= amount, "Allowance exceeded")
 
-        let result = transfer(from_addr, to_addr, amount)
+        let result = this.transfer(from_addr, to_addr, amount)
         if result["success"] {
             let key = string(from_addr) + ":" + string(spender)
             allowances[key] = allowed - amount
@@ -93,7 +93,7 @@ export contract ZexusToken {
     action mint(to_addr, amount) {
         require(amount > 0, "Mint amount must be positive")
         total_supply = total_supply + amount
-        let current = balance_of(to_addr)
+        let current = this.balance_of(to_addr)
         balances[to_addr] = current + amount
 
         let record = {"type": "mint", "to": to_addr, "amount": amount}
@@ -104,7 +104,7 @@ export contract ZexusToken {
 
     action burn(from_addr, amount) {
         require(amount > 0, "Burn amount must be positive")
-        let bal = balance_of(from_addr)
+        let bal = this.balance_of(from_addr)
         require(bal >= amount, "Insufficient balance to burn")
         balances[from_addr] = bal - amount
         total_supply = total_supply - amount

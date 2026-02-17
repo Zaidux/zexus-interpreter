@@ -23,7 +23,7 @@ use "staking.zx"
 use "dex.zx"
 use "nft.zx"
 use "governance.zx"
-use "utils.zx" as utils
+use "utils.zx"
 
 // Crypto is available globally (keccak256, hash) and via module
 use "crypto" as crypto
@@ -35,17 +35,15 @@ print("  ZEXUS BLOCKCHAIN ECOSYSTEM — FULL INTEGRATION DEMO")
 print("=" * 80)
 print("")
 
-let total_tests = 0
-let passed_tests = 0
-let failed_tests = 0
+let stats = {"total": 0, "passed": 0, "failed": 0}
 
 action assert_test(name, condition) {
-    total_tests = total_tests + 1
+    stats["total"] = stats["total"] + 1
     if condition {
-        passed_tests = passed_tests + 1
+        stats["passed"] = stats["passed"] + 1
         print("  [PASS] " + string(name))
     } else {
-        failed_tests = failed_tests + 1
+        stats["failed"] = stats["failed"] + 1
         print("  [FAIL] " + string(name))
     }
 }
@@ -127,7 +125,7 @@ assert_test("Alice balance after send", token.balance_of("0xALICE") == 490000)
 assert_test("Bob balance after receive", token.balance_of("0xBOB") == 310000)
 
 // Wallet-based transfers
-let w1 = alice_wallet.send(token, "0xCHARLIE", 5000)
+let w1 = alice_wallet.send_tokens(token, "0xCHARLIE", 5000)
 assert_test("Wallet send Alice -> Charlie", w1["success"])
 assert_test("Charlie balance", token.balance_of("0xCHARLIE") == 205000)
 
@@ -325,46 +323,46 @@ print("-" * 80)
 print("")
 
 // Generate addresses
-let addr1 = utils.generate_address("alice_seed_phrase")
+let addr1 = generate_address("alice_seed_phrase")
 assert_test("Generated address", len(addr1) > 10)
 print("  Generated address: " + string(addr1))
 
-let addr2 = utils.generate_address("bob_seed_phrase")
+let addr2 = generate_address("bob_seed_phrase")
 assert_test("Two different addresses", addr1 != addr2)
 
 // Build a chain of blocks
-let chain = utils.build_chain(["Block 1 data", "Block 2 data", "Block 3 data"])
+let chain = build_chain(["Block 1 data", "Block 2 data", "Block 3 data"])
 assert_test("Chain has 4 blocks (genesis + 3)", len(chain) == 4)
 
 // Hash data
-let h1 = utils.hash_data("hello world")
-let h2 = utils.hash_data("hello world")
-let h3 = utils.hash_data("different data")
+let h1 = hash_data("hello world")
+let h2 = hash_data("hello world")
+let h3 = hash_data("different data")
 assert_test("Hash is deterministic", h1 == h2)
 assert_test("Different data -> different hash", h1 != h3)
 print("  keccak256('hello world') = " + string(h1))
 
 // Create and hash transactions
-let my_tx = utils.make_transaction("0xALICE", "0xBOB", 1000)
+let my_tx = make_transaction("0xALICE", "0xBOB", 1000)
 assert_test("Transaction created", my_tx["sender"] == "0xALICE")
 assert_test("Transaction has hash", my_tx["hash"] != null)
 print("  Transaction hash: " + string(my_tx["hash"]))
 
 // Compute merkle root
 let tx_hashes = [
-    utils.hash_data("tx1"),
-    utils.hash_data("tx2"),
-    utils.hash_data("tx3"),
-    utils.hash_data("tx4")
+    hash_data("tx1"),
+    hash_data("tx2"),
+    hash_data("tx3"),
+    hash_data("tx4")
 ]
-let merkle = utils.compute_merkle_root(tx_hashes)
+let merkle = compute_merkle_root(tx_hashes)
 assert_test("Merkle root computed", len(merkle) > 0)
 print("  Merkle root: " + string(merkle))
 
 // Mining (find nonce for difficulty 1)
 print("")
 print("  Mining a block (difficulty 1)...")
-let mine_result = utils.mine_block("test block data", 1)
+let mine_result = mine_block("test block data", 1)
 assert_test("Block mined", mine_result["hash"] != null)
 print("  Mined! Nonce: " + string(mine_result["nonce"]) + " Hash: " + string(mine_result["hash"]))
 
@@ -376,7 +374,7 @@ let sha_hash = hash("zexus blockchain", "SHA256")
 assert_test("Global hash() works", len(sha_hash) > 0)
 
 // Address validation
-let valid = utils.is_valid_address(addr1)
+let valid = is_valid_address(addr1)
 assert_test("Generated address is valid", valid)
 
 print("")
@@ -502,7 +500,7 @@ try {
 assert_test("Non-owner NFT transfer blocked", nft_fail)
 
 // Pause and try transfer
-token.pause_token()
+let pause_result = token.pause_token()
 let paused_transfer = false
 try {
     token.transfer("0xALICE", "0xBOB", 100)
@@ -512,7 +510,7 @@ try {
 assert_test("Transfer blocked while paused", paused_transfer)
 
 // Unpause and transfer succeeds
-token.unpause_token()
+let unpause_result = token.unpause_token()
 let unpause_tx = token.transfer("0xALICE", "0xBOB", 100)
 assert_test("Transfer works after unpause", unpause_tx["success"])
 
@@ -526,12 +524,12 @@ print("=" * 80)
 print("  FINAL RESULTS")
 print("=" * 80)
 print("")
-print("  Total tests:  " + string(total_tests))
-print("  Passed:       " + string(passed_tests))
-print("  Failed:       " + string(failed_tests))
+print("  Total tests:  " + string(stats["total"]))
+print("  Passed:       " + string(stats["passed"]))
+print("  Failed:       " + string(stats["failed"]))
 print("")
 
-if failed_tests == 0 {
+if stats["failed"] == 0 {
     print("  ALL TESTS PASSED!")
 } else {
     print("  SOME TESTS FAILED — see above for details.")

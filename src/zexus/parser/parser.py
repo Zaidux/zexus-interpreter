@@ -3096,9 +3096,8 @@ class UltimateParser:
         file_path = self.cur_token.literal
 
         alias = None
-        if self.peek_token_is(IDENT) and self.peek_token.literal == "as":
-            self.next_token()
-            self.next_token()
+        if self.peek_token_is(AS) or (self.peek_token_is(IDENT) and self.peek_token.literal == "as"):
+            self.next_token()  # consume 'as'
             if not self.expect_peek(IDENT):
                 self.errors.append("Expected alias name after 'as'")
                 return None

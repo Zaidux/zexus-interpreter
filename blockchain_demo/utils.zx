@@ -8,37 +8,31 @@ use "crypto" as crypto
 
 // ── Address generation ───────────────────────────────────────────────────
 
-action generate_address(seed) {
+export action generate_address(seed) {
     let pub_key = crypto.keccak256(seed)
     let address = bc.create_address(pub_key, "0x")
     return address
 }
 
-export generate_address
-
 // ── Simple Block helpers ─────────────────────────────────────────────────
 
-action build_block(index, data, previous_hash) {
+export action build_block(index, data, previous_hash) {
     let block = bc.create_block(index, 1700000000 + index, data, previous_hash, 0)
     return block
 }
 
-export build_block
-
 // ── Merkle root from a list of transaction hashes ────────────────────────
 
-action compute_merkle_root(tx_hashes) {
+export action compute_merkle_root(tx_hashes) {
     if len(tx_hashes) == 0 {
         return crypto.keccak256("empty")
     }
     return bc.calculate_merkle_root(tx_hashes)
 }
 
-export compute_merkle_root
-
 // ── Chain builder — creates a genesis + sequence of blocks ───────────────
 
-action build_chain(block_data_list) {
+export action build_chain(block_data_list) {
     let chain = []
     let genesis = bc.create_genesis_block()
     chain = chain + [genesis]
@@ -58,51 +52,35 @@ action build_chain(block_data_list) {
     return chain
 }
 
-export build_chain
-
 // ── Mining — find a nonce that satisfies the difficulty ──────────────────
 
-action mine_block(block_data, difficulty) {
+export action mine_block(block_data, difficulty) {
     let result = bc.proof_of_work(block_data, difficulty)
     return result
 }
 
-export mine_block
-
 // ── Validate the integrity of a list of blocks ──────────────────────────
 
-action is_chain_valid(chain) {
+export action is_chain_valid(chain) {
     let valid = bc.validate_chain(chain)
     return valid
 }
 
-export is_chain_valid
+// ── Hash data using crypto ──────────────────────────────────────────────
 
-// ── Hash any data ────────────────────────────────────────────────────────
-
-action hash_data(data) {
-    return crypto.keccak256(string(data))
+export action hash_data(data) {
+    return crypto.hash_sha256(string(data))
 }
 
-export hash_data
+// ── Create a simple transaction ─────────────────────────────────────────
 
-// ── Create and hash a transaction ────────────────────────────────────────
-
-action make_transaction(sender, recipient, amount) {
-    let tx_data = bc.create_transaction(sender, recipient, amount)
-    let tx_hash = bc.hash_transaction(tx_data)
-    tx_data["hash"] = tx_hash
-    return tx_data
+export action make_transaction(from_addr, to_addr, amount) {
+    let tx = bc.create_transaction(from_addr, to_addr, amount)
+    return tx
 }
 
-export make_transaction
+// ── Validate an address ─────────────────────────────────────────────────
 
-// ── Address validation ───────────────────────────────────────────────────
-
-action is_valid_address(address) {
-    return bc.validate_address(address, "0x")
+export action is_valid_address(address) {
+    return bc.validate_address(address)
 }
-
-export is_valid_address
-
-print("[UTILS] Blockchain utilities loaded")

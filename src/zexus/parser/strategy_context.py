@@ -2012,7 +2012,7 @@ class ContextStackParser:
         for i, token in enumerate(tokens):
             if token.type == STRING:
                 file_path = token.literal
-            elif token.type == IDENT and token.literal == 'as':
+            elif token.type == AS or (token.type == IDENT and token.literal == 'as'):
                 if i + 1 < len(tokens) and tokens[i + 1].type == IDENT:
                     alias = tokens[i + 1].literal
 

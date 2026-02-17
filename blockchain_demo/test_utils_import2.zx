@@ -1,0 +1,4 @@
+use "utils.zx"
+print("utils imported!")
+let addr = generate_address("test_seed")
+print("Address: " + string(addr))

@@ -1,0 +1,5 @@
+use "crypto" as crypto
+
+export action test_hash(data) {
+    return crypto.hash_sha256(string(data))
+}

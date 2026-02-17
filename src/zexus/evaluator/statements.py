@@ -1667,7 +1667,8 @@ class StatementEvaluatorMixin:
                 
         elif alias:
             # Handle: use "./file.zx" as alias
-            env.set(alias, module_env)
+            alias_name = alias.value if hasattr(alias, 'value') else str(alias)
+            env.set(alias_name, module_env)
         else:
             # Handle: use "./file.zx" (import all exports)
             try:

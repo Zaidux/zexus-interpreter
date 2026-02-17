@@ -36,7 +36,7 @@ export contract Wallet {
     }
 
     // ── Transaction management ───────────────────────────────────────
-    action send(token_contract, to_address, amount) {
+    action send_tokens(token_contract, to_address, amount) {
         require(amount > 0, "Send amount must be positive")
         require(to_address != "", "Recipient address required")
         require(to_address != wallet_address, "Cannot send to self")

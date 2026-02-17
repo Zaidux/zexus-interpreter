@@ -523,12 +523,11 @@ class ExpressionEvaluatorMixin:
         
         if operator == "!":
             # !true = false, !false = true, !null = true, !anything_else = false
-            if right == TRUE:
+            # Use is_truthy for robust comparison (handles non-singleton BooleanObj)
+            if is_truthy(right):
                 return FALSE
-            elif right == FALSE or right == NULL:
-                return TRUE
             else:
-                return FALSE
+                return TRUE
         elif operator == "-":
             if isinstance(right, Integer):
                 return Integer(-right.value)
