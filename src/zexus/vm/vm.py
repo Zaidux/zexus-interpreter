@@ -783,6 +783,37 @@ class VM:
         return value
 
     @staticmethod
+    def _format_print_value(value: Any) -> str:
+        """Format a Zexus value for print output, unwrapping object wrappers."""
+        if value is None:
+            return "null"
+        t = type(value)
+        if t is int or t is str or t is float:
+            return str(value)
+        if t is bool:
+            return "true" if value else "false"
+        if isinstance(value, (ZInteger, ZFloat)):
+            return str(value.value)
+        if isinstance(value, ZString):
+            return value.value
+        if isinstance(value, ZBoolean):
+            return "true" if value.value else "false"
+        if isinstance(value, ZNull):
+            return "null"
+        if isinstance(value, ZList):
+            items = ", ".join(VM._format_print_value(e) for e in value.elements)
+            return f"[{items}]"
+        if isinstance(value, ZMap):
+            entries = ", ".join(
+                f"{VM._format_print_value(k)}: {VM._format_print_value(v)}"
+                for k, v in value.pairs.items()
+            )
+            return "{" + entries + "}"
+        if hasattr(value, "value") and not callable(getattr(value, "value")):
+            return str(value.value)
+        return str(value)
+
+    @staticmethod
     def _unwrap_after_builtin(value: Any) -> Any:
         # Fast path for common types
         t = type(value)
@@ -1945,7 +1976,7 @@ class VM:
                 stack_append(self._unwrap_after_builtin(result))
             elif op_name == "PRINT":
                 val = stack_pop() if stack else None
-                print(val)
+                print(self._format_print_value(val))
             elif op_name == "GET_ATTR":
                 attr = stack_pop() if stack else None
                 obj = stack_pop() if stack else None
@@ -2898,7 +2929,7 @@ class VM:
 
         def _op_print(_):
             val = stack_pop() if stack else None
-            print(val)
+            print(self._format_print_value(val))
 
         dispatch_table: Dict[str, Callable[[Any], Any]] = {
             "LOAD_CONST": _op_load_const,
@@ -3148,7 +3179,7 @@ class VM:
                     if stack: stack.append(stack[-1])
                 elif op_name == "PRINT":
                     val = stack.pop() if stack else None
-                    print(val)
+                    print(self._format_print_value(val))
                 
                 # --- Function/Closure Ops ---
                 elif op_name == "STORE_FUNC":
