@@ -9,6 +9,10 @@ Features:
 - Gas tracking and execution limits
 - Cryptographic primitives (hashing, signatures)
 - Smart contract execution environment
+- Real blockchain: chain, blocks, mempool
+- P2P networking with peer discovery
+- Pluggable consensus (PoW, PoA, PoS)
+- Full node with mining and sync
 """
 
 from .ledger import Ledger, LedgerManager, get_ledger_manager
@@ -18,6 +22,18 @@ from .transaction import (
     consume_gas, check_gas_and_consume
 )
 from .crypto import CryptoPlugin, register_crypto_builtins
+
+# Real blockchain infrastructure
+from .chain import (
+    Block, BlockHeader, Transaction as ChainTransaction,
+    TransactionReceipt, Chain, Mempool
+)
+from .network import P2PNetwork, Message, MessageType, PeerInfo
+from .consensus import (
+    ConsensusEngine, ProofOfWork, ProofOfAuthority, ProofOfStake,
+    create_consensus
+)
+from .node import BlockchainNode, NodeConfig
 
 __all__ = [
     # Ledger
@@ -37,4 +53,29 @@ __all__ = [
     # Crypto
     'CryptoPlugin',
     'register_crypto_builtins',
+
+    # Chain & Blocks
+    'Block',
+    'BlockHeader',
+    'ChainTransaction',
+    'TransactionReceipt',
+    'Chain',
+    'Mempool',
+
+    # P2P Network
+    'P2PNetwork',
+    'Message',
+    'MessageType',
+    'PeerInfo',
+
+    # Consensus
+    'ConsensusEngine',
+    'ProofOfWork',
+    'ProofOfAuthority',
+    'ProofOfStake',
+    'create_consensus',
+
+    # Node
+    'BlockchainNode',
+    'NodeConfig',
 ]

@@ -1,0 +1,91 @@
+// ============================================================================
+// Zexus Wallet Contract — Multi-user wallet with transaction history
+// ============================================================================
+
+export contract Wallet {
+    data wallet_address = ""
+    data wallet_name = ""
+    data created_at = 0
+    data transaction_history = []
+    data contacts = {}
+
+    // ── Setup ────────────────────────────────────────────────────────
+    action setup(address, name) {
+        wallet_address = address
+        wallet_name = name
+        created_at = 1700000000
+        print("[WALLET] Created wallet '" + string(name) + "' at " + string(address))
+        return {"success": true, "address": address, "name": name}
+    }
+
+    // ── Queries ──────────────────────────────────────────────────────
+    action get_address() {
+        return wallet_address
+    }
+
+    action get_name() {
+        return wallet_name
+    }
+
+    action get_history() {
+        return transaction_history
+    }
+
+    action get_history_count() {
+        return len(transaction_history)
+    }
+
+    // ── Transaction management ───────────────────────────────────────
+    action send(token_contract, to_address, amount) {
+        require(amount > 0, "Send amount must be positive")
+        require(to_address != "", "Recipient address required")
+        require(to_address != wallet_address, "Cannot send to self")
+
+        let result = token_contract.transfer(wallet_address, to_address, amount)
+
+        let record = {
+            "type": "send",
+            "to": to_address,
+            "amount": amount,
+            "success": result["success"]
+        }
+        transaction_history = transaction_history + [record]
+
+        if result["success"] {
+            print("[WALLET:" + string(wallet_name) + "] Sent " + string(amount) + " to " + string(to_address))
+        } else {
+            print("[WALLET:" + string(wallet_name) + "] Send failed to " + string(to_address))
+        }
+
+        return result
+    }
+
+    action receive_log(from_address, amount) {
+        let record = {
+            "type": "receive",
+            "from": from_address,
+            "amount": amount,
+            "success": true
+        }
+        transaction_history = transaction_history + [record]
+        print("[WALLET:" + string(wallet_name) + "] Received " + string(amount) + " from " + string(from_address))
+        return {"success": true}
+    }
+
+    // ── Contacts / Address book ──────────────────────────────────────
+    action add_contact(name, address) {
+        contacts[name] = address
+        return {"success": true, "name": name, "address": address}
+    }
+
+    action get_contact(name) {
+        if contacts[name] == null {
+            return ""
+        }
+        return contacts[name]
+    }
+
+    action list_contacts() {
+        return contacts
+    }
+}

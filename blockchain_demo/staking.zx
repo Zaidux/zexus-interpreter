@@ -1,0 +1,145 @@
+// ============================================================================
+// Zexus Staking Contract — Stake tokens and earn rewards
+// Demonstrates more complex DeFi-like contract interactions.
+// ============================================================================
+
+export contract StakingPool {
+    data pool_name = "ZXS Staking Pool"
+    data staked_balances = {}
+    data reward_balances = {}
+    data total_staked = 0
+    data reward_rate = 5          // 5% reward per distribution
+    data min_stake = 100
+    data stakers = []
+    data distribution_count = 0
+
+    // ── Initialize ───────────────────────────────────────────────────
+    action init(name, rate, minimum) {
+        pool_name = name
+        reward_rate = rate
+        min_stake = minimum
+        print("[STAKING] Pool '" + string(name) + "' initialized")
+        print("[STAKING] Reward rate: " + string(rate) + "% | Min stake: " + string(minimum))
+        return {"success": true, "name": name, "rate": rate}
+    }
+
+    // ── Stake tokens ─────────────────────────────────────────────────
+    action stake(token_contract, staker, amount) {
+        require(amount >= min_stake, "Below minimum stake of " + string(min_stake))
+
+        // Transfer tokens from staker to pool (lock them)
+        let result = token_contract.transfer(staker, "0xSTAKING_POOL", amount)
+        require(result["success"], "Token transfer failed")
+
+        let current = 0
+        if staked_balances[staker] != null {
+            current = staked_balances[staker]
+        }
+        staked_balances[staker] = current + amount
+        total_staked = total_staked + amount
+
+        // Track unique stakers
+        let is_new = true
+        for each s in stakers {
+            if s == staker {
+                is_new = false
+            }
+        }
+        if is_new {
+            stakers = stakers + [staker]
+        }
+
+        print("[STAKING] " + string(staker) + " staked " + string(amount) + " ZXS")
+        return {
+            "success": true,
+            "staker": staker,
+            "amount": amount,
+            "total_staked": staked_balances[staker]
+        }
+    }
+
+    // ── Unstake tokens ───────────────────────────────────────────────
+    action unstake(token_contract, staker, amount) {
+        let current = 0
+        if staked_balances[staker] != null {
+            current = staked_balances[staker]
+        }
+        require(current >= amount, "Insufficient staked balance")
+
+        // Transfer tokens back from pool to staker
+        let result = token_contract.transfer("0xSTAKING_POOL", staker, amount)
+        require(result["success"], "Token return transfer failed")
+
+        staked_balances[staker] = current - amount
+        total_staked = total_staked - amount
+
+        print("[STAKING] " + string(staker) + " unstaked " + string(amount) + " ZXS")
+        return {
+            "success": true,
+            "staker": staker,
+            "amount": amount,
+            "remaining_staked": staked_balances[staker]
+        }
+    }
+
+    // ── Distribute rewards ───────────────────────────────────────────
+    action distribute_rewards(token_contract) {
+        require(total_staked > 0, "No tokens staked")
+        distribution_count = distribution_count + 1
+
+        let rewards_distributed = 0
+        print("[STAKING] === Reward Distribution #" + string(distribution_count) + " ===")
+
+        for each staker in stakers {
+            let staked = staked_balances[staker]
+            if staked != null {
+                if staked > 0 {
+                    let reward = (staked * reward_rate) / 100
+                    // Mint reward tokens
+                    token_contract.mint(staker, reward)
+
+                    let current_reward = 0
+                    if reward_balances[staker] != null {
+                        current_reward = reward_balances[staker]
+                    }
+                    reward_balances[staker] = current_reward + reward
+                    rewards_distributed = rewards_distributed + reward
+
+                    print("[STAKING]   " + string(staker) + ": +" + string(reward) + " ZXS reward")
+                }
+            }
+        }
+
+        print("[STAKING] Total rewards distributed: " + string(rewards_distributed) + " ZXS")
+        return {
+            "success": true,
+            "distribution": distribution_count,
+            "total_rewards": rewards_distributed
+        }
+    }
+
+    // ── Queries ──────────────────────────────────────────────────────
+    action get_staked(staker) {
+        if staked_balances[staker] == null {
+            return 0
+        }
+        return staked_balances[staker]
+    }
+
+    action get_rewards(staker) {
+        if reward_balances[staker] == null {
+            return 0
+        }
+        return reward_balances[staker]
+    }
+
+    action get_pool_info() {
+        return {
+            "name": pool_name,
+            "total_staked": total_staked,
+            "reward_rate": reward_rate,
+            "staker_count": len(stakers),
+            "distributions": distribution_count
+        }
+    }
+}

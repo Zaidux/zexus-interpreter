@@ -1,0 +1,118 @@
+// ============================================================================
+// Zexus NFT Contract — Non-Fungible Token with metadata
+// ============================================================================
+
+export contract NFTCollection {
+    data collection_name = ""
+    data collection_symbol = ""
+    data owners = {}         // token_id -> owner address
+    data metadata = {}       // token_id -> metadata map
+    data next_token_id = 1
+    data total_minted = 0
+    data owner_tokens = {}   // address -> list of token IDs
+    data approved = {}       // token_id -> approved address
+
+    // ── Initialize ───────────────────────────────────────────────────
+    action init(name, symbol) {
+        collection_name = name
+        collection_symbol = symbol
+        print("[NFT] Collection '" + string(name) + "' (" + string(symbol) + ") created")
+        return {"success": true, "name": name, "symbol": symbol}
+    }
+
+    // ── Mint a new NFT ───────────────────────────────────────────────
+    action mint(to_address, token_name, description, image_url) {
+        let token_id = next_token_id
+        next_token_id = next_token_id + 1
+        total_minted = total_minted + 1
+
+        owners[string(token_id)] = to_address
+        metadata[string(token_id)] = {
+            "name": token_name,
+            "description": description,
+            "image": image_url,
+            "token_id": token_id,
+            "creator": to_address
+        }
+
+        // Track per-owner tokens
+        let existing = []
+        if owner_tokens[to_address] != null {
+            existing = owner_tokens[to_address]
+        }
+        owner_tokens[to_address] = existing + [token_id]
+
+        print("[NFT] Minted #" + string(token_id) + " '" + string(token_name) + "' -> " + string(to_address))
+        return {
+            "success": true,
+            "token_id": token_id,
+            "owner": to_address,
+            "name": token_name
+        }
+    }
+
+    // ── Transfer an NFT ──────────────────────────────────────────────
+    action transfer(from_addr, to_addr, token_id) {
+        let tid = string(token_id)
+        require(owners[tid] != null, "Token does not exist")
+        require(owners[tid] == from_addr, "Not the owner of token #" + string(token_id))
+        require(to_addr != "", "Recipient address required")
+
+        // Update ownership
+        owners[tid] = to_addr
+
+        // Update owner tracking (simplified — remove from old, add to new)
+        let new_list = []
+        if owner_tokens[to_addr] != null {
+            new_list = owner_tokens[to_addr]
+        }
+        owner_tokens[to_addr] = new_list + [token_id]
+
+        // Clear approval
+        approved[tid] = ""
+
+        print("[NFT] Transferred #" + string(token_id) + " from " + string(from_addr) + " -> " + string(to_addr))
+        return {"success": true, "token_id": token_id, "from": from_addr, "to": to_addr}
+    }
+
+    // ── Approve someone to transfer a specific NFT ───────────────────
+    action approve_transfer(owner_addr, spender, token_id) {
+        let tid = string(token_id)
+        require(owners[tid] == owner_addr, "Not the owner")
+        approved[tid] = spender
+        return {"success": true, "token_id": token_id, "approved": spender}
+    }
+
+    // ── Queries ──────────────────────────────────────────────────────
+    action owner_of(token_id) {
+        let tid = string(token_id)
+        if owners[tid] == null {
+            return ""
+        }
+        return owners[tid]
+    }
+
+    action get_metadata(token_id) {
+        let tid = string(token_id)
+        if metadata[tid] == null {
+            return {}
+        }
+        return metadata[tid]
+    }
+
+    action tokens_of(address) {
+        if owner_tokens[address] == null {
+            return []
+        }
+        return owner_tokens[address]
+    }
+
+    action get_collection_info() {
+        return {
+            "name": collection_name,
+            "symbol": collection_symbol,
+            "total_minted": total_minted,
+            "next_id": next_token_id
+        }
+    }
+}

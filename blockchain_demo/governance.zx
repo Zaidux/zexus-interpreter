@@ -1,0 +1,120 @@
+// ============================================================================
+// Zexus Governance Contract — DAO-style voting and proposals
+// ============================================================================
+
+export contract Governance {
+    data dao_name = ""
+    data proposals = {}       // proposal_id -> proposal map
+    data votes = {}           // proposal_id:voter -> vote
+    data next_proposal_id = 1
+    data voting_period = 100  // blocks (simulated)
+    data quorum = 50          // minimum votes needed
+    data token_contract = null
+
+    // ── Initialize ───────────────────────────────────────────────────
+    action init(name, token, min_quorum) {
+        dao_name = name
+        token_contract = token
+        quorum = min_quorum
+        print("[GOV] DAO '" + string(name) + "' initialized (quorum: " + string(min_quorum) + ")")
+        return {"success": true}
+    }
+
+    // ── Create a proposal ────────────────────────────────────────────
+    action create_proposal(proposer, title, description) {
+        // Proposer must hold tokens
+        let balance = token_contract.balance_of(proposer)
+        require(balance > 0, "Must hold tokens to create proposals")
+
+        let pid = next_proposal_id
+        next_proposal_id = next_proposal_id + 1
+
+        proposals[string(pid)] = {
+            "id": pid,
+            "title": title,
+            "description": description,
+            "proposer": proposer,
+            "yes_votes": 0,
+            "no_votes": 0,
+            "status": "active",
+            "voter_count": 0
+        }
+
+        print("[GOV] Proposal #" + string(pid) + " created: '" + string(title) + "' by " + string(proposer))
+        return {"success": true, "proposal_id": pid}
+    }
+
+    // ── Vote on a proposal ───────────────────────────────────────────
+    action vote(voter, proposal_id, support) {
+        let pid = string(proposal_id)
+        require(proposals[pid] != null, "Proposal does not exist")
+
+        let proposal = proposals[pid]
+        require(proposal["status"] == "active", "Proposal is not active")
+
+        // Check not already voted
+        let vote_key = string(pid) + ":" + string(voter)
+        require(votes[vote_key] == null, "Already voted on this proposal")
+
+        // Voting power = token balance
+        let power = token_contract.balance_of(voter)
+        require(power > 0, "Must hold tokens to vote")
+
+        votes[vote_key] = {"support": support, "power": power}
+
+        if support {
+            proposal["yes_votes"] = proposal["yes_votes"] + power
+        } else {
+            proposal["no_votes"] = proposal["no_votes"] + power
+        }
+        proposal["voter_count"] = proposal["voter_count"] + 1
+        proposals[pid] = proposal
+
+        let vote_type = "YES"
+        if !support { vote_type = "NO" }
+        print("[GOV] " + string(voter) + " voted " + string(vote_type) + " on #" + string(proposal_id) + " (power: " + string(power) + ")")
+        return {"success": true, "vote": vote_type, "power": power}
+    }
+
+    // ── Finalize a proposal ──────────────────────────────────────────
+    action finalize(proposal_id) {
+        let pid = string(proposal_id)
+        require(proposals[pid] != null, "Proposal does not exist")
+
+        let proposal = proposals[pid]
+        require(proposal["status"] == "active", "Proposal already finalized")
+
+        let total_votes = proposal["yes_votes"] + proposal["no_votes"]
+
+        if total_votes < quorum {
+            proposal["status"] = "failed_quorum"
+            print("[GOV] Proposal #" + string(proposal_id) + " FAILED (quorum not met: " + string(total_votes) + "/" + string(quorum) + ")")
+        } elif proposal["yes_votes"] > proposal["no_votes"] {
+            proposal["status"] = "passed"
+            print("[GOV] Proposal #" + string(proposal_id) + " PASSED (" + string(proposal["yes_votes"]) + " YES vs " + string(proposal["no_votes"]) + " NO)")
+        } else {
+            proposal["status"] = "rejected"
+            print("[GOV] Proposal #" + string(proposal_id) + " REJECTED (" + string(proposal["yes_votes"]) + " YES vs " + string(proposal["no_votes"]) + " NO)")
+        }
+
+        proposals[pid] = proposal
+        return {"success": true, "status": proposal["status"]}
+    }
+
+    // ── Queries ──────────────────────────────────────────────────────
+    action get_proposal(proposal_id) {
+        let pid = string(proposal_id)
+        if proposals[pid] == null {
+            return {}
+        }
+        return proposals[pid]
+    }
+
+    action get_dao_info() {
+        return {
+            "name": dao_name,
+            "total_proposals": next_proposal_id - 1,
+            "quorum": quorum
+        }
+    }
+}

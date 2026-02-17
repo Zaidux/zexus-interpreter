@@ -1,0 +1,554 @@
+// ============================================================================
+//
+//   ZEXUS BLOCKCHAIN FULL DEMO
+//   ===========================
+//   A complete blockchain ecosystem built entirely in Zexus.
+//
+//   Imports:
+//     - token.zx      → ZexusToken (ERC20-like fungible token)
+//     - wallet.zx     → Wallet (multi-user wallet with history)
+//     - staking.zx    → StakingPool (DeFi staking with rewards)
+//     - dex.zx        → SimpleDEX (AMM-style decentralized exchange)
+//     - nft.zx        → NFTCollection (non-fungible tokens)
+//     - governance.zx → Governance (DAO voting)
+//     - utils.zx      → Blockchain utilities (blocks, mining, merkle)
+//
+//   Run:  python -m zexus run blockchain_demo/main.zx
+//
+// ============================================================================
+
+use "token.zx"
+use "wallet.zx"
+use "staking.zx"
+use "dex.zx"
+use "nft.zx"
+use "governance.zx"
+use "utils.zx" as utils
+
+// Crypto is available globally (keccak256, hash) and via module
+use "crypto" as crypto
+use "blockchain" as bc
+
+print("")
+print("=" * 80)
+print("  ZEXUS BLOCKCHAIN ECOSYSTEM — FULL INTEGRATION DEMO")
+print("=" * 80)
+print("")
+
+let total_tests = 0
+let passed_tests = 0
+let failed_tests = 0
+
+action assert_test(name, condition) {
+    total_tests = total_tests + 1
+    if condition {
+        passed_tests = passed_tests + 1
+        print("  [PASS] " + string(name))
+    } else {
+        failed_tests = failed_tests + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 1: Deploy Contracts                                                ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("")
+print("-" * 80)
+print("  PHASE 1: CONTRACT DEPLOYMENT")
+print("-" * 80)
+print("")
+
+// Deploy the ZXS token
+let token = ZexusToken()
+token.init(10000000, "0xDEPLOYER")
+assert_test("Token deployed", token.get_total_supply() == 10000000)
+assert_test("Deployer has full supply", token.balance_of("0xDEPLOYER") == 10000000)
+
+// Mint tokens to test accounts
+token.mint("0xALICE", 500000)
+token.mint("0xBOB", 300000)
+token.mint("0xCHARLIE", 200000)
+token.mint("0xDAVE", 100000)
+assert_test("Alice funded", token.balance_of("0xALICE") == 500000)
+assert_test("Bob funded", token.balance_of("0xBOB") == 300000)
+
+// Deploy wallets
+let alice_wallet = Wallet()
+alice_wallet.setup("0xALICE", "Alice")
+
+let bob_wallet = Wallet()
+bob_wallet.setup("0xBOB", "Bob")
+
+let charlie_wallet = Wallet()
+charlie_wallet.setup("0xCHARLIE", "Charlie")
+
+assert_test("Alice wallet created", alice_wallet.get_address() == "0xALICE")
+assert_test("Bob wallet created", bob_wallet.get_address() == "0xBOB")
+
+// Deploy staking pool
+let staking = StakingPool()
+staking.init("ZXS Staking", 5, 100)
+assert_test("Staking pool deployed", staking.get_pool_info()["name"] == "ZXS Staking")
+
+// Deploy DEX
+let dex = SimpleDEX()
+dex.init("ZexusDEX", 30)
+assert_test("DEX deployed", dex.get_pool_info()["name"] == "ZexusDEX")
+
+// Deploy NFT collection
+let nft = NFTCollection()
+nft.init("ZexusPunks", "ZPUNK")
+assert_test("NFT collection deployed", nft.get_collection_info()["name"] == "ZexusPunks")
+
+// Deploy Governance DAO
+let dao = Governance()
+dao.init("ZexusDAO", token, 1000)
+assert_test("DAO deployed", dao.get_dao_info()["name"] == "ZexusDAO")
+
+print("")
+print("  Contracts deployed: Token, Wallet x3, Staking, DEX, NFT, DAO")
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 2: Token Operations                                                ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 2: TOKEN OPERATIONS")
+print("-" * 80)
+print("")
+
+// Direct transfers
+let t1 = token.transfer("0xALICE", "0xBOB", 10000)
+assert_test("Alice -> Bob transfer", t1["success"])
+assert_test("Alice balance after send", token.balance_of("0xALICE") == 490000)
+assert_test("Bob balance after receive", token.balance_of("0xBOB") == 310000)
+
+// Wallet-based transfers
+let w1 = alice_wallet.send(token, "0xCHARLIE", 5000)
+assert_test("Wallet send Alice -> Charlie", w1["success"])
+assert_test("Charlie balance", token.balance_of("0xCHARLIE") == 205000)
+
+// Approval and transfer_from
+token.approve("0xBOB", "0xALICE", 50000)
+let tf = token.transfer_from("0xALICE", "0xBOB", "0xCHARLIE", 20000)
+assert_test("transfer_from via approval", tf["success"])
+assert_test("Bob decreased after transfer_from", token.balance_of("0xBOB") == 290000)
+assert_test("Charlie increased", token.balance_of("0xCHARLIE") == 225000)
+
+// Allowance should decrease
+let remaining_allowance = token.get_allowance("0xBOB", "0xALICE")
+assert_test("Allowance decreased", remaining_allowance == 30000)
+
+// Burn tokens
+let burn_result = token.burn("0xDEPLOYER", 1000000)
+assert_test("Burn 1M tokens", burn_result["success"])
+assert_test("Supply decreased after burn", token.get_total_supply() == 10100000)
+
+// Transfer log
+let log = token.get_transfer_log()
+assert_test("Transfer log has entries", len(log) > 0)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 3: Staking                                                         ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 3: STAKING OPERATIONS")
+print("-" * 80)
+print("")
+
+// Alice stakes 50,000 ZXS
+let s1 = staking.stake(token, "0xALICE", 50000)
+assert_test("Alice staked 50K", s1["success"])
+assert_test("Alice staked balance", staking.get_staked("0xALICE") == 50000)
+assert_test("Alice token balance reduced", token.balance_of("0xALICE") == 435000)
+
+// Bob stakes 30,000 ZXS
+let s2 = staking.stake(token, "0xBOB", 30000)
+assert_test("Bob staked 30K", s2["success"])
+
+// Pool info
+let pool = staking.get_pool_info()
+assert_test("Total staked = 80K", pool["total_staked"] == 80000)
+assert_test("2 stakers", pool["staker_count"] == 2)
+
+// Distribute rewards (5% of staked amount)
+let rewards = staking.distribute_rewards(token)
+assert_test("Rewards distributed", rewards["success"])
+// Alice gets 5% of 50K = 2500, Bob gets 5% of 30K = 1500
+assert_test("Alice got rewards", staking.get_rewards("0xALICE") == 2500)
+assert_test("Bob got rewards", staking.get_rewards("0xBOB") == 1500)
+assert_test("Alice token balance includes reward", token.balance_of("0xALICE") == 437500)
+
+// Alice unstakes 20,000
+let us1 = staking.unstake(token, "0xALICE", 20000)
+assert_test("Alice unstaked 20K", us1["success"])
+assert_test("Alice remaining stake", staking.get_staked("0xALICE") == 30000)
+assert_test("Alice got tokens back", token.balance_of("0xALICE") == 457500)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 4: DEX / AMM Trading                                              ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 4: DEX / AMM TRADING")
+print("-" * 80)
+print("")
+
+// Add liquidity to the DEX (Token A = ZXS, Token B = "USDC" conceptually)
+let lp1 = dex.add_liquidity("0xDEPLOYER", 100000, 200000)
+assert_test("Liquidity added", lp1["success"])
+assert_test("Pool A = 100K", lp1["pool_a"] == 100000)
+assert_test("Pool B = 200K", lp1["pool_b"] == 200000)
+
+// Initial price: 1 A = 2 B
+let price = dex.get_price_a_in_b()
+assert_test("Initial price A->B = 2", price == 2)
+
+// Alice swaps 1000 Token A for Token B
+let swap1 = dex.swap_a_to_b("0xALICE", 1000)
+assert_test("Swap A->B success", swap1["success"])
+assert_test("Got Token B output", swap1["amount_out"] > 0)
+assert_test("Fee charged", swap1["fee"] > 0)
+
+// Bob swaps 500 Token B for Token A
+let swap2 = dex.swap_b_to_a("0xBOB", 500)
+assert_test("Swap B->A success", swap2["success"])
+
+// Check pool info after trades
+let pool_info = dex.get_pool_info()
+assert_test("Trade count = 2", pool_info["trade_count"] == 2)
+assert_test("LP shares exist", pool_info["total_lp_shares"] > 0)
+
+// Trade history
+let history = dex.get_trade_history()
+assert_test("Trade history recorded", len(history) == 2)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 5: NFTs                                                            ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 5: NFT OPERATIONS")
+print("-" * 80)
+print("")
+
+// Mint NFTs
+let nft1 = nft.mint("0xALICE", "Zexus Genesis #1", "The first Zexus NFT", "ipfs://Qm1234")
+assert_test("NFT #1 minted", nft1["success"])
+assert_test("NFT #1 ID = 1", nft1["token_id"] == 1)
+
+let nft2 = nft.mint("0xALICE", "Zexus Genesis #2", "Rare golden variant", "ipfs://Qm5678")
+assert_test("NFT #2 minted", nft2["success"])
+
+let nft3 = nft.mint("0xBOB", "Zexus Punk #1", "A punk for Bob", "ipfs://QmABCD")
+assert_test("NFT #3 minted to Bob", nft3["success"])
+
+// Check ownership
+assert_test("Alice owns NFT #1", nft.owner_of(1) == "0xALICE")
+assert_test("Bob owns NFT #3", nft.owner_of(3) == "0xBOB")
+
+// Alice's collection
+let alice_nfts = nft.tokens_of("0xALICE")
+assert_test("Alice has 2 NFTs", len(alice_nfts) == 2)
+
+// Transfer NFT #2 from Alice to Charlie
+let nft_tx = nft.transfer("0xALICE", "0xCHARLIE", 2)
+assert_test("NFT transfer success", nft_tx["success"])
+assert_test("Charlie now owns #2", nft.owner_of(2) == "0xCHARLIE")
+
+// Check metadata
+let meta = nft.get_metadata(1)
+assert_test("NFT #1 metadata exists", meta["name"] == "Zexus Genesis #1")
+assert_test("NFT #1 has image", meta["image"] == "ipfs://Qm1234")
+
+// Collection info
+let col = nft.get_collection_info()
+assert_test("3 total minted", col["total_minted"] == 3)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 6: Governance / DAO                                                ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 6: DAO GOVERNANCE")
+print("-" * 80)
+print("")
+
+// Alice creates a proposal (she holds tokens)
+let prop1 = dao.create_proposal("0xALICE", "Increase Staking Rewards", "Raise reward rate from 5% to 8%")
+assert_test("Proposal created", prop1["success"])
+let proposal_id = prop1["proposal_id"]
+
+// Alice votes YES (power = her token balance)
+let v1 = dao.vote("0xALICE", proposal_id, true)
+assert_test("Alice voted YES", v1["success"])
+
+// Bob votes YES
+let v2 = dao.vote("0xBOB", proposal_id, true)
+assert_test("Bob voted YES", v2["success"])
+
+// Charlie votes NO
+let v3 = dao.vote("0xCHARLIE", proposal_id, false)
+assert_test("Charlie voted NO", v3["success"])
+
+// Check proposal status
+let prop = dao.get_proposal(proposal_id)
+assert_test("Votes recorded", prop["voter_count"] == 3)
+assert_test("YES > NO", prop["yes_votes"] > prop["no_votes"])
+
+// Finalize
+let fin = dao.finalize(proposal_id)
+assert_test("Proposal finalized", fin["success"])
+assert_test("Proposal passed", fin["status"] == "passed")
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 7: Blockchain Utilities & Crypto                                   ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 7: BLOCKCHAIN UTILITIES & CRYPTO")
+print("-" * 80)
+print("")
+
+// Generate addresses
+let addr1 = utils.generate_address("alice_seed_phrase")
+assert_test("Generated address", len(addr1) > 10)
+print("  Generated address: " + string(addr1))
+
+let addr2 = utils.generate_address("bob_seed_phrase")
+assert_test("Two different addresses", addr1 != addr2)
+
+// Build a chain of blocks
+let chain = utils.build_chain(["Block 1 data", "Block 2 data", "Block 3 data"])
+assert_test("Chain has 4 blocks (genesis + 3)", len(chain) == 4)
+
+// Hash data
+let h1 = utils.hash_data("hello world")
+let h2 = utils.hash_data("hello world")
+let h3 = utils.hash_data("different data")
+assert_test("Hash is deterministic", h1 == h2)
+assert_test("Different data -> different hash", h1 != h3)
+print("  keccak256('hello world') = " + string(h1))
+
+// Create and hash transactions
+let my_tx = utils.make_transaction("0xALICE", "0xBOB", 1000)
+assert_test("Transaction created", my_tx["sender"] == "0xALICE")
+assert_test("Transaction has hash", my_tx["hash"] != null)
+print("  Transaction hash: " + string(my_tx["hash"]))
+
+// Compute merkle root
+let tx_hashes = [
+    utils.hash_data("tx1"),
+    utils.hash_data("tx2"),
+    utils.hash_data("tx3"),
+    utils.hash_data("tx4")
+]
+let merkle = utils.compute_merkle_root(tx_hashes)
+assert_test("Merkle root computed", len(merkle) > 0)
+print("  Merkle root: " + string(merkle))
+
+// Mining (find nonce for difficulty 1)
+print("")
+print("  Mining a block (difficulty 1)...")
+let mine_result = utils.mine_block("test block data", 1)
+assert_test("Block mined", mine_result["hash"] != null)
+print("  Mined! Nonce: " + string(mine_result["nonce"]) + " Hash: " + string(mine_result["hash"]))
+
+// Global crypto builtins (no import needed)
+let global_hash = keccak256("zexus blockchain")
+assert_test("Global keccak256 works", len(global_hash) > 0)
+
+let sha_hash = hash("zexus blockchain", "SHA256")
+assert_test("Global hash() works", len(sha_hash) > 0)
+
+// Address validation
+let valid = utils.is_valid_address(addr1)
+assert_test("Generated address is valid", valid)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 8: Cross-Contract Interactions                                     ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 8: CROSS-CONTRACT INTERACTIONS")
+print("-" * 80)
+print("")
+
+// Scenario: Alice uses her wallet to stake, then un-stakes and trades on DEX
+
+// 1. Alice checks her balance
+let alice_bal = token.balance_of("0xALICE")
+print("  Alice starting balance: " + string(alice_bal) + " ZXS")
+
+// 2. Alice stakes more via staking contract
+let s3 = staking.stake(token, "0xALICE", 10000)
+assert_test("Alice stakes 10K more", s3["success"])
+
+// 3. Get rewards again
+let r2 = staking.distribute_rewards(token)
+assert_test("Second reward distribution", r2["success"])
+
+// 4. Alice un-stakes everything
+let total_staked_alice = staking.get_staked("0xALICE")
+let us2 = staking.unstake(token, "0xALICE", total_staked_alice)
+assert_test("Alice fully unstaked", us2["success"])
+assert_test("Alice staked balance = 0", staking.get_staked("0xALICE") == 0)
+
+// 5. Alice swaps on DEX
+let swap3 = dex.swap_a_to_b("0xALICE", 5000)
+assert_test("Alice's DEX swap", swap3["success"])
+
+// 6. Multiple swap trades
+let swap4 = dex.swap_b_to_a("0xCHARLIE", 2000)
+assert_test("Charlie's DEX swap", swap4["success"])
+
+// 7. Final trade count
+let final_pool = dex.get_pool_info()
+assert_test("4 total trades", final_pool["trade_count"] == 4)
+
+// 8. Dave creates another proposal
+let prop2 = dao.create_proposal("0xDAVE", "Add New Trading Pair", "List TOKEN-B/TOKEN-C on the DEX")
+assert_test("Dave's proposal created", prop2["success"])
+
+// 9. Wallet contacts
+alice_wallet.add_contact("Bob", "0xBOB")
+alice_wallet.add_contact("Charlie", "0xCHARLIE")
+let bob_addr = alice_wallet.get_contact("Bob")
+assert_test("Contact book works", bob_addr == "0xBOB")
+
+// 10. Wallet history
+let alice_history = alice_wallet.get_history()
+assert_test("Alice has wallet history", len(alice_history) > 0)
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  PHASE 9: Edge Cases & Security                                           ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("-" * 80)
+print("  PHASE 9: EDGE CASES & SECURITY")
+print("-" * 80)
+print("")
+
+// Transfer more than balance
+let over_transfer = false
+try {
+    token.transfer("0xDAVE", "0xALICE", 999999999)
+} catch (e) {
+    over_transfer = true
+}
+assert_test("Over-balance transfer rejected", over_transfer)
+
+// Zero transfer
+let zero_transfer = false
+try {
+    token.transfer("0xALICE", "0xBOB", 0)
+} catch (e) {
+    zero_transfer = true
+}
+assert_test("Zero transfer rejected", zero_transfer)
+
+// Negative transfer
+let neg_transfer = false
+try {
+    token.transfer("0xALICE", "0xBOB", -100)
+} catch (e) {
+    neg_transfer = true
+}
+assert_test("Negative transfer rejected", neg_transfer)
+
+// Stake below minimum
+let low_stake = false
+try {
+    staking.stake(token, "0xALICE", 10)
+} catch (e) {
+    low_stake = true
+}
+assert_test("Below-minimum stake rejected", low_stake)
+
+// Double voting blocked
+let double_vote = false
+try {
+    dao.vote("0xALICE", 1, true)
+} catch (e) {
+    double_vote = true
+}
+assert_test("Double voting blocked", double_vote)
+
+// NFT transfer by non-owner
+let nft_fail = false
+try {
+    nft.transfer("0xDAVE", "0xALICE", 1)
+} catch (e) {
+    nft_fail = true
+}
+assert_test("Non-owner NFT transfer blocked", nft_fail)
+
+// Pause and try transfer
+token.pause_token()
+let paused_transfer = false
+try {
+    token.transfer("0xALICE", "0xBOB", 100)
+} catch (e) {
+    paused_transfer = true
+}
+assert_test("Transfer blocked while paused", paused_transfer)
+
+// Unpause and transfer succeeds
+token.unpause_token()
+let unpause_tx = token.transfer("0xALICE", "0xBOB", 100)
+assert_test("Transfer works after unpause", unpause_tx["success"])
+
+print("")
+
+// ╔════════════════════════════════════════════════════════════════════════════╗
+// ║  FINAL RESULTS                                                            ║
+// ╚════════════════════════════════════════════════════════════════════════════╝
+
+print("=" * 80)
+print("  FINAL RESULTS")
+print("=" * 80)
+print("")
+print("  Total tests:  " + string(total_tests))
+print("  Passed:       " + string(passed_tests))
+print("  Failed:       " + string(failed_tests))
+print("")
+
+if failed_tests == 0 {
+    print("  ALL TESTS PASSED!")
+} else {
+    print("  SOME TESTS FAILED — see above for details.")
+}
+
+print("")
+print("  --- Final State ---")
+print("  Token supply:        " + string(token.get_total_supply()) + " ZXS")
+print("  Alice balance:       " + string(token.balance_of("0xALICE")) + " ZXS")
+print("  Bob balance:         " + string(token.balance_of("0xBOB")) + " ZXS")
+print("  Charlie balance:     " + string(token.balance_of("0xCHARLIE")) + " ZXS")
+print("  Total staked:        " + string(staking.get_pool_info()["total_staked"]) + " ZXS")
+print("  DEX trades:          " + string(dex.get_pool_info()["trade_count"]))
+print("  NFTs minted:         " + string(nft.get_collection_info()["total_minted"]))
+print("  DAO proposals:       " + string(dao.get_dao_info()["total_proposals"]))
+print("  Alice wallet TXs:    " + string(alice_wallet.get_history_count()))
+print("")
+print("=" * 80)
+print("  Zexus Blockchain Demo Complete")
+print("=" * 80)

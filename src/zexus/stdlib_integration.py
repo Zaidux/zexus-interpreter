@@ -445,10 +445,131 @@ def create_stdlib_module(module_name, evaluator=None):
             except Exception as e:
                 return EvaluationError(f"create_genesis_block error: {str(e)}")
         
+        def _blockchain_create_block(*args):
+            if len(args) < 4:
+                return EvaluationError("create_block() requires 4 args: index, timestamp, data, previous_hash")
+            index = int(args[0].value if hasattr(args[0], 'value') else args[0])
+            timestamp = float(args[1].value if hasattr(args[1], 'value') else args[1])
+            data = args[2].value if hasattr(args[2], 'value') else str(args[2])
+            prev_hash = args[3].value if hasattr(args[3], 'value') else str(args[3])
+            nonce = int(args[4].value if hasattr(args[4], 'value') else args[4]) if len(args) > 4 else 0
+            try:
+                result = BlockchainModule.create_block(index, timestamp, data, prev_hash, nonce)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"create_block error: {str(e)}")
+
+        def _blockchain_hash_block(*args):
+            if len(args) < 1:
+                return EvaluationError("hash_block() requires 1 argument: block (map)")
+            block_obj = args[0]
+            block = {}
+            if isinstance(block_obj, Map):
+                for k, v in block_obj.pairs.items():
+                    key = k.value if hasattr(k, 'value') else str(k)
+                    val = v.value if hasattr(v, 'value') else str(v)
+                    block[key] = val
+            try:
+                result = BlockchainModule.hash_block(block)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"hash_block error: {str(e)}")
+
+        def _blockchain_validate_block(*args):
+            if len(args) < 1:
+                return EvaluationError("validate_block() requires 1 argument: block")
+            block_obj = args[0]
+            block = {}
+            if isinstance(block_obj, Map):
+                for k, v in block_obj.pairs.items():
+                    key = k.value if hasattr(k, 'value') else str(k)
+                    val = v.value if hasattr(v, 'value') else str(v)
+                    block[key] = val
+            prev = None
+            if len(args) > 1 and isinstance(args[1], Map):
+                prev = {}
+                for k, v in args[1].pairs.items():
+                    key = k.value if hasattr(k, 'value') else str(k)
+                    val = v.value if hasattr(v, 'value') else str(v)
+                    prev[key] = val
+            try:
+                result = BlockchainModule.validate_block(block, prev)
+                return Boolean(result)
+            except Exception as e:
+                return EvaluationError(f"validate_block error: {str(e)}")
+
+        def _blockchain_proof_of_work(*args):
+            if len(args) < 1:
+                return EvaluationError("proof_of_work() requires 1 argument: block_data")
+            block_data = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            difficulty = int(args[1].value if hasattr(args[1], 'value') else args[1]) if len(args) > 1 else 4
+            max_iter = int(args[2].value if hasattr(args[2], 'value') else args[2]) if len(args) > 2 else 1000000
+            try:
+                nonce, hash_val = BlockchainModule.proof_of_work(block_data, difficulty, max_iter)
+                return _python_to_zexus({"nonce": nonce, "hash": hash_val})
+            except Exception as e:
+                return EvaluationError(f"proof_of_work error: {str(e)}")
+
+        def _blockchain_create_transaction(*args):
+            if len(args) < 3:
+                return EvaluationError("create_transaction() requires 3 args: sender, recipient, amount")
+            sender = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            recipient = args[1].value if hasattr(args[1], 'value') else str(args[1])
+            amount = float(args[2].value if hasattr(args[2], 'value') else args[2])
+            timestamp = float(args[3].value if hasattr(args[3], 'value') else args[3]) if len(args) > 3 else None
+            try:
+                result = BlockchainModule.create_transaction(sender, recipient, amount, timestamp)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"create_transaction error: {str(e)}")
+
+        def _blockchain_hash_transaction(*args):
+            if len(args) < 1:
+                return EvaluationError("hash_transaction() requires 1 argument: transaction")
+            tx_obj = args[0]
+            tx = {}
+            if isinstance(tx_obj, Map):
+                for k, v in tx_obj.pairs.items():
+                    key = k.value if hasattr(k, 'value') else str(k)
+                    val = v.value if hasattr(v, 'value') else str(v)
+                    tx[key] = val
+            try:
+                result = BlockchainModule.hash_transaction(tx)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"hash_transaction error: {str(e)}")
+
+        def _blockchain_validate_chain(*args):
+            if len(args) < 1:
+                return EvaluationError("validate_chain() requires 1 argument: chain (list of blocks)")
+            if not isinstance(args[0], ListObj):
+                return EvaluationError("validate_chain() expects a list of block maps")
+            chain = []
+            for block_obj in args[0].elements:
+                block = {}
+                if isinstance(block_obj, Map):
+                    for k, v in block_obj.pairs.items():
+                        key = k.value if hasattr(k, 'value') else str(k)
+                        val = v.value if hasattr(v, 'value') else str(v)
+                        block[key] = val
+                chain.append(block)
+            try:
+                result = BlockchainModule.validate_chain(chain)
+                return Boolean(result)
+            except Exception as e:
+                return EvaluationError(f"validate_chain error: {str(e)}")
+
         env.set("create_address", Builtin(_blockchain_create_address))
         env.set("validate_address", Builtin(_blockchain_validate_address))
         env.set("calculate_merkle_root", Builtin(_blockchain_calculate_merkle_root))
         env.set("create_genesis_block", Builtin(_blockchain_create_genesis_block))
+        env.set("create_block", Builtin(_blockchain_create_block))
+        env.set("hash_block", Builtin(_blockchain_hash_block))
+        env.set("validate_block", Builtin(_blockchain_validate_block))
+        env.set("proof_of_work", Builtin(_blockchain_proof_of_work))
+        env.set("create_transaction", Builtin(_blockchain_create_transaction))
+        env.set("hash_transaction", Builtin(_blockchain_hash_transaction))
+        env.set("validate_chain", Builtin(_blockchain_validate_chain))
 
     elif module_name == "websocket" or module_name == "stdlib/websocket":
         try:

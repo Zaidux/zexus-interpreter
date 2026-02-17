@@ -130,7 +130,11 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
             resolved_path = os.path.join(importer_dir, file_path)
             candidates.append(resolved_path)
         else:
-            # Relative to current working directory
+            # For bare imports (no ./ or ../ prefix), check relative to importer first
+            if importer_file:
+                importer_dir = os.path.dirname(importer_file)
+                candidates.append(os.path.join(importer_dir, file_path))
+            # Then relative to current working directory
             candidates.append(os.path.join(os.getcwd(), file_path))
         
         # Also check zpm_modules directory

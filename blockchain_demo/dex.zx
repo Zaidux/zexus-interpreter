@@ -1,0 +1,174 @@
+// ============================================================================
+// Zexus DEX (Decentralized Exchange) — Simple AMM-style token swap
+// Demonstrates advanced contract-to-contract interactions.
+// ============================================================================
+
+export contract SimpleDEX {
+    data dex_name = "ZexusDEX"
+    data liquidity_pool_a = 0       // Token A reserves
+    data liquidity_pool_b = 0       // Token B reserves
+    data lp_shares = {}             // address -> LP shares
+    data total_lp_shares = 0
+    data swap_fee_bps = 30          // 0.3% swap fee
+    data trade_history = []
+    data trade_count = 0
+
+    // ── Initialize DEX ───────────────────────────────────────────────
+    action init(name, fee_bps) {
+        dex_name = name
+        swap_fee_bps = fee_bps
+        print("[DEX] '" + string(name) + "' initialized (fee: " + string(fee_bps) + " bps)")
+        return {"success": true}
+    }
+
+    // ── Add liquidity ────────────────────────────────────────────────
+    action add_liquidity(provider, amount_a, amount_b) {
+        require(amount_a > 0, "Amount A must be positive")
+        require(amount_b > 0, "Amount B must be positive")
+
+        // If pool is empty, initialize it
+        if total_lp_shares == 0 {
+            liquidity_pool_a = amount_a
+            liquidity_pool_b = amount_b
+            let shares = amount_a  // Initial shares = amount of token A
+            lp_shares[provider] = shares
+            total_lp_shares = shares
+            print("[DEX] Pool initialized by " + string(provider))
+            print("[DEX]   Token A: " + string(amount_a) + " | Token B: " + string(amount_b))
+        } else {
+            // Maintain ratio
+            let shares = (amount_a * total_lp_shares) / liquidity_pool_a
+            liquidity_pool_a = liquidity_pool_a + amount_a
+            liquidity_pool_b = liquidity_pool_b + amount_b
+            let current = 0
+            if lp_shares[provider] != null {
+                current = lp_shares[provider]
+            }
+            lp_shares[provider] = current + shares
+            total_lp_shares = total_lp_shares + shares
+            print("[DEX] Liquidity added by " + string(provider) + " (" + string(shares) + " LP shares)")
+        }
+
+        return {
+            "success": true,
+            "provider": provider,
+            "amount_a": amount_a,
+            "amount_b": amount_b,
+            "pool_a": liquidity_pool_a,
+            "pool_b": liquidity_pool_b
+        }
+    }
+
+    // ── Swap Token A → Token B (constant product) ────────────────────
+    action swap_a_to_b(trader, amount_in) {
+        require(amount_in > 0, "Swap amount must be positive")
+        require(liquidity_pool_a > 0, "Pool has no liquidity")
+        require(liquidity_pool_b > 0, "Pool has no liquidity")
+
+        // Calculate fee
+        let fee = (amount_in * swap_fee_bps) / 10000
+        let amount_after_fee = amount_in - fee
+
+        // Constant product formula: x * y = k
+        let k = liquidity_pool_a * liquidity_pool_b
+        let new_pool_a = liquidity_pool_a + amount_after_fee
+        let amount_out = liquidity_pool_b - (k / new_pool_a)
+
+        require(amount_out > 0, "Insufficient output amount")
+        require(amount_out < liquidity_pool_b, "Exceeds pool reserves")
+
+        liquidity_pool_a = new_pool_a
+        liquidity_pool_b = liquidity_pool_b - amount_out
+        trade_count = trade_count + 1
+
+        let record = {
+            "id": trade_count,
+            "type": "swap_a_to_b",
+            "trader": trader,
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+            "fee": fee
+        }
+        trade_history = trade_history + [record]
+
+        print("[DEX] Swap: " + string(trader) + " traded " + string(amount_in) + " A -> " + string(amount_out) + " B")
+        return {
+            "success": true,
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+            "fee": fee,
+            "trade_id": trade_count
+        }
+    }
+
+    // ── Swap Token B → Token A ───────────────────────────────────────
+    action swap_b_to_a(trader, amount_in) {
+        require(amount_in > 0, "Swap amount must be positive")
+        require(liquidity_pool_a > 0, "Pool has no liquidity")
+        require(liquidity_pool_b > 0, "Pool has no liquidity")
+
+        let fee = (amount_in * swap_fee_bps) / 10000
+        let amount_after_fee = amount_in - fee
+
+        let k = liquidity_pool_a * liquidity_pool_b
+        let new_pool_b = liquidity_pool_b + amount_after_fee
+        let amount_out = liquidity_pool_a - (k / new_pool_b)
+
+        require(amount_out > 0, "Insufficient output amount")
+        require(amount_out < liquidity_pool_a, "Exceeds pool reserves")
+
+        liquidity_pool_b = new_pool_b
+        liquidity_pool_a = liquidity_pool_a - amount_out
+        trade_count = trade_count + 1
+
+        let record = {
+            "id": trade_count,
+            "type": "swap_b_to_a",
+            "trader": trader,
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+            "fee": fee
+        }
+        trade_history = trade_history + [record]
+
+        print("[DEX] Swap: " + string(trader) + " traded " + string(amount_in) + " B -> " + string(amount_out) + " A")
+        return {
+            "success": true,
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+            "fee": fee,
+            "trade_id": trade_count
+        }
+    }
+
+    // ── Queries ──────────────────────────────────────────────────────
+    action get_price_a_in_b() {
+        if liquidity_pool_a == 0 { return 0 }
+        return liquidity_pool_b / liquidity_pool_a
+    }
+
+    action get_price_b_in_a() {
+        if liquidity_pool_b == 0 { return 0 }
+        return liquidity_pool_a / liquidity_pool_b
+    }
+
+    action get_pool_info() {
+        return {
+            "name": dex_name,
+            "pool_a": liquidity_pool_a,
+            "pool_b": liquidity_pool_b,
+            "total_lp_shares": total_lp_shares,
+            "trade_count": trade_count,
+            "fee_bps": swap_fee_bps
+        }
+    }
+
+    action get_lp_shares(provider) {
+        if lp_shares[provider] == null { return 0 }
+        return lp_shares[provider]
+    }
+
+    action get_trade_history() {
+        return trade_history
+    }
+}

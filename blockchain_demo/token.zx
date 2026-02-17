@@ -1,0 +1,131 @@
+// ============================================================================
+// Zexus Token Contract — ZXS (Zexus Standard Token)
+// A full ERC20-like fungible token with minting, burning, and allowances.
+// ============================================================================
+
+export contract ZexusToken {
+    data name = "Zexus Token"
+    data symbol = "ZXS"
+    data decimals = 18
+    data total_supply = 0
+    data owner = ""
+    data balances = {}
+    data allowances = {}
+    data transfer_log = []
+    data paused = false
+
+    // ── Initialize the token with an initial supply ──────────────────
+    action init(initial_supply, deployer) {
+        owner = deployer
+        total_supply = initial_supply
+        balances[deployer] = initial_supply
+        print("[ZXS] Token deployed by " + string(deployer))
+        print("[ZXS] Initial supply: " + string(initial_supply) + " " + string(symbol))
+        return {"success": true, "supply": initial_supply}
+    }
+
+    // ── Read-only queries ────────────────────────────────────────────
+    action balance_of(account) {
+        if balances[account] == null {
+            return 0
+        }
+        return balances[account]
+    }
+
+    action get_total_supply() {
+        return total_supply
+    }
+
+    action get_allowance(owner_addr, spender) {
+        let key = string(owner_addr) + ":" + string(spender)
+        if allowances[key] == null {
+            return 0
+        }
+        return allowances[key]
+    }
+
+    // ── State-modifying actions ──────────────────────────────────────
+    action transfer(from_addr, to_addr, amount) {
+        require(!paused, "Token is paused")
+        require(amount > 0, "Amount must be positive")
+
+        let from_balance = balance_of(from_addr)
+        require(from_balance >= amount, "Insufficient balance")
+
+        balances[from_addr] = from_balance - amount
+        let to_balance = balance_of(to_addr)
+        balances[to_addr] = to_balance + amount
+
+        // Log the transfer
+        let record = {
+            "type": "transfer",
+            "from": from_addr,
+            "to": to_addr,
+            "amount": amount
+        }
+        transfer_log = transfer_log + [record]
+
+        return {"success": true, "from": from_addr, "to": to_addr, "amount": amount}
+    }
+
+    action approve(owner_addr, spender, amount) {
+        require(!paused, "Token is paused")
+        require(amount >= 0, "Approval amount cannot be negative")
+        let key = string(owner_addr) + ":" + string(spender)
+        allowances[key] = amount
+        return {"success": true}
+    }
+
+    action transfer_from(spender, from_addr, to_addr, amount) {
+        require(!paused, "Token is paused")
+        require(amount > 0, "Amount must be positive")
+        let allowed = get_allowance(from_addr, spender)
+        require(allowed >= amount, "Allowance exceeded")
+
+        let result = transfer(from_addr, to_addr, amount)
+        if result["success"] {
+            let key = string(from_addr) + ":" + string(spender)
+            allowances[key] = allowed - amount
+        }
+        return result
+    }
+
+    action mint(to_addr, amount) {
+        require(amount > 0, "Mint amount must be positive")
+        total_supply = total_supply + amount
+        let current = balance_of(to_addr)
+        balances[to_addr] = current + amount
+
+        let record = {"type": "mint", "to": to_addr, "amount": amount}
+        transfer_log = transfer_log + [record]
+
+        return {"success": true, "new_supply": total_supply}
+    }
+
+    action burn(from_addr, amount) {
+        require(amount > 0, "Burn amount must be positive")
+        let bal = balance_of(from_addr)
+        require(bal >= amount, "Insufficient balance to burn")
+        balances[from_addr] = bal - amount
+        total_supply = total_supply - amount
+
+        let record = {"type": "burn", "from": from_addr, "amount": amount}
+        transfer_log = transfer_log + [record]
+
+        return {"success": true, "new_supply": total_supply}
+    }
+
+    action pause_token() {
+        paused = true
+        return {"success": true, "paused": true}
+    }
+
+    action unpause_token() {
+        paused = false
+        return {"success": true, "paused": false}
+    }
+
+    action get_transfer_log() {
+        return transfer_log
+    }
+}
