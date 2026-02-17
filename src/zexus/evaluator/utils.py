@@ -42,10 +42,22 @@ def _is_awaitable(obj):
         return False
 
 def _resolve_awaitable(obj):
+    """Resolve an awaitable on the shared Zexus event loop.
+
+    Instead of creating a throw-away loop with ``asyncio.run()``, we submit
+    the coroutine to the persistent background loop so that all async
+    operations share the same event loop and can coordinate (gather, wait,
+    semaphores, etc.).
+    """
     if _is_awaitable(obj):
         try:
             EVAL_SUMMARY['async_tasks_run'] += 1
-            return asyncio.run(obj)
+            from ..event_loop import submit, is_loop_thread
+            if is_loop_thread():
+                # Already on the event-loop thread — can't block; return the
+                # coroutine so the caller can await it.
+                return obj
+            return submit(obj)
         except RuntimeError:
             return obj
     return obj

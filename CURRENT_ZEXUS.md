@@ -200,10 +200,10 @@
 12. ~~**Static type checking pass** — optional analysis before runtime~~ ✅ — `StaticTypeChecker` AST walker with scoped symbol table, param/return/assignment checking
 
 ### Significant Effort
-13. **Debug Adapter Protocol** — step-through debugging
-14. **GUI backend** — Tk or web-based renderer
-15. **True concurrent EventLoop** — asyncio integration
-16. **WASM compilation target** — expose Zexus to browsers
+13. ~~**Debug Adapter Protocol** — step-through debugging~~ ✅ — Full DAP JSON wire protocol server (`dap_server.py`), `DebugEngine` state machine with breakpoints/stepping/pause, VS Code adapter shim, `eval_node()` hook with zero-cost when inactive, AST line/column tracking
+14. ~~**GUI backend** — Tk or web-based renderer~~ ✅ — `TkBackend` (tkinter: windows, buttons, labels, text boxes, canvas) + `WebBackend` (HTML/CSS/SVG generation via stdlib `http.server`, event relay via POST), lazy-loaded in `renderer.__init__`
+15. ~~**True concurrent EventLoop** — asyncio integration~~ ✅ — Persistent shared `asyncio.EventLoop` on dedicated background thread (`event_loop.py`), `submit()`/`spawn()`/`shutdown()` API, evaluator `_resolve_awaitable` and `eval_async_expression` ported from raw threads, VM `_run_coroutine_sync` ported, `AsyncChannel` with `asyncio.Queue`
+16. ~~**WASM compilation target** — expose Zexus to browsers~~ ✅ — `WasmCompiler` translates Zexus `Bytecode` → valid `.wasm` binary (LEB128 encoding, all sections, i64 stack), supports arithmetic/comparisons/logic/control-flow/locals/POW, CLI `zx compile --target wasm`
 
 ---
 
@@ -589,10 +589,10 @@ This is a **local simulation** — no networking, no consensus, no peer discover
 ### Significant Effort
 | # | Feature | Status |
 |---|---------|--------|
-| 13 | Debug Adapter Protocol | ⬜ Not started |
-| 14 | GUI backend | ⬜ Not started |
-| 15 | True concurrent EventLoop | ⬜ Not started |
-| 16 | WASM compilation target | ⬜ Not started |
+| 13 | Debug Adapter Protocol | ✅ Implemented |
+| 14 | GUI backend | ✅ Implemented |
+| 15 | True concurrent EventLoop | ✅ Implemented |
+| 16 | WASM compilation target | ✅ Implemented |
 
 ---
 

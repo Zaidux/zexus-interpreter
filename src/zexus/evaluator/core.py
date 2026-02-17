@@ -480,7 +480,15 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     def eval_node(self, node, env, stack_trace=None):
         if node is None: 
             return NULL
-        
+
+        # DAP debug hook — check breakpoints / stepping before dispatch
+        _dbg = getattr(self, "_debug_engine", None)
+        if _dbg is not None and hasattr(node, "__class__"):
+            _line = getattr(node, "line", None) or getattr(node, "token_line", 0)
+            if _line:
+                _file = getattr(self, "_debug_file", "<unknown>")
+                _dbg.check(_file, _line, env)
+
         node_type = type(node)
 
         handler = self._node_handlers.get(node_type)

@@ -1099,42 +1099,38 @@ class ExpressionEvaluatorMixin:
     def eval_async_expression(self, node, env, stack_trace):
         """Evaluate async expression: async <expression>
         
-        Executes the expression in a background thread.
-        Example: async producer()
+        Schedules the expression on the shared Zexus event loop.
+        For call expressions, evaluation is deferred entirely to the loop.
+        For coroutine results, driving is done inside a loop task.
         """
-        import threading
+        from ..event_loop import spawn as _spawn
+        import asyncio
         import sys
-        
-        # For call expressions, we need to defer evaluation to the thread
-        # Otherwise evaluating here will execute the action in the main thread
+
+        # For call expressions, we need to defer evaluation to the event loop
         if type(node.expression).__name__ == 'CallExpression':
-            def run_in_thread():
+            async def _run_call():
                 try:
                     result = self.eval_node(node.expression, env, stack_trace)
-                    
+
                     # If it's a Coroutine (from async action), execute it
                     if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
                         try:
-                            # Prime the generator
                             next(result.generator)
-                            # Execute until completion
                             while True:
                                 next(result.generator)
                         except StopIteration:
-                            pass  # Coroutine completed
-                    
+                            pass
                 except StopIteration:
-                    pass  # Normal coroutine completion
+                    pass
                 except Exception as e:
-                    import sys
                     print(f"[ASYNC ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
                     import traceback
                     traceback.print_exc(file=sys.stderr)
-            
-            thread = threading.Thread(target=run_in_thread, daemon=True)
-            thread.start()
+
+            _spawn(_run_call())
             return NULL
-        
+
         # For other expressions, evaluate first then check if it's a Coroutine
         previous_allow = getattr(self, "_allow_coroutine_result", False)
         self._allow_coroutine_result = True
@@ -1142,35 +1138,25 @@ class ExpressionEvaluatorMixin:
             result = self.eval_node(node.expression, env, stack_trace)
         finally:
             self._allow_coroutine_result = previous_allow
-        
+
         if is_error(result):
             return result
-        
-        # print(f"[ASYNC EXPR] Expression evaluated to: {type(result).__name__}", file=sys.stderr)
-        
-        # If it's a Coroutine (from calling an async action), execute it in a thread
+
+        # If it's a Coroutine, drive it on the shared event loop
         if hasattr(result, '__class__') and result.__class__.__name__ == 'Coroutine':
-            def run_coroutine():
+            async def _drive_coroutine():
                 try:
-                    # Prime the generator
                     next(result.generator)
-                    # Execute until completion
                     while True:
                         next(result.generator)
                 except StopIteration:
-                    pass  # Coroutine completed normally
+                    pass
                 except Exception as e:
-                    import sys
                     print(f"[ASYNC ERROR] {type(e).__name__}: {str(e)}", file=sys.stderr, flush=True)
                     import traceback
                     traceback.print_exc(file=sys.stderr)
-            
-            thread = threading.Thread(target=run_coroutine, daemon=True)
-            thread.start()
+
+            _spawn(_drive_coroutine())
             return NULL
-        
-        # For any other result (including NULL from regular actions),
-        # we can't execute it asynchronously since it already executed.
-        # Just return NULL to indicate "async operation initiated"
-        # print(f"[ASYNC EXPR] Result is not a coroutine, returning NULL", file=sys.stderr)
+
         return NULL

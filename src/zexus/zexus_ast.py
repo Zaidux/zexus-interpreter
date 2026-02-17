@@ -2,6 +2,10 @@
 
 # Base classes
 class Node: 
+    # Source location for debugger / error reporting (set by parser)
+    line: int = 0
+    column: int = 0
+
     def __repr__(self):
         return f"{self.__class__.__name__}()"
 

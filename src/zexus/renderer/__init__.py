@@ -43,4 +43,19 @@ __all__ = [
     "register_graphics",
     "render_screen",
     "set_theme",
+    # GUI backends
+    "TkBackend",
+    "WebBackend",
+    "create_tk_backend",
+    "create_web_backend",
 ]
+
+# Lazy imports for GUI backends (tkinter may not be installed)
+def __getattr__(name: str):
+    if name in ("TkBackend", "create_tk_backend"):
+        from .tk_backend import TkBackend, create_tk_backend
+        return TkBackend if name == "TkBackend" else create_tk_backend
+    if name in ("WebBackend", "create_web_backend"):
+        from .web_backend import WebBackend, create_web_backend
+        return WebBackend if name == "WebBackend" else create_web_backend
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

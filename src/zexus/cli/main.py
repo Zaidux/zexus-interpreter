@@ -655,6 +655,59 @@ def check(ctx, file):
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         sys.exit(1)
 
+
+@cli.command()
+@click.argument('file', type=click.Path(exists=True))
+@click.option('--target', '-t', type=click.Choice(['wasm']), default='wasm',
+              help='Compilation target (default: wasm)')
+@click.option('-o', '--output', type=click.Path(), default=None,
+              help='Output file path (default: <input>.wasm)')
+@click.pass_context
+def compile(ctx, file, target, output):
+    """Compile a Zexus file to a target format (e.g. WebAssembly)."""
+    import os
+    try:
+        with open(file, 'r') as f:
+            source_code = f.read()
+
+        syntax_style = ctx.obj['SYNTAX_STYLE']
+        advanced_parsing = ctx.obj['ADVANCED_PARSING']
+
+        lexer = Lexer(source_code)
+        parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
+        program = parser.parse_program()
+
+        if parser.errors:
+            console.print("[bold red]❌ Parse errors — cannot compile:[/bold red]")
+            for err in parser.errors:
+                console.print(f"  🚫 {err}")
+            sys.exit(1)
+
+        # Compile AST → bytecode
+        from ..vm.compiler import BytecodeCompiler as BCCompiler
+        bc_compiler = BCCompiler()
+        bytecode = bc_compiler.compile(program)
+
+        if target == 'wasm':
+            from ..vm.wasm_compiler import WasmCompiler
+            wasm = WasmCompiler().compile(bytecode)
+
+            out_path = output or os.path.splitext(file)[0] + '.wasm'
+            with open(out_path, 'wb') as wf:
+                wf.write(wasm)
+
+            console.print(f"[bold green]✅ Compiled to WASM:[/bold green] {out_path} ({len(wasm)} bytes)")
+        else:
+            console.print(f"[bold red]Unknown target: {target}[/bold red]")
+            sys.exit(1)
+
+    except Exception as e:
+        console.print(f"[bold red]Compile error:[/bold red] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 @cli.command()
 @click.argument('file', type=click.Path(exists=True))
 @click.pass_context

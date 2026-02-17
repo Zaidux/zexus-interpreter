@@ -468,6 +468,85 @@ class ConcurrencyManager:
                 f"tasks={stats['tasks_completed']}/{stats['tasks_total']})")
 
 
+# ---------------------------------------------------------------------------
+# AsyncChannel — asyncio-native channel for the shared event loop
+# ---------------------------------------------------------------------------
+
+class AsyncChannel:
+    """
+    Async-native channel backed by :class:`asyncio.Queue`.
+
+    Unlike :class:`Channel` (which uses ``threading`` primitives), this
+    channel is designed to be used inside coroutines running on the shared
+    Zexus event loop.  ``send`` and ``receive`` are ``async`` methods.
+
+    Example (inside a Zexus ``async action``)::
+
+        ch = AsyncChannel("numbers", capacity=10)
+        await ch.send(42)
+        val = await ch.receive()  # 42
+        ch.close()
+    """
+
+    def __init__(self, name: str, element_type: Optional[str] = None,
+                 capacity: int = 0):
+        self.name = name
+        self.element_type = element_type
+        self.capacity = capacity
+        self._closed = False
+
+        import asyncio as _asyncio
+        if capacity > 0:
+            self._queue: _asyncio.Queue = _asyncio.Queue(maxsize=capacity)
+        else:
+            self._queue = _asyncio.Queue()
+
+    @property
+    def is_open(self) -> bool:
+        return not self._closed
+
+    async def send(self, value, *, timeout: Optional[float] = None):
+        """Send *value* into the channel (async, may block if full)."""
+        if self._closed:
+            raise RuntimeError(f"Cannot send on closed async channel '{self.name}'")
+        import asyncio as _asyncio
+        if timeout is not None:
+            await _asyncio.wait_for(self._queue.put(value), timeout=timeout)
+        else:
+            await self._queue.put(value)
+
+    async def receive(self, *, timeout: Optional[float] = None):
+        """Receive a value from the channel (async, may block if empty)."""
+        if self._closed and self._queue.empty():
+            return None
+        import asyncio as _asyncio
+        try:
+            if timeout is not None:
+                value = await _asyncio.wait_for(self._queue.get(), timeout=timeout)
+            else:
+                value = await self._queue.get()
+            if isinstance(value, _ChannelClosedSentinel):
+                return None
+            return value
+        except _asyncio.TimeoutError:
+            if self._closed:
+                return None
+            raise RuntimeError(f"Timeout receiving from async channel '{self.name}'")
+
+    def close(self):
+        """Close the channel.  Pending receivers will get ``None``."""
+        self._closed = True
+        try:
+            self._queue.put_nowait(_CHANNEL_CLOSED_SENTINEL)
+        except Exception:
+            pass
+
+    def __repr__(self) -> str:
+        mode = f"buffered({self.capacity})" if self.capacity > 0 else "unbuffered"
+        status = "closed" if self._closed else "open"
+        return f"AsyncChannel<{self.element_type}>({self.name}, {mode}, {status})"
+
+
 # Global singleton instance
 _concurrency_manager: Optional[ConcurrencyManager] = None
 

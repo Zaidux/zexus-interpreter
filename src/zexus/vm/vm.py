@@ -815,35 +815,21 @@ class VM:
     # ==================== Public Execution API ====================
 
     def _run_coroutine_sync(self, coro):
-        """Run a coroutine from sync code, even if an event loop is already running."""
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro)
+        """Run a coroutine from sync code using the shared Zexus event loop.
 
-        result_holder: Dict[str, Any] = {}
-        error_holder: Dict[str, Exception] = {}
-
-        def _runner():
+        The persistent background loop means all VM async tasks share a
+        single event loop and can coordinate via asyncio primitives.
+        """
+        from ..event_loop import submit, is_loop_thread
+        if is_loop_thread():
+            # Already on the event-loop thread — fall back to a throwaway
+            # loop to avoid deadlock.
             loop = asyncio.new_event_loop()
             try:
-                asyncio.set_event_loop(loop)
-                result_holder["result"] = loop.run_until_complete(coro)
-            except Exception as exc:
-                error_holder["error"] = exc
+                return loop.run_until_complete(coro)
             finally:
-                try:
-                    loop.close()
-                except Exception:
-                    pass
-
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join()
-
-        if "error" in error_holder:
-            raise error_holder["error"]
-        return result_holder.get("result")
+                loop.close()
+        return submit(coro)
 
     def _bump_env_version(self, name: Optional[str] = None, value: Any = None) -> None:
         self._env_version += 1

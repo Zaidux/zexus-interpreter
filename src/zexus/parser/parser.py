@@ -690,6 +690,10 @@ class UltimateParser:
                 node = self.parse_expression_statement()
 
             if node is not None:
+                # Attach source location for debugger / error reporting
+                if self.cur_token and not getattr(node, 'line', 0):
+                    node.line = getattr(self.cur_token, 'line', 0) or 0
+                    node.column = getattr(self.cur_token, 'column', 0) or 0
                 return attach_modifiers(node, modifiers)
             return None
         except Exception as e:
