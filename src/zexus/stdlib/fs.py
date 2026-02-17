@@ -154,11 +154,6 @@ class FileSystemModule:
 
     @staticmethod
     def mkdir(path: str, parents: bool = True) -> None:
-        validated_path = FileSystemModule._validate_path(path, "remove")
-        os.remove(validated_path)
-
-    @staticmethod
-    def mkdir(path: str, parents: bool = True) -> None:
         """Create directory."""
         validated_path = FileSystemModule._validate_path(path, "mkdir")
         Path(validated_path).mkdir(parents=parents, exist_ok=True)

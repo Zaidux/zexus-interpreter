@@ -1217,9 +1217,6 @@ class WatchStatement(Statement):
     def __repr__(self):
         return f"WatchStatement(expr={self.watched_expr}, reaction={self.reaction})"
 
-    def __repr__(self):
-        return f"WatchStatement(watch={self.watched_expr})"
-
 
 class LogStatement(Statement):
     """Log statement - Redirect output to file

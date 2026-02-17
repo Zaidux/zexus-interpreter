@@ -188,7 +188,6 @@ LIMIT = "LIMIT"                # Gas/resource limit: action transfer() limit 100
 GAS = "GAS"                    # Gas tracking: gas_used(), gas_remaining()
 PERSISTENT = "PERSISTENT"
 STORAGE = "STORAGE"
-REQUIRE = "REQUIRE"
 
 # PERFORMANCE OPTIMIZATION TOKENS
 NATIVE = "NATIVE"            # Call C/C++ code: native { "func_name", arg1, arg2 }
@@ -205,7 +204,6 @@ CASE = "CASE"                # Case clause in match/pattern
 DEFAULT = "DEFAULT"          # Default case in match
 
 # ADVANCED FEATURES TOKENS
-ENUM = "ENUM"                # Type-safe enumerations: enum Color { Red, Green, Blue }
 STREAM = "STREAM"            # Event streaming: stream name as event => handler;
 WATCH = "WATCH"              # Reactive state management: watch variable => reaction;
 LOG = "LOG"                  # Output logging: log > filename.txt
@@ -214,9 +212,6 @@ LOG = "LOG"                  # Output logging: log > filename.txt
 PUBLIC = "PUBLIC"
 PRIVATE = "PRIVATE"
 SEALED = "SEALED"
-ASYNC = "ASYNC"
-NATIVE = "NATIVE"
-INLINE = "INLINE"
 SECURE = "SECURE"
 PURE = "PURE"
 VIEW = "VIEW"                  # View function (alias for pure, read-only)

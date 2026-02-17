@@ -32,10 +32,25 @@ class TypeParameter:
         return self.name == other.name
     
     def satisfies_bounds(self, type_spec: 'TypeSpec') -> bool:
-        """Check if type satisfies bounds."""
+        """Check if type satisfies bounds.
+        
+        Verifies that type_spec is compatible with all upper bounds
+        defined on this type parameter.
+        """
         if not self.bounds:
             return True
-        # Simplified - would need full subtype checking
+        for bound in self.bounds:
+            # If both are AdvancedTypeSpec, use structural compatibility
+            if hasattr(type_spec, 'is_assignable_to') and hasattr(bound, 'is_assignable_to'):
+                if not type_spec.is_assignable_to(bound):
+                    return False
+            # If both have base_type, compare base types
+            elif hasattr(type_spec, 'base_type') and hasattr(bound, 'base_type'):
+                if type_spec.base_type != bound.base_type:
+                    return False
+            # String-based comparison fallback
+            elif str(type_spec) != str(bound):
+                return False
         return True
 
 
