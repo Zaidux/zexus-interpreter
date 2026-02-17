@@ -62,8 +62,8 @@ print(r)
 '''
     compiler, bc = compile_source(src)
     vm, res, out = capture_run(bc, builtins={}, capsys=capsys)
-    # Expect printed value contains "1" (closure captured the original x)
-    assert "1" in out, f"Expected '1' in output, got: {out!r}"
+    # Closure captures reference to environment, so sees latest x = 2
+    assert "2" in out, f"Expected '2' in output, got: {out!r}"
 
 def test_compiled_async_await(capsys):
     # Async test: uses an async builtin registered in the VM

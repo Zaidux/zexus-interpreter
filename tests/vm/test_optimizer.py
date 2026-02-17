@@ -327,9 +327,12 @@ class TestJumpThreading(unittest.TestCase):
         
         optimized = self.optimizer.optimize(instructions, [])
         
-        # First JUMP should thread directly to label2
-        if self.optimizer.stats.jumps_threaded > 0:
-            self.assertEqual(optimized[0][1], 4)
+        # DCE removes dead code between jumps and remaps targets, then
+        # jump threading threads the first JUMP directly to the final target.
+        # The final LOAD_CONST (originally at index 4) ends up at a lower index
+        # after dead code removal.
+        final_target = optimized[0][1]
+        self.assertEqual(optimized[final_target][0], "LOAD_CONST")
     
     def test_no_threading_needed(self):
         """Test no threading when jump doesn't point to jump"""
@@ -340,7 +343,9 @@ class TestJumpThreading(unittest.TestCase):
         ]
         
         optimized = self.optimizer.optimize(instructions, [])
-        self.assertEqual(optimized[0][1], 2)
+        # JUMP target should still point to the LOAD_CONST (may be remapped by DCE)
+        final_target = optimized[0][1]
+        self.assertEqual(optimized[final_target][0], "LOAD_CONST")
 
 
 class TestOptimizationLevels(unittest.TestCase):

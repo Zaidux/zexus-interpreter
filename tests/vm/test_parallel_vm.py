@@ -10,7 +10,9 @@ Date: December 19, 2025
 
 import unittest
 import time
+import subprocess
 from typing import List
+from pathlib import Path
 import multiprocessing as mp
 
 from src.zexus.vm.parallel_vm import (
@@ -273,51 +275,72 @@ class TestResultMerger(unittest.TestCase):
 class TestWorkerPool(unittest.TestCase):
     """Test worker pool management"""
     
-    def setUp(self):
-        self.pool = WorkerPool(num_workers=2)
-    
-    def tearDown(self):
-        self.pool.shutdown()
+    def _run_in_subprocess(self, script_body: str, timeout: int = 10):
+        """Run code in subprocess to avoid pytest/multiprocessing conflicts."""
+        import sys, textwrap
+        preamble = textwrap.dedent("""\
+            import sys
+            sys.path.insert(0, '.')
+            import multiprocessing as mp
+            from src.zexus.vm.parallel_vm import WorkerPool, SharedState, ParallelVM, ParallelConfig, BytecodeChunk, ExecutionMode
+            from src.zexus.vm.bytecode import BytecodeBuilder, Opcode, Bytecode
+        """)
+        script = preamble + textwrap.dedent(script_body)
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=timeout,
+            cwd=str(Path(__file__).resolve().parent.parent.parent)
+        )
     
     def test_pool_creation(self):
         """Test creating worker pool"""
-        self.assertIsNotNone(self.pool)
-        self.assertGreaterEqual(self.pool.num_workers, 1)
-        self.assertLessEqual(self.pool.num_workers, mp.cpu_count())
+        pool = WorkerPool(num_workers=2)
+        self.assertIsNotNone(pool)
+        self.assertGreaterEqual(pool.num_workers, 1)
+        self.assertLessEqual(pool.num_workers, mp.cpu_count())
     
     def test_start_shutdown(self):
         """Test starting and shutting down pool"""
-        self.pool.start()
-        self.assertIsNotNone(self.pool.pool)
-        
-        self.pool.shutdown()
-        self.assertIsNone(self.pool.pool)
+        proc = self._run_in_subprocess("""
+            pool = WorkerPool(num_workers=2)
+            pool.start()
+            assert pool.pool is not None
+            pool.shutdown()
+            assert pool.pool is None
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
     
     def test_execute_chunk(self):
         """Test executing a single chunk"""
-        manager = mp.Manager()
-        shared_state = SharedState(manager)
-        
-        # Create simple chunk  
-        chunk = BytecodeChunk(
-            chunk_id=0,
-            instructions=[(Opcode.LOAD_CONST, 42)],
-            start_index=0,
-            end_index=1
-        )
-        
-        result = self.pool.execute_chunk(chunk, shared_state)
-        
-        self.assertTrue(result.success)
-        self.assertEqual(result.chunk_id, 0)
+        proc = self._run_in_subprocess("""
+            manager = mp.Manager()
+            shared_state = SharedState(manager)
+            chunk = BytecodeChunk(
+                chunk_id=0,
+                instructions=[(Opcode.LOAD_CONST, 42)],
+                start_index=0,
+                end_index=1
+            )
+            pool = WorkerPool(num_workers=2)
+            result = pool.execute_chunk(chunk, shared_state)
+            assert result.success, f"Chunk failed: {result.error}"
+            assert result.chunk_id == 0
+            pool.shutdown()
+            manager.shutdown()
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
     
     def test_context_manager(self):
         """Test using pool as context manager"""
-        with WorkerPool(num_workers=2) as pool:
-            self.assertIsNotNone(pool.pool)
-        
-        # Should be shutdown after exit
-        self.assertIsNone(pool.pool)
+        proc = self._run_in_subprocess("""
+            with WorkerPool(num_workers=2) as pool:
+                assert pool.pool is not None
+            assert pool.pool is None
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
 
 
 class TestParallelVM(unittest.TestCase):
@@ -329,7 +352,26 @@ class TestParallelVM(unittest.TestCase):
         self.vm = ParallelVM(config=config)
     
     def tearDown(self):
-        self.vm.worker_pool.shutdown()
+        try:
+            self.vm.worker_pool.shutdown()
+        except Exception:
+            pass
+    
+    def _run_in_subprocess(self, script_body: str, timeout: int = 10):
+        """Run code in subprocess to avoid pytest/multiprocessing conflicts."""
+        import sys, textwrap
+        preamble = textwrap.dedent("""\
+            import sys
+            sys.path.insert(0, '.')
+            from src.zexus.vm.bytecode import BytecodeBuilder
+            from src.zexus.vm.parallel_vm import ParallelVM, ParallelConfig
+        """)
+        script = preamble + textwrap.dedent(script_body)
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=timeout,
+            cwd=str(Path(__file__).resolve().parent.parent.parent)
+        )
     
     def test_vm_creation(self):
         """Test creating parallel VM"""
@@ -351,17 +393,20 @@ class TestParallelVM(unittest.TestCase):
         self.assertEqual(self.vm.stats['parallel_executions'], 0)
     
     def test_parallel_execution_large_bytecode(self):
-        """Test parallel execution for large bytecode"""
-        builder = BytecodeBuilder()
-        
-        # Create large bytecode (100 instructions)
-        for i in range(100):
-            builder.emit_constant(i)
-        
-        result = self.vm.execute(builder.bytecode)
-        
-        # Should have metrics after execution
-        self.assertIsNotNone(self.vm.last_metrics)
+        """Test parallel execution for large bytecode (in subprocess)"""
+        proc = self._run_in_subprocess("""
+            builder = BytecodeBuilder()
+            for i in range(100):
+                builder.emit_constant(i)
+            
+            config = ParallelConfig(worker_count=2, chunk_size=10)
+            vm = ParallelVM(config=config)
+            result = vm.execute(builder.bytecode, sequential_fallback=True)
+            assert vm.last_metrics is not None
+            vm.worker_pool.shutdown()
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
     
     def test_statistics(self):
         """Test statistics tracking"""
@@ -392,82 +437,119 @@ class TestParallelVM(unittest.TestCase):
 class TestParallelVMIntegration(unittest.TestCase):
     """Integration tests for parallel VM"""
     
+    def _run_parallel_in_subprocess(self, script_body: str, timeout: int = 10) -> subprocess.CompletedProcess:
+        """Run parallel VM code in a subprocess to avoid pytest/multiprocessing conflicts."""
+        import subprocess, sys, textwrap
+        preamble = textwrap.dedent("""\
+            import sys
+            sys.path.insert(0, '.')
+            from src.zexus.vm.bytecode import BytecodeBuilder
+            from src.zexus.vm.parallel_vm import ParallelVM, ParallelConfig
+        """)
+        script = preamble + textwrap.dedent(script_body)
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=timeout,
+            cwd=str(Path(__file__).resolve().parent.parent.parent)
+        )
+
     def test_simple_arithmetic(self):
         """Test parallel execution of simple arithmetic"""
-        builder = BytecodeBuilder()
-        
-        # Create: x = 10 + 20 + 30 + 40 + 50
-        for i in range(10, 60, 10):
-            builder.emit_constant(i)
-        
-        # 4 ADD operations
-        for _ in range(4):
-            builder.emit("ADD", None)
-        
-        from zexus.vm.parallel_vm import ParallelConfig
-        config = ParallelConfig(worker_count=2, chunk_size=3)
-        vm = ParallelVM(config=config)
-        result = vm.execute(builder.bytecode, sequential_fallback=True)
-        
-        # Should execute (with fallback if needed)
-        self.assertIsNotNone(result)
-        vm.worker_pool.shutdown()
+        proc = self._run_parallel_in_subprocess("""
+            builder = BytecodeBuilder()
+            for i in range(10, 60, 10):
+                builder.emit_constant(i)
+            for _ in range(4):
+                builder.emit("ADD", None)
+            
+            config = ParallelConfig(worker_count=2, chunk_size=3)
+            vm = ParallelVM(config=config)
+            result = vm.execute(builder.bytecode, sequential_fallback=True)
+            assert result is not None
+            vm.worker_pool.shutdown()
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
     
     def test_variable_operations(self):
         """Test parallel execution with variables"""
-        builder = BytecodeBuilder()
-        
-        # x = 10
-        builder.emit_constant(10)
-        builder.emit("STORE_NAME", "x")
-        
-        # y = 20
-        builder.emit_constant(20)
-        builder.emit("STORE_NAME", "y")
-        
-        # Many more operations to trigger chunking
-        for i in range(50):
-            builder.emit_constant(i)
-            builder.emit("STORE_NAME", f"var{i}")
-        
-        from zexus.vm.parallel_vm import ParallelConfig
-        config = ParallelConfig(worker_count=2, chunk_size=10)
-        vm = ParallelVM(config=config)
-        result = vm.execute(builder.bytecode, sequential_fallback=True)
-        
-        # Should execute without errors
-        self.assertIsNotNone(result)
-        vm.worker_pool.shutdown()
+        proc = self._run_parallel_in_subprocess("""
+            builder = BytecodeBuilder()
+            builder.emit_constant(10)
+            builder.emit("STORE_NAME", "x")
+            builder.emit_constant(20)
+            builder.emit("STORE_NAME", "y")
+            for i in range(50):
+                builder.emit_constant(i)
+                builder.emit("STORE_NAME", f"var{i}")
+            
+            config = ParallelConfig(worker_count=2, chunk_size=10)
+            vm = ParallelVM(config=config)
+            result = vm.execute(builder.bytecode, sequential_fallback=True)
+            assert result is not None
+            vm.worker_pool.shutdown()
+            print("OK")
+        """)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
     
     def test_performance_comparison(self):
-        """Test that parallel execution can be faster"""
-        # Note: This is a rough test, actual speedup depends on workload
-        builder = BytecodeBuilder()
+        """Test that parallel execution can be faster.
         
-        # Create large bytecode
+        Note: multiprocessing.Pool can hang under pytest due to 
+        fixture/capture interference. We run the parallel VM in a
+        subprocess to isolate it.
+        """
+        import subprocess, sys, textwrap
+        
+        # Create large bytecode and test sequential first
+        builder = BytecodeBuilder()
         for i in range(200):
             builder.emit_constant(i)
             builder.emit("DUP", None)
             builder.emit("POP", None)
         
-        # Sequential
         vm_seq = VM()
-        start = time.time()
         result_seq = vm_seq.execute(builder.bytecode)
-        seq_time = time.time() - start
-        
-        # Parallel (with fallback)
-        from zexus.vm.parallel_vm import ParallelConfig
-        config = ParallelConfig(worker_count=4, chunk_size=20)
-        vm_par = ParallelVM(config=config)
-        start = time.time()
-        result_par = vm_par.execute(builder.bytecode, sequential_fallback=True)
-        par_time = time.time() - start
-        
-        # Just verify both complete (actual speedup varies)
         self.assertIsNotNone(result_seq)
-        self.assertIsNotNone(result_par)
-        vm_par.worker_pool.shutdown()
+        
+        # Run parallel test in a subprocess to avoid pytest/multiprocessing conflicts
+        script = textwrap.dedent("""\
+            import sys
+            sys.path.insert(0, '.')
+            from src.zexus.vm.bytecode import BytecodeBuilder
+            from src.zexus.vm.parallel_vm import ParallelVM, ParallelConfig
+            
+            builder = BytecodeBuilder()
+            for i in range(200):
+                builder.emit_constant(i)
+                builder.emit("DUP", None)
+                builder.emit("POP", None)
+            
+            config = ParallelConfig(worker_count=2, chunk_size=20, timeout_seconds=5.0, retry_attempts=1)
+            vm = ParallelVM(config=config)
+            try:
+                result = vm.execute(builder.bytecode, sequential_fallback=True)
+                assert result is not None, "Parallel execution returned None"
+                print("OK")
+            finally:
+                try:
+                    vm.worker_pool.shutdown()
+                except Exception:
+                    pass
+        """)
+        
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=15,
+            cwd=str(Path(__file__).resolve().parent.parent.parent)
+        )
+        
+        # Accept success or graceful fallback — just verify no hang
+        self.assertTrue(
+            proc.returncode == 0 or "OK" in proc.stdout,
+            f"Parallel VM subprocess failed: rc={proc.returncode}, "
+            f"stdout={proc.stdout!r}, stderr={proc.stderr[-200:]!r}"
+        )
 
 
 class TestExecutionMode(unittest.TestCase):
@@ -484,18 +566,27 @@ class TestConvenienceFunction(unittest.TestCase):
     """Test convenience function"""
     
     def test_execute_parallel(self):
-        """Test execute_parallel convenience function"""
-        from src.zexus.vm.parallel_vm import execute_parallel
-        
-        builder = BytecodeBuilder()
-        builder.emit_constant(42)
-        
-        result, metrics = execute_parallel(
-            builder.bytecode, worker_count=2, chunk_size=5
+        """Test execute_parallel convenience function (in subprocess)"""
+        import sys, textwrap
+        script = textwrap.dedent("""\
+            import sys
+            sys.path.insert(0, '.')
+            from src.zexus.vm.bytecode import BytecodeBuilder
+            from src.zexus.vm.parallel_vm import execute_parallel
+            
+            builder = BytecodeBuilder()
+            builder.emit_constant(42)
+            
+            result, metrics = execute_parallel(builder.bytecode, worker_count=2, chunk_size=5)
+            assert result is not None
+            print("OK")
+        """)
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True, text=True, timeout=15,
+            cwd=str(Path(__file__).resolve().parent.parent.parent)
         )
-        self.assertIsNotNone(result)
-        
-        self.assertIsNotNone(result)
+        self.assertEqual(proc.returncode, 0, f"stderr: {proc.stderr[-300:]}")
 
 
 if __name__ == '__main__':

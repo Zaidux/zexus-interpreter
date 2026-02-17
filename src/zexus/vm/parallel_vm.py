@@ -28,6 +28,8 @@ import time
 import logging
 from collections import defaultdict
 import traceback
+import signal
+import concurrent.futures
 
 from .bytecode import Bytecode, Opcode
 from .vm import VM
@@ -449,7 +451,12 @@ class WorkerPool:
     def start(self) -> None:
         """Start the worker pool"""
         if self.pool is None:
-            self.pool = Pool(processes=self.num_workers)
+            try:
+                self.pool = Pool(processes=self.num_workers)
+            except (OSError, RuntimeError) as e:
+                logger.warning(f"Failed to start multiprocessing Pool: {e}")
+                self.pool = None
+                raise
     
     def shutdown(self) -> None:
         """Shutdown the worker pool"""
@@ -808,9 +815,20 @@ class ParallelVM:
             metrics.chunk_count = len(chunks)
             logger.info(f"Created {len(chunks)} chunks in {time.time() - chunk_start:.4f}s")
             
-            # Initialize shared state
-            manager = Manager()
-            self.shared_state = SharedState(manager)
+            # Initialize shared state — use thread-safe dict instead of 
+            # multiprocessing.Manager which can hang in container environments
+            try:
+                manager = Manager()
+                self.shared_state = SharedState(manager)
+            except (OSError, RuntimeError) as e:
+                logger.warning(f"multiprocessing.Manager() failed ({e}), falling back to sequential")
+                if sequential_fallback and self.config.enable_fallback:
+                    self.stats["fallback_executions"] += 1
+                    result = self._execute_sequential(bytecode)
+                    metrics.total_time = time.time() - start_time
+                    self.last_metrics = metrics
+                    return result
+                raise
             self.merger = ResultMerger()
 
             builtins = None

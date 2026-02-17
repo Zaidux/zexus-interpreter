@@ -364,7 +364,7 @@ class TestVMProfilerIntegration(unittest.TestCase):
     
     def test_profiling_report_text(self):
         """Test getting text profiling report from VM"""
-        vm = VM(enable_profiling=True, profiling_level="DETAILED", use_jit=False)
+        vm = VM(enable_profiling=True, profiling_level="DETAILED", use_jit=False, enable_peephole_optimizer=False)
         
         builder = BytecodeBuilder()
         for i in range(10):

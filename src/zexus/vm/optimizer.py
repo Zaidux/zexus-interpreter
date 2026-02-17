@@ -70,8 +70,8 @@ class BytecodeOptimizer:
         self.max_passes = max_passes
         self.debug = debug
         self.stats = OptimizationStats()
-        self.min_basic_size = 3
-        self.min_aggressive_size = 12
+        self.min_basic_size = 2
+        self.min_aggressive_size = 2
         self.min_experimental_size = 20
         self._control_flow_ops = {
             "JUMP",
@@ -177,7 +177,7 @@ class BytecodeOptimizer:
                         "dead_code_elimination",
                         optimized,
                         lambda: self._dead_code_elimination(optimized),
-                        can_change_size=True,
+                        can_change_size=False,
                     )
                     optimized = self._run_pass(
                         "peephole_optimization",
@@ -405,10 +405,12 @@ class BytecodeOptimizer:
     def _dead_code_elimination(self, instructions: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
         """
         Remove unreachable code after RETURN, unconditional JUMP, etc.
+        Jump targets are remapped after dead code removal to keep control flow valid.
         """
         result = []
         in_dead_code = False
         jump_targets: Set[int] = set()
+        removed_indices: Set[int] = set()
 
         for idx, (op, operand) in enumerate(instructions):
             if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD"):
@@ -423,11 +425,30 @@ class BytecodeOptimizer:
                     result.append((op, operand))
                 else:
                     self.stats.dead_code_removed += 1
+                    removed_indices.add(idx)
             else:
                 result.append((op, operand))
                 # Mark dead code after unconditional control flow
                 if op in ("RETURN", "JUMP"):
                     in_dead_code = True
+        
+        # Remap jump targets after dead code removal
+        if removed_indices:
+            index_map: Dict[int, int] = {}
+            new_idx = 0
+            for old_idx in range(len(instructions)):
+                if old_idx not in removed_indices:
+                    index_map[old_idx] = new_idx
+                    new_idx += 1
+            
+            jump_ops = ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD")
+            remapped = []
+            for op, operand in result:
+                if op in jump_ops and isinstance(operand, int) and operand in index_map:
+                    remapped.append((op, index_map[operand]))
+                else:
+                    remapped.append((op, operand))
+            result = remapped
         
         return result
     

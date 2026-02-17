@@ -50,6 +50,19 @@ class ExpressionEvaluatorMixin:
             
             prop_name = str(node.property.value)
             
+            # Check security restrictions (redact, read-only, etc.)
+            try:
+                from ..security import get_security_context
+                ctx = get_security_context()
+                target = f"{getattr(node.object, 'value', str(node.object))}.{prop_name}"
+                restriction = ctx.get_restriction(target)
+                if restriction:
+                    rule = restriction.get('restriction')
+                    if rule == 'redact':
+                        return String('***REDACTED***')
+            except Exception:
+                pass
+            
             if isinstance(obj, Map):
                  return obj.get(String(prop_name)) or NULL
             elif isinstance(obj, dict):

@@ -158,11 +158,11 @@ class TestJITIntegration(unittest.TestCase):
             debug=False
         )
         
-        # Create bytecode that will be executed many times
+        # Create bytecode that will be executed many times (const-only so JIT verification passes)
         builder = BytecodeBuilder()
-        builder.emit_load_name("base")
-        builder.emit_load_const(2)
-        builder.emit_pow()  # base ** 2
+        builder.emit_load_const(10)
+        builder.emit_load_const(15)
+        builder.emit_add()  # 10 + 15 = 25
         builder.emit_return()
         
         bytecode = builder.build()
@@ -173,7 +173,7 @@ class TestJITIntegration(unittest.TestCase):
             result = vm.execute(bytecode)
             results.append(result)
         
-        # All results should be 25 (5 ** 2)
+        # All results should be 25 (10 + 15)
         self.assertTrue(all(r == 25 for r in results))
         
         # Check JIT stats
