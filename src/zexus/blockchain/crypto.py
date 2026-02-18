@@ -24,6 +24,13 @@ except ImportError:
     print("Warning: cryptography library not installed. Signature features will be limited.")
     print("Install with: pip install cryptography")
 
+# Real Keccak-256 from pycryptodome (different from SHA3-256!)
+try:
+    from Crypto.Hash import keccak as _keccak_mod
+    _KECCAK_AVAILABLE = True
+except ImportError:
+    _KECCAK_AVAILABLE = False
+
 
 class CryptoPlugin:
     """
@@ -38,7 +45,7 @@ class CryptoPlugin:
         'SHA3-512': hashlib.sha3_512,
         'BLAKE2B': hashlib.blake2b,
         'BLAKE2S': hashlib.blake2s,
-        'KECCAK256': lambda: hashlib.sha3_256(),  # Ethereum-style Keccak
+        # KECCAK256 is handled specially in hash_data() — NOT sha3_256
     }
     
     @staticmethod
@@ -54,6 +61,26 @@ class CryptoPlugin:
             Hex-encoded hash
         """
         algorithm = algorithm.upper()
+        
+        # Special case: real Keccak-256 (NOT SHA3-256 — different padding)
+        if algorithm == 'KECCAK256':
+            if not _KECCAK_AVAILABLE:
+                raise RuntimeError(
+                    "Keccak-256 requires the 'pycryptodome' package. "
+                    "SHA3-256 uses different padding and is NOT compatible. "
+                    "Install with: pip install pycryptodome"
+                )
+            # Convert data to bytes
+            if isinstance(data, bytes):
+                data_bytes = data
+            elif isinstance(data, str):
+                data_bytes = data.encode('utf-8')
+            else:
+                data_bytes = str(data).encode('utf-8')
+            k = _keccak_mod.new(digest_bits=256)
+            k.update(data_bytes)
+            return k.hexdigest()
+
         if algorithm not in CryptoPlugin.HASH_ALGORITHMS:
             raise ValueError(f"Unsupported hash algorithm: {algorithm}. "
                            f"Supported: {', '.join(CryptoPlugin.HASH_ALGORITHMS.keys())}")
@@ -285,7 +312,10 @@ class CryptoPlugin:
     @staticmethod
     def keccak256(data: Any) -> str:
         """
-        Ethereum-style Keccak-256 hash
+        Ethereum-compatible Keccak-256 hash.
+        
+        NOTE: This uses real Keccak-256 (pre-NIST padding), NOT SHA3-256.
+        Requires pycryptodome.
         
         Args:
             data: Data to hash
@@ -335,8 +365,16 @@ class CryptoPlugin:
             format=serialization.PublicFormat.UncompressedPoint
         )
         
-        # Keccak256 hash
-        hash_result = hashlib.sha3_256(public_bytes[1:]).digest()
+        # Real Keccak-256 hash (Ethereum-compatible)
+        if _KECCAK_AVAILABLE:
+            k = _keccak_mod.new(digest_bits=256)
+            k.update(public_bytes[1:])  # Skip 0x04 prefix
+            hash_result = k.digest()
+        else:
+            raise RuntimeError(
+                "Ethereum-compatible address derivation requires Keccak-256 "
+                "from the 'pycryptodome' package. Install with: pip install pycryptodome"
+            )
         
         # Take last 20 bytes as address
         address = hash_result[-20:].hex()

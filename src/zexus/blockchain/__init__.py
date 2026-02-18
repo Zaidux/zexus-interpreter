@@ -28,7 +28,7 @@ from .chain import (
     Block, BlockHeader, Transaction as ChainTransaction,
     TransactionReceipt, Chain, Mempool
 )
-from .network import P2PNetwork, Message, MessageType, PeerInfo
+from .network import P2PNetwork, Message, MessageType, PeerInfo, PeerReputationManager
 from .consensus import (
     ConsensusEngine, ProofOfWork, ProofOfAuthority, ProofOfStake,
     create_consensus

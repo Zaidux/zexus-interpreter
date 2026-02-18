@@ -12,13 +12,98 @@ import asyncio
 import hashlib
 import json
 import random
+import ssl
 import threading
 import time
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("zexus.blockchain.network")
+
+
+# ── TLS helpers ────────────────────────────────────────────────────────
+
+def _generate_self_signed_cert(cert_path: str, key_path: str):
+    """Generate a self-signed TLS certificate for node identity.
+
+    Uses the ``cryptography`` library (already a dependency) to produce
+    an ECDSA P-256 keypair and an X.509 certificate valid for 10 years.
+    The certificate's Subject is set to the key's SHA-256 fingerprint so
+    it doubles as a verifiable node identity.
+    """
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.backends import default_backend
+    import datetime
+
+    key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+
+    # Derive a human-readable CN from the public key fingerprint
+    pub_bytes = key.public_key().public_bytes(
+        serialization.Encoding.DER,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    fingerprint = hashlib.sha256(pub_bytes).hexdigest()[:16]
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, f"zexus-node-{fingerprint}"),
+    ])
+
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.utcnow())
+        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=3650))
+        .sign(key, hashes.SHA256(), default_backend())
+    )
+
+    os.makedirs(os.path.dirname(cert_path) or ".", exist_ok=True)
+
+    with open(key_path, "wb") as f:
+        f.write(key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        ))
+
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+    return cert_path, key_path
+
+
+def _make_server_ssl_context(cert_path: str, key_path: str) -> ssl.SSLContext:
+    """Create a TLS server context with mutual-auth support."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(cert_path, key_path)
+    # We don't require client certs (nodes self-identify via handshake),
+    # but we enforce modern ciphers.
+    ctx.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20:!aNULL:!MD5:!DSS")
+    return ctx
+
+
+def _make_client_ssl_context(cert_path: Optional[str] = None,
+                              key_path: Optional[str] = None) -> ssl.SSLContext:
+    """Create a TLS client context.
+
+    Self-signed certs are expected in a peer-to-peer network, so we
+    disable hostname verification but still enforce encryption.
+    """
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # peers use self-signed certs
+    if cert_path and key_path:
+        ctx.load_cert_chain(cert_path, key_path)
+    ctx.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20:!aNULL:!MD5:!DSS")
+    return ctx
 
 
 # ── Message types ──────────────────────────────────────────────────────────
@@ -97,6 +182,92 @@ class PeerInfo:
         return f"{self.host}:{self.port}"
 
 
+class PeerReputationManager:
+    """Track and enforce peer reputation to resist Sybil and DoS attacks.
+
+    Every peer starts at score 100 (maximum).  Good behaviour (valid blocks,
+    valid transactions) earns points; bad behaviour (invalid messages, spam,
+    protocol violations) costs points.  Peers whose score drops to 0 are
+    banned for ``ban_duration`` seconds.
+
+    The manager also enforces per-peer message rate limiting.
+    """
+
+    # ── Reputation deltas ──────────────────────────────────────────
+    VALID_BLOCK = 5
+    VALID_TX = 1
+    INVALID_BLOCK = -20
+    INVALID_TX = -10
+    PROTOCOL_VIOLATION = -25
+    TIMEOUT = -5
+    SPAM = -15
+    SUCCESSFUL_SYNC = 10
+
+    def __init__(self, ban_duration: float = 3600.0,
+                 rate_limit: int = 100,
+                 rate_window: float = 60.0):
+        self.ban_duration = ban_duration          # seconds
+        self.rate_limit = rate_limit              # msgs per window
+        self.rate_window = rate_window            # seconds
+        self._bans: Dict[str, float] = {}         # peer_id -> unban timestamp
+        self._msg_counts: Dict[str, List[float]] = {}  # peer_id -> [timestamps]
+
+    def update(self, peer: PeerInfo, delta: int, reason: str = "") -> int:
+        """Adjust a peer's reputation score.
+
+        Returns the new score. If it drops to 0, the peer is banned.
+        """
+        old = peer.reputation
+        peer.reputation = max(0, min(100, peer.reputation + delta))
+        if reason:
+            logger.debug("Reputation %s: %d -> %d (%s)", peer.peer_id[:8], old, peer.reputation, reason)
+        if peer.reputation == 0:
+            self.ban(peer.peer_id)
+        return peer.reputation
+
+    def ban(self, peer_id: str):
+        """Ban a peer for ``ban_duration`` seconds."""
+        self._bans[peer_id] = time.time() + self.ban_duration
+        logger.warning("Peer %s BANNED for %ds", peer_id[:8], int(self.ban_duration))
+
+    def unban(self, peer_id: str):
+        """Manually unban a peer."""
+        self._bans.pop(peer_id, None)
+
+    def is_banned(self, peer_id: str) -> bool:
+        """Check if a peer is currently banned."""
+        if peer_id not in self._bans:
+            return False
+        if time.time() >= self._bans[peer_id]:
+            del self._bans[peer_id]
+            return False
+        return True
+
+    def check_rate_limit(self, peer_id: str) -> bool:
+        """Check if a peer has exceeded the message rate limit.
+
+        Returns True if the message should be allowed, False if rate-limited.
+        """
+        now = time.time()
+        timestamps = self._msg_counts.setdefault(peer_id, [])
+        # Prune old entries
+        cutoff = now - self.rate_window
+        self._msg_counts[peer_id] = [t for t in timestamps if t > cutoff]
+        timestamps = self._msg_counts[peer_id]
+
+        if len(timestamps) >= self.rate_limit:
+            return False  # Rate limited
+        timestamps.append(now)
+        return True
+
+    def get_banned_peers(self) -> List[str]:
+        """Return list of currently banned peer IDs."""
+        now = time.time()
+        # Prune expired bans
+        self._bans = {pid: ts for pid, ts in self._bans.items() if ts > now}
+        return list(self._bans.keys())
+
+
 class PeerConnection:
     """Manages a single peer connection with send/receive capabilities."""
 
@@ -168,7 +339,9 @@ class P2PNetwork:
 
     def __init__(self, host: str = "0.0.0.0", port: int = 30303,
                  chain_id: str = "zexus-mainnet", node_id: str = "",
-                 max_peers: int = 25, min_peers: int = 3):
+                 max_peers: int = 25, min_peers: int = 3,
+                 tls_cert: Optional[str] = None, tls_key: Optional[str] = None,
+                 tls_enabled: bool = True, data_dir: Optional[str] = None):
         self.host = host
         self.port = port
         self.chain_id = chain_id
@@ -177,6 +350,25 @@ class P2PNetwork:
         ).hexdigest()[:40]
         self.max_peers = max_peers
         self.min_peers = min_peers
+
+        # ── TLS configuration ────────────────────────────────────────
+        self.tls_enabled = tls_enabled
+        self._server_ssl: Optional[ssl.SSLContext] = None
+        self._client_ssl: Optional[ssl.SSLContext] = None
+
+        if tls_enabled:
+            # Auto-generate certs if none provided
+            _data = data_dir or os.path.join(os.path.expanduser("~"), ".zexus", "tls")
+            self._cert_path = tls_cert or os.path.join(_data, "node.crt")
+            self._key_path = tls_key or os.path.join(_data, "node.key")
+
+            if not (os.path.exists(self._cert_path) and os.path.exists(self._key_path)):
+                logger.info("Generating TLS certificate for node identity...")
+                _generate_self_signed_cert(self._cert_path, self._key_path)
+
+            self._server_ssl = _make_server_ssl_context(self._cert_path, self._key_path)
+            self._client_ssl = _make_client_ssl_context(self._cert_path, self._key_path)
+            logger.info("TLS enabled — all P2P traffic is encrypted")
 
         # Connection state
         self.peers: Dict[str, PeerConnection] = {}  # peer_id -> connection
@@ -187,6 +379,9 @@ class P2PNetwork:
         self._handlers: Dict[str, List[Callable]] = {}
         self._seen_messages: Set[str] = set()
         self._seen_max = 10_000
+
+        # Sybil / DoS resistance
+        self.reputation = PeerReputationManager()
 
         # Server state
         self._server: Optional[asyncio.AbstractServer] = None
@@ -208,7 +403,26 @@ class P2PNetwork:
             self._handlers[msg_type] = [h for h in self._handlers[msg_type] if h != handler]
 
     async def _dispatch(self, msg: Message, conn: PeerConnection):
-        """Dispatch a received message to registered handlers."""
+        """Dispatch a received message to registered handlers.
+
+        Enforces rate-limiting and reputation checks before dispatch.
+        """
+        peer_id = conn.peer_info.peer_id
+
+        # Block banned peers
+        if self.reputation.is_banned(peer_id):
+            logger.debug("Dropping message from banned peer %s", peer_id[:8])
+            return
+
+        # Rate-limit check
+        if not self.reputation.check_rate_limit(peer_id):
+            self.reputation.update(conn.peer_info, PeerReputationManager.SPAM,
+                                   reason="rate limit exceeded")
+            logger.warning("Rate-limited peer %s", peer_id[:8])
+            if self.reputation.is_banned(peer_id):
+                await self.disconnect_peer(peer_id)
+            return
+
         handlers = self._handlers.get(msg.type, [])
         for handler in handlers:
             try:
@@ -226,10 +440,13 @@ class P2PNetwork:
             return
         self._loop = asyncio.get_event_loop()
         self._server = await asyncio.start_server(
-            self._handle_inbound, self.host, self.port
+            self._handle_inbound, self.host, self.port,
+            ssl=self._server_ssl,  # None when TLS disabled → plain TCP
         )
         self._running = True
-        logger.info("P2P listening on %s:%d (node_id=%s)", self.host, self.port, self.node_id[:8])
+        tls_status = "TLS" if self.tls_enabled else "plaintext"
+        logger.info("P2P listening on %s:%d (%s, node_id=%s)",
+                     self.host, self.port, tls_status, self.node_id[:8])
 
         # Register built-in handlers
         self.on(MessageType.PING, self._handle_ping)
@@ -310,6 +527,23 @@ class P2PNetwork:
             await conn.close()
             return
 
+        # Reject banned peers
+        if self.reputation.is_banned(peer_id):
+            logger.info("Rejected banned peer %s", peer_id[:8])
+            await conn.close()
+            return
+            await conn.close()
+            return
+
+        if not msg or msg.type != MessageType.HANDSHAKE:
+            await conn.close()
+            return
+
+        peer_id = msg.sender
+        if peer_id == self.node_id or peer_id in self.peers:
+            await conn.close()
+            return
+
         # Accept the peer
         conn.peer_info.peer_id = peer_id
         conn.peer_info.chain_id = msg.payload.get("chain_id", "")
@@ -329,7 +563,8 @@ class P2PNetwork:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port), timeout=10.0
+                asyncio.open_connection(host, port, ssl=self._client_ssl),
+                timeout=10.0,
             )
         except (ConnectionError, asyncio.TimeoutError, OSError) as e:
             logger.debug("Failed to connect to %s:%d: %s", host, port, e)
@@ -362,6 +597,12 @@ class P2PNetwork:
 
         peer_id = msg.sender
         if peer_id == self.node_id or peer_id in self.peers:
+            await conn.close()
+            return None
+
+        # Reject banned peers
+        if self.reputation.is_banned(peer_id):
+            logger.info("Refused connection to banned peer %s", peer_id[:8])
             await conn.close()
             return None
 
@@ -526,6 +767,7 @@ class P2PNetwork:
             "host": self.host,
             "port": self.port,
             "chain_id": self.chain_id,
+            "tls_enabled": self.tls_enabled,
             "connected_peers": len(self.peers),
             "known_peers": len(self.known_peers),
             "running": self._running,

@@ -19,7 +19,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .chain import Block, BlockHeader, Chain, Mempool, Transaction, TransactionReceipt
-from .network import P2PNetwork, Message, MessageType, PeerConnection
+from .network import P2PNetwork, Message, MessageType, PeerConnection, PeerReputationManager
 from .consensus import ConsensusEngine, ProofOfWork, create_consensus
 
 logger = logging.getLogger("zexus.blockchain.node")
@@ -356,6 +356,11 @@ class BlockchainNode:
         # Validate via consensus
         if not self.consensus_engine.verify(block, self.chain):
             logger.debug("Block %d from %s failed consensus", block.header.height, msg.sender[:8])
+            # Penalize peer for invalid block
+            if conn.peer_info.peer_id:
+                self.network.reputation.update(
+                    conn.peer_info, PeerReputationManager.INVALID_BLOCK,
+                    reason="failed consensus verification")
             return
 
         # Try to add to chain
@@ -363,6 +368,11 @@ class BlockchainNode:
         if success:
             logger.info("Accepted block %d from peer %s", block.header.height, msg.sender[:8])
             self._emit("new_block", block)
+            # Reward peer for valid block
+            if conn.peer_info.peer_id:
+                self.network.reputation.update(
+                    conn.peer_info, PeerReputationManager.VALID_BLOCK,
+                    reason="valid block accepted")
             # Remove block's txs from our mempool
             for tx in block.transactions:
                 self.mempool.remove(tx.tx_hash)
@@ -384,6 +394,11 @@ class BlockchainNode:
 
         if self.mempool.add(tx):
             self._emit("new_tx", tx)
+            # Reward peer for valid transaction
+            if conn.peer_info.peer_id:
+                self.network.reputation.update(
+                    conn.peer_info, PeerReputationManager.VALID_TX,
+                    reason="valid transaction")
             # Relay
             await self.network.gossip(msg, exclude={msg.sender})
 

@@ -18,6 +18,16 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 
+# Import real cryptographic signing from CryptoPlugin
+try:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.exceptions import InvalidSignature
+    _ECDSA_AVAILABLE = True
+except ImportError:
+    _ECDSA_AVAILABLE = False
+
 
 @dataclass
 class BlockHeader:
@@ -88,21 +98,91 @@ class Transaction:
         return h
 
     def sign(self, private_key: str) -> str:
-        """Sign the transaction with a private key."""
-        # Use HMAC-based signing for portability (real ECDSA when cryptography lib available)
-        import hmac
+        """Sign the transaction with an ECDSA private key (secp256k1).
+        
+        Args:
+            private_key: Private key in PEM format, or hex-encoded raw key.
+            
+        Returns:
+            Hex-encoded DER signature.
+        """
         msg = self.compute_hash()
-        sig = hmac.new(private_key.encode(), msg.encode(), hashlib.sha256).hexdigest()
-        self.signature = sig
-        return sig
+        msg_bytes = msg.encode('utf-8')
+
+        if not _ECDSA_AVAILABLE:
+            raise RuntimeError(
+                "Transaction signing requires the 'cryptography' package. "
+                "Install with: pip install cryptography"
+            )
+
+        # Load private key — accept PEM or raw hex
+        if private_key.strip().startswith('-----BEGIN'):
+            priv = serialization.load_pem_private_key(
+                private_key.encode('utf-8'),
+                password=None,
+                backend=default_backend(),
+            )
+        else:
+            # Raw hex-encoded 32-byte scalar
+            try:
+                key_bytes = bytes.fromhex(private_key)
+            except ValueError:
+                raise ValueError("Private key must be PEM-encoded or a hex string")
+            priv = ec.derive_private_key(
+                int.from_bytes(key_bytes, 'big'),
+                ec.SECP256K1(),
+                default_backend(),
+            )
+
+        sig_bytes = priv.sign(msg_bytes, ec.ECDSA(hashes.SHA256()))
+        self.signature = sig_bytes.hex()
+        return self.signature
 
     def verify(self, public_key: str) -> bool:
-        """Verify transaction signature."""
+        """Verify the ECDSA (secp256k1) signature on this transaction.
+        
+        Args:
+            public_key: Public key in PEM format, or hex-encoded
+                        uncompressed/compressed point.
+                        
+        Returns:
+            True if the signature is valid.
+        """
         if not self.signature:
             return False
-        # For HMAC-based signatures, verification requires the private key
-        # In production, this would use ECDSA public key verification
-        return len(self.signature) == 64  # Basic format check
+
+        if not _ECDSA_AVAILABLE:
+            return False
+
+        msg = (self.tx_hash or self.compute_hash()).encode('utf-8')
+
+        try:
+            sig_bytes = bytes.fromhex(self.signature)
+        except ValueError:
+            return False
+
+        # Load public key — accept PEM or raw hex point
+        try:
+            if public_key.strip().startswith('-----BEGIN'):
+                pub = serialization.load_pem_public_key(
+                    public_key.encode('utf-8'),
+                    backend=default_backend(),
+                )
+            else:
+                point_bytes = bytes.fromhex(public_key)
+                pub = ec.EllipticCurvePublicKey.from_encoded_point(
+                    ec.SECP256K1(), point_bytes,
+                )
+        except Exception:
+            return False
+
+        try:
+            pub.verify(sig_bytes, msg, ec.ECDSA(hashes.SHA256()))
+            return True
+        except InvalidSignature:
+            return False
+        except Exception:
+            return False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -393,6 +473,8 @@ class Chain:
         for tx in block.transactions:
             if not tx.tx_hash:
                 return False, f"Transaction missing hash"
+            if not tx.signature:
+                return False, f"Transaction {tx.tx_hash[:16]} has no signature"
 
         # Validate tx root
         expected_root = block.compute_tx_root()
