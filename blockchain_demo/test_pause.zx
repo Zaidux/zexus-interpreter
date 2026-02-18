@@ -1,8 +1,0 @@
-use "token.zx"
-let token = ZexusToken()
-token.init(1000, "0xOWNER")
-print("Transfer works: " + string(token.transfer("0xOWNER", "0xBOB", 100)))
-print("Balance: " + string(token.balance_of("0xBOB")))
-print("About to pause...")
-token.pause_token()
-print("Paused!")

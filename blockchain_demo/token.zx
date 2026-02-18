@@ -93,7 +93,10 @@ export contract ZexusToken {
     action mint(to_addr, amount) {
         require(amount > 0, "Mint amount must be positive")
         total_supply = total_supply + amount
-        let current = this.balance_of(to_addr)
+        let current = 0
+        if balances[to_addr] != null {
+            current = balances[to_addr]
+        }
         balances[to_addr] = current + amount
 
         let record = {"type": "mint", "to": to_addr, "amount": amount}
@@ -104,7 +107,10 @@ export contract ZexusToken {
 
     action burn(from_addr, amount) {
         require(amount > 0, "Burn amount must be positive")
-        let bal = this.balance_of(from_addr)
+        let bal = 0
+        if balances[from_addr] != null {
+            bal = balances[from_addr]
+        }
         require(bal >= amount, "Insufficient balance to burn")
         balances[from_addr] = bal - amount
         total_supply = total_supply - amount

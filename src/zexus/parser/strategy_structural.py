@@ -809,7 +809,27 @@ class StructuralAnalyzer:
                             # Break if we've already completed the LET/CONST and this is an indexed assignment
                             if is_indexed_assignment and in_assignment and seen_assign:
                                 break
-                        # IDENT followed by LPAREN is a function call (already handled below, but listed for clarity)
+                        
+                        # Pattern 4: IDENT followed by LPAREN is a function call expression
+                        # This is a NEW statement if we're in LET/CONST and have seen the main assign
+                        # and the function call is on a new line (prevents absorbing next statement)
+                        elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LPAREN:
+                            if stmt_tokens and in_assignment and seen_assign:
+                                last_token = stmt_tokens[-1]
+                                last_line = getattr(last_token, 'line', None)
+                                current_line = getattr(tj, 'line', None)
+                                if last_line is not None and current_line is not None and current_line > last_line:
+                                    # Safety: don't break if previous token is an infix operator
+                                    # (e.g., let x = foo() +\n bar() across two lines)
+                                    _infix_ops = {PLUS, MINUS, STAR, SLASH, MOD, AND, OR,
+                                                  EQ, NOT_EQ, LT, GT, LTE, GTE, POWER,
+                                                  DOT, COMMA, ASSIGN, QUESTION, NULLISH,
+                                                  PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN,
+                                                  SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN,
+                                                  APPEND, IMPORT_OP}
+                                    if last_token.type not in _infix_ops:
+                                        # New line after completed assignment - this is a new statement
+                                        break
                     
                     # Detect colon-based block (tolerable syntax for action/function/if/while etc.)
                     if tj.type == COLON and nesting == 0 and t.type in {ACTION, FUNCTION, IF, WHILE, FOR}:

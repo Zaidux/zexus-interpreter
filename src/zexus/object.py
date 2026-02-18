@@ -142,8 +142,20 @@ class Map(Object):
         return str(key)
 
     def get(self, key):
-        """Get value by key (compatible with string keys)"""
-        return self.pairs.get(self._normalize_key(key))
+        """Get value by key (compatible with both string and String keys)"""
+        # Try direct lookup first (works for String-keyed and plain-keyed maps)
+        val = self.pairs.get(key)
+        if val is not None:
+            return val
+        # Try with String object key (for maps created by _python_to_zexus)
+        if isinstance(key, str):
+            str_key = String(key)
+            val = self.pairs.get(str_key)
+            if val is not None:
+                return val
+        # Try with normalized plain string key (for maps with plain string keys)
+        norm_key = self._normalize_key(key)
+        return self.pairs.get(norm_key)
 
     def set(self, key, value):
         """Set value for key, blocking modification if key is sealed."""
