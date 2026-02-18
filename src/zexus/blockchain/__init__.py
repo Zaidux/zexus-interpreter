@@ -42,6 +42,20 @@ try:
 except ImportError:
     _CONTRACT_VM_AVAILABLE = False
 
+# Multichain / cross-chain bridge infrastructure
+try:
+    from .multichain import (
+        ChainRouter,
+        BridgeRelay,
+        BridgeContract,
+        CrossChainMessage,
+        MerkleProofEngine,
+        MessageStatus,
+    )
+    _MULTICHAIN_AVAILABLE = True
+except ImportError:
+    _MULTICHAIN_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -90,4 +104,12 @@ __all__ = [
     'ContractVM',
     'ContractExecutionReceipt',
     'ContractStateAdapter',
+
+    # Multichain / Bridge
+    'ChainRouter',
+    'BridgeRelay',
+    'BridgeContract',
+    'CrossChainMessage',
+    'MerkleProofEngine',
+    'MessageStatus',
 ]

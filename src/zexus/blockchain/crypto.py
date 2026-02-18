@@ -10,6 +10,7 @@ Provides built-in functions for:
 import hashlib
 import hmac
 import secrets
+import os
 from typing import Any, Optional
 
 # Try to import cryptography library (optional for basic hashing)
@@ -47,6 +48,21 @@ class CryptoPlugin:
         'BLAKE2S': hashlib.blake2s,
         # KECCAK256 is handled specially in hash_data() — NOT sha3_256
     }
+
+    # Configurable blockchain address prefix (default Ethereum style)
+    ADDRESS_PREFIX = os.environ.get("ZEXUS_ADDRESS_PREFIX", "0x")
+
+    @classmethod
+    def set_address_prefix(cls, prefix: str) -> None:
+        """Set the default prefix used by derive_address()."""
+        if not isinstance(prefix, str) or not prefix:
+            raise ValueError("Address prefix must be a non-empty string")
+        cls.ADDRESS_PREFIX = prefix
+
+    @classmethod
+    def get_address_prefix(cls) -> str:
+        """Get the current default address prefix."""
+        return cls.ADDRESS_PREFIX
     
     @staticmethod
     def hash_data(data: Any, algorithm: str = 'SHA256') -> str:
@@ -339,19 +355,24 @@ class CryptoPlugin:
         """
         return secrets.token_hex(length)
     
-    @staticmethod
-    def derive_address(public_key_pem: str) -> str:
+    @classmethod
+    def derive_address(cls, public_key_pem: str, prefix: Optional[str] = None) -> str:
         """
-        Derive an Ethereum-style address from a public key
+        Derive a blockchain address from a public key
         
         Args:
             public_key_pem: Public key in PEM format
+            prefix: Optional address prefix override (e.g. "0x", "Zx01")
             
         Returns:
-            Address (hex with '0x' prefix)
+            Address (prefix + 40 hex chars)
         """
         if not CRYPTO_AVAILABLE:
             raise RuntimeError("cryptography library not installed. Install with: pip install cryptography")
+
+        effective_prefix = cls.ADDRESS_PREFIX if prefix is None else prefix
+        if not isinstance(effective_prefix, str) or not effective_prefix:
+            raise ValueError("Address prefix must be a non-empty string")
         
         # Load public key
         public_key = serialization.load_pem_public_key(
@@ -378,7 +399,7 @@ class CryptoPlugin:
         
         # Take last 20 bytes as address
         address = hash_result[-20:].hex()
-        return '0x' + address
+        return effective_prefix + address
 
 
 def register_crypto_builtins(env):
@@ -394,7 +415,10 @@ def register_crypto_builtins(env):
     - random_bytes(length?) -> string
     - derive_address(public_key) -> string
     """
-    from zexus.object import Function, String, Boolean, Hash, Integer, Error
+    try:
+        from zexus.object import Function, String, Boolean, Hash, Integer, Error
+    except ImportError:
+        from src.zexus.object import Function, String, Boolean, Hash, Integer, Error
     
     # hash(data, algorithm)
     def builtin_hash(args):
@@ -477,15 +501,18 @@ def register_crypto_builtins(env):
         except Exception as e:
             return Error(f"Random bytes error: {str(e)}")
     
-    # derive_address(public_key)
+    # derive_address(public_key, [prefix])
     def builtin_derive_address(args):
-        if len(args) != 1:
-            return Error("derive_address expects 1 argument: public_key")
+        if len(args) < 1 or len(args) > 2:
+            return Error("derive_address expects 1 or 2 arguments: public_key, [prefix]")
         
         public_key = args[0].value if hasattr(args[0], 'value') else str(args[0])
+        prefix = None
+        if len(args) > 1:
+            prefix = args[1].value if hasattr(args[1], 'value') else str(args[1])
         
         try:
-            result = CryptoPlugin.derive_address(public_key)
+            result = CryptoPlugin.derive_address(public_key, prefix=prefix)
             return String(result)
         except Exception as e:
             return Error(f"Address derivation error: {str(e)}")

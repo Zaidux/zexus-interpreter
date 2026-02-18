@@ -22,6 +22,15 @@ from .chain import Block, BlockHeader, Chain, Mempool, Transaction, TransactionR
 from .network import P2PNetwork, Message, MessageType, PeerConnection, PeerReputationManager
 from .consensus import ConsensusEngine, ProofOfWork, create_consensus
 
+# Multichain bridge (optional)
+try:
+    from .multichain import ChainRouter, BridgeContract, CrossChainMessage
+    _MULTICHAIN_AVAILABLE = True
+except ImportError:
+    _MULTICHAIN_AVAILABLE = False
+    ChainRouter = None  # type: ignore
+    BridgeContract = None  # type: ignore
+
 # Contract VM bridge (optional — only if the VM module is present)
 try:
     from .contract_vm import ContractVM, ContractExecutionReceipt
@@ -575,3 +584,44 @@ class BlockchainNode:
     def __repr__(self):
         return (f"BlockchainNode(chain_id={self.config.chain_id!r}, "
                 f"height={self.chain.height}, peers={self.network.peer_count})")
+
+    # ── Multichain / Cross-chain Bridge ────────────────────────────────
+
+    def join_router(self, router: "ChainRouter") -> None:
+        """Register this node's chain with an external ChainRouter."""
+        if not _MULTICHAIN_AVAILABLE:
+            raise RuntimeError("Multichain module not available")
+        router.register_chain(self.config.chain_id, self.chain)
+        self._router = router
+        logger.info("Node %s joined ChainRouter", self.config.chain_id)
+
+    def bridge_to(
+        self,
+        other_node: "BlockchainNode",
+        router: Optional["ChainRouter"] = None,
+    ) -> "BridgeContract":
+        """Create a bridge contract between this node and *other_node*.
+
+        If no *router* is provided, a new one is created.
+
+        Returns a ``BridgeContract`` for lock-and-mint / burn-and-release.
+        """
+        if not _MULTICHAIN_AVAILABLE:
+            raise RuntimeError("Multichain module not available")
+        if router is None:
+            router = ChainRouter()
+        if self.config.chain_id not in router.chain_ids:
+            self.join_router(router)
+        if other_node.config.chain_id not in router.chain_ids:
+            other_node.join_router(router)
+        router.connect(self.config.chain_id, other_node.config.chain_id)
+        bridge = BridgeContract(
+            router=router,
+            source_chain=self.config.chain_id,
+            dest_chain=other_node.config.chain_id,
+        )
+        logger.info(
+            "Bridge created: %s <-> %s",
+            self.config.chain_id, other_node.config.chain_id,
+        )
+        return bridge

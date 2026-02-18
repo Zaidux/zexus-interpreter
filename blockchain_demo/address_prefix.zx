@@ -1,0 +1,78 @@
+// ============================================================================
+//   Zexus Configurable Address Prefix Demo
+//   ========================================
+//   Shows how to use the blockchain crypto module to derive wallet
+//   addresses with a custom prefix (e.g. "Zx01") instead of "0x".
+//
+//   Run: python -m zexus run blockchain_demo/address_prefix.zx
+// ============================================================================
+
+use "crypto" as crypto
+
+print("")
+print("=" * 70)
+print("  ZEXUS — CONFIGURABLE ADDRESS PREFIX DEMO")
+print("=" * 70)
+print("")
+
+// ── Step 1: Generate an ECDSA keypair ────────────────────────────────
+
+let keys = generateKeypair("ECDSA")
+print("[1] Generated secp256k1 keypair")
+print("    Public key (first 64 chars): " + string(keys["public_key"])[:64] + "...")
+print("")
+
+// ── Step 2: Derive address with the default prefix (0x) ─────────────
+
+let default_addr = deriveAddress(keys["public_key"])
+print("[2] Default prefix address:")
+print("    " + string(default_addr))
+print("    Prefix: 0x")
+print("    Length: " + string(len(string(default_addr))) + " chars")
+print("")
+
+// ── Step 3: Derive address with custom Zexus prefix ─────────────────
+
+let zx_addr = deriveAddress(keys["public_key"], "Zx01")
+print("[3] Custom Zexus prefix address:")
+print("    " + string(zx_addr))
+print("    Prefix: Zx01")
+print("    Length: " + string(len(string(zx_addr))) + " chars")
+print("")
+
+// ── Step 4: Derive with another custom prefix ────────────────────────
+
+let ziver_addr = deriveAddress(keys["public_key"], "ZVR_")
+print("[4] Another custom prefix address:")
+print("    " + string(ziver_addr))
+print("    Prefix: ZVR_")
+print("")
+
+// ── Step 5: Verify all addresses share the same 40-hex body ─────────
+
+let body_default = string(default_addr)[2:]
+let body_zx = string(zx_addr)[4:]
+let body_zvr = string(ziver_addr)[4:]
+
+print("[5] Verification — all share the same 40-hex address body:")
+print("    0x  body: " + string(body_default))
+print("    Zx01 body: " + string(body_zx))
+print("    ZVR_ body: " + string(body_zvr))
+
+if body_default == body_zx {
+    print("    ✓ 0x and Zx01 bodies match")
+} else {
+    print("    ✗ Mismatch!")
+}
+
+if body_default == body_zvr {
+    print("    ✓ 0x and ZVR_ bodies match")
+} else {
+    print("    ✗ Mismatch!")
+}
+
+print("")
+print("=" * 70)
+print("  DEMO COMPLETE — Address prefix is fully configurable per-call.")
+print("=" * 70)
+print("")
