@@ -59,8 +59,8 @@ class TestHashBlockOpcode(unittest.TestCase):
         bytecode.add_instruction("HASH_BLOCK")
         
         result = self.vm.execute(bytecode)
-        # SHA-256 of empty string
-        self.assertEqual(result, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        # Keccak-256 of empty string
+        self.assertEqual(result, "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
     
     def test_hash_deterministic(self):
         """Test hash is deterministic"""
@@ -467,14 +467,14 @@ class TestGasChargeOpcode(unittest.TestCase):
     
     def test_gas_charge_insufficient(self):
         """Test gas charge with insufficient gas"""
-        self.vm.env["_gas_remaining"] = 50
+        self.vm = VM(gas_limit=50)
         
         bytecode = Bytecode()
         bytecode.add_instruction("GAS_CHARGE", 100)
         
-        result = self.vm.execute(bytecode)
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result.get("error"), "OutOfGas")
+        with self.assertRaises(Exception) as ctx:
+            self.vm.execute(bytecode)
+        self.assertIn("gas", str(ctx.exception).lower())
     
     def test_gas_charge_exact(self):
         """Test gas charge with exact amount"""

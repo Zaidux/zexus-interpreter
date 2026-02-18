@@ -76,6 +76,22 @@ class GasCost(IntEnum):
     TX_COMMIT = 30
     TX_REVERT = 20
     LEDGER_APPEND = 40
+    GAS_CHARGE = 2        # Overhead of the charge itself
+    REQUIRE = 5
+    AUDIT_LOG = 15
+    RESTRICT_ACCESS = 5
+    DEFINE_CONTRACT = 50
+    EMIT_EVENT = 10
+    
+    # Error handling
+    SETUP_TRY = 3
+    POP_TRY = 2
+    THROW = 5
+    ENABLE_ERROR_MODE = 2
+    
+    # Parallel operations
+    PARALLEL_START = 15
+    PARALLEL_END = 10
     
     # I/O operations
     PRINT = 10

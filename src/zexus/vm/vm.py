@@ -1675,8 +1675,9 @@ class VM:
                 normalized.append((op_name, operand))
         instrs = normalized
 
-        # Cython fast-path if available
-        if _FASTOPS_AVAILABLE:
+        # Cython fast-path if available (skip when gas metering is active
+        # because the native code doesn't enforce gas limits)
+        if _FASTOPS_AVAILABLE and not self.gas_metering:
             try:
                 return _fastops.execute(instrs, consts, self.env, self.builtins, self._closure_cells)
             except NotImplementedError:
@@ -1730,9 +1731,29 @@ class VM:
                 env[name] = value
                 self._bump_env_version(name, value)
         
+        # Gas metering for sync path (security: prevents DoS via
+        # unbounded computation even when using the fast path)
+        _gas = self.gas_metering  # may be None
+        _gas_consume = _gas.consume if _gas else None
+        _gas_light = self.enable_gas_light
+        _gas_light_cost = self.gas_light_cost if _gas_light else 0
+        _gas_consume_light = _gas.consume_light if _gas else None
+
         while ip < instr_count:
             op_name, operand = instrs[ip]
             ip += 1
+
+            # --- Gas accounting (fast) ---
+            if _gas is not None:
+                if _gas_light:
+                    if not _gas_consume_light(_gas_light_cost):
+                        from .gas_metering import OutOfGasError
+                        raise OutOfGasError(_gas.gas_used, _gas.gas_limit, op_name)
+                else:
+                    if not _gas_consume(op_name):
+                        from .gas_metering import OutOfGasError
+                        raise OutOfGasError(_gas.gas_used, _gas.gas_limit, op_name)
+
             if trace_interval > 0:
                 trace_counter += 1
                 if trace_counter % trace_interval == 0:
@@ -1999,8 +2020,226 @@ class VM:
             elif op_name == "DEFINE_CONTRACT":
                 contract_obj = self._build_smart_contract(operand, stack, stack_pop, const, env)
                 stack_append(contract_obj)
+
+            # --- Blockchain / TX opcodes (sync-safe) ---
+
+            elif op_name == "HASH_BLOCK":
+                block_data = stack_pop() if stack else ""
+                if isinstance(block_data, dict):
+                    import json; block_data = json.dumps(block_data, sort_keys=True)
+                if not isinstance(block_data, (bytes, str)): block_data = str(block_data)
+                if isinstance(block_data, str): block_data = block_data.encode('utf-8')
+                try:
+                    from Crypto.Hash import keccak as _keccak_mod
+                    h = _keccak_mod.new(digest_bits=256, data=block_data)
+                    stack_append(h.hexdigest())
+                except ImportError:
+                    stack_append(hashlib.sha256(block_data).hexdigest())
+
+            elif op_name == "VERIFY_SIGNATURE":
+                if len(stack) >= 3:
+                    pk = stack.pop(); msg = stack.pop(); sig = stack.pop()
+                    verify_fn = builtins.get("verify_sig") or env.get("verify_sig")
+                    if verify_fn and callable(verify_fn):
+                        try:
+                            res = verify_fn(sig, msg, pk)
+                        except Exception:
+                            res = False
+                        stack_append(res)
+                    else:
+                        try:
+                            from ..blockchain.crypto import CryptoPlugin
+                            sig_s = sig.value if hasattr(sig, 'value') else str(sig)
+                            msg_s = msg.value if hasattr(msg, 'value') else str(msg)
+                            pk_s = pk.value if hasattr(pk, 'value') else str(pk)
+                            stack_append(CryptoPlugin.verify_signature(msg_s, sig_s, pk_s))
+                        except ImportError:
+                            stack_append(False)
+                else:
+                    stack_append(False)
+
+            elif op_name == "MERKLE_ROOT":
+                leaf_count = operand if operand is not None else 0
+                if leaf_count <= 0 or len(stack) < leaf_count:
+                    stack_append("")
+                else:
+                    leaves = [stack.pop() for _ in range(leaf_count)][::-1]
+                    hashes = []
+                    for leaf in leaves:
+                        if isinstance(leaf, dict):
+                            import json; leaf = json.dumps(leaf, sort_keys=True)
+                        if not isinstance(leaf, (str, bytes)): leaf = str(leaf)
+                        if isinstance(leaf, str): leaf = leaf.encode('utf-8')
+                        hashes.append(hashlib.sha256(leaf).hexdigest())
+                    while len(hashes) > 1:
+                        if len(hashes) % 2 != 0: hashes.append(hashes[-1])
+                        new_hashes = []
+                        for i in range(0, len(hashes), 2):
+                            combined = (hashes[i] + hashes[i+1]).encode('utf-8')
+                            new_hashes.append(hashlib.sha256(combined).hexdigest())
+                        hashes = new_hashes
+                    stack_append(hashes[0] if hashes else "")
+
+            elif op_name == "STATE_READ":
+                if operand is None:
+                    key = stack_pop()
+                    if hasattr(key, 'value'): key = key.value
+                else:
+                    key = const(operand)
+                stack_append(env.setdefault("_blockchain_state", {}).get(key))
+
+            elif op_name == "STATE_WRITE":
+                val = stack_pop()
+                if hasattr(val, 'value'): val = val.value
+                if operand is None:
+                    key = stack_pop()
+                    if hasattr(key, 'value'): key = key.value
+                else:
+                    key = const(operand)
+                if env.get("_in_transaction", False):
+                    env.setdefault("_tx_pending_state", {})[key] = val
+                else:
+                    env.setdefault("_blockchain_state", {})[key] = val
+
+            elif op_name == "TX_BEGIN":
+                tx_stack = env.setdefault("_tx_stack", [])
+                tx_stack.append({
+                    "snapshot": dict(env.get("_blockchain_state", {})),
+                    "pending": dict(env.get("_tx_pending_state", {})),
+                })
+                env["_in_transaction"] = True
+                env["_tx_pending_state"] = {}
+                env["_tx_snapshot"] = dict(env.get("_blockchain_state", {}))
+
+            elif op_name == "TX_COMMIT":
+                if env.get("_in_transaction", False):
+                    env.setdefault("_blockchain_state", {}).update(
+                        env.get("_tx_pending_state", {}))
+                    env["_tx_pending_state"] = {}
+                    env.pop("_tx_snapshot", None)
+                    # Restore outer TX if nested
+                    tx_stack = env.get("_tx_stack", [])
+                    if tx_stack:
+                        tx_stack.pop()
+                    env["_in_transaction"] = bool(tx_stack)
+
+            elif op_name == "TX_REVERT":
+                if env.get("_in_transaction", False):
+                    env["_blockchain_state"] = dict(env.get("_tx_snapshot", {}))
+                    env["_tx_pending_state"] = {}
+                    env.pop("_tx_snapshot", None)
+                    tx_stack = env.get("_tx_stack", [])
+                    if tx_stack:
+                        outer = tx_stack.pop()
+                        if tx_stack:
+                            env["_tx_snapshot"] = outer["snapshot"]
+                            env["_tx_pending_state"] = outer["pending"]
+                    env["_in_transaction"] = bool(env.get("_tx_stack", []))
+
+            elif op_name == "GAS_CHARGE":
+                amount = operand if operand is not None else 0
+                if _gas is not None:
+                    if not _gas.consume("GAS_CHARGE", amount=amount):
+                        if env.get("_in_transaction", False):
+                            env["_blockchain_state"] = dict(env.get("_tx_snapshot", {}))
+                            env["_in_transaction"] = False
+                        from .gas_metering import OutOfGasError
+                        raise OutOfGasError(_gas.gas_used, _gas.gas_limit, "GAS_CHARGE")
+                    # Sync env-based counter for backward compat
+                    if "_gas_remaining" in env:
+                        env["_gas_remaining"] = max(0, env["_gas_remaining"] - amount)
+                else:
+                    # Fallback to env-based tracking when no GasMetering
+                    current = env.get("_gas_remaining", float('inf'))
+                    if current != float('inf'):
+                        new_gas = current - amount
+                        if new_gas < 0:
+                            if env.get("_in_transaction", False):
+                                env["_blockchain_state"] = dict(env.get("_tx_snapshot", {}))
+                                env["_in_transaction"] = False
+                            raise ZEvaluationError(
+                                f"Out of gas: required {amount}, remaining {current}")
+                        env["_gas_remaining"] = new_gas
+
+            elif op_name == "REQUIRE":
+                message = stack_pop()
+                if hasattr(message, 'value'): message = message.value
+                condition = stack_pop()
+                cond_val = condition.value if hasattr(condition, 'value') else condition
+                if not cond_val:
+                    if env.get("_in_transaction", False):
+                        env["_blockchain_state"] = dict(env.get("_tx_snapshot", {}))
+                        env["_in_transaction"] = False
+                        env["_tx_pending_state"] = {}
+                        env.pop("_tx_snapshot", None)
+                    raise ZEvaluationError(f"Requirement failed: {message}")
+
+            elif op_name == "LEDGER_APPEND":
+                entry = stack_pop()
+                ledger = env.setdefault("_ledger", [])
+                if len(ledger) < 10000:  # Size limit
+                    if isinstance(entry, dict) and "timestamp" not in entry:
+                        entry["timestamp"] = time.time()
+                    ledger.append(entry)
+
+            elif op_name == "SETUP_TRY":
+                handler_ip = int(operand) if operand is not None else ip
+                env.setdefault("_try_stack_sync", []).append(handler_ip)
+
+            elif op_name == "POP_TRY":
+                ts = env.get("_try_stack_sync", [])
+                if ts: ts.pop()
+
+            elif op_name == "THROW":
+                exc = stack_pop()
+                ts = env.get("_try_stack_sync", [])
+                if ts:
+                    handler_ip = ts.pop()
+                    stack_append(exc)
+                    ip = handler_ip
+                else:
+                    msg = exc.value if hasattr(exc, 'value') else exc
+                    raise ZEvaluationError(str(msg))
+
+            elif op_name == "ENABLE_ERROR_MODE":
+                env["_continue_on_error"] = True
+
+            elif op_name in ("PARALLEL_START", "PARALLEL_END"):
+                pass  # Marker ops — no-op in stack VM
+
+            elif op_name == "AUDIT_LOG":
+                ts = time.time()
+                data = stack_pop(); action = stack_pop()
+                if hasattr(action, 'value'): action = action.value
+                if hasattr(data, 'value'): data = data.value
+                env.setdefault("_audit_log", []).append(
+                    {"timestamp": ts, "action": action, "data": data})
+
+            elif op_name == "RESTRICT_ACCESS":
+                restriction = stack_pop(); prop = stack_pop(); obj = stack_pop()
+                r_key = f"{obj}.{prop}" if prop else str(obj)
+                env.setdefault("_restrictions", {})[r_key] = restriction
+                # Enforcement via TX.caller
+                caller = None
+                tx_obj = env.get("TX")
+                if tx_obj is not None and hasattr(tx_obj, 'get'):
+                    from ..object import String as _ZS
+                    cv = tx_obj.get(_ZS("caller"))
+                    if cv: caller = cv.value if hasattr(cv, 'value') else str(cv)
+                rv = restriction.value if hasattr(restriction, 'value') else restriction
+                if isinstance(rv, str) and rv == "owner_only":
+                    owner = env.get("owner")
+                    if owner is not None:
+                        ov = owner.value if hasattr(owner, 'value') else str(owner)
+                        if caller and caller != ov:
+                            raise ZEvaluationError(f"Access denied: '{r_key}' restricted to owner only")
+                elif isinstance(rv, (list, tuple)):
+                    allowed = [a.value if hasattr(a, 'value') else str(a) for a in rv]
+                    if caller and caller not in allowed:
+                        raise ZEvaluationError(f"Access denied: '{r_key}' restricted to allowed addresses")
+
             else:
-                # Fallback to async path for unsupported ops
+                # Truly unknown op — fallback to async path
                 return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
         
         return stack_pop() if stack else None
@@ -2093,8 +2332,12 @@ class VM:
                 if self._action_evaluator is None:
                     self._action_evaluator = Evaluator(use_vm=False)
                 self._action_evaluator.eval_node(constructor.body, contract_env, [])
-            except Exception:
-                pass  # Constructor errors are non-fatal for contract creation
+            except Exception as _ctor_err:
+                # Log the error — silent failures can leave security-critical
+                # storage (e.g. owner) uninitialised.
+                import logging as _logging
+                _logging.getLogger("zexus.vm").warning(
+                    "Contract '%s' constructor failed: %s", contract_name, _ctor_err)
 
             # Sync modified variables back to storage
             for sv in storage_vars:
@@ -2161,22 +2404,16 @@ class VM:
             bytecode = fn.get("bytecode")
             if bytecode:
                 params = fn.get("parameters", [])
-                child_vm = VM(
-                    builtins=self.builtins.copy(),
-                    env={},
-                    parent_env=self,
-                    use_jit=False,
-                    enable_gas_metering=False,
-                    enable_peephole_optimizer=False,
-                    enable_bytecode_optimizer=False,
-                    enable_profiling=False,
-                    enable_memory_pool=False,
-                )
-                child_vm._perf_fast_dispatch = True
+                local_env = {}
                 for i, p in enumerate(params):
                     pname = p.get("name") if isinstance(p, dict) else str(p)
-                    child_vm.env[pname] = args[i] if i < len(args) else None
-                return child_vm._run_stack_bytecode_sync(bytecode, debug=False)
+                    local_env[pname] = args[i] if i < len(args) else None
+                # Share parent's gas metering so nested calls can't evade limits
+                child_vm = VM.create_child(parent_vm=self, env=local_env)
+                try:
+                    return child_vm._run_stack_bytecode_sync(bytecode, debug=False)
+                finally:
+                    self._return_vm_to_pool(child_vm)
         # Fallback for async callables
         if _iscoroutinefunction(real_fn):
             return self._run_coroutine_sync(real_fn(*args))
@@ -3001,7 +3238,7 @@ class VM:
         fast_loop_allowed = (
             (self.enable_fast_loop or auto_fast_loop)
             and not profile_ops
-            and not (gas_enabled and not gas_light)
+            and not gas_enabled  # Never skip gas metering (including gas_light)
             and not trace_interval
             and trace_ip_range is None
             and not trace_loads_active
@@ -3860,7 +4097,12 @@ class VM:
                         import json; block_data = json.dumps(block_data, sort_keys=True)
                     if not isinstance(block_data, (bytes, str)): block_data = str(block_data)
                     if isinstance(block_data, str): block_data = block_data.encode('utf-8')
-                    stack.append(hashlib.sha256(block_data).hexdigest())
+                    try:
+                        from Crypto.Hash import keccak as _keccak_mod
+                        h = _keccak_mod.new(digest_bits=256, data=block_data)
+                        stack.append(h.hexdigest())
+                    except ImportError:
+                        stack.append(hashlib.sha256(block_data).hexdigest())
     
                 elif op_name == "VERIFY_SIGNATURE":
                     if len(stack) >= 3:
@@ -3870,15 +4112,23 @@ class VM:
                             res = await self._invoke_callable_or_funcdesc(verify_fn, [sig, msg, pk])
                             stack.append(res)
                         else:
-                            # Fallback for testing
-                            expected = hashlib.sha256(str(msg).encode()).hexdigest()
-                            stack.append(sig == expected)
+                            # Use real CryptoPlugin verification when available.
+                            # No SHA-256 fallback — forging a SHA-256 hash is trivial.
+                            try:
+                                from ..blockchain.crypto import CryptoPlugin
+                                sig_str = sig.value if hasattr(sig, 'value') else str(sig)
+                                msg_str = msg.value if hasattr(msg, 'value') else str(msg)
+                                pk_str = pk.value if hasattr(pk, 'value') else str(pk)
+                                stack.append(CryptoPlugin.verify_signature(msg_str, sig_str, pk_str))
+                            except ImportError:
+                                # CryptoPlugin unavailable — always reject
+                                stack.append(False)
                     else:
                         stack.append(False)
     
                 elif op_name == "MERKLE_ROOT":
                     leaf_count = operand if operand is not None else 0
-                    if leaf_count <= 0:
+                    if leaf_count <= 0 or len(stack) < leaf_count:
                         stack.append("")
                     else:
                         leaves = [stack.pop() for _ in range(leaf_count)][::-1] if len(stack) >= leaf_count else []
@@ -3918,6 +4168,12 @@ class VM:
                         self.env.setdefault("_blockchain_state", {})[key] = val
     
                 elif op_name == "TX_BEGIN":
+                    # Support nested transactions via a stack
+                    tx_stack = self.env.setdefault("_tx_stack", [])
+                    tx_stack.append({
+                        "snapshot": dict(self.env.get("_blockchain_state", {})),
+                        "pending": dict(self.env.get("_tx_pending_state", {})),
+                    })
                     self.env["_in_transaction"] = True
                     self.env["_tx_pending_state"] = {}
                     self.env["_tx_snapshot"] = dict(self.env.get("_blockchain_state", {}))
@@ -3944,17 +4200,31 @@ class VM:
                 elif op_name == "TX_COMMIT":
                     if self.env.get("_in_transaction", False):
                         self.env.setdefault("_blockchain_state", {}).update(self.env.get("_tx_pending_state", {}))
-                        self.env["_in_transaction"] = False
                         self.env["_tx_pending_state"] = {}
+                        self.env.pop("_tx_snapshot", None)
                         if "_tx_memory_snapshot" in self.env: del self.env["_tx_memory_snapshot"]
+                        # Restore outer TX context if nested
+                        tx_stack = self.env.get("_tx_stack", [])
+                        if tx_stack:
+                            tx_stack.pop()
+                        self.env["_in_transaction"] = bool(tx_stack)
     
                 elif op_name == "TX_REVERT":
                     if self.env.get("_in_transaction", False):
                         self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
-                        self.env["_in_transaction"] = False
                         self.env["_tx_pending_state"] = {}
+                        self.env.pop("_tx_snapshot", None)
                         if self.use_memory_manager and "_tx_memory_snapshot" in self.env:
                             self._managed_objects = dict(self.env["_tx_memory_snapshot"])
+                            del self.env["_tx_memory_snapshot"]
+                        # Restore outer TX context if nested
+                        tx_stack = self.env.get("_tx_stack", [])
+                        if tx_stack:
+                            outer = tx_stack.pop()
+                            if tx_stack:
+                                self.env["_tx_snapshot"] = outer["snapshot"]
+                                self.env["_tx_pending_state"] = outer["pending"]
+                        self.env["_in_transaction"] = bool(self.env.get("_tx_stack", []))
     
                 elif op_name == "ENABLE_ERROR_MODE":
                     self.env["_continue_on_error"] = True
@@ -3962,17 +4232,33 @@ class VM:
     
                 elif op_name == "GAS_CHARGE":
                     amount = operand if operand is not None else 0
-                    current = self.env.get("_gas_remaining", float('inf'))
-                    if current != float('inf'):
-                        new_gas = current - amount
-                        if new_gas < 0:
-                            # Revert if in TX
+                    # Delegate to the unified GasMetering system when available
+                    if self.gas_metering is not None:
+                        if not self.gas_metering.consume("GAS_CHARGE", amount=amount):
                             if self.env.get("_in_transaction", False):
                                 self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
                                 self.env["_in_transaction"] = False
-                            stack.append({"error": "OutOfGas", "required": amount, "remaining": current})
-                            return stack[-1]
-                        self.env["_gas_remaining"] = new_gas
+                                self.env.pop("_tx_snapshot", None)
+                            raise OutOfGasError(
+                                self.gas_metering.gas_used,
+                                self.gas_metering.gas_limit,
+                                "GAS_CHARGE"
+                            )
+                        # Sync env-based counter for backward compat
+                        if "_gas_remaining" in self.env:
+                            self.env["_gas_remaining"] = max(0, self.env["_gas_remaining"] - amount)
+                    else:
+                        # Fallback to env-based tracking when no GasMetering
+                        current = self.env.get("_gas_remaining", float('inf'))
+                        if current != float('inf'):
+                            new_gas = current - amount
+                            if new_gas < 0:
+                                if self.env.get("_in_transaction", False):
+                                    self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                                    self.env["_in_transaction"] = False
+                                raise ZEvaluationError(
+                                    f"Out of gas: required {amount}, remaining {current}")
+                            self.env["_gas_remaining"] = new_gas
     
                 elif op_name == "REQUIRE":
                     message = stack.pop() if stack else "Requirement failed"
@@ -3985,6 +4271,12 @@ class VM:
                             self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
                             self.env["_in_transaction"] = False
                             self.env["_tx_pending_state"] = {}
+                            self.env.pop("_tx_snapshot", None)
+                            self.env.pop("_tx_memory_snapshot", None)
+                            # Clean up TX stack
+                            tx_stack = self.env.get("_tx_stack", [])
+                            if tx_stack: tx_stack.pop()
+                            self.env["_in_transaction"] = bool(tx_stack)
                         raise ZEvaluationError(f"Requirement failed: {message}")
     
                 elif op_name == "DEFINE_CONTRACT":
@@ -4059,10 +4351,39 @@ class VM:
                     restriction = stack_pop()
                     prop = stack_pop()
                     obj = stack_pop()
-                    # Just store in a registry for now. 
-                    # Real implementation would hook into PropertyAccess/Assign logic.
+
+                    # Enforce access restrictions for smart contract actions.
+                    # ``restriction`` can be:
+                    #   - a string like "owner_only" — compared against TX.caller
+                    #   - a list of allowed addresses
+                    #   - a callable predicate
                     r_key = f"{obj}.{prop}" if prop else str(obj)
                     self.env.setdefault("_restrictions", {})[r_key] = restriction
+
+                    # Real enforcement: check if the current caller matches
+                    caller = None
+                    tx_obj = self.env.get("TX")
+                    if tx_obj is not None:
+                        if hasattr(tx_obj, 'get'):
+                            caller_val = tx_obj.get(ZString("caller")) if hasattr(tx_obj, 'get') else None
+                            if caller_val is not None:
+                                caller = caller_val.value if hasattr(caller_val, 'value') else str(caller_val)
+
+                    restriction_val = restriction.value if hasattr(restriction, 'value') else restriction
+                    if isinstance(restriction_val, str) and restriction_val == "owner_only":
+                        owner = self.env.get("owner")
+                        if owner is not None:
+                            owner_val = owner.value if hasattr(owner, 'value') else str(owner)
+                            if caller and caller != owner_val:
+                                raise ZEvaluationError(
+                                    f"Access denied: '{r_key}' restricted to owner only"
+                                )
+                    elif isinstance(restriction_val, (list, tuple)):
+                        allowed = [a.value if hasattr(a, 'value') else str(a) for a in restriction_val]
+                        if caller and caller not in allowed:
+                            raise ZEvaluationError(
+                                f"Access denied: '{r_key}' restricted to allowed addresses"
+                            )
     
                 elif op_name == "LEDGER_APPEND":
                     entry = stack.pop() if stack else None

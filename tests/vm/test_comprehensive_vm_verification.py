@@ -775,15 +775,15 @@ class TestBlockchainOpcodes(unittest.TestCase):
         self.assertEqual(self.vm.env['_gas_remaining'], 950)
     
     def test_066_gas_charge_out_of_gas(self):
-        """Test GAS_CHARGE with insufficient gas"""
-        self.vm.env['_gas_remaining'] = 10
+        """Test GAS_CHARGE with insufficient gas raises error"""
+        self.vm = VM(gas_limit=10)
         builder = BytecodeBuilder()
         builder.emit_gas_charge(50)
         builder.emit_load_const("should_not_execute")
         builder.emit_return()
-        result = self.vm.execute(builder.build())
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result.get('error'), 'OutOfGas')
+        with self.assertRaises(Exception) as ctx:
+            self.vm.execute(builder.build())
+        self.assertIn("gas", str(ctx.exception).lower())
     
     def test_067_ledger_append(self):
         """Test LEDGER_APPEND"""
@@ -808,7 +808,7 @@ class TestBlockchainOpcodes(unittest.TestCase):
         self.assertIn("timestamp", ledger[0])
     
     def test_069_verify_signature_fallback(self):
-        """Test VERIFY_SIGNATURE fallback implementation"""
+        """Test VERIFY_SIGNATURE returns False when no CryptoPlugin or verify_sig builtin"""
         builder = BytecodeBuilder()
         msg = "test_message"
         expected_sig = hashlib.sha256(msg.encode()).hexdigest()
@@ -818,7 +818,9 @@ class TestBlockchainOpcodes(unittest.TestCase):
         builder.emit_verify_signature()
         builder.emit_return()
         result = self.vm.execute(builder.build())
-        self.assertTrue(result)
+        # Without a real CryptoPlugin or verify_sig builtin, always returns False
+        # (SHA-256 fallback was removed as a security fix)
+        self.assertFalse(result)
     
     def test_070_nested_transactions(self):
         """Test nested TX_BEGIN scenarios"""

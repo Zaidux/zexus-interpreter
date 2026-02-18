@@ -24,6 +24,32 @@ from src.zexus.blockchain.network import Message, MessageType, PeerInfo
 from src.zexus.blockchain.node import BlockchainNode, NodeConfig
 
 
+# ── Test key pair (secp256k1) for signing transactions in tests ──
+try:
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.backends import default_backend
+    _test_priv = ec.generate_private_key(ec.SECP256K1(), default_backend())
+    _test_pub = _test_priv.public_key()
+    # Hex-encoded 32-byte scalar
+    TEST_PRIVATE_KEY = format(
+        _test_priv.private_numbers().private_value, '064x'
+    )
+    from cryptography.hazmat.primitives import serialization
+    TEST_PUBLIC_KEY = _test_pub.public_bytes(
+        serialization.Encoding.X962,
+        serialization.PublicFormat.UncompressedPoint,
+    ).hex()
+except ImportError:
+    TEST_PRIVATE_KEY = "a" * 64
+    TEST_PUBLIC_KEY = "04" + "a" * 128
+
+
+def _sign_tx(tx: Transaction) -> Transaction:
+    """Helper to sign a transaction with the test private key."""
+    tx.sign(TEST_PRIVATE_KEY)
+    return tx
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Block / BlockHeader tests
 # ═══════════════════════════════════════════════════════════════════════════
@@ -54,9 +80,10 @@ class TestTransaction:
 
     def test_sign_and_verify(self):
         tx = Transaction(sender="alice", recipient="bob", value=50, timestamp=1000.0)
-        sig = tx.sign("secret_key")
-        assert len(sig) == 64
-        assert tx.verify("any_public_key")  # Basic format check
+        tx.compute_hash()
+        sig = tx.sign(TEST_PRIVATE_KEY)
+        assert len(sig) > 0
+        assert tx.verify(TEST_PUBLIC_KEY)
 
     def test_to_dict(self):
         tx = Transaction(sender="alice", recipient="bob", value=42)
@@ -549,6 +576,7 @@ class TestBlockchainNode:
     def test_mine_block_sync(self):
         node = self._make_node()
         tx = node.create_transaction("alice", "bob", 100)
+        _sign_tx(tx)
         node.submit_transaction(tx)
         block = node.mine_block_sync()
         assert block is not None
@@ -560,6 +588,7 @@ class TestBlockchainNode:
         node.chain.difficulty = 0
         for i in range(3):
             tx = node.create_transaction("alice", "bob", 10, gas_limit=21000)
+            _sign_tx(tx)
             node.submit_transaction(tx)
             block = node.mine_block_sync()
             assert block is not None
@@ -606,6 +635,7 @@ class TestBlockchainNode:
         node.chain.difficulty = 0
 
         tx = node.create_transaction("alice", "bob", 50)
+        _sign_tx(tx)
         node.submit_transaction(tx)
         # Height 1 → v2's turn
         block = node.mine_block_sync()
@@ -627,6 +657,7 @@ class TestBlockchainNode:
         node.consensus_engine.stake("v1", 5000)
 
         tx = node.create_transaction("alice", "bob", 50)
+        _sign_tx(tx)
         node.submit_transaction(tx)
         # v1 is the only eligible validator
         block = node.mine_block_sync()

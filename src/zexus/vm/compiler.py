@@ -744,10 +744,37 @@ class BytecodeCompiler:
         self._emit(Opcode.POP)
 
     def _compile_TxStatement(self, node):
-        """Compile transaction block"""
+        """Compile transaction block with automatic revert on error.
+
+        Emits:
+            TX_BEGIN
+            SETUP_TRY catch_label
+            <body>
+            POP_TRY
+            TX_COMMIT
+            JUMP end_label
+          catch_label:
+            POP            ; discard exception value
+            TX_REVERT
+            THROW          ; re-raise so callers see the error
+          end_label:
+        """
+        catch_label = self._make_label()
+        end_label = self._make_label()
+
         self._emit(Opcode.TX_BEGIN)
+        self._emit(Opcode.SETUP_TRY, catch_label)
         self._compile_node(node.body)
+        self._emit(Opcode.POP_TRY)
         self._emit(Opcode.TX_COMMIT)
+        self._emit(Opcode.JUMP, end_label)
+
+        # Exception handler — revert and re-raise
+        self._mark_label(catch_label)
+        self._emit(Opcode.TX_REVERT)
+        self._emit(Opcode.THROW)
+
+        self._mark_label(end_label)
 
     def _compile_GCStatement(self, node):
         """Compile GC statement"""

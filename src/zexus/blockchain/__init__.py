@@ -35,6 +35,13 @@ from .consensus import (
 )
 from .node import BlockchainNode, NodeConfig
 
+# Contract VM bridge (connects VM opcodes to real chain state)
+try:
+    from .contract_vm import ContractVM, ContractExecutionReceipt, ContractStateAdapter
+    _CONTRACT_VM_AVAILABLE = True
+except ImportError:
+    _CONTRACT_VM_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -78,4 +85,9 @@ __all__ = [
     # Node
     'BlockchainNode',
     'NodeConfig',
+
+    # Contract VM
+    'ContractVM',
+    'ContractExecutionReceipt',
+    'ContractStateAdapter',
 ]

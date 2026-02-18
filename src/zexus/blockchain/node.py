@@ -22,6 +22,15 @@ from .chain import Block, BlockHeader, Chain, Mempool, Transaction, TransactionR
 from .network import P2PNetwork, Message, MessageType, PeerConnection, PeerReputationManager
 from .consensus import ConsensusEngine, ProofOfWork, create_consensus
 
+# Contract VM bridge (optional — only if the VM module is present)
+try:
+    from .contract_vm import ContractVM, ContractExecutionReceipt
+    _CONTRACT_VM_AVAILABLE = True
+except ImportError:
+    _CONTRACT_VM_AVAILABLE = False
+    ContractVM = None  # type: ignore
+    ContractExecutionReceipt = None  # type: ignore
+
 logger = logging.getLogger("zexus.blockchain.node")
 
 
@@ -75,6 +84,15 @@ class BlockchainNode:
         # Mining state
         self._mining = False
         self._mining_task: Optional[asyncio.Task] = None
+
+        # Contract VM bridge — enables smart-contract execution via
+        # the Zexus VM with real chain-backed state.
+        self.contract_vm: Optional["ContractVM"] = None
+        if _CONTRACT_VM_AVAILABLE:
+            self.contract_vm = ContractVM(
+                chain=self.chain,
+                gas_limit=self.config.consensus_params.get("gas_limit", 10_000_000),
+            )
 
         # Event listeners
         self._event_handlers: Dict[str, List[Callable]] = {}
@@ -257,6 +275,74 @@ class BlockchainNode:
         """Fund an account (for testnets / development)."""
         acct = self.chain.get_account(address)
         acct["balance"] += amount
+
+    # ── Smart Contract API ─────────────────────────────────────────────
+
+    def deploy_contract(self, contract, deployer: str,
+                        gas_limit: int = 10_000_000,
+                        initial_value: int = 0) -> Dict[str, Any]:
+        """Deploy a SmartContract onto the chain via the ContractVM.
+
+        Returns:
+            {"success": bool, "address": str, "error": str}
+        """
+        if self.contract_vm is None:
+            return {"success": False, "address": "", "error": "ContractVM not available"}
+
+        receipt = self.contract_vm.deploy_contract(
+            contract=contract,
+            deployer=deployer,
+            gas_limit=gas_limit,
+            initial_value=initial_value,
+        )
+        return {
+            "success": receipt.success,
+            "address": contract.address,
+            "error": receipt.error,
+            "gas_used": receipt.gas_used,
+        }
+
+    def call_contract(self, contract_address: str, action: str,
+                      args: Optional[Dict[str, Any]] = None,
+                      caller: str = "",
+                      gas_limit: int = 500_000,
+                      value: int = 0) -> Dict[str, Any]:
+        """Execute a contract action (state-mutating).
+
+        Returns:
+            {"success": bool, "return_value": Any, "gas_used": int, ...}
+        """
+        if self.contract_vm is None:
+            return {"success": False, "error": "ContractVM not available"}
+
+        receipt = self.contract_vm.execute_contract(
+            contract_address=contract_address,
+            action=action,
+            args=args,
+            caller=caller,
+            gas_limit=gas_limit,
+            value=value,
+        )
+        return receipt.to_dict()
+
+    def static_call_contract(self, contract_address: str, action: str,
+                             args: Optional[Dict[str, Any]] = None,
+                             caller: str = "") -> Dict[str, Any]:
+        """Execute a read-only contract call (no state changes committed).
+
+        Returns:
+            {"success": bool, "return_value": Any, "gas_used": int, ...}
+        """
+        if self.contract_vm is None:
+            return {"success": False, "error": "ContractVM not available"}
+
+        receipt = self.contract_vm.static_call(
+            contract_address=contract_address,
+            action=action,
+            args=args,
+            caller=caller,
+        )
+        return receipt.to_dict()
 
     # ── Mining ─────────────────────────────────────────────────────────
 
