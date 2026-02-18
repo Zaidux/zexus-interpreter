@@ -629,6 +629,9 @@ class TestNodeBridgeIntegration:
             chain_id="net-b", data_dir=str(tmp_path / "b"),
             miner_address="miner_b",
         ))
+        # Nodes need genesis blocks for bridging (normally created in start())
+        node_a.chain.create_genesis(miner="miner_a")
+        node_b.chain.create_genesis(miner="miner_b")
         # Fund alice on node_a
         node_a.fund_account("alice", 1000)
 
@@ -650,6 +653,8 @@ class TestNodeBridgeIntegration:
             chain_id="y", data_dir=str(tmp_path / "y"),
             miner_address="my",
         ))
+        na.chain.create_genesis(miner="mx")
+        nb.chain.create_genesis(miner="my")
         na.fund_account("alice", 500)
 
         bridge = na.bridge_to(nb, router=router)
