@@ -234,6 +234,42 @@ def create_stdlib_module(module_name, evaluator=None):
             except Exception as e:
                 return EvaluationError(f"pbkdf2 error: {str(e)}")
         
+        # generate_keypair(algorithm?) and derive_address(public_key, [prefix])
+        try:
+            from .blockchain.crypto import CryptoPlugin as _BCPlugin
+
+            def _crypto_generate_keypair(*args):
+                algorithm = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 'ECDSA'
+                try:
+                    private_key, public_key = _BCPlugin.generate_keypair(algorithm)
+                    return Map({
+                        String('private_key'): String(private_key),
+                        String('public_key'): String(public_key)
+                    })
+                except Exception as e:
+                    return EvaluationError(f"Keypair generation error: {str(e)}")
+
+            def _crypto_derive_address(*args):
+                if len(args) < 1 or len(args) > 2:
+                    return EvaluationError("derive_address() expects 1 or 2 arguments: public_key, [prefix]")
+                public_key = args[0].value if hasattr(args[0], 'value') else str(args[0])
+                prefix = None
+                if len(args) > 1:
+                    prefix = args[1].value if hasattr(args[1], 'value') else str(args[1])
+                try:
+                    result = _BCPlugin.derive_address(public_key, prefix=prefix)
+                    return String(result)
+                except Exception as e:
+                    return EvaluationError(f"Address derivation error: {str(e)}")
+
+            env.set("generate_keypair", Builtin(_crypto_generate_keypair))
+            env.set("derive_address", Builtin(_crypto_derive_address))
+            # Also register camelCase aliases used by demo files
+            env.set("generateKeypair", Builtin(_crypto_generate_keypair))
+            env.set("deriveAddress", Builtin(_crypto_derive_address))
+        except ImportError:
+            pass  # blockchain.crypto not available
+
         env.set("hash_sha256", Builtin(_crypto_hash_sha256))
         env.set("keccak256", Builtin(_crypto_keccak256))
         env.set("random_bytes", Builtin(_crypto_random_bytes))

@@ -3530,6 +3530,32 @@ class FunctionEvaluatorMixin:
                 String("limit"): Integer(tx.gas_limit)
             })
         
+        # generateKeypair(algorithm?)
+        def _generate_keypair(*a):
+            algorithm = a[0].value if len(a) > 0 and hasattr(a[0], 'value') else 'ECDSA'
+            try:
+                private_key, public_key = CryptoPlugin.generate_keypair(algorithm)
+                return Map({
+                    String('private_key'): String(private_key),
+                    String('public_key'): String(public_key)
+                })
+            except Exception as e:
+                return EvaluationError(f"Keypair generation error: {str(e)}")
+
+        # deriveAddress(public_key, [prefix])
+        def _derive_address(*a):
+            if len(a) < 1 or len(a) > 2:
+                return EvaluationError("deriveAddress() expects 1 or 2 arguments: public_key, [prefix]")
+            public_key = a[0].value if hasattr(a[0], 'value') else str(a[0])
+            prefix = None
+            if len(a) > 1:
+                prefix = a[1].value if hasattr(a[1], 'value') else str(a[1])
+            try:
+                result = CryptoPlugin.derive_address(public_key, prefix=prefix)
+                return String(result)
+            except Exception as e:
+                return EvaluationError(f"Address derivation error: {str(e)}")
+
         self.builtins.update({
             "hash": Builtin(_hash, "hash"),
             "keccak256": Builtin(_keccak256, "keccak256"),
@@ -3537,6 +3563,8 @@ class FunctionEvaluatorMixin:
             "verify_sig": Builtin(_verify_sig, "verify_sig"),
             "tx": Builtin(_tx, "tx"),
             "gas": Builtin(_gas, "gas"),
+            "generateKeypair": Builtin(_generate_keypair, "generateKeypair"),
+            "deriveAddress": Builtin(_derive_address, "deriveAddress"),
         })
         
         # Register advanced feature builtins

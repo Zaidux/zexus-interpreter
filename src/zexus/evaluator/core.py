@@ -828,12 +828,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif isinstance(node, zexus_ast.IntegerLiteral):
                 debug_log("  IntegerLiteral node", node.value)
-                from ..object import Integer
                 return Integer(node.value)
             
             elif node_type == zexus_ast.FloatLiteral or isinstance(node, zexus_ast.FloatLiteral):
                 debug_log("  FloatLiteral node", getattr(node, 'value', 'unknown'))
-                from ..object import Float
                 try:
                     val = getattr(node, 'value', None)
                     return Float(val)
@@ -842,7 +840,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif isinstance(node, zexus_ast.StringLiteral):
                 debug_log("  StringLiteral node", node.value)
-                from ..object import String
                 # Process escape sequences in the string
                 value = node.value
                 value = value.replace('\\n', '\n')
@@ -859,8 +856,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             elif isinstance(node, zexus_ast.Boolean):
                 debug_log("  Boolean node", f"value: {node.value}")
-                from ..object import Boolean
-                return Boolean(node.value)
+                return BooleanObj(node.value)
             
             elif isinstance(node, zexus_ast.NullLiteral):
                 debug_log("  NullLiteral node")
@@ -1006,22 +1002,23 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     restriction = None
 
                 # Handle Builtin objects (for static methods like TypeName.default())
-                from ..object import Builtin
                 if isinstance(obj, Builtin):
                     if hasattr(obj, 'static_methods') and property_name in obj.static_methods:
                         return obj.static_methods[property_name]
                     return NULL
 
                 # Handle Module objects
-                from ..complexity_system import Module
-                if isinstance(obj, Module):
+                try:
+                    from ..complexity_system import Module as _Module
+                except ImportError:
+                    _Module = None
+                if _Module is not None and isinstance(obj, _Module):
                     val = obj.get(property_name)
                     if val is None:
                         return NULL
                     if restriction:
                         rule = restriction.get('restriction')
                         if rule == 'redact':
-                            from ..object import String
                             return String('***REDACTED***')
                         if rule == 'admin-only':
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
@@ -1031,8 +1028,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
 
                 # Handle Map objects
                 if isinstance(obj, Map):
-                    from ..object import String
-                    
                     # Try string key first
                     val = obj.pairs.get(property_name, NULL)
                     if val == NULL:
@@ -1064,7 +1059,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     if restriction:
                         rule = restriction.get('restriction')
                         if rule == 'redact':
-                            from ..object import String
                             return String('***REDACTED***')
                         if rule == 'admin-only':
                             # check environment flag for admin
@@ -1081,7 +1075,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     if restriction:
                         rule = restriction.get('restriction')
                         if rule == 'redact':
-                            from ..object import String
                             return String('***REDACTED***')
                         if rule == 'admin-only':
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
@@ -1094,7 +1087,6 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                     if restriction:
                         rule = restriction.get('restriction')
                         if rule == 'redact':
-                            from ..object import String
                             return String('***REDACTED***')
                         if rule == 'admin-only':
                             is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False

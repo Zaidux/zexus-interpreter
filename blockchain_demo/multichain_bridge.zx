@@ -1,0 +1,260 @@
+// ============================================================================
+//
+//   ZEXUS MULTICHAIN BRIDGE DEMO
+//   ==============================
+//   Demonstrates cross-chain asset transfer using the Zexus multichain
+//   infrastructure: ChainRouter, BridgeRelay (Merkle-proof verified),
+//   and BridgeContract (lock-and-mint / burn-and-release).
+//
+//   This demo creates two independent chains with custom address prefixes,
+//   connects them via a bridge, and transfers tokens between them.
+//
+//   Run:  python -m zexus run blockchain_demo/multichain_bridge.zx
+//
+// ============================================================================
+
+use "crypto" as crypto
+use "blockchain" as bc
+
+print("")
+print("=" * 70)
+print("  ZEXUS — MULTICHAIN BRIDGE DEMO")
+print("=" * 70)
+print("")
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  STEP 1: Generate Keypairs & Addresses with Custom Prefixes          ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("-" * 70)
+print("  STEP 1: KEYPAIR & ADDRESS GENERATION")
+print("-" * 70)
+print("")
+
+let alice_keys = generateKeypair("ECDSA")
+let bob_keys = generateKeypair("ECDSA")
+
+// Derive addresses with the Zexus custom prefix "Zx01"
+let alice_addr = deriveAddress(alice_keys["public_key"], "Zx01")
+let bob_addr   = deriveAddress(bob_keys["public_key"], "Zx01")
+
+print("  Alice address: " + string(alice_addr))
+print("  Bob address:   " + string(bob_addr))
+print("")
+
+assert_test("Alice address starts with Zx01", string(alice_addr)[:4] == "Zx01")
+assert_test("Bob address starts with Zx01",   string(bob_addr)[:4] == "Zx01")
+assert_test("Addresses are 44 chars (Zx01 + 40 hex)", len(string(alice_addr)) == 44)
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  STEP 2: Show How Multiple Prefixes Map to Same Key                  ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("")
+print("-" * 70)
+print("  STEP 2: PREFIX-AGNOSTIC KEY IDENTITY")
+print("-" * 70)
+print("")
+
+let alice_eth  = deriveAddress(alice_keys["public_key"])       // default "0x"
+let alice_zx   = deriveAddress(alice_keys["public_key"], "Zx01")
+let alice_test = deriveAddress(alice_keys["public_key"], "TEST_")
+
+print("  Same key, different prefixes:")
+print("    0x:    " + string(alice_eth))
+print("    Zx01:  " + string(alice_zx))
+print("    TEST_: " + string(alice_test))
+
+// All share the same 40-hex body
+let body_eth  = string(alice_eth)[2:]
+let body_zx   = string(alice_zx)[4:]
+let body_test = string(alice_test)[5:]
+
+assert_test("0x and Zx01 share same 40-hex body", body_eth == body_zx)
+assert_test("0x and TEST_ share same 40-hex body", body_eth == body_test)
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  STEP 3: Simulate Two-Chain Cross-Chain Transfer                     ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("")
+print("-" * 70)
+print("  STEP 3: CROSS-CHAIN TRANSFER SIMULATION")
+print("-" * 70)
+print("")
+
+// In a full node setup, the ChainRouter + BridgeContract handle this
+// automatically with Merkle proofs.  Here we simulate the flow in
+// pure Zexus to demonstrate the concept.
+
+// Chain A: Alice starts with 1000 tokens
+// Chain B: Alice starts with 0 tokens
+let chain_a_balances = {"alice": 1000, "bob": 500, "escrow": 0}
+let chain_b_balances = {"alice": 0, "bob": 0}
+
+print("  Initial State:")
+print("    Chain A — Alice: " + string(chain_a_balances["alice"]) + ", Bob: " + string(chain_a_balances["bob"]))
+print("    Chain B — Alice: " + string(chain_b_balances["alice"]) + ", Bob: " + string(chain_b_balances["bob"]))
+print("")
+
+// --- Lock-and-Mint: Move 300 tokens from Alice@ChainA to Alice@ChainB ---
+
+let transfer_amount = 300
+
+// Step 3a. Lock on Chain A
+print("  [LOCK] Alice locks " + string(transfer_amount) + " on Chain A")
+chain_a_balances["alice"] = chain_a_balances["alice"] - transfer_amount
+chain_a_balances["escrow"] = chain_a_balances["escrow"] + transfer_amount
+
+// Step 3b. Create cross-chain message hash (simulated Merkle proof)
+let msg_data = string(transfer_amount) + "|alice|chainA|chainB"
+let msg_hash = hash(msg_data, "SHA256")
+print("  [MSG]  Cross-chain message hash: " + string(msg_hash)[:32] + "...")
+
+// Step 3c. Mint on Chain B (after relay verifies the Merkle proof)
+print("  [MINT] Relay verified — minting " + string(transfer_amount) + " on Chain B")
+chain_b_balances["alice"] = chain_b_balances["alice"] + transfer_amount
+
+print("")
+print("  After Lock-and-Mint:")
+print("    Chain A — Alice: " + string(chain_a_balances["alice"]) + " (locked: " + string(chain_a_balances["escrow"]) + ")")
+print("    Chain B — Alice: " + string(chain_b_balances["alice"]))
+print("")
+
+assert_test("Alice@A reduced to 700", chain_a_balances["alice"] == 700)
+assert_test("Escrow holds 300", chain_a_balances["escrow"] == 300)
+assert_test("Alice@B received 300", chain_b_balances["alice"] == 300)
+
+// --- Burn-and-Release: Move 100 tokens back from Alice@ChainB to Alice@ChainA ---
+
+let burn_amount = 100
+print("  [BURN] Alice burns " + string(burn_amount) + " on Chain B")
+chain_b_balances["alice"] = chain_b_balances["alice"] - burn_amount
+
+let release_msg = string(burn_amount) + "|alice|chainB|chainA"
+let release_hash = hash(release_msg, "SHA256")
+print("  [MSG]  Cross-chain release hash: " + string(release_hash)[:32] + "...")
+
+print("  [REL]  Relay verified — releasing " + string(burn_amount) + " on Chain A")
+chain_a_balances["escrow"] = chain_a_balances["escrow"] - burn_amount
+chain_a_balances["alice"] = chain_a_balances["alice"] + burn_amount
+
+print("")
+print("  After Burn-and-Release:")
+print("    Chain A — Alice: " + string(chain_a_balances["alice"]) + " (locked: " + string(chain_a_balances["escrow"]) + ")")
+print("    Chain B — Alice: " + string(chain_b_balances["alice"]))
+print("")
+
+assert_test("Alice@A back to 800", chain_a_balances["alice"] == 800)
+assert_test("Escrow reduced to 200", chain_a_balances["escrow"] == 200)
+assert_test("Alice@B reduced to 200", chain_b_balances["alice"] == 200)
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  STEP 4: Three-Chain Triangle Transfer                               ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("-" * 70)
+print("  STEP 4: THREE-CHAIN TRIANGLE")
+print("-" * 70)
+print("")
+
+let chain_x = {"alice": 500}
+let chain_y = {"alice": 0}
+let chain_z = {"alice": 0}
+
+// X -> Y: 200
+chain_x["alice"] = chain_x["alice"] - 200
+chain_y["alice"] = chain_y["alice"] + 200
+print("  X -> Y: 200 tokens  (X=" + string(chain_x["alice"]) + ", Y=" + string(chain_y["alice"]) + ")")
+
+// Y -> Z: 100
+chain_y["alice"] = chain_y["alice"] - 100
+chain_z["alice"] = chain_z["alice"] + 100
+print("  Y -> Z: 100 tokens  (Y=" + string(chain_y["alice"]) + ", Z=" + string(chain_z["alice"]) + ")")
+
+// Z -> X: 50
+chain_z["alice"] = chain_z["alice"] - 50
+chain_x["alice"] = chain_x["alice"] + 50
+print("  Z -> X: 50 tokens   (Z=" + string(chain_z["alice"]) + ", X=" + string(chain_x["alice"]) + ")")
+
+print("")
+let total = chain_x["alice"] + chain_y["alice"] + chain_z["alice"]
+print("  Final: X=" + string(chain_x["alice"]) + " Y=" + string(chain_y["alice"]) + " Z=" + string(chain_z["alice"]) + " (total=" + string(total) + ")")
+
+assert_test("Chain X balance = 350", chain_x["alice"] == 350)
+assert_test("Chain Y balance = 100", chain_y["alice"] == 100)
+assert_test("Chain Z balance = 50",  chain_z["alice"] == 50)
+assert_test("Conservation: total = 500", total == 500)
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  STEP 5: Merkle Proof Verification (Simulated)                       ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("")
+print("-" * 70)
+print("  STEP 5: MERKLE PROOF INTEGRITY CHECK")
+print("-" * 70)
+print("")
+
+// Simulate a Merkle tree of 4 message hashes
+let m1 = hash("lock|alice|100|chainA|chainB", "SHA256")
+let m2 = hash("lock|bob|50|chainA|chainB", "SHA256")
+let m3 = hash("lock|carol|75|chainA|chainC", "SHA256")
+let m4 = hash("lock|dave|25|chainA|chainC", "SHA256")
+
+// Build tree: level 1
+let h12 = hash(string(m1) + string(m2), "SHA256")
+let h34 = hash(string(m3) + string(m4), "SHA256")
+
+// Level 2: root
+let merkle_root = hash(string(h12) + string(h34), "SHA256")
+
+print("  Messages:")
+print("    m1: " + string(m1)[:24] + "...")
+print("    m2: " + string(m2)[:24] + "...")
+print("    m3: " + string(m3)[:24] + "...")
+print("    m4: " + string(m4)[:24] + "...")
+print("")
+print("  Merkle root: " + string(merkle_root)[:32] + "...")
+print("")
+
+// Verify m1 using proof: [m2 on right, h34 on right]
+let verify_step1 = hash(string(m1) + string(m2), "SHA256")
+let verify_root  = hash(string(verify_step1) + string(h34), "SHA256")
+
+assert_test("Merkle proof verifies m1 inclusion", verify_root == merkle_root)
+
+// Tamper: change m1 and re-verify — should fail
+let fake_m1 = hash("TAMPERED|alice|100|chainA|chainB", "SHA256")
+let fake_step1 = hash(string(fake_m1) + string(m2), "SHA256")
+let fake_root  = hash(string(fake_step1) + string(h34), "SHA256")
+
+assert_test("Tampered message fails Merkle verification", fake_root != merkle_root)
+
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║  RESULTS                                                              ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
+print("")
+print("=" * 70)
+print("  RESULTS: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 {
+    print("  ALL TESTS PASSED")
+} else {
+    print("  " + string(stats["failed"]) + " FAILED")
+}
+print("=" * 70)
+print("")
