@@ -31,6 +31,7 @@ from .chain import (
 from .network import P2PNetwork, Message, MessageType, PeerInfo, PeerReputationManager
 from .consensus import (
     ConsensusEngine, ProofOfWork, ProofOfAuthority, ProofOfStake,
+    BFTConsensus, BFTMessage, BFTPhase, BFTRoundState,
     create_consensus
 )
 from .node import BlockchainNode, NodeConfig
@@ -70,6 +71,36 @@ try:
 except ImportError:
     _EVENTS_AVAILABLE = False
 
+# Merkle Patricia Trie
+try:
+    from .mpt import MerklePatriciaTrie, StateTrie, TrieNode, NodeType
+    _MPT_AVAILABLE = True
+except ImportError:
+    _MPT_AVAILABLE = False
+
+# HD Wallet & Keystore
+try:
+    from .wallet import (
+        HDWallet, Account, Keystore, ExtendedKey,
+        generate_mnemonic, validate_mnemonic, mnemonic_to_seed,
+    )
+    _WALLET_AVAILABLE = True
+except ImportError:
+    _WALLET_AVAILABLE = False
+
+# Token Standards (ZX-20, ZX-721, ZX-1155)
+try:
+    from .tokens import (
+        ZX20Token, ZX20Interface,
+        ZX721Token, ZX721Interface,
+        ZX1155Token, ZX1155Interface,
+        TokenEvent, TransferEvent, ApprovalEvent,
+        TransferSingleEvent, TransferBatchEvent, ApprovalForAllEvent,
+    )
+    _TOKENS_AVAILABLE = True
+except ImportError:
+    _TOKENS_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -108,6 +139,10 @@ __all__ = [
     'ProofOfWork',
     'ProofOfAuthority',
     'ProofOfStake',
+    'BFTConsensus',
+    'BFTMessage',
+    'BFTPhase',
+    'BFTRoundState',
     'create_consensus',
 
     # Node
@@ -138,4 +173,33 @@ __all__ = [
     'EventLog',
     'LogFilter',
     'BloomFilter',
+
+    # Merkle Patricia Trie
+    'MerklePatriciaTrie',
+    'StateTrie',
+    'TrieNode',
+    'NodeType',
+
+    # HD Wallet & Keystore
+    'HDWallet',
+    'Account',
+    'Keystore',
+    'ExtendedKey',
+    'generate_mnemonic',
+    'validate_mnemonic',
+    'mnemonic_to_seed',
+
+    # Token Standards
+    'ZX20Token',
+    'ZX20Interface',
+    'ZX721Token',
+    'ZX721Interface',
+    'ZX1155Token',
+    'ZX1155Interface',
+    'TokenEvent',
+    'TransferEvent',
+    'ApprovalEvent',
+    'TransferSingleEvent',
+    'TransferBatchEvent',
+    'ApprovalForAllEvent',
 ]
