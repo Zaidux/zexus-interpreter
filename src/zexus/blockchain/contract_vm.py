@@ -184,6 +184,10 @@ class ContractVM:
         # Reentrancy guard — tracks contracts currently being executed
         self._executing: set = set()
 
+        # Cross-contract call depth tracking
+        self._call_depth: int = 0
+        self._max_call_depth: int = 10
+
     # ------------------------------------------------------------------
     # Contract lifecycle
     # ------------------------------------------------------------------
@@ -290,7 +294,18 @@ class ContractVM:
                 revert_reason=f"Reentrant call to contract {contract_address}",
                 gas_limit=gas_limit,
             )
+
+        # Call-depth guard (cross-contract calls)
+        if self._call_depth >= self._max_call_depth:
+            return ContractExecutionReceipt(
+                success=False,
+                error="CallDepthExceeded",
+                revert_reason=f"Call depth {self._call_depth} exceeds max {self._max_call_depth}",
+                gas_limit=gas_limit,
+            )
+
         self._executing.add(contract_address)
+        self._call_depth += 1
 
         # 1. TX context
         tip = self._chain.tip
@@ -361,6 +376,7 @@ class ContractVM:
 
         finally:
             self._executing.discard(contract_address)
+            self._call_depth -= 1
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -494,6 +510,143 @@ class ContractVM:
 
         builtins["block_number"] = block_number
         builtins["block_timestamp"] = block_timestamp
+
+        # ── Cross-contract calls ──────────────────────────────────
+        vm_ref = self  # capture for closures
+
+        def contract_call(target_address: Any, action: Any,
+                          call_args: Any = None, value: Any = None) -> Any:
+            """Call another contract's action (state-mutating).
+
+            Parameters
+            ----------
+            target_address : str or String
+                Address of the contract to call.
+            action : str or String
+                Name of the action to invoke.
+            call_args : dict, optional
+                Arguments to pass to the action.
+            value : int, optional
+                Value to transfer with the call.
+
+            Returns the action's return value (unwrapped to Python).
+            Raises RuntimeError on failure or depth exceeded.
+            """
+            addr = str(target_address.value) if hasattr(target_address, 'value') else str(target_address)
+            act = str(action.value) if hasattr(action, 'value') else str(action)
+            args = {}
+            if call_args is not None:
+                if hasattr(call_args, 'pairs'):
+                    args = {str(k.value) if hasattr(k, 'value') else str(k):
+                            vm_ref._unwrap_value(v) for k, v in call_args.pairs.items()}
+                elif isinstance(call_args, dict):
+                    args = call_args
+            val = 0
+            if value is not None:
+                val = int(value.value) if hasattr(value, 'value') else int(value)
+
+            if vm_ref._call_depth >= vm_ref._max_call_depth:
+                raise RuntimeError(f"Cross-contract call depth exceeded (max {vm_ref._max_call_depth})")
+
+            receipt = vm_ref.execute_contract(
+                contract_address=addr,
+                action=act,
+                args=args,
+                caller=contract_address or tx_ctx.caller,
+                gas_limit=tx_ctx.gas_remaining,
+                value=val,
+            )
+            if not receipt.success:
+                raise RuntimeError(f"Cross-contract call failed: {receipt.error or receipt.revert_reason}")
+            return receipt.return_value
+
+        def static_contract_call(target_address: Any, action: Any,
+                                  call_args: Any = None) -> Any:
+            """Read-only call to another contract (no state changes).
+
+            Same as contract_call but uses static_call internally.
+            """
+            addr = str(target_address.value) if hasattr(target_address, 'value') else str(target_address)
+            act = str(action.value) if hasattr(action, 'value') else str(action)
+            args = {}
+            if call_args is not None:
+                if hasattr(call_args, 'pairs'):
+                    args = {str(k.value) if hasattr(k, 'value') else str(k):
+                            vm_ref._unwrap_value(v) for k, v in call_args.pairs.items()}
+                elif isinstance(call_args, dict):
+                    args = call_args
+
+            receipt = vm_ref.static_call(
+                contract_address=addr,
+                action=act,
+                args=args,
+                caller=contract_address or tx_ctx.caller,
+            )
+            if not receipt.success:
+                raise RuntimeError(f"Static call failed: {receipt.error or receipt.revert_reason}")
+            return receipt.return_value
+
+        def delegate_call(target_address: Any, action: Any,
+                          call_args: Any = None) -> Any:
+            """Delegatecall: execute target's code in caller's storage context.
+
+            Like contract_call, but the target's action runs with the
+            *calling* contract's state adapter, so state writes go to
+            the caller's storage, not the target's.
+            """
+            addr = str(target_address.value) if hasattr(target_address, 'value') else str(target_address)
+            act = str(action.value) if hasattr(action, 'value') else str(action)
+            args = {}
+            if call_args is not None:
+                if hasattr(call_args, 'pairs'):
+                    args = {str(k.value) if hasattr(k, 'value') else str(k):
+                            vm_ref._unwrap_value(v) for k, v in call_args.pairs.items()}
+                elif isinstance(call_args, dict):
+                    args = call_args
+
+            if vm_ref._call_depth >= vm_ref._max_call_depth:
+                raise RuntimeError(f"Delegatecall depth exceeded (max {vm_ref._max_call_depth})")
+
+            # Find the target contract's action
+            target_contract = vm_ref.get_contract(addr)
+            if target_contract is None:
+                raise RuntimeError(f"Contract not found: {addr}")
+
+            action_obj = None
+            if hasattr(target_contract, 'actions'):
+                for a in target_contract.actions:
+                    a_name = a.name if hasattr(a, 'name') else str(a)
+                    if a_name == act:
+                        action_obj = a
+                        break
+            if action_obj is None:
+                raise RuntimeError(f"Action '{act}' not found on contract {addr}")
+
+            # Execute with *caller's* state adapter (the key difference)
+            caller_addr = contract_address or tx_ctx.caller
+            state_adapter = ContractStateAdapter(vm_ref._chain, caller_addr)
+            snapshot = dict(state_adapter)
+
+            from ..vm.vm import VM as ZexusVM
+            vm = ZexusVM(debug=vm_ref._debug)
+            vm_ref._call_depth += 1
+            try:
+                env = vm_ref._build_env(state_adapter, tx_ctx, target_contract, args)
+                inner_builtins = vm_ref._build_builtins(tx_ctx, caller_addr, _logs)
+                for bk, bv in inner_builtins.items():
+                    vm.env[bk] = bv
+                result = vm_ref._execute_action(vm, action_obj, env, args)
+                state_adapter.commit()
+                return vm_ref._unwrap_value(result) if result is not None else None
+            except Exception:
+                state_adapter.rollback(snapshot)
+                raise
+            finally:
+                vm_ref._call_depth -= 1
+
+        builtins["contract_call"] = contract_call
+        builtins["static_call"] = static_contract_call
+        builtins["delegate_call"] = delegate_call
 
         return builtins
 

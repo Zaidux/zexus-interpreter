@@ -35,6 +35,13 @@ from .consensus import (
 )
 from .node import BlockchainNode, NodeConfig
 
+# JSON-RPC server (optional — requires aiohttp)
+try:
+    from .rpc import RPCServer, RPCError, RPCErrorCode, RPCMethodRegistry
+    _RPC_AVAILABLE = True
+except ImportError:
+    _RPC_AVAILABLE = False
+
 # Contract VM bridge (connects VM opcodes to real chain state)
 try:
     from .contract_vm import ContractVM, ContractExecutionReceipt, ContractStateAdapter
@@ -55,6 +62,13 @@ try:
     _MULTICHAIN_AVAILABLE = True
 except ImportError:
     _MULTICHAIN_AVAILABLE = False
+
+# Event indexing & log filtering
+try:
+    from .events import EventIndex, EventLog, LogFilter, BloomFilter
+    _EVENTS_AVAILABLE = True
+except ImportError:
+    _EVENTS_AVAILABLE = False
 
 __all__ = [
     # Ledger
@@ -100,6 +114,12 @@ __all__ = [
     'BlockchainNode',
     'NodeConfig',
 
+    # RPC Server
+    'RPCServer',
+    'RPCError',
+    'RPCErrorCode',
+    'RPCMethodRegistry',
+
     # Contract VM
     'ContractVM',
     'ContractExecutionReceipt',
@@ -112,4 +132,10 @@ __all__ = [
     'CrossChainMessage',
     'MerkleProofEngine',
     'MessageStatus',
+
+    # Event Indexing
+    'EventIndex',
+    'EventLog',
+    'LogFilter',
+    'BloomFilter',
 ]

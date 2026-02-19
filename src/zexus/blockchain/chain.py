@@ -252,37 +252,113 @@ class Block:
 
 
 class Mempool:
-    """Transaction mempool with priority ordering.
-    
+    """Transaction mempool with priority ordering and Replace-by-Fee (RBF).
+
     Holds pending transactions, ordered by gas_price (descending)
     for block producers to select from.
+
+    **Replace-by-Fee (RBF):** If a new transaction has the same
+    ``(sender, nonce)`` as an existing mempool entry, it replaces
+    the old one *only* if its ``gas_price`` exceeds the old price
+    by at least ``rbf_increment_pct`` percent (default 10 %).
     """
 
-    def __init__(self, max_size: int = 10_000):
+    def __init__(self, max_size: int = 10_000,
+                 rbf_enabled: bool = True,
+                 rbf_increment_pct: int = 10):
         self.max_size = max_size
+        self.rbf_enabled = rbf_enabled
+        self.rbf_increment_pct = rbf_increment_pct
         self._txs: Dict[str, Transaction] = {}  # tx_hash -> Transaction
         self._nonces: Dict[str, int] = {}  # sender -> highest nonce seen
+        # RBF index: (sender, nonce) -> tx_hash  — fast lookup for replacement
+        self._sender_nonce_idx: Dict[tuple, str] = {}
 
     def add(self, tx: Transaction) -> bool:
-        """Add transaction to mempool. Returns True if accepted."""
-        if len(self._txs) >= self.max_size:
-            return False
+        """Add transaction to mempool. Returns True if accepted.
+
+        If RBF is enabled and a transaction from the same sender with the
+        same nonce already exists, the new transaction replaces it only
+        when its gas_price is at least ``rbf_increment_pct`` % higher.
+        """
         if not tx.tx_hash:
             tx.compute_hash()
         if tx.tx_hash in self._txs:
-            return False  # Duplicate
+            return False  # Exact duplicate
+
+        key = (tx.sender, tx.nonce)
+
+        # ── RBF path ──
+        if self.rbf_enabled and key in self._sender_nonce_idx:
+            old_hash = self._sender_nonce_idx[key]
+            old_tx = self._txs.get(old_hash)
+            if old_tx is not None:
+                min_price = old_tx.gas_price * (100 + self.rbf_increment_pct) // 100
+                if tx.gas_price >= min_price:
+                    # Replace
+                    del self._txs[old_hash]
+                    self._txs[tx.tx_hash] = tx
+                    self._sender_nonce_idx[key] = tx.tx_hash
+                    return True
+                return False  # Bump too small
+
+        # ── Normal path ──
+        if len(self._txs) >= self.max_size:
+            return False
         # Nonce check
         expected = self._nonces.get(tx.sender, 0)
         if tx.nonce < expected:
             return False  # Replay
         self._txs[tx.tx_hash] = tx
+        self._sender_nonce_idx[key] = tx.tx_hash
         if tx.nonce >= expected:
             self._nonces[tx.sender] = tx.nonce + 1
         return True
 
+    def replace_by_fee(self, tx: Transaction) -> Dict[str, Any]:
+        """Explicitly attempt a replace-by-fee.
+
+        Returns ``{"replaced": bool, "old_hash": str|None, "error": str}``.
+        """
+        if not self.rbf_enabled:
+            return {"replaced": False, "old_hash": None,
+                    "error": "RBF is disabled on this mempool"}
+        if not tx.tx_hash:
+            tx.compute_hash()
+
+        key = (tx.sender, tx.nonce)
+        old_hash = self._sender_nonce_idx.get(key)
+        if old_hash is None:
+            return {"replaced": False, "old_hash": None,
+                    "error": "no existing tx with this sender+nonce"}
+        old_tx = self._txs.get(old_hash)
+        if old_tx is None:
+            return {"replaced": False, "old_hash": None,
+                    "error": "index stale — old tx already removed"}
+
+        min_price = old_tx.gas_price * (100 + self.rbf_increment_pct) // 100
+        if tx.gas_price < min_price:
+            return {"replaced": False, "old_hash": old_hash,
+                    "error": f"gas_price too low: need >= {min_price}, got {tx.gas_price}"}
+
+        del self._txs[old_hash]
+        self._txs[tx.tx_hash] = tx
+        self._sender_nonce_idx[key] = tx.tx_hash
+        return {"replaced": True, "old_hash": old_hash, "error": ""}
+
+    def get_by_sender_nonce(self, sender: str, nonce: int) -> Optional[Transaction]:
+        """Look up the current mempool tx for a given (sender, nonce)."""
+        h = self._sender_nonce_idx.get((sender, nonce))
+        return self._txs.get(h) if h else None
+
     def remove(self, tx_hash: str) -> Optional[Transaction]:
         """Remove a transaction from the mempool."""
-        return self._txs.pop(tx_hash, None)
+        tx = self._txs.pop(tx_hash, None)
+        if tx is not None:
+            key = (tx.sender, tx.nonce)
+            if self._sender_nonce_idx.get(key) == tx_hash:
+                del self._sender_nonce_idx[key]
+        return tx
 
     def get_pending(self, gas_limit: int = 10_000_000) -> List[Transaction]:
         """Get pending transactions ordered by gas_price, fitting within gas_limit."""
@@ -302,6 +378,7 @@ class Mempool:
     def clear(self):
         self._txs.clear()
         self._nonces.clear()
+        self._sender_nonce_idx.clear()
 
 
 class Chain:
@@ -348,6 +425,12 @@ class Chain:
                 data TEXT NOT NULL
             )
         """)
+        self._db.execute("""
+            CREATE TABLE IF NOT EXISTS contract_state (
+                address TEXT PRIMARY KEY,
+                data TEXT NOT NULL
+            )
+        """)
         self._db.commit()
         self._load_from_db()
 
@@ -366,6 +449,11 @@ class Chain:
         for address, data in cursor:
             self.accounts[address] = json.loads(data)
 
+        # Load contract state
+        cursor = self._db.execute("SELECT address, data FROM contract_state")
+        for address, data in cursor:
+            self.contract_state[address] = json.loads(data)
+
     def _persist_block(self, block: Block):
         """Persist a block to the database."""
         if not self._db:
@@ -377,13 +465,18 @@ class Chain:
         self._db.commit()
 
     def _persist_state(self):
-        """Persist account state to the database."""
+        """Persist account state and contract state to the database."""
         if not self._db:
             return
         for address, data in self.accounts.items():
             self._db.execute(
                 "INSERT OR REPLACE INTO state (address, data) VALUES (?, ?)",
                 (address, json.dumps(data))
+            )
+        for address, data in self.contract_state.items():
+            self._db.execute(
+                "INSERT OR REPLACE INTO contract_state (address, data) VALUES (?, ?)",
+                (address, json.dumps(data, default=str))
             )
         self._db.commit()
 

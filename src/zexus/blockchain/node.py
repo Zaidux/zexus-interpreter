@@ -31,6 +31,14 @@ except ImportError:
     ChainRouter = None  # type: ignore
     BridgeContract = None  # type: ignore
 
+# RPC server (optional — requires aiohttp)
+try:
+    from .rpc import RPCServer
+    _RPC_AVAILABLE = True
+except ImportError:
+    _RPC_AVAILABLE = False
+    RPCServer = None  # type: ignore
+
 # Contract VM bridge (optional — only if the VM module is present)
 try:
     from .contract_vm import ContractVM, ContractExecutionReceipt
@@ -39,6 +47,14 @@ except ImportError:
     _CONTRACT_VM_AVAILABLE = False
     ContractVM = None  # type: ignore
     ContractExecutionReceipt = None  # type: ignore
+
+# Event indexing (optional)
+try:
+    from .events import EventIndex, LogFilter, BloomFilter, EventLog
+    _EVENTS_AVAILABLE = True
+except ImportError:
+    _EVENTS_AVAILABLE = False
+    EventIndex = None  # type: ignore
 
 logger = logging.getLogger("zexus.blockchain.node")
 
@@ -106,6 +122,14 @@ class BlockchainNode:
         # Event listeners
         self._event_handlers: Dict[str, List[Callable]] = {}
 
+        # RPC server
+        self.rpc_server: Optional["RPCServer"] = None
+
+        # Event indexer
+        self.event_index: Optional["EventIndex"] = None
+        if _EVENTS_AVAILABLE:
+            self.event_index = EventIndex(data_dir=self.config.data_dir)
+
         # Node lifecycle
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -141,6 +165,16 @@ class BlockchainNode:
         if self.config.mining_enabled and self.config.miner_address:
             self.start_mining()
 
+        # Start RPC server if enabled
+        if self.config.rpc_enabled and _RPC_AVAILABLE:
+            self.rpc_server = RPCServer(
+                node=self,
+                host=self.config.host,
+                port=self.config.rpc_port,
+            )
+            await self.rpc_server.start()
+            logger.info("RPC server started on port %d", self.config.rpc_port)
+
         logger.info("Node started: chain=%s height=%d peers=%d",
                      self.config.chain_id, self.chain.height, self.network.peer_count)
 
@@ -148,6 +182,8 @@ class BlockchainNode:
         """Stop the node gracefully."""
         self._running = False
         self.stop_mining()
+        if self.rpc_server and self.rpc_server.is_running:
+            await self.rpc_server.stop()
         await self.network.stop()
         self.chain.close()
         logger.info("Node stopped")
@@ -420,6 +456,9 @@ class BlockchainNode:
             success, err = self.chain.add_block(block)
             if success:
                 self._emit("mined", block)
+                # Index events from the new block
+                if self.event_index:
+                    self.event_index.index_block(block)
                 return block
             else:
                 logger.warning("Block rejected: %s", err)
