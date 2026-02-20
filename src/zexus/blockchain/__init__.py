@@ -101,6 +101,59 @@ try:
 except ImportError:
     _TOKENS_AVAILABLE = False
 
+# Upgradeable Contracts & Chain Governance
+try:
+    from .upgradeable import (
+        ProxyContract,
+        ImplementationRecord,
+        UpgradeManager,
+        ChainUpgradeGovernance,
+        ChainUpgradeProposal,
+        ProposalStatus,
+        ProposalType,
+        UpgradeEvent,
+        UpgradeEventType,
+    )
+    _UPGRADEABLE_AVAILABLE = True
+except ImportError:
+    _UPGRADEABLE_AVAILABLE = False
+
+# Formal Verification Engine
+try:
+    from .verification import (
+        FormalVerifier,
+        VerificationLevel,
+        VerificationReport,
+        VerificationFinding,
+        Severity,
+        FindingCategory,
+        StructuralVerifier,
+        InvariantVerifier,
+        PropertyVerifier,
+        AnnotationParser,
+        Invariant,
+        ContractProperty,
+    )
+    _VERIFICATION_AVAILABLE = True
+except ImportError:
+    _VERIFICATION_AVAILABLE = False
+
+# Execution Accelerator
+try:
+    from .accelerator import (
+        ExecutionAccelerator,
+        AOTCompiler,
+        InlineCache,
+        NumericFastPath,
+        WASMCache,
+        BatchExecutor,
+        TxBatchResult,
+        CompiledAction,
+    )
+    _ACCELERATOR_AVAILABLE = True
+except ImportError:
+    _ACCELERATOR_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -202,4 +255,39 @@ __all__ = [
     'TransferSingleEvent',
     'TransferBatchEvent',
     'ApprovalForAllEvent',
+
+    # Upgradeable Contracts & Chain Governance
+    'ProxyContract',
+    'ImplementationRecord',
+    'UpgradeManager',
+    'ChainUpgradeGovernance',
+    'ChainUpgradeProposal',
+    'ProposalStatus',
+    'ProposalType',
+    'UpgradeEvent',
+    'UpgradeEventType',
+
+    # Formal Verification
+    'FormalVerifier',
+    'VerificationLevel',
+    'VerificationReport',
+    'VerificationFinding',
+    'Severity',
+    'FindingCategory',
+    'StructuralVerifier',
+    'InvariantVerifier',
+    'PropertyVerifier',
+    'AnnotationParser',
+    'Invariant',
+    'ContractProperty',
+
+    # Execution Accelerator
+    'ExecutionAccelerator',
+    'AOTCompiler',
+    'InlineCache',
+    'NumericFastPath',
+    'WASMCache',
+    'BatchExecutor',
+    'TxBatchResult',
+    'CompiledAction',
 ]
