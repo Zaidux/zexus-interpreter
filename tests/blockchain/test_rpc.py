@@ -389,8 +389,14 @@ class TestZxMethods:
         assert int(result, 16) == 21_000
 
     def test_estimate_gas_contract(self, rpc):
-        result = rpc._zx_estimate_gas([{"data": "0x1234"}])
+        # With a 'to' address, data triggers contract-call estimation
+        result = rpc._zx_estimate_gas([{"data": "0x1234", "to": "0x" + "cc" * 20}])
         assert int(result, 16) == 500_000
+
+    def test_estimate_gas_deployment(self, rpc):
+        # No 'to' address + data triggers deployment estimation
+        result = rpc._zx_estimate_gas([{"data": "0x1234"}])
+        assert int(result, 16) == 54_200  # 53000 base + 6 bytes * 200
 
     def test_get_chain_info(self, rpc):
         result = rpc._zx_get_chain_info(None)

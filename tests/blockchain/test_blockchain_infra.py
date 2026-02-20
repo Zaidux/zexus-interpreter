@@ -487,7 +487,7 @@ class TestCreateConsensus:
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError):
-            create_consensus("bft")
+            create_consensus("unknown_algo")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

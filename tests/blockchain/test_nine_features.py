@@ -113,9 +113,10 @@ class TestRBFMempool:
         tx1 = _make_tx(sender="0xA", nonce=0, gas_price=10)
         tx2 = _make_tx(sender="0xA", nonce=0, gas_price=20)
         mp.add(tx1)
-        mp.add(tx2)
-        # Both should be in the pool when RBF is off (different hashes)
-        assert mp.size == 2
+        result = mp.add(tx2)
+        # With RBF off, same-sender same-nonce is rejected as replay
+        assert result is False
+        assert mp.size == 1
 
     def test_replace_by_fee_method(self):
         mp = Mempool(rbf_enabled=True, rbf_increment_pct=10)

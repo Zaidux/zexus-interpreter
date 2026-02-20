@@ -1,0 +1,305 @@
+// ============================================================================
+//  FEATURE 9: Token Standard Interfaces (ZX20, ZX721, ZX1155)
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 9: Token Standards (ZX20 / ZX721 / ZX1155)")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+// ── ZX20 (Fungible Token) ────────────────────────────────────────────────
+contract ZX20 {
+    data tk_name = ""
+    data tk_symbol = ""
+    data supply = 0
+    data balances = {}
+    data allowances = {}
+    data tx_log = []
+
+    action setup(n, s, initial, deployer) {
+        tk_name = n
+        tk_symbol = s
+        supply = initial
+        balances[deployer] = initial
+        tx_log = tx_log + [{"type": "Mint", "to": deployer, "amount": initial}]
+    }
+
+    action balance_of(addr) {
+        if balances[addr] == null { return 0 }
+        return balances[addr]
+    }
+
+    action transfer(from_addr, to_addr, amount) {
+        require(amount > 0, "Positive amount required")
+        require(this.balance_of(from_addr) >= amount, "Insufficient")
+        balances[from_addr] = this.balance_of(from_addr) - amount
+        balances[to_addr] = this.balance_of(to_addr) + amount
+        tx_log = tx_log + [{"type": "Transfer", "from": from_addr, "to": to_addr, "amount": amount}]
+        return true
+    }
+
+    action approve(owner_addr, spender, amount) {
+        let key = string(owner_addr) + ":" + string(spender)
+        allowances[key] = amount
+        return true
+    }
+
+    action get_allowance(owner_addr, spender) {
+        let key = string(owner_addr) + ":" + string(spender)
+        if allowances[key] == null { return 0 }
+        return allowances[key]
+    }
+
+    action transfer_from(spender, from_addr, to_addr, amount) {
+        let allowed = this.get_allowance(from_addr, spender)
+        require(allowed >= amount, "Exceeds allowance")
+        this.transfer(from_addr, to_addr, amount)
+        let key = string(from_addr) + ":" + string(spender)
+        allowances[key] = allowed - amount
+        return true
+    }
+
+    action mint(to_addr, amount) {
+        supply = supply + amount
+        balances[to_addr] = this.balance_of(to_addr) + amount
+        tx_log = tx_log + [{"type": "Mint", "to": to_addr, "amount": amount}]
+        return true
+    }
+
+    action burn(from_addr, amount) {
+        require(this.balance_of(from_addr) >= amount, "Insufficient to burn")
+        balances[from_addr] = this.balance_of(from_addr) - amount
+        supply = supply - amount
+        return true
+    }
+
+    action get_log() {
+        return tx_log
+    }
+}
+
+// --- 9.1 ZX20 ---
+print("")
+print("--- 9.1 ZX20: Fungible Token ---")
+let token = ZX20()
+token.setup("ZexusCoin", "ZXC", 1000000, "0xOwner")
+assert_test("ZX20: Owner has supply", token.balance_of("0xOwner") == 1000000)
+
+token.transfer("0xOwner", "0xAlice", 50000)
+assert_test("ZX20: Owner after transfer", token.balance_of("0xOwner") == 950000)
+assert_test("ZX20: Alice received", token.balance_of("0xAlice") == 50000)
+
+token.approve("0xAlice", "0xDEX", 10000)
+token.transfer_from("0xDEX", "0xAlice", "0xBob", 5000)
+assert_test("ZX20: TransferFrom works", token.balance_of("0xBob") == 5000)
+assert_test("ZX20: Allowance reduced", token.get_allowance("0xAlice", "0xDEX") == 5000)
+
+token.mint("0xAlice", 25000)
+assert_test("ZX20: Mint adds balance", token.balance_of("0xAlice") == 70000)
+
+token.burn("0xAlice", 10000)
+assert_test("ZX20: Burn removes balance", token.balance_of("0xAlice") == 60000)
+assert_test("ZX20: Log has entries", len(token.get_log()) > 0)
+
+// ── ZX721 (Non-Fungible Token) ───────────────────────────────────────────
+contract ZX721 {
+    data tk_name = ""
+    data tk_symbol = ""
+    data owners = {}
+    data approvals = {}
+    data uris = {}
+    data minted = 0
+    data tx_log = []
+
+    action setup(n, s) {
+        tk_name = n
+        tk_symbol = s
+    }
+
+    action mint(to_addr, token_id, uri) {
+        require(owners[string(token_id)] == null, "Already minted")
+        owners[string(token_id)] = to_addr
+        uris[string(token_id)] = uri
+        minted = minted + 1
+        tx_log = tx_log + [{"type": "Mint", "to": to_addr, "id": token_id}]
+        return true
+    }
+
+    action owner_of(token_id) {
+        return owners[string(token_id)]
+    }
+
+    action transfer(from_addr, to_addr, token_id) {
+        require(owners[string(token_id)] == from_addr, "Not owner")
+        owners[string(token_id)] = to_addr
+        approvals[string(token_id)] = null
+        tx_log = tx_log + [{"type": "Transfer", "from": from_addr, "to": to_addr, "id": token_id}]
+        return true
+    }
+
+    action approve(token_id, addr) {
+        approvals[string(token_id)] = addr
+        return true
+    }
+
+    action get_approved(token_id) {
+        return approvals[string(token_id)]
+    }
+
+    action token_uri(token_id) {
+        return uris[string(token_id)]
+    }
+
+    action total_supply() {
+        return minted
+    }
+
+    action burn(token_id, from_addr) {
+        require(owners[string(token_id)] == from_addr, "Not owner")
+        owners[string(token_id)] = null
+        minted = minted - 1
+        return true
+    }
+}
+
+// --- 9.2 ZX721 ---
+print("")
+print("--- 9.2 ZX721: Non-Fungible Token ---")
+let nft = ZX721()
+nft.setup("ZexusPunks", "ZPNK")
+nft.mint("0xAlice", 1, "ipfs://Qm1")
+nft.mint("0xAlice", 2, "ipfs://Qm2")
+nft.mint("0xBob", 3, "ipfs://Qm3")
+assert_test("ZX721: Supply is 3", nft.total_supply() == 3)
+assert_test("ZX721: Alice owns #1", nft.owner_of(1) == "0xAlice")
+assert_test("ZX721: URI stored", nft.token_uri(1) == "ipfs://Qm1")
+
+nft.transfer("0xAlice", "0xBob", 1)
+assert_test("ZX721: Transfer changes owner", nft.owner_of(1) == "0xBob")
+
+nft.approve(2, "0xMarket")
+assert_test("ZX721: Approval set", nft.get_approved(2) == "0xMarket")
+
+nft.burn(3, "0xBob")
+assert_test("ZX721: Burn reduces supply", nft.total_supply() == 2)
+assert_test("ZX721: Burned token no owner", nft.owner_of(3) == null)
+
+// ── ZX1155 (Multi-Token) ─────────────────────────────────────────────────
+contract ZX1155 {
+    data balances = {}
+    data uris = {}
+    data tx_log = []
+
+    action mint(to_addr, token_id, amount) {
+        let key = string(to_addr) + ":" + string(token_id)
+        let cur = 0
+        if balances[key] != null { cur = balances[key] }
+        balances[key] = cur + amount
+        tx_log = tx_log + [{"type": "Mint", "to": to_addr, "id": token_id, "amount": amount}]
+        return true
+    }
+
+    action balance_of(addr, token_id) {
+        let key = string(addr) + ":" + string(token_id)
+        if balances[key] == null { return 0 }
+        return balances[key]
+    }
+
+    action transfer(from_addr, to_addr, token_id, amount) {
+        let fk = string(from_addr) + ":" + string(token_id)
+        let tk = string(to_addr) + ":" + string(token_id)
+        let fb = 0
+        if balances[fk] != null { fb = balances[fk] }
+        require(fb >= amount, "Insufficient balance")
+        balances[fk] = fb - amount
+        let tb = 0
+        if balances[tk] != null { tb = balances[tk] }
+        balances[tk] = tb + amount
+        tx_log = tx_log + [{"type": "Transfer", "from": from_addr, "to": to_addr, "id": token_id, "amount": amount}]
+        return true
+    }
+
+    action batch_mint(to_addr, ids, amounts) {
+        let i = 0
+        while i < len(ids) {
+            this.mint(to_addr, ids[i], amounts[i])
+            i = i + 1
+        }
+        return true
+    }
+
+    action batch_transfer(from_addr, to_addr, ids, amounts) {
+        let i = 0
+        while i < len(ids) {
+            this.transfer(from_addr, to_addr, ids[i], amounts[i])
+            i = i + 1
+        }
+        return true
+    }
+
+    action set_uri(token_id, uri) {
+        uris[string(token_id)] = uri
+        return true
+    }
+
+    action uri(token_id) {
+        return uris[string(token_id)]
+    }
+
+    action burn(from_addr, token_id, amount) {
+        let key = string(from_addr) + ":" + string(token_id)
+        let bal = 0
+        if balances[key] != null { bal = balances[key] }
+        require(bal >= amount, "Insufficient to burn")
+        balances[key] = bal - amount
+        return true
+    }
+}
+
+// --- 9.3 ZX1155 ---
+print("")
+print("--- 9.3 ZX1155: Multi-Token ---")
+let multi = ZX1155()
+multi.mint("0xPlayer", 1, 1000)
+multi.mint("0xPlayer", 2, 500)
+multi.mint("0xPlayer", 100, 1)
+assert_test("ZX1155: Gold balance", multi.balance_of("0xPlayer", 1) == 1000)
+assert_test("ZX1155: Silver balance", multi.balance_of("0xPlayer", 2) == 500)
+assert_test("ZX1155: Sword (NFT)", multi.balance_of("0xPlayer", 100) == 1)
+
+// --- 9.4 Batch Operations ---
+print("")
+print("--- 9.4 ZX1155: Batch Operations ---")
+multi.batch_mint("0xShop", [1, 2, 3], [200, 300, 50])
+assert_test("ZX1155: Batch gold to shop", multi.balance_of("0xShop", 1) == 200)
+assert_test("ZX1155: Batch silver to shop", multi.balance_of("0xShop", 2) == 300)
+
+multi.batch_transfer("0xPlayer", "0xFriend", [1, 2], [100, 50])
+assert_test("ZX1155: Friend got gold", multi.balance_of("0xFriend", 1) == 100)
+assert_test("ZX1155: Friend got silver", multi.balance_of("0xFriend", 2) == 50)
+
+// --- 9.5 URI & Burn ---
+print("")
+print("--- 9.5 ZX1155: URI & Burn ---")
+multi.set_uri(100, "https://game.zexus.io/items/100.json")
+assert_test("ZX1155: URI set", multi.uri(100) == "https://game.zexus.io/items/100.json")
+
+multi.burn("0xPlayer", 2, 100)
+assert_test("ZX1155: Burn reduces balance", multi.balance_of("0xPlayer", 2) == 350)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Token Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

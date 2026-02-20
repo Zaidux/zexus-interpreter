@@ -1,0 +1,73 @@
+// ============================================================================
+//  FEATURE 2: Gas Estimation API
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 2: Gas Estimation API")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract GasEstimator {
+    data base_cost = 21000
+    data per_byte = 16
+    data creation_cost = 32000
+    data storage_op_cost = 20000
+    data compute_step_cost = 3
+
+    action estimate_transfer(data_size) {
+        return base_cost + (per_byte * data_size)
+    }
+
+    action estimate_deploy(code_size) {
+        return base_cost + creation_cost + (per_byte * code_size)
+    }
+
+    action estimate_call(data_size, storage_ops, compute_steps) {
+        return base_cost + (per_byte * data_size) + (storage_op_cost * storage_ops) + (compute_step_cost * compute_steps)
+    }
+
+    action with_safety(base_gas, factor_pct) {
+        return base_gas * factor_pct / 100
+    }
+}
+
+// --- 2.1 Simple Transfer ---
+print("")
+print("--- 2.1 Transfer Estimation ---")
+let gas = GasEstimator()
+assert_test("Empty transfer = 21000", gas.estimate_transfer(0) == 21000)
+assert_test("100-byte transfer = 22600", gas.estimate_transfer(100) == 22600)
+
+// --- 2.2 Contract Deploy ---
+print("")
+print("--- 2.2 Deploy Estimation ---")
+assert_test("500-byte deploy = 61000", gas.estimate_deploy(500) == 61000)
+
+// --- 2.3 Contract Call ---
+print("")
+print("--- 2.3 Contract Call Estimation ---")
+let expected = 21000 + (16 * 64) + (20000 * 2) + (3 * 1000)
+assert_test("Call gas = " + string(expected), gas.estimate_call(64, 2, 1000) == expected)
+
+// --- 2.4 Safety Multiplier ---
+print("")
+print("--- 2.4 Safety Multiplier ---")
+assert_test("120% of 50000 = 60000", gas.with_safety(50000, 120) == 60000)
+assert_test("150% of 21000 = 31500", gas.with_safety(21000, 150) == 31500)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Gas Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

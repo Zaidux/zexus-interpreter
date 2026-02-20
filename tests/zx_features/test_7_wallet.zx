@@ -1,0 +1,154 @@
+// ============================================================================
+//  FEATURE 7: HD Wallet & Keystore
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 7: HD Wallet & Keystore")
+print("=" * 60)
+
+use "crypto" as crypto
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract HDWalletSim {
+    data seed_phrase = ""
+    data accts = {}
+    data acct_count = 0
+    data master = ""
+
+    action generate(words) {
+        let word_list = ["abandon", "ability", "able", "about", "above",
+                        "absent", "absorb", "abstract", "absurd", "abuse",
+                        "access", "accident"]
+        let phrase = ""
+        let i = 0
+        while i < words {
+            if i > 0 { phrase = phrase + " " }
+            phrase = phrase + word_list[i % len(word_list)]
+            i = i + 1
+        }
+        seed_phrase = phrase
+        master = hash(phrase, "SHA256")
+        return {"phrase": phrase, "words": words}
+    }
+
+    action derive(idx) {
+        require(master != "", "Not initialized")
+        let path = "m/44'/60'/0'/0/" + string(idx)
+        let key = hash(master + "/" + string(idx), "SHA256")
+        let addr = "0x" + key
+        let acct = {"path": path, "key": key, "addr": addr, "idx": idx}
+        accts[string(idx)] = acct
+        acct_count = acct_count + 1
+        return acct
+    }
+
+    action get_acct(idx) {
+        return accts[string(idx)]
+    }
+
+    action get_phrase() {
+        return seed_phrase
+    }
+
+    action count() {
+        return acct_count
+    }
+}
+
+contract KeystoreSim {
+    data keys = {}
+    data total = 0
+
+    action store_key(addr, priv_key, password) {
+        require(len(password) >= 8, "Password too short (min 8)")
+        let enc = hash(priv_key + ":" + password, "SHA256")
+        keys[addr] = {"enc": enc, "orig": priv_key}
+        total = total + 1
+        return {"ok": true, "addr": addr}
+    }
+
+    action unlock(addr, password) {
+        let record = keys[addr]
+        require(record != null, "Key not found")
+        let check = hash(record["orig"] + ":" + password, "SHA256")
+        if check == record["enc"] {
+            return {"ok": true, "key": record["orig"]}
+        }
+        return {"ok": false, "reason": "Wrong password"}
+    }
+
+    action has_key(addr) {
+        return keys[addr] != null
+    }
+
+    action count() {
+        return total
+    }
+}
+
+// --- 7.1 Mnemonic ---
+print("")
+print("--- 7.1 Mnemonic Generation ---")
+let w = HDWalletSim()
+let gen = w.generate(12)
+assert_test("Mnemonic generated", w.get_phrase() != "")
+assert_test("12 words", gen["words"] == 12)
+
+// --- 7.2 Account Derivation ---
+print("")
+print("--- 7.2 Account Derivation ---")
+let a0 = w.derive(0)
+let a1 = w.derive(1)
+let a2 = w.derive(2)
+assert_test("BIP-44 path for #0", a0["path"] == "m/44'/60'/0'/0/0")
+assert_test("Account #1 exists", a1["addr"] != "")
+assert_test("Different keys", a0["key"] != a1["key"])
+assert_test("Different addresses", a0["addr"] != a1["addr"])
+assert_test("3 accounts total", w.count() == 3)
+
+// --- 7.3 Retrieval ---
+print("")
+print("--- 7.3 Account Retrieval ---")
+let ret = w.get_acct(0)
+assert_test("Retrieved acct matches", ret["path"] == a0["path"])
+
+// --- 7.4 Keystore Store & Unlock ---
+print("")
+print("--- 7.4 Keystore ---")
+let ks = KeystoreSim()
+ks.store_key(a0["addr"], a0["key"], "myS3cure!")
+assert_test("Key stored", ks.has_key(a0["addr"]) == true)
+assert_test("Keystore count 1", ks.count() == 1)
+
+let unlocked = ks.unlock(a0["addr"], "myS3cure!")
+assert_test("Correct password unlocks", unlocked["ok"] == true)
+assert_test("Unlocked key matches", unlocked["key"] == a0["key"])
+
+// --- 7.5 Wrong Password ---
+print("")
+print("--- 7.5 Wrong Password ---")
+let bad = ks.unlock(a0["addr"], "wrong_pw!")
+assert_test("Wrong password fails", bad["ok"] == false)
+
+// --- 7.6 Multiple Keys ---
+print("")
+print("--- 7.6 Multiple Keys ---")
+ks.store_key(a1["addr"], a1["key"], "secondK3y!")
+assert_test("2 keys stored", ks.count() == 2)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  HD Wallet Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

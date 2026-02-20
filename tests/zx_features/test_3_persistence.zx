@@ -1,0 +1,108 @@
+// ============================================================================
+//  FEATURE 3: Contract State Persistence
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 3: Contract State Persistence")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract PersistentCounter {
+    data counter = 0
+    data history = []
+    data snaps = {}
+
+    action inc() {
+        counter = counter + 1
+        history = history + [counter]
+        return counter
+    }
+
+    action dec() {
+        counter = counter - 1
+        history = history + [counter]
+        return counter
+    }
+
+    action val() {
+        return counter
+    }
+
+    action save_snap(name) {
+        snaps[name] = counter
+        return counter
+    }
+
+    action load_snap(name) {
+        counter = snaps[name]
+        return counter
+    }
+
+    action get_history() {
+        return history
+    }
+
+    action get_info() {
+        return {
+            "counter": counter,
+            "hist_len": len(history),
+            "snaps": snaps
+        }
+    }
+}
+
+// --- 3.1 State across calls ---
+print("")
+print("--- 3.1 State Persists Across Calls ---")
+let pc = PersistentCounter()
+pc.inc()
+pc.inc()
+pc.inc()
+assert_test("Counter is 3 after 3 incs", pc.val() == 3)
+assert_test("History has 3 entries", len(pc.get_history()) == 3)
+
+// --- 3.2 Snapshot and Restore ---
+print("")
+print("--- 3.2 Snapshot and Restore ---")
+pc.save_snap("before_dec")
+pc.dec()
+assert_test("Counter is 2 after dec", pc.val() == 2)
+pc.load_snap("before_dec")
+assert_test("Counter restored to 3", pc.val() == 3)
+
+// --- 3.3 Full State ---
+print("")
+print("--- 3.3 Full State Snapshot ---")
+let info = pc.get_info()
+assert_test("State counter matches", info["counter"] == 3)
+assert_test("History recorded", info["hist_len"] == 4)
+assert_test("Snap exists", info["snaps"] != null)
+
+// --- 3.4 Multiple Snapshots ---
+print("")
+print("--- 3.4 Multiple Snapshots ---")
+pc.inc()
+pc.inc()
+pc.save_snap("at_five")
+assert_test("Counter is 5", pc.val() == 5)
+pc.load_snap("before_dec")
+assert_test("Restored to snap 'before_dec' (3)", pc.val() == 3)
+pc.load_snap("at_five")
+assert_test("Restored to snap 'at_five' (5)", pc.val() == 5)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Persistence Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

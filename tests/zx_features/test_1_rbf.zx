@@ -1,0 +1,109 @@
+// ============================================================================
+//  FEATURE 1: Replace-By-Fee (RBF) in Mempool
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 1: Replace-By-Fee (RBF) in Mempool")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract MempoolSim {
+    data txs = {}
+    data nonce_idx = {}
+    data rbf_on = true
+    data rbf_pct = 10
+    data count = 0
+
+    action setup(enabled, pct) {
+        rbf_on = enabled
+        rbf_pct = pct
+    }
+
+    action add_tx(sender, nonce, gas_price, tx_hash) {
+        let key = string(sender) + ":" + string(nonce)
+
+        if rbf_on {
+            if nonce_idx[key] != null {
+                let old_hash = nonce_idx[key]
+                let old_tx = txs[old_hash]
+                if old_tx != null {
+                    let min_price = old_tx["gas_price"] * (100 + rbf_pct) / 100
+                    if gas_price >= min_price {
+                        txs[old_hash] = null
+                        txs[tx_hash] = {"sender": sender, "nonce": nonce, "gas_price": gas_price}
+                        nonce_idx[key] = tx_hash
+                        return {"accepted": true, "replaced": true, "old_hash": old_hash}
+                    }
+                    return {"accepted": false, "reason": "gas price too low"}
+                }
+            }
+        }
+
+        txs[tx_hash] = {"sender": sender, "nonce": nonce, "gas_price": gas_price}
+        nonce_idx[key] = tx_hash
+        count = count + 1
+        return {"accepted": true, "replaced": false}
+    }
+
+    action get_tx(tx_hash) {
+        return txs[tx_hash]
+    }
+
+    action get_count() {
+        return count
+    }
+}
+
+// --- 1.1 Basic Operations ---
+print("")
+print("--- 1.1 Basic Mempool Operations ---")
+let mp = MempoolSim()
+mp.setup(true, 10)
+
+let r1 = mp.add_tx("0xAlice", 0, 100, "tx_001")
+assert_test("Add first tx", r1["accepted"] == true)
+assert_test("Not a replacement", r1["replaced"] == false)
+assert_test("Pool has 1 tx", mp.get_count() == 1)
+
+// --- 1.2 RBF Replacement ---
+print("")
+print("--- 1.2 RBF Replacement (Sufficient Bump) ---")
+let r2 = mp.add_tx("0xAlice", 0, 120, "tx_002")
+assert_test("RBF accepted", r2["accepted"] == true)
+assert_test("Marked replaced", r2["replaced"] == true)
+assert_test("Old hash returned", r2["old_hash"] == "tx_001")
+assert_test("New tx in pool", mp.get_tx("tx_002") != null)
+assert_test("Old tx removed", mp.get_tx("tx_001") == null)
+
+// --- 1.3 RBF Rejection ---
+print("")
+print("--- 1.3 RBF Rejection (Insufficient Bump) ---")
+let r3 = mp.add_tx("0xAlice", 0, 126, "tx_003")
+assert_test("Low bump rejected", r3["accepted"] == false)
+
+// --- 1.4 RBF Disabled ---
+print("")
+print("--- 1.4 RBF Disabled ---")
+let mp2 = MempoolSim()
+mp2.setup(false, 10)
+let n1 = mp2.add_tx("0xBob", 0, 50, "tx_a01")
+let n2 = mp2.add_tx("0xBob", 0, 500, "tx_a02")
+assert_test("No-RBF: first accepted", n1["accepted"] == true)
+assert_test("No-RBF: second accepted (no gas check)", n2["accepted"] == true)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  RBF Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

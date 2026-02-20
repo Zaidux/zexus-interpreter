@@ -1,0 +1,143 @@
+// ============================================================================
+//  FEATURE 5: Event Indexing & Log Filtering
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 5: Event Indexing & Log Filtering")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract EventLogger {
+    data entries = []
+    data total = 0
+    data bloom = {}
+
+    action log_event(etype, addr, topics, payload) {
+        let entry = {
+            "type": etype,
+            "address": addr,
+            "topics": topics,
+            "data": payload,
+            "idx": total
+        }
+        entries = entries + [entry]
+        total = total + 1
+
+        // Update bloom filter
+        bloom[etype] = true
+        for each t in topics {
+            bloom[t] = true
+        }
+        return entry
+    }
+
+    action get_logs_by_addr(addr) {
+        let results = []
+        for each e in entries {
+            if e["address"] == addr {
+                results = results + [e]
+            }
+        }
+        return results
+    }
+
+    action get_logs_by_topic(topic) {
+        let results = []
+        for each e in entries {
+            for each t in e["topics"] {
+                if t == topic {
+                    results = results + [e]
+                }
+            }
+        }
+        return results
+    }
+
+    action get_logs_filtered(addr, topic) {
+        let results = []
+        for each e in entries {
+            let addr_ok = true
+            let topic_ok = true
+            if addr != null {
+                if e["address"] != addr { addr_ok = false }
+            }
+            if topic != null {
+                topic_ok = false
+                for each t in e["topics"] {
+                    if t == topic { topic_ok = true }
+                }
+            }
+            if addr_ok {
+                if topic_ok {
+                    results = results + [e]
+                }
+            }
+        }
+        return results
+    }
+
+    action bloom_check(item) {
+        return bloom[item] != null
+    }
+
+    action count() {
+        return total
+    }
+}
+
+// --- 5.1 Emit Events ---
+print("")
+print("--- 5.1 Emitting Events ---")
+let idx = EventLogger()
+idx.log_event("Transfer", "0xToken", ["from:0xAlice", "to:0xBob"], 500)
+idx.log_event("Transfer", "0xToken", ["from:0xBob", "to:0xCharlie"], 200)
+idx.log_event("Approval", "0xToken", ["owner:0xAlice", "spender:0xDEX"], 99999)
+idx.log_event("Deposit", "0xVault", ["user:0xAlice"], 1000)
+idx.log_event("Transfer", "0xNFT", ["from:0x0", "to:0xAlice"], 42)
+assert_test("5 events logged", idx.count() == 5)
+
+// --- 5.2 Filter by Address ---
+print("")
+print("--- 5.2 Filter by Address ---")
+let token_logs = idx.get_logs_by_addr("0xToken")
+assert_test("3 events from 0xToken", len(token_logs) == 3)
+let vault_logs = idx.get_logs_by_addr("0xVault")
+assert_test("1 event from 0xVault", len(vault_logs) == 1)
+
+// --- 5.3 Filter by Topic ---
+print("")
+print("--- 5.3 Filter by Topic ---")
+let alice_from = idx.get_logs_by_topic("from:0xAlice")
+assert_test("1 event with topic from:0xAlice", len(alice_from) == 1)
+
+// --- 5.4 Bloom Filter ---
+print("")
+print("--- 5.4 Bloom Filter Checks ---")
+assert_test("Bloom: Transfer exists", idx.bloom_check("Transfer") == true)
+assert_test("Bloom: Approval exists", idx.bloom_check("Approval") == true)
+assert_test("Bloom: Swap does not exist", idx.bloom_check("Swap") == false)
+
+// --- 5.5 Combined Filter ---
+print("")
+print("--- 5.5 Combined Address + Topic Filter ---")
+let combined = idx.get_logs_filtered("0xToken", "from:0xBob")
+assert_test("1 Token event from Bob", len(combined) == 1)
+let all_token = idx.get_logs_filtered("0xToken", null)
+assert_test("3 Token events (any topic)", len(all_token) == 3)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Event Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

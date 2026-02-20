@@ -1,0 +1,152 @@
+// ============================================================================
+//  FEATURE 8: BFT Consensus (PBFT-style)
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 8: BFT Consensus (PBFT-style)")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract BFTNode {
+    data node_id = ""
+    data leader = false
+    data cur_round = 0
+    data cur_phase = "idle"
+    data votes = {}
+    data validator_list = []
+    data finalized = []
+
+    action setup(id, vals) {
+        node_id = id
+        validator_list = vals
+        leader = (id == vals[0])
+    }
+
+    action is_leader() {
+        return leader
+    }
+
+    action propose(block_data) {
+        require(leader, "Only leader can propose")
+        cur_round = cur_round + 1
+        cur_phase = "pre-prepare"
+        votes = {"prepare": 0, "commit": 0}
+        return {"round": cur_round, "proposer": node_id, "data": block_data}
+    }
+
+    action recv_prepare(from_node) {
+        votes["prepare"] = votes["prepare"] + 1
+        let quorum = (len(validator_list) * 2) / 3
+        if votes["prepare"] >= quorum {
+            cur_phase = "prepare"
+        }
+        return {"prepares": votes["prepare"], "quorum": quorum}
+    }
+
+    action recv_commit(from_node) {
+        votes["commit"] = votes["commit"] + 1
+        let quorum = (len(validator_list) * 2) / 3
+        if votes["commit"] >= quorum {
+            cur_phase = "commit"
+        }
+        return {"commits": votes["commit"], "quorum": quorum}
+    }
+
+    action finalize(block_data) {
+        require(cur_phase == "commit", "Not committed yet")
+        cur_phase = "finalized"
+        finalized = finalized + [{"round": cur_round, "data": block_data}]
+        return {"ok": true, "round": cur_round}
+    }
+
+    action get_phase() {
+        return cur_phase
+    }
+
+    action get_round() {
+        return cur_round
+    }
+
+    action get_finalized() {
+        return finalized
+    }
+
+    action rotate_leader() {
+        let idx = cur_round % len(validator_list)
+        leader = (validator_list[idx] == node_id)
+        return {"leader_idx": idx, "am_leader": leader}
+    }
+}
+
+// --- 8.1 Init ---
+print("")
+print("--- 8.1 BFT Initialization ---")
+let vals = ["node_A", "node_B", "node_C", "node_D"]
+let n = BFTNode()
+n.setup("node_A", vals)
+assert_test("Node A is leader", n.is_leader() == true)
+assert_test("Phase is idle", n.get_phase() == "idle")
+
+// --- 8.2 Propose ---
+print("")
+print("--- 8.2 Block Proposal ---")
+let prop = n.propose("block_v1")
+assert_test("Round is 1", prop["round"] == 1)
+assert_test("Proposer is node_A", prop["proposer"] == "node_A")
+assert_test("Phase is pre-prepare", n.get_phase() == "pre-prepare")
+
+// --- 8.3 Prepare ---
+print("")
+print("--- 8.3 Prepare Phase ---")
+n.recv_prepare("node_B")
+n.recv_prepare("node_C")
+let p3 = n.recv_prepare("node_D")
+assert_test("3 prepare votes", p3["prepares"] == 3)
+assert_test("Phase advanced to prepare", n.get_phase() == "prepare")
+
+// --- 8.4 Commit ---
+print("")
+print("--- 8.4 Commit Phase ---")
+n.recv_commit("node_B")
+n.recv_commit("node_C")
+let c3 = n.recv_commit("node_D")
+assert_test("3 commit votes", c3["commits"] == 3)
+assert_test("Phase advanced to commit", n.get_phase() == "commit")
+
+// --- 8.5 Finalize ---
+print("")
+print("--- 8.5 Finalization ---")
+let fin = n.finalize("block_v1")
+assert_test("Block finalized", fin["ok"] == true)
+assert_test("Phase is finalized", n.get_phase() == "finalized")
+assert_test("1 block in log", len(n.get_finalized()) == 1)
+
+// --- 8.6 Follower ---
+print("")
+print("--- 8.6 Non-Leader Node ---")
+let follower = BFTNode()
+follower.setup("node_C", vals)
+assert_test("Node C is not leader", follower.is_leader() == false)
+
+// --- 8.7 Leader Rotation ---
+print("")
+print("--- 8.7 Leader Rotation ---")
+let rot = n.rotate_leader()
+assert_test("Rotation returns index", rot["leader_idx"] != null)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  BFT Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

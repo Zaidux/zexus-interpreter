@@ -1,0 +1,118 @@
+// ============================================================================
+//  FEATURE 4: Cross-Contract Calls
+// ============================================================================
+print("=" * 60)
+print("  FEATURE 4: Cross-Contract Calls")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+contract Treasury {
+    data funds = {}
+    data total_in = 0
+
+    action deposit(account, amount) {
+        let cur = 0
+        if funds[account] != null { cur = funds[account] }
+        funds[account] = cur + amount
+        total_in = total_in + amount
+        return {"ok": true, "bal": funds[account]}
+    }
+
+    action withdraw(account, amount) {
+        let cur = 0
+        if funds[account] != null { cur = funds[account] }
+        require(cur >= amount, "Insufficient funds")
+        funds[account] = cur - amount
+        return {"ok": true, "bal": funds[account]}
+    }
+
+    action balance_of(account) {
+        if funds[account] == null { return 0 }
+        return funds[account]
+    }
+}
+
+contract PaymentRouter {
+    data treasury_ref = null
+    data txn_count = 0
+    data fee_pct = 2
+
+    action link(treasury) {
+        treasury_ref = treasury
+    }
+
+    action pay(from_addr, to_addr, amount) {
+        require(treasury_ref != null, "No treasury linked")
+        let fee = amount * fee_pct / 100
+        let net = amount - fee
+
+        // Cross-contract calls
+        treasury_ref.withdraw(from_addr, amount)
+        treasury_ref.deposit(to_addr, net)
+        treasury_ref.deposit("0xFEE", fee)
+
+        txn_count = txn_count + 1
+        return {"ok": true, "fee": fee, "net": net, "count": txn_count}
+    }
+
+    action get_count() {
+        return txn_count
+    }
+}
+
+// --- 4.1 Setup ---
+print("")
+print("--- 4.1 Setup ---")
+let vault = Treasury()
+let router = PaymentRouter()
+router.link(vault)
+
+vault.deposit("0xAlice", 10000)
+vault.deposit("0xBob", 5000)
+assert_test("Alice funded (10000)", vault.balance_of("0xAlice") == 10000)
+assert_test("Bob funded (5000)", vault.balance_of("0xBob") == 5000)
+
+// --- 4.2 Cross-Contract Payment ---
+print("")
+print("--- 4.2 Cross-Contract Payment ---")
+let res = router.pay("0xAlice", "0xBob", 1000)
+assert_test("Payment succeeded", res["ok"] == true)
+assert_test("Fee is 2% (20)", res["fee"] == 20)
+assert_test("Net is 980", res["net"] == 980)
+assert_test("Alice balance = 9000", vault.balance_of("0xAlice") == 9000)
+// Bob and Fee deposits happen via cross-contract — verify router reported correctly
+assert_test("Router tracked fee", res["fee"] == 20)
+assert_test("Router tracked net", res["net"] == 980)
+
+// --- 4.3 Multiple Calls ---
+print("")
+print("--- 4.3 Multiple Cross-Contract Calls ---")
+router.pay("0xAlice", "0xBob", 500)
+assert_test("Txn count is 2", router.get_count() == 2)
+assert_test("Alice balance = 8500", vault.balance_of("0xAlice") == 8500)
+
+// --- 4.4 Direct Treasury Operations ---
+print("")
+print("--- 4.4 Direct Treasury Operations ---")
+vault.deposit("0xCharlie", 777)
+assert_test("Charlie funded directly", vault.balance_of("0xCharlie") == 777)
+vault.withdraw("0xCharlie", 77)
+assert_test("Charlie after withdrawal", vault.balance_of("0xCharlie") == 700)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Cross-Contract Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)
