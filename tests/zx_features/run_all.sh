@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Run all 9 Zexus feature tests
+#  Run all Zexus feature tests
 # ============================================================================
 set -e
 
@@ -13,11 +13,11 @@ TOTAL_TESTS=0
 FAILED_FEATURES=()
 
 echo "================================================================"
-echo "  ZEXUS NINE FEATURES — INTEGRATION TEST SUITE"
+echo "  ZEXUS FEATURE INTEGRATION TEST SUITE"
 echo "================================================================"
 echo ""
 
-for i in 1 2 3 4 5 6 7 8 9; do
+for i in 1 2 3 4 5 6 7 8 9 10; do
     FILE="tests/zx_features/test_${i}_*.zx"
     FILE=$(ls $FILE 2>/dev/null | head -1)
     if [ -z "$FILE" ]; then
@@ -46,7 +46,7 @@ done
 echo "================================================================"
 echo "  GRAND TOTAL"
 echo "================================================================"
-echo "  Features: 9"
+echo "  Features: 10"
 echo "  Tests:    $TOTAL_TESTS"
 echo "  Passed:   $TOTAL_PASS"
 echo "  Failed:   $TOTAL_FAIL"

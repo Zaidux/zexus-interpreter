@@ -1,0 +1,177 @@
+// ============================================================================
+//  FEATURE 10: Upgradeable Contracts + Verification Annotations + Numeric Exec
+// ============================================================================
+//
+// @invariant counter >= 0
+// @property upgrade_preserves_state: counter never decreases
+// @pre caller == admin
+// @post version increases by 1
+//
+print("=" * 60)
+print("  FEATURE 10: Upgradeable + Verification + Numeric")
+print("=" * 60)
+
+let stats = {"total": 0, "passed": 0, "failed": 0}
+action assert_test(name, condition) {
+    stats["total"] = stats["total"] + 1
+    if condition {
+        stats["passed"] = stats["passed"] + 1
+        print("  [PASS] " + string(name))
+    } else {
+        stats["failed"] = stats["failed"] + 1
+        print("  [FAIL] " + string(name))
+    }
+}
+
+// --- Implementations ---
+contract ImplV1 {
+    // Implementation operates on caller-provided storage map.
+    action inc(store) {
+        let cur = 0
+        if store["counter"] != null { cur = store["counter"] }
+        store["counter"] = cur + 1
+        return store["counter"]
+    }
+}
+
+contract ImplV2 {
+    action inc(store) {
+        let cur = 0
+        if store["counter"] != null { cur = store["counter"] }
+        // New behavior: increment by 2
+        store["counter"] = cur + 2
+        return store["counter"]
+    }
+}
+
+// --- Proxy ---
+contract Proxy {
+    data admin = ""
+    data version = 0
+    data impl_ref = null
+    data store = {"counter": 0}
+    data impl_history = []
+
+    action init(admin_addr, impl) {
+        admin = admin_addr
+        impl_ref = impl
+        version = 1
+        return {"ok": true}
+    }
+
+    action counter() {
+        return store["counter"]
+    }
+
+    action get_version() {
+        return version
+    }
+
+    action inc() {
+        require(impl_ref != null, "No implementation")
+        return impl_ref.inc(store)
+    }
+
+    action upgrade(new_impl, caller) {
+        if caller != admin {
+            return {"ok": false, "error": "not admin"}
+        }
+        require(new_impl != null, "new impl required")
+
+        // Save old impl for rollback
+        impl_history.push(impl_ref)
+        impl_ref = new_impl
+        version = version + 1
+        return {"ok": true, "version": version}
+    }
+
+    action rollback(caller) {
+        if caller != admin {
+            return {"ok": false, "error": "not admin"}
+        }
+        if impl_history.length == 0 {
+            return {"ok": false, "error": "no previous"}
+        }
+        let prev = impl_history.pop()
+        impl_ref = prev
+        version = version - 1
+        return {"ok": true, "version": version}
+    }
+
+    // Numeric-heavy deterministic action to exercise execution pipeline.
+    action sum_to(n) {
+        let i = 0
+        let acc = 0
+        while i <= n {
+            acc = acc + i
+            i = i + 1
+        }
+        return acc
+    }
+}
+
+// --- 10.1 Setup ---
+print("")
+print("--- 10.1 Setup ---")
+let impl1 = ImplV1()
+let impl2 = ImplV2()
+let p = Proxy()
+let init_res = p.init("0xAdmin", impl1)
+assert_test("init ok", init_res["ok"] == true)
+assert_test("version starts at 1", p.get_version() == 1)
+assert_test("direct field read works (version)", p.version == 1)
+assert_test("counter starts at 0", p.counter() == 0)
+
+// --- 10.2 V1 behavior ---
+print("")
+print("--- 10.2 V1 behavior ---")
+p.inc()
+assert_test("counter after inc = 1", p.counter() == 1)
+p.inc()
+assert_test("counter after inc = 2", p.counter() == 2)
+
+// --- 10.3 Upgrade access control ---
+print("")
+print("--- 10.3 Upgrade access control ---")
+let bad = p.upgrade(impl2, "0xHacker")
+assert_test("non-admin upgrade rejected", bad["ok"] == false)
+assert_test("counter unchanged", p.counter() == 2)
+assert_test("version unchanged", p.get_version() == 1)
+assert_test("direct field read unchanged", p.version == 1)
+
+// --- 10.4 Upgrade success + state preserved ---
+print("")
+print("--- 10.4 Upgrade success + state preserved ---")
+let up = p.upgrade(impl2, "0xAdmin")
+assert_test("admin upgrade ok", up["ok"] == true)
+assert_test("version now 2", p.get_version() == 2)
+assert_test("direct field read now 2", p.version == 2)
+assert_test("counter preserved", p.counter() == 2)
+
+// V2 behavior (+2)
+p.inc()
+assert_test("counter after V2 inc = 4", p.counter() == 4)
+
+// --- 10.5 Rollback ---
+print("")
+print("--- 10.5 Rollback ---")
+let rb = p.rollback("0xAdmin")
+assert_test("rollback ok", rb["ok"] == true)
+assert_test("version back to 1", p.get_version() == 1)
+
+// V1 behavior again (+1)
+p.inc()
+assert_test("counter after rollback inc = 5", p.counter() == 5)
+
+// --- 10.6 Numeric deterministic ---
+print("")
+print("--- 10.6 Numeric deterministic ---")
+assert_test("sum_to(0)=0", p.sum_to(0) == 0)
+assert_test("sum_to(1000)=500500", p.sum_to(1000) == 500500)
+
+// --- Report ---
+print("")
+print("=" * 60)
+print("  Feature 10 Tests: " + string(stats["passed"]) + "/" + string(stats["total"]) + " passed")
+if stats["failed"] == 0 { print("  *** ALL PASSED ***") }
+print("=" * 60)

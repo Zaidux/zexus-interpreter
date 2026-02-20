@@ -2013,6 +2013,9 @@ class VM:
                             stack_append(obj.get(key))
                         elif isinstance(obj, dict):
                             stack_append(obj.get(attr_name))
+                        elif hasattr(obj, 'get') and hasattr(obj, 'set') and callable(getattr(obj, 'get', None)):
+                            # Contract-like objects (e.g., SmartContract) expose state via get/set.
+                            stack_append(obj.get(attr_name))
                         else:
                             stack_append(getattr(obj, attr_name, None))
                     except Exception:

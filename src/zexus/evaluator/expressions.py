@@ -67,6 +67,14 @@ class ExpressionEvaluatorMixin:
                  return obj.get(String(prop_name)) or NULL
             elif isinstance(obj, dict):
                  return obj.get(prop_name, NULL)
+            elif hasattr(obj, 'get') and hasattr(obj, 'set') and callable(getattr(obj, 'get', None)):
+                 # Contract-like objects (e.g., SmartContract) expose state via get/set.
+                 # This makes `contract.state_var` reliable and deterministic.
+                 try:
+                     res = obj.get(prop_name)
+                     return res if res is not None else NULL
+                 except Exception:
+                     return NULL
             else:
                  # Try getattr (for data classes, etc.)
                  try:
