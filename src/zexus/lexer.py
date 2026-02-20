@@ -234,378 +234,375 @@ class Lexer:
             return self.input[self.read_position]
 
     def next_token(self):
-        self.skip_whitespace()
+        # NOTE: This method must not recurse. Large files can contain thousands
+        # of consecutive comment/blank lines; using recursion here can hit
+        # Python's recursion limit and cause unpredictable failures.
+        while True:
+            self.skip_whitespace()
 
-        # CRITICAL FIX: Skip single line comments (both # and // styles)
-        if self.ch == '#' and self.peek_char() != '{':
-            self.skip_comment()
-            return self.next_token()
+            # Skip single line comments (both # and // styles)
+            if self.ch == '#' and self.peek_char() != '{':
+                self.skip_comment()
+                continue
 
-        # NEW: Handle // style comments and /* */ block comments
-        if self.ch == '/' and self.peek_char() == '/':
-            self.skip_double_slash_comment()
-            return self.next_token()
-
-        # Block comments: /* ... */
-        if self.ch == '/' and self.peek_char() == '*':
-            self.skip_block_comment()
-            return self.next_token()
-
-        tok = None
-        current_line = self.line
-        current_column = self.column
-
-        if self.ch == '=':
-            # Equality '=='
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(EQ, literal)
-                tok.line = current_line
-                tok.column = current_column
-            # Arrow '=>' (treat as lambda shorthand)
-            elif self.peek_char() == '>':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(LAMBDA, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(ASSIGN, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '!':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(NOT_EQ, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(BANG, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '&':
-            if self.peek_char() == '&':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(AND, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                # Single '&' is not supported - suggest using '&&'
-                error = self.error_reporter.report_error(
-                    ZexusSyntaxError,
-                    f"Unexpected character '{self.ch}'",
-                    line=current_line,
-                    column=current_column,
-                    filename=self.filename,
-                    suggestion="Did you mean '&&' for logical AND?"
-                )
-                raise error
-        elif self.ch == '|':
-            if self.peek_char() == '|':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(OR, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                # Single '|' is not supported - suggest using '||'
-                error = self.error_reporter.report_error(
-                    ZexusSyntaxError,
-                    f"Unexpected character '{self.ch}'",
-                    line=current_line,
-                    column=current_column,
-                    filename=self.filename,
-                    suggestion="Did you mean '||' for logical OR?"
-                )
-                raise error
-        elif self.ch == '<':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(LTE, literal)
-                tok.line = current_line
-                tok.column = current_column
-            elif self.peek_char() == '<':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(IMPORT_OP, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(LT, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '>':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(GTE, literal)
-                tok.line = current_line
-                tok.column = current_column
-            elif self.peek_char() == '>':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(APPEND, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(GT, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '?':
-            # Check for nullish coalescing '??'
-            if self.peek_char() == '?':
-                ch = self.ch
-                self.read_char()
-                literal = ch + self.ch
-                tok = Token(NULLISH, literal)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(QUESTION, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '"':
-            # Check for triple-quote multiline string
-            if self.peek_char() == '"' and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == '"':
-                string_literal = self.read_multiline_string()
-            else:
-                string_literal = self.read_string()
-            # If read_string returned a list, it's an interpolated string
-            if isinstance(string_literal, list):
-                tok = Token(INTERP_STRING, string_literal)
-            else:
-                tok = Token(STRING, string_literal)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == "'":
-            # Single-quoted strings
-            if self.peek_char() == "'" and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == "'":
-                string_literal = self.read_multiline_string(quote_char="'")
-            else:
-                string_literal = self.read_single_quoted_string()
-            tok = Token(STRING, string_literal)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '[':
-            tok = Token(LBRACKET, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == ']':
-            tok = Token(RBRACKET, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '@':
-            tok = Token(AT, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '(':
-            # Quick char-level scan: detect if this '(' pairs with a ')' that
-            # is followed by '=>' (arrow). If so, set a hint flag so parser
-            # can treat the parentheses as a lambda-parameter list.
-            try:
-                src = self.input
-                i = self.position
-                depth = 0
-                found = False
-                scan_limit = len(src)
-                while i < scan_limit:
-                    c = src[i]
-                    if c == '(':
-                        depth += 1
-                    elif c == ')':
-                        depth -= 1
-                        if depth == 0:
-                            # look ahead for '=>' skipping whitespace
-                            j = i + 1
-                            while j < len(src) and src[j].isspace():
-                                j += 1
-                            if j + 1 < len(src) and src[j] == '=' and src[j + 1] == '>':
-                                found = True
-                            break
-                    i += 1
-                self._next_paren_has_lambda = found
-            except Exception:
-                self._next_paren_has_lambda = False
-
-            tok = Token(LPAREN, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == ')':
-            tok = Token(RPAREN, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '{':
-            # Check if this might be start of embedded block
-            lookback = self.input[max(0, self.position-10):self.position]
-            if 'embedded' in lookback:
-                self.in_embedded_block = True
-            tok = Token(LBRACE, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '}':
-            if self.in_embedded_block:
-                self.in_embedded_block = False
-            tok = Token(RBRACE, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == ',':
-            tok = Token(COMMA, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == ';':
-            tok = Token(SEMICOLON, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == ':':
-            tok = Token(COLON, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == '+':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                tok = Token(PLUS_ASSIGN, ch + self.ch)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(PLUS, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '-':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                tok = Token(MINUS_ASSIGN, ch + self.ch)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(MINUS, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '*':
-            if self.peek_char() == '*':
-                ch = self.ch
-                self.read_char()
-                if self.peek_char() == '=':
-                    self.read_char()
-                    tok = Token(POWER_ASSIGN, '**=')
-                    tok.line = current_line
-                    tok.column = current_column
-                else:
-                    tok = Token(POWER, ch + self.ch)
-                    tok.line = current_line
-                    tok.column = current_column
-            elif self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                tok = Token(STAR_ASSIGN, ch + self.ch)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(STAR, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '/':
-            # Check if this is division or comment
-            if self.peek_char() == '/':
+            # Handle // style comments and /* */ block comments
+            if self.ch == '/' and self.peek_char() == '/':
                 self.skip_double_slash_comment()
-                return self.next_token()
-            elif self.peek_char() == '*':
+                continue
+
+            # Block comments: /* ... */
+            if self.ch == '/' and self.peek_char() == '*':
                 self.skip_block_comment()
-                return self.next_token()
-            elif self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                tok = Token(SLASH_ASSIGN, ch + self.ch)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(SLASH, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '%':
-            if self.peek_char() == '=':
-                ch = self.ch
-                self.read_char()
-                tok = Token(MOD_ASSIGN, ch + self.ch)
-                tok.line = current_line
-                tok.column = current_column
-            else:
-                tok = Token(MOD, self.ch)
-                tok.line = current_line
-                tok.column = current_column
-        elif self.ch == '.':
-            tok = Token(DOT, self.ch)
-            tok.line = current_line
-            tok.column = current_column
-        elif self.ch == "":
-            tok = Token(EOF, "")
-            tok.line = current_line
-            tok.column = current_column
-        else:
-            if self.is_letter(self.ch):
-                literal = self.read_identifier()
+                continue
 
-                if self.in_embedded_block:
-                    token_type = IDENT
-                else:
-                    token_type = self.lookup_ident(literal)
+            tok = None
+            current_line = self.line
+            current_column = self.column
 
-                tok = Token(token_type, literal)
-                tok.line = current_line
-                tok.column = current_column
-                self._finalize_token(tok)
-                return tok
-            elif self.is_digit(self.ch):
-                num_literal = self.read_number()
-                if '.' in num_literal:
-                    tok = Token(FLOAT, num_literal)
-                else:
-                    tok = Token(INT, num_literal)
-                tok.line = current_line
-                tok.column = current_column
-                self._finalize_token(tok)
-                return tok
-            else:
-                if self.ch in ['\n', '\r']:
+            if self.ch == '=':
+                # Equality '=='
+                if self.peek_char() == '=':
+                    ch = self.ch
                     self.read_char()
-                    return self.next_token()
-                # For embedded code, treat unknown printable chars as IDENT
-                if self.ch.isprintable():
-                    literal = self.read_embedded_char()
-                    tok = Token(IDENT, literal)
+                    literal = ch + self.ch
+                    tok = Token(EQ, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                # Arrow '=>' (treat as lambda shorthand)
+                elif self.peek_char() == '>':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(LAMBDA, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(ASSIGN, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '!':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(NOT_EQ, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(BANG, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '&':
+                if self.peek_char() == '&':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(AND, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    # Single '&' is not supported - suggest using '&&'
+                    error = self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        f"Unexpected character '{self.ch}'",
+                        line=current_line,
+                        column=current_column,
+                        filename=self.filename,
+                        suggestion="Did you mean '&&' for logical AND?"
+                    )
+                    raise error
+            elif self.ch == '|':
+                if self.peek_char() == '|':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(OR, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    # Single '|' is not supported - suggest using '||'
+                    error = self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        f"Unexpected character '{self.ch}'",
+                        line=current_line,
+                        column=current_column,
+                        filename=self.filename,
+                        suggestion="Did you mean '||' for logical OR?"
+                    )
+                    raise error
+            elif self.ch == '<':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(LTE, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                elif self.peek_char() == '<':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(IMPORT_OP, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(LT, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '>':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(GTE, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                elif self.peek_char() == '>':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(APPEND, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(GT, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '?':
+                # Check for nullish coalescing '??'
+                if self.peek_char() == '?':
+                    ch = self.ch
+                    self.read_char()
+                    literal = ch + self.ch
+                    tok = Token(NULLISH, literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(QUESTION, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '"':
+                # Check for triple-quote multiline string
+                if self.peek_char() == '"' and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == '"':
+                    string_literal = self.read_multiline_string()
+                else:
+                    string_literal = self.read_string()
+                # If read_string returned a list, it's an interpolated string
+                if isinstance(string_literal, list):
+                    tok = Token(INTERP_STRING, string_literal)
+                else:
+                    tok = Token(STRING, string_literal)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == "'":
+                # Single-quoted strings
+                if self.peek_char() == "'" and self.read_position + 1 < len(self.input) and self.input[self.read_position + 1] == "'":
+                    string_literal = self.read_multiline_string(quote_char="'")
+                else:
+                    string_literal = self.read_single_quoted_string()
+                tok = Token(STRING, string_literal)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '[':
+                tok = Token(LBRACKET, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == ']':
+                tok = Token(RBRACKET, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '@':
+                tok = Token(AT, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '(':
+                # Quick char-level scan: detect if this '(' pairs with a ')' that
+                # is followed by '=>' (arrow). If so, set a hint flag so parser
+                # can treat the parentheses as a lambda-parameter list.
+                try:
+                    src = self.input
+                    i = self.position
+                    depth = 0
+                    found = False
+                    scan_limit = len(src)
+                    while i < scan_limit:
+                        c = src[i]
+                        if c == '(':
+                            depth += 1
+                        elif c == ')':
+                            depth -= 1
+                            if depth == 0:
+                                # look ahead for '=>' skipping whitespace
+                                j = i + 1
+                                while j < len(src) and src[j].isspace():
+                                    j += 1
+                                if j + 1 < len(src) and src[j] == '=' and src[j + 1] == '>':
+                                    found = True
+                                break
+                        i += 1
+                    self._next_paren_has_lambda = found
+                except Exception:
+                    self._next_paren_has_lambda = False
+
+                tok = Token(LPAREN, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == ')':
+                tok = Token(RPAREN, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '{':
+                # Check if this might be start of embedded block
+                lookback = self.input[max(0, self.position-10):self.position]
+                if 'embedded' in lookback:
+                    self.in_embedded_block = True
+                tok = Token(LBRACE, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '}':
+                if self.in_embedded_block:
+                    self.in_embedded_block = False
+                tok = Token(RBRACE, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == ',':
+                tok = Token(COMMA, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == ';':
+                tok = Token(SEMICOLON, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == ':':
+                tok = Token(COLON, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == '+':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    tok = Token(PLUS_ASSIGN, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(PLUS, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '-':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    tok = Token(MINUS_ASSIGN, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(MINUS, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '*':
+                if self.peek_char() == '*':
+                    ch = self.ch
+                    self.read_char()
+                    if self.peek_char() == '=':
+                        self.read_char()
+                        tok = Token(POWER_ASSIGN, '**=')
+                        tok.line = current_line
+                        tok.column = current_column
+                    else:
+                        tok = Token(POWER, ch + self.ch)
+                        tok.line = current_line
+                        tok.column = current_column
+                elif self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    tok = Token(STAR_ASSIGN, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(STAR, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '/':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    tok = Token(SLASH_ASSIGN, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(SLASH, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '%':
+                if self.peek_char() == '=':
+                    ch = self.ch
+                    self.read_char()
+                    tok = Token(MOD_ASSIGN, ch + self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+                else:
+                    tok = Token(MOD, self.ch)
+                    tok.line = current_line
+                    tok.column = current_column
+            elif self.ch == '.':
+                tok = Token(DOT, self.ch)
+                tok.line = current_line
+                tok.column = current_column
+            elif self.ch == "":
+                tok = Token(EOF, "")
+                tok.line = current_line
+                tok.column = current_column
+            else:
+                if self.is_letter(self.ch):
+                    literal = self.read_identifier()
+
+                    if self.in_embedded_block:
+                        token_type = IDENT
+                    else:
+                        token_type = self.lookup_ident(literal)
+
+                    tok = Token(token_type, literal)
                     tok.line = current_line
                     tok.column = current_column
                     self._finalize_token(tok)
                     return tok
-                # Unknown character - report helpful error
-                char_desc = f"'{self.ch}'" if self.ch.isprintable() else f"'\\x{ord(self.ch):02x}'"
-                error = self.error_reporter.report_error(
-                    ZexusSyntaxError,
-                    f"Unexpected character {char_desc}",
-                    line=current_line,
-                    column=current_column,
-                    filename=self.filename,
-                    suggestion="Remove or replace this character with valid Zexus syntax."
-                )
-                raise error
+                elif self.is_digit(self.ch):
+                    num_literal = self.read_number()
+                    if '.' in num_literal:
+                        tok = Token(FLOAT, num_literal)
+                    else:
+                        tok = Token(INT, num_literal)
+                    tok.line = current_line
+                    tok.column = current_column
+                    self._finalize_token(tok)
+                    return tok
+                else:
+                    if self.ch in ['\n', '\r']:
+                        self.read_char()
+                        continue
+                    # For embedded code, treat unknown printable chars as IDENT
+                    if self.ch.isprintable():
+                        literal = self.read_embedded_char()
+                        tok = Token(IDENT, literal)
+                        tok.line = current_line
+                        tok.column = current_column
+                        self._finalize_token(tok)
+                        return tok
+                    # Unknown character - report helpful error
+                    char_desc = f"'{self.ch}'" if self.ch.isprintable() else f"'\\x{ord(self.ch):02x}'"
+                    error = self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        f"Unexpected character {char_desc}",
+                        line=current_line,
+                        column=current_column,
+                        filename=self.filename,
+                        suggestion="Remove or replace this character with valid Zexus syntax."
+                    )
+                    raise error
 
-        self.read_char()
-        self._finalize_token(tok)
-        return tok
+            self.read_char()
+            self._finalize_token(tok)
+            return tok
 
     def _finalize_token(self, tok):
         """Update lexer state after producing a token."""

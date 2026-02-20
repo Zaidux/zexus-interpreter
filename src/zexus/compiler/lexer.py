@@ -39,12 +39,17 @@ class Lexer:
             return self.input[self.read_position]
 
     def next_token(self):
-        self.skip_whitespace()
+        # Avoid recursion: long files can contain thousands of consecutive
+        # comments/blank lines.
+        while True:
+            self.skip_whitespace()
 
-        # Skip single line comments
-        if self.ch == '#' and self.peek_char() != '{':
-            self.skip_comment()
-            return self.next_token()
+            # Skip single line comments
+            if self.ch == '#' and self.peek_char() != '{':
+                self.skip_comment()
+                continue
+
+            break
 
         tok = None
         current_line = self.line
