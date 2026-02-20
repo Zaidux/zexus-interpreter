@@ -117,9 +117,14 @@ class ImplementationRecord:
     version: int
     address: str                 # address of the implementation contract
     deployer: str                # who deployed it
-    timestamp: float
-    code_hash: str               # hash of the implementation's code/name
+    timestamp: float = field(default_factory=time.time)
+    code_hash: str = ""          # hash of the implementation's code/name
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.code_hash:
+            # Deterministic default: bind code hash to implementation address
+            self.code_hash = hashlib.sha256(str(self.address).encode()).hexdigest()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -214,17 +219,46 @@ class ProxyContract:
     # ── Serialization ─────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        # Public shape intentionally mirrors common proxy contract APIs
+        # and is what the Python test suite expects.
         return {
             "address": self.address,
-            "storage": dict(self._storage),
+            "admin": self.admin,
+            "implementation": self.implementation,
+            "version": self.version,
             "data": dict(self.data),
+            # Preserve low-level slots for debugging/forensics
+            "storage": dict(self._storage),
         }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ProxyContract":
+        # Backward/forward compatible loader: accepts either the public keys
+        # (admin/implementation/version) or the internal storage slot mapping.
+        address = d.get("address")
+        admin = d.get("admin")
+        impl = d.get("implementation")
+        version = d.get("version")
+        storage = d.get("storage")
+
         p = cls.__new__(cls)
-        p.address = d["address"]
-        p._storage = dict(d["storage"])
+        p.address = address
+        if isinstance(storage, dict):
+            p._storage = dict(storage)
+        else:
+            p._storage = {
+                _IMPL_SLOT: impl or "",
+                _ADMIN_SLOT: admin or "",
+                _VERSION_SLOT: int(version or 0),
+            }
+        # If explicit public keys exist, prefer them
+        if admin is not None:
+            p._storage[_ADMIN_SLOT] = admin
+        if impl is not None:
+            p._storage[_IMPL_SLOT] = impl
+        if version is not None:
+            p._storage[_VERSION_SLOT] = int(version)
+
         p.data = dict(d.get("data", {}))
         return p
 

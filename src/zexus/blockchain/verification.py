@@ -126,7 +126,9 @@ class VerificationFinding:
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
             "category": self.category.value,
-            "severity": self.severity.value,
+            # Public/serialized form uses the Enum name (UPPERCASE)
+            # to provide a stable contract for external tooling.
+            "severity": self.severity.name,
             "message": self.message,
         }
         if self.action_name:
@@ -150,8 +152,8 @@ class VerificationFinding:
 @dataclass
 class VerificationReport:
     """Aggregate result of verifying a contract."""
-    contract_name: str
     level: VerificationLevel
+    contract_name: str = ""
     started_at: float = field(default_factory=time.time)
     finished_at: float = 0.0
     findings: List[VerificationFinding] = field(default_factory=list)
@@ -199,7 +201,9 @@ class VerificationReport:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            # Provide both keys for compatibility across callers.
             "contract": self.contract_name,
+            "contract_name": self.contract_name,
             "level": self.level.name,
             "passed": self.passed,
             "duration": round(self.duration, 4),
@@ -217,6 +221,7 @@ class VerificationReport:
 
 class SymType(str, Enum):
     INT = "int"
+    INTEGER = "int"  # alias expected by tests
     FLOAT = "float"
     STRING = "string"
     BOOL = "bool"
@@ -229,7 +234,7 @@ class SymType(str, Enum):
 @dataclass
 class SymValue:
     """A symbolic value with optional concrete range bounds."""
-    name: str
+    name: str = ""
     sym_type: SymType = SymType.ANY
     min_val: Optional[Union[int, float]] = None
     max_val: Optional[Union[int, float]] = None
@@ -293,6 +298,10 @@ class SymState:
 
     def child(self) -> "SymState":
         return SymState(parent=self)
+
+    @property
+    def constraints(self) -> List[str]:
+        return list(self._constraints)
 
     @property
     def all_vars(self) -> Dict[str, SymValue]:
@@ -696,8 +705,13 @@ class Invariant:
         // @invariant balances_sum == total_supply
     """
     expression: str              # Human-readable expression
+    variable: str = ""           # singular alias (some tooling prefers this)
     variables: List[str] = field(default_factory=list)
     parsed: Optional[Any] = None  # Internal parsed representation
+
+    def __post_init__(self) -> None:
+        if self.variable and not self.variables:
+            self.variables = [self.variable]
 
     def to_dict(self) -> Dict[str, Any]:
         return {"expression": self.expression, "variables": self.variables}
@@ -886,7 +900,7 @@ class ContractProperty:
     description: str = ""
     precondition: str = ""       # @pre expression
     postcondition: str = ""      # @post expression
-    action_scope: str = ""       # Specific action, or "" for all
+    action: str = ""             # Specific action, or "" for all
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"name": self.name}
@@ -896,9 +910,14 @@ class ContractProperty:
             d["precondition"] = self.precondition
         if self.postcondition:
             d["postcondition"] = self.postcondition
-        if self.action_scope:
-            d["action"] = self.action_scope
+        if self.action:
+            d["action"] = self.action
         return d
+
+    @property
+    def action_scope(self) -> str:
+        # Backward-compatible alias for older internal name.
+        return self.action
 
 
 class PropertyVerifier:
@@ -929,8 +948,8 @@ class PropertyVerifier:
         for prop in properties:
             report.properties_checked += 1
             target_actions = (
-                {prop.action_scope: actions[prop.action_scope]}
-                if prop.action_scope and prop.action_scope in actions
+                {prop.action: actions[prop.action]}
+                if prop.action and prop.action in actions
                 else actions
             )
 
@@ -1068,16 +1087,22 @@ class AnnotationParser:
     def parse_annotations(
         cls,
         source: Union[str, List[str]],
-    ) -> Tuple[List[Invariant], List[ContractProperty]]:
+    ) -> Dict[str, Any]:
         """Parse verification annotations from source text or comments.
 
-        Returns ``(invariants, properties)``.
+        Returns a dict with keys:
+        - ``invariants``: List[str]
+        - ``properties``: List[Dict[str, Any]]
+        - ``preconditions``: List[str]
+        - ``postconditions``: List[str]
         """
         lines = source.splitlines() if isinstance(source, str) else source
-        invariants: List[Invariant] = []
-        properties: List[ContractProperty] = []
+        invariants: List[str] = []
+        properties: List[Dict[str, Any]] = []
+        preconditions: List[str] = []
+        postconditions: List[str] = []
 
-        current_prop: Optional[ContractProperty] = None
+        current_prop: Optional[Dict[str, Any]] = None
 
         for line in lines:
             stripped = line.strip().lstrip("/").strip()
@@ -1086,10 +1111,7 @@ class AnnotationParser:
             m = cls._INV_PATTERN.match(stripped)
             if m:
                 expr = m.group(1).strip()
-                inv = Invariant(expression=expr)
-                # Extract variable names
-                inv.variables = re.findall(r"\b([a-zA-Z_]\w*)\b", expr)
-                invariants.append(inv)
+                invariants.append(expr)
                 continue
 
             # @property
@@ -1098,60 +1120,82 @@ class AnnotationParser:
                 # Flush previous property
                 if current_prop is not None:
                     properties.append(current_prop)
-                current_prop = ContractProperty(
-                    name=m.group(1),
-                    description=m.group(2) or "",
-                )
+                current_prop = {
+                    "name": m.group(1),
+                    "description": (m.group(2) or "").strip(),
+                    "precondition": "",
+                    "postcondition": "",
+                    "action": "",
+                }
                 continue
 
             # @pre
             m = cls._PRE_PATTERN.match(stripped)
-            if m and current_prop is not None:
-                current_prop.precondition = m.group(1).strip()
+            if m:
+                expr = m.group(1).strip()
+                preconditions.append(expr)
+                if current_prop is not None:
+                    current_prop["precondition"] = expr
                 continue
 
             # @post
             m = cls._POST_PATTERN.match(stripped)
-            if m and current_prop is not None:
-                current_prop.postcondition = m.group(1).strip()
+            if m:
+                expr = m.group(1).strip()
+                postconditions.append(expr)
+                if current_prop is not None:
+                    current_prop["postcondition"] = expr
                 continue
 
         # Flush last property
         if current_prop is not None:
             properties.append(current_prop)
 
-        return invariants, properties
+        return {
+            "invariants": invariants,
+            "properties": properties,
+            "preconditions": preconditions,
+            "postconditions": postconditions,
+        }
 
     @classmethod
     def from_contract_metadata(
         cls,
         contract: Any,
-    ) -> Tuple[List[Invariant], List[ContractProperty]]:
-        """Extract annotations from a contract's metadata dict."""
-        invariants: List[Invariant] = []
-        properties: List[ContractProperty] = []
+    ) -> Dict[str, Any]:
+        """Extract annotations from a contract's metadata.
 
+        Supports either dict-like ``blockchain_config`` or an object
+        with a ``verification`` attribute.
+        """
         meta = getattr(contract, "blockchain_config", {}) or {}
-        verification = meta.get("verification", {})
+        if isinstance(meta, dict):
+            verification = meta.get("verification", {})
+        else:
+            verification = getattr(meta, "verification", {})
+        if not isinstance(verification, dict):
+            verification = {}
 
-        # Invariants from metadata
-        for inv_str in verification.get("invariants", []):
-            inv = Invariant(expression=inv_str)
-            inv.variables = re.findall(r"\b([a-zA-Z_]\w*)\b", inv_str)
-            invariants.append(inv)
+        invariants = list(verification.get("invariants", []) or [])
+        props_in = list(verification.get("properties", []) or [])
+        properties: List[Dict[str, Any]] = []
 
-        # Properties from metadata
-        for prop_dict in verification.get("properties", []):
-            prop = ContractProperty(
-                name=prop_dict.get("name", ""),
-                description=prop_dict.get("description", ""),
-                precondition=prop_dict.get("pre", ""),
-                postcondition=prop_dict.get("post", ""),
-                action_scope=prop_dict.get("action", ""),
-            )
-            properties.append(prop)
+        for p in props_in:
+            if isinstance(p, dict):
+                properties.append({
+                    "name": p.get("name", ""),
+                    "description": p.get("description", ""),
+                    "precondition": p.get("precondition", p.get("pre", "")),
+                    "postcondition": p.get("postcondition", p.get("post", "")),
+                    "action": p.get("action", ""),
+                })
 
-        return invariants, properties
+        return {
+            "invariants": invariants,
+            "properties": properties,
+            "preconditions": [],
+            "postconditions": [],
+        }
 
 
 # =====================================================================
@@ -1176,7 +1220,7 @@ class FormalVerifier:
     def __init__(
         self,
         level: VerificationLevel = VerificationLevel.STRUCTURAL,
-        annotations: Optional[Union[str, List[str]]] = None,
+        annotations: Optional[Union[str, List[str], Dict[str, Any]]] = None,
         invariants: Optional[List[Invariant]] = None,
         properties: Optional[List[ContractProperty]] = None,
         max_depth: int = 3,
@@ -1186,14 +1230,42 @@ class FormalVerifier:
         self._invariant_v = InvariantVerifier()
         self._property_v = PropertyVerifier(max_depth=max_depth)
 
-        # Parse annotations
-        if annotations is not None:
-            parsed_inv, parsed_prop = AnnotationParser.parse_annotations(annotations)
-        else:
-            parsed_inv, parsed_prop = [], []
+        parsed_invariants: List[Invariant] = []
+        parsed_properties: List[ContractProperty] = []
 
-        self._invariants = invariants if invariants is not None else parsed_inv
-        self._properties = properties if properties is not None else parsed_prop
+        if isinstance(annotations, dict):
+            for inv_expr in (annotations.get("invariants") or []):
+                if isinstance(inv_expr, str):
+                    inv = Invariant(expression=inv_expr)
+                    inv.variables = re.findall(r"\b([a-zA-Z_]\w*)\b", inv_expr)
+                    parsed_invariants.append(inv)
+            for prop in (annotations.get("properties") or []):
+                if isinstance(prop, dict):
+                    parsed_properties.append(ContractProperty(
+                        name=prop.get("name", ""),
+                        description=prop.get("description", ""),
+                        precondition=prop.get("precondition", ""),
+                        postcondition=prop.get("postcondition", ""),
+                        action=prop.get("action", ""),
+                    ))
+        elif annotations is not None:
+            parsed = AnnotationParser.parse_annotations(annotations)
+            for inv_expr in (parsed.get("invariants") or []):
+                inv = Invariant(expression=inv_expr)
+                inv.variables = re.findall(r"\b([a-zA-Z_]\w*)\b", inv_expr)
+                parsed_invariants.append(inv)
+            for prop in (parsed.get("properties") or []):
+                if isinstance(prop, dict):
+                    parsed_properties.append(ContractProperty(
+                        name=prop.get("name", ""),
+                        description=prop.get("description", ""),
+                        precondition=prop.get("precondition", ""),
+                        postcondition=prop.get("postcondition", ""),
+                        action=prop.get("action", ""),
+                    ))
+
+        self._invariants = invariants if invariants is not None else parsed_invariants
+        self._properties = properties if properties is not None else parsed_properties
 
     def verify_contract(
         self,
@@ -1220,7 +1292,23 @@ class FormalVerifier:
         )
 
         # Also try extracting annotations from contract metadata
-        meta_inv, meta_prop = AnnotationParser.from_contract_metadata(contract)
+        meta = AnnotationParser.from_contract_metadata(contract)
+        meta_inv: List[Invariant] = []
+        meta_prop: List[ContractProperty] = []
+        for inv_expr in (meta.get("invariants") or []):
+            if isinstance(inv_expr, str):
+                inv = Invariant(expression=inv_expr)
+                inv.variables = re.findall(r"\b([a-zA-Z_]\w*)\b", inv_expr)
+                meta_inv.append(inv)
+        for prop in (meta.get("properties") or []):
+            if isinstance(prop, dict):
+                meta_prop.append(ContractProperty(
+                    name=prop.get("name", ""),
+                    description=prop.get("description", ""),
+                    precondition=prop.get("precondition", ""),
+                    postcondition=prop.get("postcondition", ""),
+                    action=prop.get("action", ""),
+                ))
 
         all_inv = list(self._invariants) + (extra_invariants or []) + meta_inv
         all_prop = list(self._properties) + (extra_properties or []) + meta_prop
@@ -1257,14 +1345,14 @@ class FormalVerifier:
         name: str,
         precondition: str = "",
         postcondition: str = "",
-        action_scope: str = "",
+        action: str = "",
         description: str = "",
     ) -> None:
         self._properties.append(ContractProperty(
             name=name,
             precondition=precondition,
             postcondition=postcondition,
-            action_scope=action_scope,
+            action=action,
             description=description,
         ))
 
