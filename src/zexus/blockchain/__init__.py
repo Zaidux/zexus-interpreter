@@ -28,6 +28,10 @@ from .chain import (
     Block, BlockHeader, Transaction as ChainTransaction,
     TransactionReceipt, Chain, Mempool
 )
+from .storage import (
+    StorageBackend, SQLiteBackend, LevelDBBackend, RocksDBBackend,
+    MemoryBackend, get_storage_backend, register_backend,
+)
 from .network import P2PNetwork, Message, MessageType, PeerInfo, PeerReputationManager
 from .consensus import (
     ConsensusEngine, ProofOfWork, ProofOfAuthority, ProofOfStake,
@@ -130,6 +134,7 @@ try:
         StructuralVerifier,
         InvariantVerifier,
         PropertyVerifier,
+        TaintAnalyzer,
         AnnotationParser,
         Invariant,
         ContractProperty,
@@ -153,6 +158,13 @@ try:
     _ACCELERATOR_AVAILABLE = True
 except ImportError:
     _ACCELERATOR_AVAILABLE = False
+
+# Production monitoring
+try:
+    from .monitoring import NodeMetrics, MetricsServer
+    _MONITORING_AVAILABLE = True
+except ImportError:
+    _MONITORING_AVAILABLE = False
 
 __all__ = [
     # Ledger
@@ -180,6 +192,15 @@ __all__ = [
     'TransactionReceipt',
     'Chain',
     'Mempool',
+
+    # Storage Backends
+    'StorageBackend',
+    'SQLiteBackend',
+    'LevelDBBackend',
+    'RocksDBBackend',
+    'MemoryBackend',
+    'get_storage_backend',
+    'register_backend',
 
     # P2P Network
     'P2PNetwork',
@@ -277,6 +298,7 @@ __all__ = [
     'StructuralVerifier',
     'InvariantVerifier',
     'PropertyVerifier',
+    'TaintAnalyzer',
     'AnnotationParser',
     'Invariant',
     'ContractProperty',
@@ -290,4 +312,8 @@ __all__ = [
     'BatchExecutor',
     'TxBatchResult',
     'CompiledAction',
+
+    # Production Monitoring
+    'NodeMetrics',
+    'MetricsServer',
 ]

@@ -78,30 +78,79 @@ def _generate_self_signed_cert(cert_path: str, key_path: str):
     return cert_path, key_path
 
 
-def _make_server_ssl_context(cert_path: str, key_path: str) -> ssl.SSLContext:
-    """Create a TLS server context with mutual-auth support."""
+def _make_server_ssl_context(
+    cert_path: str,
+    key_path: str,
+    ca_cert_path: Optional[str] = None,
+    require_client_cert: bool = False,
+) -> ssl.SSLContext:
+    """Create a TLS server context with optional mutual-TLS (mTLS).
+
+    Parameters
+    ----------
+    cert_path : str
+        Path to the server certificate (PEM).
+    key_path : str
+        Path to the server private key (PEM).
+    ca_cert_path : str, optional
+        Path to a CA bundle.  When provided, the server verifies peer
+        certificates against this CA — enabling proper CA-signed
+        certificate chains instead of self-signed only.
+    require_client_cert : bool
+        When *True*, the server demands a valid client certificate
+        (mutual TLS).  Only effective when ``ca_cert_path`` is set.
+    """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(cert_path, key_path)
-    # We don't require client certs (nodes self-identify via handshake),
-    # but we enforce modern ciphers.
+
+    if ca_cert_path and os.path.isfile(ca_cert_path):
+        ctx.load_verify_locations(ca_cert_path)
+        if require_client_cert:
+            ctx.verify_mode = ssl.CERT_REQUIRED
+        else:
+            ctx.verify_mode = ssl.CERT_OPTIONAL
+        logger.info("Server TLS: CA-signed verification enabled (mTLS=%s)", require_client_cert)
+    else:
+        ctx.verify_mode = ssl.CERT_NONE
+
     ctx.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20:!aNULL:!MD5:!DSS")
     return ctx
 
 
-def _make_client_ssl_context(cert_path: Optional[str] = None,
-                              key_path: Optional[str] = None) -> ssl.SSLContext:
-    """Create a TLS client context.
+def _make_client_ssl_context(
+    cert_path: Optional[str] = None,
+    key_path: Optional[str] = None,
+    ca_cert_path: Optional[str] = None,
+) -> ssl.SSLContext:
+    """Create a TLS client context with optional CA verification.
 
-    Self-signed certs are expected in a peer-to-peer network, so we
-    disable hostname verification but still enforce encryption.
+    Parameters
+    ----------
+    cert_path : str, optional
+        Client certificate for mutual TLS.
+    key_path : str, optional
+        Client private key for mutual TLS.
+    ca_cert_path : str, optional
+        CA bundle.  When provided the client verifies the server's
+        certificate against known CA roots — enabling production-grade
+        certificate validation instead of trusting all self-signed certs.
     """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE  # peers use self-signed certs
+
+    if ca_cert_path and os.path.isfile(ca_cert_path):
+        ctx.load_verify_locations(ca_cert_path)
+        ctx.check_hostname = False   # P2P nodes don't use DNS hostnames
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        logger.info("Client TLS: CA-signed server verification enabled")
+    else:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE  # fallback: accept self-signed
+
     if cert_path and key_path:
         ctx.load_cert_chain(cert_path, key_path)
+
     ctx.set_ciphers("ECDHE+AESGCM:ECDHE+CHACHA20:!aNULL:!MD5:!DSS")
     return ctx
 
@@ -341,7 +390,11 @@ class P2PNetwork:
                  chain_id: str = "zexus-mainnet", node_id: str = "",
                  max_peers: int = 25, min_peers: int = 3,
                  tls_cert: Optional[str] = None, tls_key: Optional[str] = None,
-                 tls_enabled: bool = True, data_dir: Optional[str] = None):
+                 tls_ca: Optional[str] = None,
+                 tls_enabled: bool = True,
+                 tls_mutual: bool = False,
+                 tls_pinned_certs: Optional[List[str]] = None,
+                 data_dir: Optional[str] = None):
         self.host = host
         self.port = port
         self.chain_id = chain_id
@@ -353,22 +406,37 @@ class P2PNetwork:
 
         # ── TLS configuration ────────────────────────────────────────
         self.tls_enabled = tls_enabled
+        self.tls_mutual = tls_mutual
         self._server_ssl: Optional[ssl.SSLContext] = None
         self._client_ssl: Optional[ssl.SSLContext] = None
+
+        # Certificate pinning: set of SHA-256 fingerprints of trusted
+        # peer certificates.  If non-empty, only peers whose TLS cert
+        # fingerprint is in this set are accepted.
+        self._pinned_certs: Set[str] = set(tls_pinned_certs or [])
 
         if tls_enabled:
             # Auto-generate certs if none provided
             _data = data_dir or os.path.join(os.path.expanduser("~"), ".zexus", "tls")
             self._cert_path = tls_cert or os.path.join(_data, "node.crt")
             self._key_path = tls_key or os.path.join(_data, "node.key")
+            self._ca_path = tls_ca  # None = self-signed mode
 
             if not (os.path.exists(self._cert_path) and os.path.exists(self._key_path)):
                 logger.info("Generating TLS certificate for node identity...")
                 _generate_self_signed_cert(self._cert_path, self._key_path)
 
-            self._server_ssl = _make_server_ssl_context(self._cert_path, self._key_path)
-            self._client_ssl = _make_client_ssl_context(self._cert_path, self._key_path)
-            logger.info("TLS enabled — all P2P traffic is encrypted")
+            self._server_ssl = _make_server_ssl_context(
+                self._cert_path, self._key_path,
+                ca_cert_path=self._ca_path,
+                require_client_cert=self.tls_mutual,
+            )
+            self._client_ssl = _make_client_ssl_context(
+                self._cert_path, self._key_path,
+                ca_cert_path=self._ca_path,
+            )
+            mode = "mTLS" if tls_mutual else ("CA-verified" if tls_ca else "self-signed")
+            logger.info("TLS enabled (%s) — all P2P traffic is encrypted", mode)
 
         # Connection state
         self.peers: Dict[str, PeerConnection] = {}  # peer_id -> connection
@@ -485,6 +553,29 @@ class P2PNetwork:
     def is_running(self) -> bool:
         return self._running
 
+    # ── Certificate pinning ──────────────────────────────────────────
+
+    def _check_cert_pin(self, writer: asyncio.StreamWriter) -> bool:
+        """Verify the peer's TLS certificate fingerprint against the
+        pinned set.  Returns *True* if pinning is disabled or if the
+        cert is in the pinned set; *False* to reject the connection."""
+        if not self._pinned_certs:
+            return True  # pinning not configured — accept all
+        ssl_obj = writer.get_extra_info("ssl_object")
+        if ssl_obj is None:
+            return True  # non-TLS — nothing to pin
+        try:
+            der = ssl_obj.getpeercert(binary_form=True)
+            if der is None:
+                return False  # no cert presented
+            fp = hashlib.sha256(der).hexdigest()
+            if fp in self._pinned_certs:
+                return True
+            logger.warning("Certificate pin mismatch: %s", fp)
+            return False
+        except Exception:
+            return False
+
     # ── Connections ────────────────────────────────────────────────────
 
     async def _handle_inbound(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -493,6 +584,12 @@ class P2PNetwork:
         logger.debug("Inbound connection from %s", addr)
 
         if len(self.peers) >= self.max_peers:
+            writer.close()
+            return
+
+        # Certificate pinning check
+        if not self._check_cert_pin(writer):
+            logger.warning("Rejected inbound connection (cert pin mismatch) from %s", addr)
             writer.close()
             return
 
@@ -568,6 +665,12 @@ class P2PNetwork:
             )
         except (ConnectionError, asyncio.TimeoutError, OSError) as e:
             logger.debug("Failed to connect to %s:%d: %s", host, port, e)
+            return None
+
+        # Certificate pinning check
+        if not self._check_cert_pin(writer):
+            logger.warning("Rejected outbound connection (cert pin mismatch) to %s:%d", host, port)
+            writer.close()
             return None
 
         temp_info = PeerInfo(host=host, port=port)

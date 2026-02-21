@@ -15,8 +15,16 @@ import copy
 import os
 import sqlite3
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from .storage import StorageBackend
+
+# Lazy import to avoid circular dependencies
+def _get_storage_backend(name: str, **kwargs):
+    from .storage import get_storage_backend
+    return get_storage_backend(name, **kwargs)
 
 # Import real cryptographic signing from CryptoPlugin
 try:
@@ -392,7 +400,27 @@ class Chain:
     - Fork detection and chain tip tracking
     """
 
-    def __init__(self, chain_id: str = "zexus-mainnet", data_dir: Optional[str] = None):
+    def __init__(self, chain_id: str = "zexus-mainnet",
+                 data_dir: Optional[str] = None,
+                 storage: Optional["StorageBackend"] = None,
+                 storage_backend: str = "sqlite"):
+        """Initialise the chain.
+
+        Parameters
+        ----------
+        chain_id : str
+            Unique identifier for this chain.
+        data_dir : str, optional
+            On-disk directory.  When provided (and *storage* is ``None``),
+            a storage backend is created automatically.
+        storage : StorageBackend, optional
+            A pre-configured storage backend.  Takes priority over
+            *data_dir* / *storage_backend*.
+        storage_backend : str
+            Which backend to create when *data_dir* is given and
+            *storage* is not.  One of ``"sqlite"`` (default),
+            ``"leveldb"``, ``"rocksdb"``, or ``"memory"``.
+        """
         self.chain_id = chain_id
         self.blocks: List[Block] = []
         self.block_index: Dict[str, Block] = {}  # hash -> Block
@@ -401,84 +429,74 @@ class Chain:
         self.contract_state: Dict[str, Dict[str, Any]] = {}  # contract_addr -> state
         self.difficulty: int = 1
         self.target_block_time: float = 10.0  # seconds
-        
-        # Persistent storage
+
+        # Persistent storage — pluggable backend
         self._data_dir = data_dir
-        self._db: Optional[sqlite3.Connection] = None
-        if data_dir:
+        self._storage: Optional["StorageBackend"] = storage
+
+        # Legacy compat: if no explicit storage, auto-create from data_dir
+        if self._storage is None and data_dir:
             os.makedirs(data_dir, exist_ok=True)
-            self._init_db(os.path.join(data_dir, "chain.db"))
+            backend_name = storage_backend.lower()
+            if backend_name == "sqlite":
+                self._storage = _get_storage_backend(
+                    "sqlite", db_path=os.path.join(data_dir, "chain.db")
+                )
+            else:
+                self._storage = _get_storage_backend(
+                    backend_name, db_path=os.path.join(data_dir, "chaindb")
+                )
 
-    def _init_db(self, db_path: str):
-        """Initialize SQLite database for chain storage."""
-        self._db = sqlite3.connect(db_path)
-        self._db.execute("""
-            CREATE TABLE IF NOT EXISTS blocks (
-                height INTEGER PRIMARY KEY,
-                hash TEXT UNIQUE NOT NULL,
-                data TEXT NOT NULL
-            )
-        """)
-        self._db.execute("""
-            CREATE TABLE IF NOT EXISTS state (
-                address TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            )
-        """)
-        self._db.execute("""
-            CREATE TABLE IF NOT EXISTS contract_state (
-                address TEXT PRIMARY KEY,
-                data TEXT NOT NULL
-            )
-        """)
-        self._db.commit()
-        self._load_from_db()
+        # Also keep legacy _db attribute for any external code that checks it
+        self._db = self._storage
 
-    def _load_from_db(self):
-        """Load chain from persistent storage."""
-        if not self._db:
+        if self._storage is not None:
+            self._load_from_storage()
+
+    # -- persistence (pluggable) -----------------------------------------
+
+    def _load_from_storage(self):
+        """Load chain state from the configured storage backend."""
+        if not self._storage:
             return
-        cursor = self._db.execute("SELECT data FROM blocks ORDER BY height ASC")
-        for row in cursor:
-            block = Block.from_dict(json.loads(row[0]))
+
+        # Blocks — iterate in height order
+        for _key, value in self._storage.iterate_sorted("blocks"):
+            block = Block.from_dict(json.loads(value))
             self.blocks.append(block)
             self.block_index[block.hash] = block
             self.height_index[block.header.height] = block
-        
-        cursor = self._db.execute("SELECT address, data FROM state")
-        for address, data in cursor:
+
+        # Account state
+        for address, data in self._storage.iterate("state"):
             self.accounts[address] = json.loads(data)
 
-        # Load contract state
-        cursor = self._db.execute("SELECT address, data FROM contract_state")
-        for address, data in cursor:
+        # Contract state
+        for address, data in self._storage.iterate("contract_state"):
             self.contract_state[address] = json.loads(data)
 
     def _persist_block(self, block: Block):
-        """Persist a block to the database."""
-        if not self._db:
+        """Persist a single block to the backend."""
+        if not self._storage:
             return
-        self._db.execute(
-            "INSERT OR REPLACE INTO blocks (height, hash, data) VALUES (?, ?, ?)",
-            (block.header.height, block.hash, json.dumps(block.to_dict()))
+        self._storage.put(
+            "blocks",
+            str(block.header.height),
+            json.dumps(block.to_dict()),
         )
-        self._db.commit()
+        self._storage.commit()
 
     def _persist_state(self):
-        """Persist account state and contract state to the database."""
-        if not self._db:
+        """Persist full account & contract state to the backend."""
+        if not self._storage:
             return
         for address, data in self.accounts.items():
-            self._db.execute(
-                "INSERT OR REPLACE INTO state (address, data) VALUES (?, ?)",
-                (address, json.dumps(data))
-            )
+            self._storage.put("state", address, json.dumps(data))
         for address, data in self.contract_state.items():
-            self._db.execute(
-                "INSERT OR REPLACE INTO contract_state (address, data) VALUES (?, ?)",
-                (address, json.dumps(data, default=str))
+            self._storage.put(
+                "contract_state", address, json.dumps(data, default=str)
             )
-        self._db.commit()
+        self._storage.commit()
 
     def create_genesis(self, miner: str = "0x0000000000000000000000000000000000000000",
                        initial_balances: Optional[Dict[str, int]] = None) -> Block:

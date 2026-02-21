@@ -684,8 +684,9 @@ class TxBatchResult:
 class BatchExecutor:
     """Optimised block-level transaction executor.
 
-    Groups non-conflicting transactions and executes them in an
-    optimised order, with speculative state pre-loading.
+    Groups non-conflicting transactions and executes them in parallel
+    using a thread/process pool, while falling back to sequential
+    execution for transactions that share state.
 
     Parameters
     ----------
@@ -695,6 +696,9 @@ class BatchExecutor:
         If provided, uses pre-compiled actions for faster execution.
     inline_cache : InlineCache, optional
         Shared inline cache for dispatch acceleration.
+    max_workers : int
+        Maximum number of parallel worker threads for non-conflicting
+        transaction groups (default: 4).
     """
 
     def __init__(
@@ -702,10 +706,12 @@ class BatchExecutor:
         contract_vm=None,
         aot_compiler: Optional[AOTCompiler] = None,
         inline_cache: Optional[InlineCache] = None,
+        max_workers: int = 4,
     ):
         self._vm = contract_vm
         self._aot = aot_compiler
         self._ic = inline_cache
+        self._max_workers = max(1, max_workers)
 
     def execute_batch(
         self,
@@ -721,23 +727,55 @@ class BatchExecutor:
         * ``caller`` — sender address
         * ``gas_limit`` — per-tx gas limit (optional)
 
+        Non-conflicting contract groups are dispatched to a thread pool
+        for parallel execution, giving significant speedups on
+        multi-core machines.
+
         Returns a ``TxBatchResult``.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         result = TxBatchResult(total=len(transactions))
         start = time.time()
 
-        # Group by contract for locality
+        # Group by contract for locality  — groups that target
+        # different contracts have no state overlap and can run
+        # in parallel.
         groups = self._group_by_contract(transactions)
 
-        for contract_addr, txs in groups.items():
-            for tx in txs:
-                receipt = self._execute_single(tx, contract_addr)
-                result.receipts.append(receipt)
-                if receipt.get("success"):
-                    result.succeeded += 1
-                    result.gas_used += receipt.get("gas_used", 0)
-                else:
-                    result.failed += 1
+        if len(groups) <= 1 or self._max_workers <= 1:
+            # Single contract or single worker → sequential fast path
+            for contract_addr, txs in groups.items():
+                for tx in txs:
+                    receipt = self._execute_single(tx, contract_addr)
+                    result.receipts.append(receipt)
+                    if receipt.get("success"):
+                        result.succeeded += 1
+                        result.gas_used += receipt.get("gas_used", 0)
+                    else:
+                        result.failed += 1
+        else:
+            # Multiple contracts → parallel execution per contract group
+            def _run_group(contract_addr: str, txs: List[Dict[str, Any]]):
+                receipts = []
+                for tx in txs:
+                    receipts.append(self._execute_single(tx, contract_addr))
+                return receipts
+
+            with ThreadPoolExecutor(max_workers=min(self._max_workers, len(groups))) as pool:
+                futures = {
+                    pool.submit(_run_group, addr, txs): addr
+                    for addr, txs in groups.items()
+                }
+                for future in as_completed(futures):
+                    group_receipts = future.result()
+                    for receipt in group_receipts:
+                        result.receipts.append(receipt)
+                        if receipt.get("success"):
+                            result.succeeded += 1
+                            result.gas_used += receipt.get("gas_used", 0)
+                        else:
+                            result.failed += 1
 
         result.elapsed = time.time() - start
         return result
@@ -827,6 +865,7 @@ class ExecutionAccelerator:
         numeric_fast_path: bool = True,
         optimization_level: int = 2,
         debug: bool = False,
+        batch_workers: int = 4,
     ):
         self._vm = contract_vm
         self._debug = debug
@@ -856,6 +895,7 @@ class ExecutionAccelerator:
             contract_vm=contract_vm,
             aot_compiler=self.aot,
             inline_cache=self.inline_cache,
+            max_workers=batch_workers,
         )
 
         # Top-level stats

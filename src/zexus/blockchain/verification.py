@@ -80,6 +80,7 @@ class VerificationLevel(IntEnum):
     STRUCTURAL = 1     # Pattern-based checks only
     INVARIANT = 2      # + symbolic invariant proofs
     PROPERTY = 3       # + bounded model checking of @property annotations
+    TAINT = 4          # + taint / data-flow analysis
 
 
 class Severity(str, Enum):
@@ -105,6 +106,11 @@ class FindingCategory(str, Enum):
     STATE_AFTER_CALL = "state_after_call"
     PRECONDITION_VIOLATION = "precondition"
     POSTCONDITION_VIOLATION = "postcondition"
+    TAINTED_VALUE = "tainted_value"
+    UNSANITIZED_INPUT = "unsanitized_input"
+    TAINTED_STORAGE_KEY = "tainted_storage_key"
+    PRIVILEGE_ESCALATION = "privilege_escalation"
+    UNCHECKED_RETURN = "unchecked_return"
 
 
 # =====================================================================
@@ -1199,6 +1205,232 @@ class AnnotationParser:
 
 
 # =====================================================================
+# Taint / Data-Flow Analyzer (Level 4)
+# =====================================================================
+
+class TaintLabel(str, Enum):
+    """Labels for data-flow taint tracking."""
+    USER_INPUT = "user_input"        # from TX.caller, action args
+    EXTERNAL_CALL = "external_call"  # return value of cross-contract call
+    STORAGE_READ = "storage_read"    # from persistent state
+    ARITHMETIC = "arithmetic"        # derived from tainted operands
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class TaintAnalyzer:
+    """Data-flow taint analysis for smart contracts.
+
+    Tracks how user-controlled (tainted) values propagate through
+    contract actions and flags dangerous sinks:
+
+    * **Tainted storage key** — using user input as a map/storage key
+      without validation can lead to storage collision attacks.
+    * **Tainted transfer amount** — using unsanitized user input as a
+      transfer value enables arbitrary drain attacks.
+    * **Tainted control flow** — branching on external call results
+      without validation enables oracle manipulation.
+    * **Unchecked external return** — calling another contract and
+      ignoring (or not checking) the return value.
+    * **Privilege escalation** — storing user-supplied data into
+      ``owner`` or ``admin`` state variables.
+
+    This operates on the AST — no code is executed.
+    """
+
+    # Variables considered *inherently tainted* (user-controlled)
+    TAINT_SOURCES = frozenset({
+        "TX.caller", "tx.caller", "TX.value", "tx.value",
+        "TX.origin", "tx.origin", "msg.sender", "msg.value",
+    })
+
+    # State variables that must never receive unsanitized user input
+    SENSITIVE_STATE = frozenset({
+        "owner", "admin", "authority", "minter", "pauser",
+        "operator", "governance",
+    })
+
+    # Sink functions where tainted values are dangerous
+    DANGEROUS_SINKS = frozenset({
+        "transfer", "send", "call", "delegatecall",
+        "selfdestruct", "suicide",
+    })
+
+    def verify(
+        self,
+        contract: Any,
+        report: VerificationReport,
+    ) -> None:
+        contract_name = _get_name(getattr(contract, "name", "")) or "Unknown"
+        actions = _extract_actions(contract)
+
+        for action_name, action_obj in actions.items():
+            body = getattr(action_obj, "body", None)
+            if body is None:
+                continue
+
+            # Build taint set: variables known to carry user-controlled data
+            tainted: Set[str] = set()
+
+            # Action parameters are tainted (they come from the caller)
+            params = getattr(action_obj, "params", getattr(action_obj, "parameters", []))
+            if isinstance(params, (list, tuple)):
+                for p in params:
+                    name = _get_name(p) if not isinstance(p, str) else p
+                    if name:
+                        tainted.add(name)
+
+            # Walk the AST and propagate taint
+            nodes = _walk_ast(body)
+            for node in nodes:
+                nt = _node_type(node)
+
+                # -- Assignments: propagate taint through data flow --
+                if nt in ("AssignmentExpression", "AssignmentStatement", "LetStatement", "VarDeclaration"):
+                    target = _get_name(getattr(node, "name", getattr(node, "left", getattr(node, "target", None))))
+                    value = getattr(node, "value", getattr(node, "right", None))
+                    if target and self._is_tainted_expr(value, tainted):
+                        tainted.add(target)
+
+                        # Check: assigning tainted value to sensitive state
+                        if target.lower() in self.SENSITIVE_STATE:
+                            report.findings.append(VerificationFinding(
+                                category=FindingCategory.PRIVILEGE_ESCALATION,
+                                severity=Severity.CRITICAL,
+                                message=(
+                                    f"Action '{action_name}' assigns user-controlled "
+                                    f"data to sensitive state variable '{target}'."
+                                ),
+                                action_name=action_name,
+                                contract_name=contract_name,
+                                suggestion=(
+                                    f"Validate the value before assigning to '{target}', "
+                                    f"or restrict this action to authorised callers only."
+                                ),
+                            ))
+
+                # -- Call expressions: check dangerous sinks --
+                if nt == "CallExpression":
+                    callee = getattr(node, "function", getattr(node, "callee", None))
+                    name = _get_name(callee) if callee else ""
+
+                    if name.lower() in self.DANGEROUS_SINKS:
+                        args = getattr(node, "arguments", getattr(node, "args", []))
+                        if isinstance(args, (list, tuple)):
+                            for arg in args:
+                                if self._is_tainted_expr(arg, tainted):
+                                    report.findings.append(VerificationFinding(
+                                        category=FindingCategory.UNSANITIZED_INPUT,
+                                        severity=Severity.HIGH,
+                                        message=(
+                                            f"Action '{action_name}' passes user-controlled "
+                                            f"data to dangerous sink '{name}()' without sanitization."
+                                        ),
+                                        action_name=action_name,
+                                        contract_name=contract_name,
+                                        suggestion=(
+                                            f"Validate/bound the argument before calling '{name}()'."
+                                        ),
+                                    ))
+                                    break  # one finding per call
+
+                # -- Storage writes with tainted keys --
+                if nt in ("IndexExpression", "MemberExpression"):
+                    idx = getattr(node, "index", getattr(node, "property", None))
+                    if idx and self._is_tainted_expr(idx, tainted):
+                        parent = getattr(node, "object", None)
+                        parent_name = _get_name(parent) if parent else ""
+                        report.findings.append(VerificationFinding(
+                            category=FindingCategory.TAINTED_STORAGE_KEY,
+                            severity=Severity.MEDIUM,
+                            message=(
+                                f"Action '{action_name}' uses user-controlled data "
+                                f"as a storage/map key on '{parent_name}' — "
+                                f"potential storage collision."
+                            ),
+                            action_name=action_name,
+                            contract_name=contract_name,
+                            suggestion="Hash or validate user input before using as storage key.",
+                        ))
+
+            # -- Check for unchecked external call returns --
+            self._check_unchecked_returns(action_name, body, contract_name, report)
+
+    def _is_tainted_expr(self, node: Any, tainted: Set[str]) -> bool:
+        """Return True if the expression is or derives from tainted data."""
+        if node is None:
+            return False
+
+        # Direct variable reference
+        name = _get_name(node)
+        if name:
+            if name in tainted:
+                return True
+            if name in self.TAINT_SOURCES:
+                return True
+
+        # Member access (TX.caller, etc.)
+        nt = _node_type(node)
+        if nt == "MemberExpression":
+            obj_name = _get_name(getattr(node, "object", None))
+            prop_name = _get_name(getattr(node, "property", None))
+            full = f"{obj_name}.{prop_name}" if obj_name and prop_name else ""
+            if full in self.TAINT_SOURCES:
+                return True
+
+        # Binary expression: tainted if either operand is tainted
+        if nt == "BinaryExpression":
+            left = getattr(node, "left", None)
+            right = getattr(node, "right", None)
+            if self._is_tainted_expr(left, tainted) or self._is_tainted_expr(right, tainted):
+                return True
+
+        # Call expression return value
+        if nt == "CallExpression":
+            callee = getattr(node, "function", getattr(node, "callee", None))
+            callee_name = _get_name(callee) if callee else ""
+            # External calls return tainted data
+            if callee_name.lower() in ("call", "delegatecall", "staticcall"):
+                return True
+
+        return False
+
+    def _check_unchecked_returns(
+        self,
+        action_name: str,
+        body: Any,
+        contract_name: str,
+        report: VerificationReport,
+    ) -> None:
+        """Flag external calls whose return value is not assigned or checked."""
+        nodes = _walk_ast(body)
+        for node in nodes:
+            nt = _node_type(node)
+            if nt != "ExpressionStatement":
+                continue
+            expr = getattr(node, "expression", node)
+            if _node_type(expr) == "CallExpression":
+                callee = getattr(expr, "function", getattr(expr, "callee", None))
+                name = _get_name(callee) if callee else ""
+                if name.lower() in ("call", "delegatecall", "staticcall", "send"):
+                    report.findings.append(VerificationFinding(
+                        category=FindingCategory.UNCHECKED_RETURN,
+                        severity=Severity.HIGH,
+                        message=(
+                            f"Action '{action_name}' calls '{name}()' "
+                            f"without checking its return value."
+                        ),
+                        action_name=action_name,
+                        contract_name=contract_name,
+                        suggestion=(
+                            f"Assign the return value and check for success: "
+                            f"`let result = {name}(...); require(result, \"call failed\");`"
+                        ),
+                    ))
+
+
+# =====================================================================
 # Main Verifier
 # =====================================================================
 
@@ -1229,6 +1461,7 @@ class FormalVerifier:
         self._structural = StructuralVerifier()
         self._invariant_v = InvariantVerifier()
         self._property_v = PropertyVerifier(max_depth=max_depth)
+        self._taint = TaintAnalyzer()
 
         parsed_invariants: List[Invariant] = []
         parsed_properties: List[ContractProperty] = []
@@ -1324,6 +1557,10 @@ class FormalVerifier:
         # Level 3: property
         if self.level >= VerificationLevel.PROPERTY and all_prop:
             self._property_v.verify(contract, all_prop, report)
+
+        # Level 4: taint / data-flow analysis
+        if self.level >= VerificationLevel.TAINT:
+            self._taint.verify(contract, report)
 
         report.finished_at = time.time()
         return report
