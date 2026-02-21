@@ -1,0 +1,26 @@
+[package]
+name = "zexus_core"
+version = "0.4.0"
+edition = "2021"
+description = "High-performance Rust execution core for the Zexus blockchain"
+license = "MIT"
+
+[lib]
+name = "zexus_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+sha2 = "0.10"
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+k256 = { version = "0.13", features = ["ecdsa", "sha256"] }
+tiny-keccak = { version = "2", features = ["keccak"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

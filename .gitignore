@@ -43,6 +43,9 @@ htmlcov/
 .tox/
 .hypothesis/
 
+# Rust build artifacts
+rust_core/target/
+
 # Zexus specific
 .zexus_persist/
 *.zx.compiled

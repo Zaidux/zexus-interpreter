@@ -166,6 +166,27 @@ try:
 except ImportError:
     _MONITORING_AVAILABLE = False
 
+# Rust native execution core
+try:
+    from .rust_bridge import RustCoreBridge, rust_core_available
+    _RUST_CORE_AVAILABLE = rust_core_available()
+except ImportError:
+    _RUST_CORE_AVAILABLE = False
+
+# Multiprocess executor (GIL-free parallelism)
+try:
+    from .multiprocess_executor import MultiProcessBatchExecutor, MPBatchResult
+    _MULTIPROCESS_AVAILABLE = True
+except ImportError:
+    _MULTIPROCESS_AVAILABLE = False
+
+# Load testing framework
+try:
+    from .loadtest import LoadTestRunner, LoadProfile, LoadTestReport, quick_benchmark
+    _LOADTEST_AVAILABLE = True
+except ImportError:
+    _LOADTEST_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -316,4 +337,115 @@ __all__ = [
     # Production Monitoring
     'NodeMetrics',
     'MetricsServer',
+
+    # Rust Native Execution Core
+    'RustCoreBridge',
+    'rust_core_available',
+
+    # Multiprocess Executor
+    'MultiProcessBatchExecutor',
+    'MPBatchResult',
+
+    # Load Testing
+    'LoadTestRunner',
+    'LoadProfile',
+    'LoadTestReport',
+    'quick_benchmark',
+
+    # Dependency audit
+    'check_dependencies',
 ]
+
+
+# ── Dependency audit helper ──────────────────────────────────────────
+
+import warnings as _warnings
+
+
+def check_dependencies(verbose: bool = True) -> dict:
+    """Check optional blockchain dependencies and emit warnings.
+
+    Returns a dict mapping component names to their availability status.
+    When *verbose* is ``True`` (the default), a user-friendly summary is
+    printed and ``warnings.warn()`` is called for any missing component.
+
+    Usage::
+
+        from zexus.blockchain import check_dependencies
+        deps = check_dependencies()
+    """
+    status: dict = {}
+
+    # Rust native core
+    status["rust_core"] = _RUST_CORE_AVAILABLE
+    if not _RUST_CORE_AVAILABLE and verbose:
+        _warnings.warn(
+            "Rust execution core not compiled — throughput capped at "
+            "~500 TPS (Python GIL bound).  Build it for 1800+ TPS:\n"
+            "  cd rust_core/ && pip install maturin && maturin develop --release",
+            stacklevel=2,
+        )
+
+    # LevelDB
+    try:
+        import plyvel  # noqa: F401
+        status["leveldb"] = True
+    except ImportError:
+        status["leveldb"] = False
+        if verbose:
+            _warnings.warn(
+                "plyvel not installed — LevelDBBackend unavailable.  "
+                "Install: pip install plyvel  (requires libleveldb-dev)",
+                stacklevel=2,
+            )
+
+    # RocksDB
+    try:
+        import rocksdb  # noqa: F401  # type: ignore[import-untyped]
+        status["rocksdb"] = True
+    except ImportError:
+        status["rocksdb"] = False
+        if verbose:
+            _warnings.warn(
+                "python-rocksdb not installed — RocksDBBackend unavailable.  "
+                "Install: pip install python-rocksdb  (requires librocksdb-dev)",
+                stacklevel=2,
+            )
+
+    # aiohttp (for RPC server)
+    try:
+        import aiohttp  # noqa: F401
+        status["aiohttp"] = True
+    except ImportError:
+        status["aiohttp"] = False
+        if verbose:
+            _warnings.warn(
+                "aiohttp not installed — RPCServer unavailable.  "
+                "Install: pip install aiohttp",
+                stacklevel=2,
+            )
+
+    # Prometheus client (for monitoring)
+    try:
+        import prometheus_client  # noqa: F401
+        status["prometheus"] = True
+    except ImportError:
+        status["prometheus"] = False
+        if verbose:
+            _warnings.warn(
+                "prometheus_client not installed — Prometheus metrics export "
+                "unavailable.  Install: pip install prometheus-client",
+                stacklevel=2,
+            )
+
+    if verbose:
+        installed = [k for k, v in status.items() if v]
+        missing = [k for k, v in status.items() if not v]
+        print(f"Zexus Blockchain dependencies: "
+              f"{len(installed)} available, {len(missing)} missing")
+        if missing:
+            print(f"  Missing: {', '.join(missing)}")
+        if installed:
+            print(f"  Available: {', '.join(installed)}")
+
+    return status

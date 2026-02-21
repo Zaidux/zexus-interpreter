@@ -195,8 +195,15 @@ class LevelDBBackend(StorageBackend):
             import plyvel
         except ImportError:
             raise ImportError(
-                "LevelDB backend requires the 'plyvel' package.  "
-                "Install it with:  pip install plyvel"
+                "LevelDB backend requires the 'plyvel' package.\n\n"
+                "  Install with:  pip install plyvel\n\n"
+                "  plyvel requires the LevelDB C library.  "
+                "On Ubuntu/Debian:\n"
+                "    sudo apt-get install libleveldb-dev\n"
+                "  On macOS:\n"
+                "    brew install leveldb\n\n"
+                "  Alternatively, use SQLiteBackend (no native deps) "
+                "or MemoryBackend for development."
             )
         self._db_path = db_path
         os.makedirs(db_path, exist_ok=True)
@@ -268,8 +275,15 @@ class RocksDBBackend(StorageBackend):
             import rocksdb  # type: ignore[import-untyped]
         except ImportError:
             raise ImportError(
-                "RocksDB backend requires the 'python-rocksdb' package.  "
-                "Install it with:  pip install python-rocksdb"
+                "RocksDB backend requires the 'python-rocksdb' package.\n\n"
+                "  Install with:  pip install python-rocksdb\n\n"
+                "  python-rocksdb requires the RocksDB C++ library.  "
+                "On Ubuntu/Debian:\n"
+                "    sudo apt-get install librocksdb-dev\n"
+                "  On macOS:\n"
+                "    brew install rocksdb\n\n"
+                "  Alternatively, use SQLiteBackend (no native deps) "
+                "or MemoryBackend for development."
             )
         self._db_path = db_path
         os.makedirs(db_path, exist_ok=True)
