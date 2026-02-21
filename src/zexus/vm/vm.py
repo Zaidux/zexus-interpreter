@@ -1414,12 +1414,45 @@ class VM:
 
     def _normalize_ssa_instructions(self, instructions: List[Tuple], consts: List[Any]) -> Tuple[List[Tuple], List[Any]]:
         """Normalize SSA-destructed instructions to (opcode, operand) format."""
-        def _const_index(value: Any) -> int:
+        # Large programs can produce large instruction streams. The previous
+        # constant lookup did a linear scan for every constant insertion, which
+        # becomes O(n^2) on big constant pools. Prefer a dict for hashable
+        # constants; fall back to linear scan for unhashables.
+        const_index: Dict[Tuple[type, Any], int] = {}
+        try:
             for i, const in enumerate(consts):
-                if const == value and type(const) == type(value):
-                    return i
+                try:
+                    const_index[(type(const), const)] = i
+                except Exception:
+                    continue
+        except Exception:
+            const_index = {}
+
+        def _const_index(value: Any) -> int:
+            try:
+                key = (type(value), value)
+                existing = const_index.get(key)
+                if existing is not None:
+                    return existing
+            except Exception:
+                key = None
+
+            # Fallback for unhashable values: preserve legacy semantics
+            for i, const in enumerate(consts):
+                try:
+                    if const == value and type(const) == type(value):
+                        return i
+                except Exception:
+                    continue
+
             consts.append(value)
-            return len(consts) - 1
+            idx = len(consts) - 1
+            if key is not None:
+                try:
+                    const_index[key] = idx
+                except Exception:
+                    pass
+            return idx
 
         normalized: List[Tuple] = []
         for instr in instructions:

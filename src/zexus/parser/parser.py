@@ -313,12 +313,29 @@ class UltimateParser:
         if not self.use_advanced_parsing:
             return self._parse_traditional()
 
+        # Large-file stability: advanced parsing performs whole-file analysis
+        # that can become expensive on very large sources. For long files, fall
+        # back to the traditional streaming parser which is more predictable.
+        if self._should_disable_advanced_for_size():
+            self.use_advanced_parsing = False
+            return self._parse_traditional()
+
         try:
             # OPTIMIZATION: Check if we already have tokens cached
             if not hasattr(self, '_cached_tokens'):
                 self._cached_tokens = self._collect_all_tokens()
             
             all_tokens = self._cached_tokens
+
+            # If the token stream is huge, prefer the traditional parser to avoid
+            # heavy multi-pass analysis and large intermediate structures.
+            try:
+                max_tokens = getattr(config, 'advanced_parsing_max_tokens', 50000)
+                if isinstance(max_tokens, int) and max_tokens > 0 and len(all_tokens) > max_tokens:
+                    self.use_advanced_parsing = False
+                    return self._parse_traditional()
+            except Exception:
+                pass
 
             # Arrow lambdas currently parse reliably via the traditional engine.
             # When the token stream contains the '=>' literal OUTSIDE of a match
@@ -392,6 +409,26 @@ class UltimateParser:
             self._log(f"⚠️ Advanced parsing failed, falling back to traditional: {e}", "normal")
             self.use_advanced_parsing = False
             return self._parse_traditional()
+
+    def _should_disable_advanced_for_size(self) -> bool:
+        """Heuristic guardrail to keep very large inputs stable.
+
+        Uses source line-count (cheap) to decide whether to skip advanced parsing.
+        """
+        try:
+            source = getattr(self.lexer, 'input', None)
+            if not isinstance(source, str) or not source:
+                return False
+
+            max_lines = getattr(config, 'advanced_parsing_max_lines', 2000)
+            if isinstance(max_lines, int) and max_lines > 0:
+                # count('\n') is linear but cheap compared to tokenization + analysis
+                line_count = source.count('\n') + 1
+                if line_count > max_lines:
+                    return True
+        except Exception:
+            return False
+        return False
 
     def _advanced_result_needs_fallback(self, program):
         """Detect obvious advanced-parser failures and trigger traditional fallback."""
@@ -1612,13 +1649,14 @@ class UltimateParser:
         """
         import sys
         # Debug logging (fail silently if file operations fail)
-        try:
-            log_path = os.path.join(tempfile.gettempdir(), 'parser_log.txt')
-            with open(log_path, 'a') as f:
-                f.write(f"===  parse_print_statement CALLED ===\n")
-                f.flush()
-        except (IOError, OSError, PermissionError):
-            pass  # Silently ignore debug logging errors
+        if getattr(config, 'enable_parser_debug', False):
+            try:
+                log_path = os.path.join(tempfile.gettempdir(), 'parser_log.txt')
+                with open(log_path, 'a') as f:
+                    f.write(f"===  parse_print_statement CALLED ===\n")
+                    f.flush()
+            except (IOError, OSError, PermissionError):
+                pass  # Silently ignore debug logging errors
         
         stmt = PrintStatement(values=[])
         self.next_token()

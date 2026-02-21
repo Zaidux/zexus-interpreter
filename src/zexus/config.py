@@ -28,6 +28,11 @@ DEFAULT_RUNTIME = {
     'enable_advanced_parsing': True,
     'enable_debug_logs': False,
     'enable_parser_debug': False,  # OPTIMIZATION: Disable parser debug output for speed
+    # Large-file stability: advanced parsing does extra analysis and can be
+    # significantly heavier on very large sources. For big files, we prefer the
+    # traditional streaming parser for stability.
+    'advanced_parsing_max_lines': 2000,
+    'advanced_parsing_max_tokens': 50000,
     # Legacy runtime flags expected by older modules
     'use_hybrid_compiler': True,
     'fallback_to_interpreter': True,
@@ -151,6 +156,47 @@ class Config:
             self.debug_level = 'none'
 
     # Legacy runtime properties
+    @property
+    def enable_parser_debug(self):
+        return bool(self._data.get('runtime', {}).get('enable_parser_debug', False))
+
+    @enable_parser_debug.setter
+    def enable_parser_debug(self, value):
+        self._data.setdefault('runtime', {})['enable_parser_debug'] = bool(value)
+        self._write()
+
+    @property
+    def advanced_parsing_max_lines(self):
+        try:
+            return int(self._data.get('runtime', {}).get('advanced_parsing_max_lines', 2000))
+        except Exception:
+            return 2000
+
+    @advanced_parsing_max_lines.setter
+    def advanced_parsing_max_lines(self, value):
+        try:
+            v = int(value)
+        except Exception:
+            v = 2000
+        self._data.setdefault('runtime', {})['advanced_parsing_max_lines'] = v
+        self._write()
+
+    @property
+    def advanced_parsing_max_tokens(self):
+        try:
+            return int(self._data.get('runtime', {}).get('advanced_parsing_max_tokens', 50000))
+        except Exception:
+            return 50000
+
+    @advanced_parsing_max_tokens.setter
+    def advanced_parsing_max_tokens(self, value):
+        try:
+            v = int(value)
+        except Exception:
+            v = 50000
+        self._data.setdefault('runtime', {})['advanced_parsing_max_tokens'] = v
+        self._write()
+
     @property
     def use_hybrid_compiler(self):
         return self._data.get('runtime', {}).get('use_hybrid_compiler', True)

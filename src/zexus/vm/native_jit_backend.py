@@ -282,6 +282,12 @@ class NativeJITBackend:
             ptr = builder.gep(stack_base, [new_sp])
             return builder.load(ptr)
 
+        name_to_idx = {}
+        try:
+            name_to_idx = {n: i for i, n in enumerate(names)}
+        except Exception:
+            name_to_idx = {}
+
         for idx, (op_name, operand) in enumerate(instrs):
             builder = ir.IRBuilder(blocks[idx])
 
@@ -300,8 +306,8 @@ class NativeJITBackend:
                     name = consts[operand]
                 else:
                     name = operand
-                if name in names:
-                    name_idx = names.index(name)
+                name_idx = name_to_idx.get(name)
+                if name_idx is not None:
                     ptr = builder.gep(locals_ptr, [ir.Constant(ir.IntType(32), name_idx)])
                     push(builder.load(ptr))
                 else:
@@ -315,8 +321,8 @@ class NativeJITBackend:
                 else:
                     name = operand
                 val = pop()
-                if name in names:
-                    name_idx = names.index(name)
+                name_idx = name_to_idx.get(name)
+                if name_idx is not None:
                     ptr = builder.gep(locals_ptr, [ir.Constant(ir.IntType(32), name_idx)])
                     builder.store(val, ptr)
                 builder.branch(blocks[idx + 1])

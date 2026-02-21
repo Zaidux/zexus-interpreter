@@ -2388,13 +2388,17 @@ class ContextStackParser:
             return []
 
         cache_key = None
-        try:
-            cache_key = _block_tokens_signature(tokens)
-            cached = _BLOCK_STATEMENTS_CACHE.get(cache_key)
-            if cached is not None:
-                return list(cached)
-        except Exception:
-            cache_key = None
+        # Large blocks can be thousands of tokens; building a signature tuple
+        # (and looking it up) can cost significant time/memory. Skip caching
+        # for very large blocks to keep parsing stable.
+        if len(tokens) <= 2000:
+            try:
+                cache_key = _block_tokens_signature(tokens)
+                cached = _BLOCK_STATEMENTS_CACHE.get(cache_key)
+                if cached is not None:
+                    return list(cached)
+            except Exception:
+                cache_key = None
         
         statements = []
         i = 0

@@ -75,14 +75,23 @@ class BytecodeCompiler:
 
     def _add_constant(self, value) -> int:
         """Add constant to pool, return index"""
-        # Deduplicate constants
-        key = (type(value).__name__, str(value))
-        if key in self.constant_map:
+        # Deduplicate only cheap, stable primitive constants.
+        # Avoid calling str(value) for large/complex values (AST nodes, dicts,
+        # bytecode specs) because that can be expensive on large programs and
+        # can balloon memory.
+        key = None
+        if value is None or isinstance(value, (bool, int, float, str)):
+            if isinstance(value, str) and len(value) > 256:
+                key = None
+            else:
+                key = (type(value), value)
+        if key is not None and key in self.constant_map:
             return self.constant_map[key]
         
         idx = len(self.constants)
         self.constants.append(value)
-        self.constant_map[key] = idx
+        if key is not None:
+            self.constant_map[key] = idx
         return idx
     
     def _emit(self, opcode: Opcode, *args):

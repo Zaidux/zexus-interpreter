@@ -66,10 +66,34 @@ class StatementEvaluatorMixin:
     """Handles evaluation of statements, flow control, module loading, and security features."""
     
     def _statement_signature(self, stmt):
+        """Create a stable, cheap signature for tolerant duplicate-skipping.
+
+        The tolerant parser/recovery can sometimes enqueue duplicate statements.
+        For long files, calling ``str(stmt)`` for every statement can become
+        expensive because AST __repr__ often includes nested expressions.
+        Prefer source location (line/column) when available.
+        """
+        stmt_type = type(stmt).__name__
+        line = int(getattr(stmt, 'line', 0) or 0)
+        column = int(getattr(stmt, 'column', 0) or 0)
+
+        if line or column:
+            extra = ""
+            try:
+                if isinstance(stmt, ExpressionStatement):
+                    expr = getattr(stmt, "expression", None)
+                    func = getattr(expr, "function", None)
+                    if isinstance(func, Identifier) and getattr(func, "value", None):
+                        extra = f":{func.value}"
+            except Exception:
+                extra = ""
+            return f"{stmt_type}@{line}:{column}{extra}"
+
+        # Fallback: retain old behavior for nodes without location metadata.
         try:
             return str(stmt)
         except Exception:
-            return f"{type(stmt).__name__}@{id(stmt)}"
+            return f"{stmt_type}@{id(stmt)}"
 
     def _enqueue_tolerant_duplicates(self, statements):
         if not statements:
@@ -100,7 +124,8 @@ class StatementEvaluatorMixin:
                 duplicates_added += occurrence - 1
 
         if duplicates_added:
-            print(f"[TOLERANT] enqueue {duplicates_added} duplicate statements")
+            if zexus_config.should_log('debug'):
+                print(f"[TOLERANT] enqueue {duplicates_added} duplicate statements")
 
     def ceval_program(self, statements, env):
         debug_log("eval_program", f"Processing {len(statements)} statements")
@@ -122,7 +147,8 @@ class StatementEvaluatorMixin:
                     signature = self._statement_signature(stmt)
                     remaining = counts.get(signature, 0)
                     if remaining > 0:
-                        print(f"[TOLERANT] skipping program stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
+                        if zexus_config.should_log('debug'):
+                            print(f"[TOLERANT] skipping program stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
                         if remaining == 1:
                             counts.pop(signature, None)
                         else:
@@ -162,7 +188,8 @@ class StatementEvaluatorMixin:
                         # Log the error and continue execution
                         error_msg = str(res)
                         self.error_log.append(error_msg)
-                        print(f"[ERROR] {error_msg}")
+                        if zexus_config.should_log('error'):
+                            print(f"[ERROR] {error_msg}")
                         debug_log("  Continuing after error", "continue_on_error=True")
                         result = NULL  # Continue with null result
                         continue
@@ -197,7 +224,8 @@ class StatementEvaluatorMixin:
                     signature = self._statement_signature(stmt)
                     remaining = counts.get(signature, 0)
                     if remaining > 0:
-                        print(f"[TOLERANT] skipping block stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
+                        if zexus_config.should_log('debug'):
+                            print(f"[TOLERANT] skipping block stmt {type(stmt).__name__} sig={signature} remaining={remaining}")
                         if remaining == 1:
                             counts.pop(signature, None)
                         else:
@@ -220,7 +248,8 @@ class StatementEvaluatorMixin:
                             # Log the error and continue execution
                             error_msg = str(res)
                             self.error_log.append(error_msg)
-                            print(f"[ERROR] {error_msg}")
+                            if zexus_config.should_log('error'):
+                                print(f"[ERROR] {error_msg}")
                             debug_log("  Continuing after error in block", "continue_on_error=True")
                             result = NULL  # Continue with null result
                             continue
@@ -1074,7 +1103,8 @@ class StatementEvaluatorMixin:
             return value
 
         debug_log("eval_assignment", f"Invalid assignment target - node.name: {node.name}, type: {type(node.name).__name__}")
-        print(f"[ASSIGN ERROR] node.name: {node.name}, type: {type(node.name).__name__}, value: {getattr(node.name, 'value', 'N/A')}")
+        if zexus_config.should_log('debug'):
+            print(f"[ASSIGN ERROR] node.name: {node.name}, type: {type(node.name).__name__}, value: {getattr(node.name, 'value', 'N/A')}")
         return EvaluationError('Invalid assignment target')
     
     def eval_try_catch_statement(self, node, env, stack_trace):
@@ -1093,7 +1123,8 @@ class StatementEvaluatorMixin:
                 catch_env = Environment(outer=env)
                 var_name = node.error_variable.value if node.error_variable else "error"
                 catch_env.set(var_name, String(str(result)))
-                print(f"[TRY_CATCH] caught error: {result}")
+                if zexus_config.should_log('debug'):
+                    print(f"[TRY_CATCH] caught error: {result}")
                 result = self.eval_node(node.catch_block, catch_env, stack_trace)
                 self._tolerant_skip_counts = {}
                 self._enqueue_tolerant_duplicates(getattr(node.try_block, "statements", []))
@@ -4365,10 +4396,12 @@ class StatementEvaluatorMixin:
             if not is_truthy(condition):
                 # Execute tolerance block if provided (for conditional allowances)
                 if node.tolerance_block:
-                    print(f"⚡ TOLERANCE BLOCK: type={type(node.tolerance_block).__name__}")
+                    if zexus_config.should_log('debug'):
+                        print(f"⚡ TOLERANCE BLOCK: type={type(node.tolerance_block).__name__}")
                     debug_log("eval_require_statement", "Condition failed - executing tolerance logic")
                     tolerance_result = self.eval_node(node.tolerance_block, env, stack_trace)
-                    print(f"⚡ TOLERANCE RESULT: type={type(tolerance_result).__name__}")
+                    if zexus_config.should_log('debug'):
+                        print(f"⚡ TOLERANCE RESULT: type={type(tolerance_result).__name__}")
                     
                     # Check if tolerance logic allows proceeding
                     if is_error(tolerance_result):
@@ -4377,18 +4410,22 @@ class StatementEvaluatorMixin:
                     # Unwrap ReturnValue if present
                     from ..object import ReturnValue
                     if isinstance(tolerance_result, ReturnValue):
-                        print(f"⚡ UNWRAPPING ReturnValue")
+                        if zexus_config.should_log('debug'):
+                            print(f"⚡ UNWRAPPING ReturnValue")
                         tolerance_result = tolerance_result.value
-                        print(f"⚡ UNWRAPPED VALUE: {tolerance_result}")
+                        if zexus_config.should_log('debug'):
+                            print(f"⚡ UNWRAPPED VALUE: {tolerance_result}")
                     
                     # If tolerance block returns true/truthy, allow it
                     if is_truthy(tolerance_result):
-                        print(f"⚡ TOLERANCE APPROVED")
+                        if zexus_config.should_log('debug'):
+                            print(f"⚡ TOLERANCE APPROVED")
                         debug_log("eval_require_statement", "Tolerance logic approved - allowing requirement")
                         return NULL
                     
                     # If tolerance block returns false, requirement still fails
-                    print(f"⚡ TOLERANCE REJECTED")
+                    if zexus_config.should_log('debug'):
+                        print(f"⚡ TOLERANCE REJECTED")
                     debug_log("eval_require_statement", "Tolerance logic rejected - requirement fails")
                     # Fall through to error below
                 
@@ -4861,7 +4898,8 @@ class StatementEvaluatorMixin:
         
         # Print event for debugging (optional)
         args_str = ", ".join(str(arg.inspect() if hasattr(arg, 'inspect') else arg) for arg in args)
-        print(f"📢 Event: {event_name}({args_str})")
+        if zexus_config.should_log('info'):
+            print(f"📢 Event: {event_name}({args_str})")
         
         return NULL
 

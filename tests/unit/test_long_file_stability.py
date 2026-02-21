@@ -42,8 +42,9 @@ def test_long_comment_file_lex_parse_eval_no_recursion():
         # Interpreter lexer should not recurse when skipping comments.
         _lex_all(Lexer(code))
 
-        # Parser + evaluator should still work (with and without VM).
-        program = UltimateParser(Lexer(code), enable_advanced_strategies=False).parse(raise_on_error=True)
+        # Parser + evaluator should still work with default settings.
+        # (Advanced parsing is enabled by default but should auto-disable for very large inputs.)
+        program = UltimateParser(Lexer(code)).parse(raise_on_error=True)
 
         env_vm = Environment()
         evaluate(program, env_vm, use_vm=True)
