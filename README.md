@@ -2598,7 +2598,11 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
   - `python -m pip install --upgrade build twine`
   - `python -m build`  # creates `dist/*.tar.gz` and (by default) a `py3-none-any.whl`
   - `python -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl`
-- If you *really* want native extensions, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel) and upload those wheels. Native builds can be enabled locally with `ZEXUS_BUILD_EXTENSIONS=1`, but those wheels are usually **not** PyPI-uploadable when built on Termux.
+- `ZEXUS_BUILD_EXTENSIONS=1 python -m build` means: **build the optional native extensions** (Cython/C/C++) *in addition* to the Python code (it does not skip Python). This produces a **platform-specific** wheel.
+- If you want “everything compiled” locally, use:
+  - `ZEXUS_BUILD_EXTENSIONS=1 python -m build`
+  - or `ZEXUS_BUILD_EXTENSIONS=1 python -m pip install .`
+- For publishing native wheels to PyPI, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel). Wheels built on Termux are usually **not** PyPI-uploadable.
 
 #### Blockchain/Contract issues
 - Remember `TX` is a global context object (uppercase)
