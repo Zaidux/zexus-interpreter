@@ -60,4 +60,3 @@ That tag triggers GitHub Actions to:
 - Tag format is `v*` (e.g. `v1.7.3`). This matches `on.push.tags: ["v*"]`.
 - The build includes native extensions in CI (`ZEXUS_BUILD_EXTENSIONS=1`) so wheels include the C/C++/Cython modules.
 - If you want a “dry run”, you can use **Actions → Build wheels (cibuildwheel) → Run workflow** to build artifacts without publishing.
-
