@@ -464,7 +464,7 @@ class TestGasMeteringBridge:
     def test_gas_usage_tracking(self):
         """Gas used should be tracked accurately."""
         RustVMExecutor = _try_import_executor()
-        executor = RustVMExecutor()
+        executor = RustVMExecutor(gas_discount=1.0)  # Full price for exact assertion
 
         data = _make_zxc([1, 2], [
             (Opcode.LOAD_CONST, 0),  # gas: 1
@@ -668,7 +668,7 @@ class TestPhase3Integration:
     def test_rust_vm_executor_stats(self):
         """Verify RustVMExecutor returns proper stats."""
         RustVMExecutor = _try_import_executor()
-        executor = RustVMExecutor()
+        executor = RustVMExecutor(gas_discount=1.0)  # Full price for exact assertion
 
         data = _make_zxc([10, 20], [
             (Opcode.LOAD_CONST, 0),

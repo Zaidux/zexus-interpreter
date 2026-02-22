@@ -227,7 +227,7 @@ impl Op {
         }
     }
 
-    /// Gas cost for this opcode (matches Python GasCost IntEnum).
+    /// Base gas cost for this opcode (matches Python GasCost IntEnum).
     fn gas_cost(self) -> u64 {
         match self {
             Op::NOP => 0,
@@ -245,18 +245,18 @@ impl Op {
             Op::JUMP => 2,
             Op::JUMP_IF_FALSE | Op::JUMP_IF_TRUE => 3,
             Op::RETURN => 2,
-            Op::BUILD_LIST | Op::BUILD_MAP | Op::BUILD_SET => 5,
+            Op::BUILD_LIST | Op::BUILD_MAP | Op::BUILD_SET => 5, // base; dynamic added in consume_gas_dynamic
             Op::INDEX | Op::GET_ATTR => 3,
             Op::SLICE => 5,
-            Op::CALL_NAME | Op::CALL_TOP | Op::CALL_METHOD | Op::CALL_FUNC_CONST => 10,
-            Op::CALL_BUILTIN => 8,
+            Op::CALL_NAME | Op::CALL_TOP | Op::CALL_METHOD | Op::CALL_FUNC_CONST => 10, // base; + 2*argc
+            Op::CALL_BUILTIN => 8, // base; + 2*argc
             Op::SPAWN | Op::SPAWN_CALL => 15,
             Op::AWAIT => 10,
             Op::HASH_BLOCK => 50,
             Op::VERIFY_SIGNATURE => 100,
-            Op::MERKLE_ROOT => 30,
+            Op::MERKLE_ROOT => 30, // base; + 5*leaves
             Op::STATE_READ => 20,
-            Op::STATE_WRITE => 50,
+            Op::STATE_WRITE => 30,  // Reduced: RustStateAdapter caching makes writes memory-local
             Op::TX_BEGIN => 20,
             Op::TX_COMMIT => 30,
             Op::TX_REVERT => 20,
@@ -446,7 +446,7 @@ fn zxc_to_zx(v: &ZxcValue) -> ZxValue {
 
 // ── ZxValue → PyObject conversion ────────────────────────────────────
 
-fn zx_to_py(py: Python<'_>, val: &ZxValue) -> PyObject {
+pub fn zx_to_py(py: Python<'_>, val: &ZxValue) -> PyObject {
     match val {
         ZxValue::Null => py.None(),
         ZxValue::Bool(b) => b.to_object(py),
@@ -472,7 +472,7 @@ fn zx_to_py(py: Python<'_>, val: &ZxValue) -> PyObject {
 }
 
 /// Convert a PyObject to ZxValue.
-fn py_to_zx(py: Python<'_>, obj: &PyObject) -> ZxValue {
+pub fn py_to_zx(py: Python<'_>, obj: &PyObject) -> ZxValue {
     let bound = obj.bind(py);
 
     if bound.is_none() {
@@ -567,6 +567,9 @@ pub struct RustVM {
     gas_limit: u64,
     gas_used: u64,
     gas_enabled: bool,
+    /// Discount factor for Rust execution (0.0–1.0).
+    /// Default 0.6 → Rust charges 60% of base gas (40% discount).
+    gas_discount: f64,
 
     // Transaction state
     in_transaction: bool,
@@ -610,6 +613,7 @@ impl RustVM {
             gas_limit: 100_000_000,
             gas_used: 0,
             gas_enabled: false,
+            gas_discount: 0.6,  // 40% cheaper than Python VM
             in_transaction: false,
             tx_snapshot: None,
             tx_pending: HashMap::new(),
@@ -676,7 +680,8 @@ impl RustVM {
         if !self.gas_enabled {
             return Ok(());
         }
-        let cost = op.gas_cost();
+        let base_cost = op.gas_cost();
+        let cost = ((base_cost as f64) * self.gas_discount).ceil() as u64;
         self.gas_used += cost;
         if self.gas_used > self.gas_limit {
             return Err(VmError::OutOfGas {
@@ -686,6 +691,31 @@ impl RustVM {
             });
         }
         Ok(())
+    }
+
+    /// Consume gas with dynamic per-element scaling (for BUILD_LIST, CALL_*, etc.)
+    #[inline(always)]
+    fn consume_gas_dynamic(&mut self, op: Op, extra: u64) -> Result<(), VmError> {
+        if !self.gas_enabled {
+            return Ok(());
+        }
+        let base_cost = op.gas_cost();
+        let total = base_cost + extra;
+        let cost = ((total as f64) * self.gas_discount).ceil() as u64;
+        self.gas_used += cost;
+        if self.gas_used > self.gas_limit {
+            return Err(VmError::OutOfGas {
+                used: self.gas_used,
+                limit: self.gas_limit,
+                opcode: format!("{:?}", op),
+            });
+        }
+        Ok(())
+    }
+
+    /// Set gas discount factor (0.0–1.0, default 0.6).
+    pub fn set_gas_discount(&mut self, discount: f64) {
+        self.gas_discount = discount.clamp(0.01, 1.0);
     }
 
     fn revert_on_failure(&mut self) {
@@ -996,6 +1026,10 @@ impl RustVM {
                         Operand::U32(n) => *n as usize,
                         _ => 0,
                     };
+                    // Dynamic scaling: +1 gas per element (matches Python)
+                    if count > 0 {
+                        self.consume_gas_dynamic(Op::NOP, count as u64)?;
+                    }
                     let mut items = Vec::with_capacity(count);
                     for _ in 0..count {
                         items.push(self.pop());
@@ -1009,6 +1043,10 @@ impl RustVM {
                         Operand::U32(n) => *n as usize,
                         _ => 0,
                     };
+                    // Dynamic scaling: +2 gas per pair (matches Python)
+                    if count > 0 {
+                        self.consume_gas_dynamic(Op::NOP, count as u64 * 2)?;
+                    }
                     let mut pairs = Vec::with_capacity(count);
                     for _ in 0..count {
                         let val = self.pop();
@@ -1030,6 +1068,10 @@ impl RustVM {
                         Operand::U32(n) => *n as usize,
                         _ => 0,
                     };
+                    // Dynamic scaling: +1 gas per element (matches Python BUILD_LIST)
+                    if count > 0 {
+                        self.consume_gas_dynamic(Op::NOP, count as u64)?;
+                    }
                     let mut items = Vec::with_capacity(count);
                     for _ in 0..count {
                         items.push(self.pop());
@@ -1390,6 +1432,11 @@ impl RustVM {
         &self.env
     }
 
+    /// Set a single environment variable.
+    pub fn env_set(&mut self, key: &str, val: ZxValue) {
+        self.env.insert(key.to_string(), val);
+    }
+
     /// Get the ledger entries.
     pub fn get_ledger(&self) -> &[ZxValue] {
         &self.ledger
@@ -1411,16 +1458,32 @@ pub struct RustVMExecutor {
     /// Stats from last execution
     last_instructions: u64,
     last_gas_used: u64,
+    /// Gas discount factor (0.0–1.0). Default 0.6 = 40% cheaper than Python.
+    gas_discount: f64,
 }
 
 #[pymethods]
 impl RustVMExecutor {
     #[new]
-    fn new() -> Self {
+    #[pyo3(signature = (gas_discount=0.6))]
+    fn new(gas_discount: f64) -> Self {
         RustVMExecutor {
             last_instructions: 0,
             last_gas_used: 0,
+            gas_discount: gas_discount.clamp(0.01, 1.0),
         }
+    }
+
+    /// Get the current gas discount factor.
+    #[getter]
+    fn gas_discount(&self) -> f64 {
+        self.gas_discount
+    }
+
+    /// Set the gas discount factor (0.01–1.0).
+    #[setter]
+    fn set_gas_discount(&mut self, discount: f64) {
+        self.gas_discount = discount.clamp(0.01, 1.0);
     }
 
     /// Execute .zxc binary bytecode and return the result.
@@ -1452,10 +1515,11 @@ impl RustVMExecutor {
         // Create VM
         let mut vm = RustVM::from_module(&module);
 
-        // Set gas limit
+        // Set gas limit and discount
         if gas_limit > 0 {
             vm.set_gas_limit(gas_limit);
         }
+        vm.set_gas_discount(self.gas_discount);
 
         // Convert Python env → Rust env
         if let Some(py_env) = env {
@@ -1539,6 +1603,7 @@ impl RustVMExecutor {
         let (instr_count, gas_used, _gas_limit) = vm.get_stats();
         result_dict.set_item("gas_used", gas_used)?;
         result_dict.set_item("instructions_executed", instr_count)?;
+        result_dict.set_item("gas_discount", self.gas_discount)?;
 
         self.last_instructions = instr_count;
         self.last_gas_used = gas_used;

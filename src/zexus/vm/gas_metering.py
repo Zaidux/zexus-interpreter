@@ -59,7 +59,7 @@ class GasCost(IntEnum):
     CALL_TOP = 10
     CALL_METHOD = 10
     CALL_BUILTIN = 8
-    STORE_FUNC = 5
+    STORE_FUNC = 3       # Aligned with Rust — function storage is a cheap memory op
     BUILD_LAMBDA = 5
     
     # Async operations
@@ -71,7 +71,7 @@ class GasCost(IntEnum):
     VERIFY_SIGNATURE = 100
     MERKLE_ROOT = 30  # Base cost, + per leaf
     STATE_READ = 20
-    STATE_WRITE = 50
+    STATE_WRITE = 30       # Reduced: RustStateAdapter caching makes writes memory-local
     TX_BEGIN = 20
     TX_COMMIT = 30
     TX_REVERT = 20

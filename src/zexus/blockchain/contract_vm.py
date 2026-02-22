@@ -66,6 +66,14 @@ except Exception:
     _RUST_VM_AVAILABLE = False
     _RustVMExecutor = None  # type: ignore
 
+# Rust ContractVM orchestrator (Phase 4)
+try:
+    from zexus_core import RustContractVM as _RustContractVM
+    _RUST_CONTRACT_VM_AVAILABLE = True
+except Exception:
+    _RUST_CONTRACT_VM_AVAILABLE = False
+    _RustContractVM = None  # type: ignore
+
 # SmartContract from security module
 try:
     from ..security import SmartContract
@@ -218,6 +226,17 @@ class ContractVM:
         except (ValueError, TypeError):
             pass
 
+        # Rust ContractVM orchestrator (Phase 4)
+        self._rust_contract_vm = (
+            _RustContractVM(
+                gas_discount=0.6,
+                default_gas_limit=gas_limit,
+                max_call_depth=self._max_call_depth,
+            )
+            if _RUST_CONTRACT_VM_AVAILABLE
+            else None
+        )
+
     # ------------------------------------------------------------------
     # Contract lifecycle
     # ------------------------------------------------------------------
@@ -354,7 +373,20 @@ class ContractVM:
         env = self._build_env(state_adapter, tx_ctx, contract, args or {})
         builtins = self._build_builtins(tx_ctx, contract_address, logs)
 
-        # 4. Execute
+        # ── Phase 4: Rust ContractVM orchestration ──
+        # Try to handle the entire execution lifecycle in Rust.
+        # If Rust signals needs_fallback we fall through to Python.
+        if (self._rust_contract_vm is not None
+                and self._use_bytecode_vm
+                and hasattr(action_obj, 'body')):
+            rust_receipt = self._try_rust_contract_vm(
+                contract_address, action_obj, state_adapter,
+                snapshot, env, args or {}, gas_limit, caller, logs,
+            )
+            if rust_receipt is not None:
+                return rust_receipt
+
+        # 4. Execute (Python path — Phase 3/0/tree-walk)
         try:
             vm = ZexusVM(
                 env=env,
@@ -990,6 +1022,149 @@ class ContractVM:
             logger.debug("Rust VM execution failed, falling back: %s", e)
             return None
 
+    def _try_rust_contract_vm(
+        self,
+        contract_address: str,
+        action_obj: Any,
+        state_adapter: ContractStateAdapter,
+        snapshot: Dict[str, Any],
+        env: Dict[str, Any],
+        args: Dict[str, Any],
+        gas_limit: int,
+        caller: str,
+        logs: List[Dict[str, Any]],
+    ) -> Optional[ContractExecutionReceipt]:
+        """Phase 4: Attempt full contract execution via Rust ContractVM.
+
+        Returns a ``ContractExecutionReceipt`` on success, or ``None``
+        if Rust can't handle it (falls back to Python).
+        """
+        try:
+            from ..vm.binary_bytecode import serialize as _serialize_zxc
+
+            # Compile to bytecode
+            bc = getattr(action_obj, '_cached_bytecode', None)
+            if bc is None:
+                from ..evaluator.core import Evaluator
+                evaluator = Evaluator(use_vm=True)
+                try:
+                    bc = evaluator.compile_to_bytecode(action_obj.body)
+                except Exception:
+                    return None  # Can't compile — fall back
+
+            # Serialize to .zxc
+            zxc_data = _serialize_zxc(bc, include_checksum=True)
+
+            # Build state dict (simple values)
+            rust_state = {}
+            for k, v in state_adapter.items():
+                if isinstance(v, (int, float, str, bool, type(None))):
+                    rust_state[k] = v
+
+            # Build env dict (simple values)
+            from ..object import (
+                Integer as ZInteger, Float as ZFloat,
+                Boolean as ZBoolean, String as ZString, Null as ZNull,
+            )
+            rust_env = {}
+            for k, v in env.items():
+                if isinstance(v, (int, float, str, bool, type(None))):
+                    rust_env[k] = v
+                elif isinstance(v, ZInteger):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZFloat):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZString):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZBoolean):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZNull):
+                    rust_env[k] = None
+
+            # Build args dict (simple values)
+            rust_args = {}
+            for k, v in args.items():
+                if isinstance(v, (int, float, str, bool, type(None))):
+                    rust_args[k] = v
+
+            # Execute via Rust ContractVM
+            result_dict = self._rust_contract_vm.execute_contract(
+                contract_address=contract_address,
+                action_bytecode=zxc_data,
+                state=rust_state or None,
+                env=rust_env or None,
+                args=rust_args or None,
+                gas_limit=gas_limit,
+                caller=caller,
+            )
+
+            # Check for fallback
+            if result_dict.get("needs_fallback", False):
+                self._vm_stats["rust_fallbacks"] += 1
+                if self._debug:
+                    logger.debug("Rust ContractVM needs fallback: %s",
+                                 result_dict.get("error", ""))
+                return None
+
+            # Build receipt
+            success = result_dict.get("success", False)
+            gas_used = result_dict.get("gas_used", 0)
+
+            if success:
+                # Merge new state back to ContractStateAdapter
+                new_state = result_dict.get("new_state", {})
+                if new_state:
+                    state_adapter.clear()
+                    state_adapter.update(new_state)
+                state_adapter.commit()
+
+                self._vm_stats["rust_executions"] += 1
+
+                return ContractExecutionReceipt(
+                    success=True,
+                    return_value=result_dict.get("result"),
+                    gas_used=gas_used,
+                    gas_limit=gas_limit,
+                    logs=list(logs),
+                    state_changes=result_dict.get("state_changes", {}),
+                )
+            else:
+                # Error — rollback
+                state_adapter.rollback(snapshot)
+                error = result_dict.get("error", "UnknownError")
+
+                if error == "OutOfGas":
+                    self._vm_stats["rust_fallbacks"] += 1
+                    return ContractExecutionReceipt(
+                        success=False,
+                        gas_used=gas_limit,
+                        gas_limit=gas_limit,
+                        error="OutOfGas",
+                        revert_reason=result_dict.get("revert_reason", ""),
+                    )
+                elif error == "ReentrancyGuard":
+                    return ContractExecutionReceipt(
+                        success=False,
+                        error="ReentrancyGuard",
+                        revert_reason=result_dict.get("revert_reason", ""),
+                        gas_limit=gas_limit,
+                    )
+                else:
+                    self._vm_stats["rust_fallbacks"] += 1
+                    return ContractExecutionReceipt(
+                        success=False,
+                        gas_used=gas_used,
+                        gas_limit=gas_limit,
+                        error=error,
+                        revert_reason=result_dict.get("revert_reason", ""),
+                        logs=list(logs),
+                    )
+
+        except Exception as e:
+            self._vm_stats["rust_fallbacks"] += 1
+            logger.debug("Rust ContractVM failed, falling back: %s", e)
+            return None
+
     def get_vm_execution_stats(self) -> Dict[str, Any]:
         """Return Phase 0-3 execution statistics."""
         total = (
@@ -998,6 +1173,14 @@ class ContractVM:
             + self._vm_stats["treewalk_executions"]
             + self._vm_stats["rust_executions"]
         )
+        # Phase 4 stats from Rust ContractVM
+        rust_cvm_stats = {}
+        if self._rust_contract_vm is not None:
+            try:
+                rust_cvm_stats = self._rust_contract_vm.get_stats()
+            except Exception:
+                pass
+
         return {
             **self._vm_stats,
             "total_executions": total,
@@ -1012,6 +1195,8 @@ class ContractVM:
             "use_bytecode_vm": self._use_bytecode_vm,
             "rust_vm_available": self._rust_vm_executor is not None,
             "rust_vm_threshold": self._rust_vm_threshold,
+            "rust_contract_vm_available": self._rust_contract_vm is not None,
+            "rust_contract_vm_stats": rust_cvm_stats,
         }
 
     # ------------------------------------------------------------------
@@ -1130,6 +1315,9 @@ class ContractVM:
                 gas_limit=gas_limit,
                 debug=self._debug,
             )
+            # Static calls use light gas metering (flat 1/op) since
+            # they don't consume chain resources — read-only.
+            vm.enable_gas_light = True
             result = self._execute_action(vm, action_obj, env, args or {})
             gas_used = vm.gas_metering.gas_used if vm.gas_metering else 0
 
