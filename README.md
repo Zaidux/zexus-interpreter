@@ -2604,6 +2604,16 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
   - or `ZEXUS_BUILD_EXTENSIONS=1 python -m pip install .`
 - For publishing native wheels to PyPI, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel). Wheels built on Termux are usually **not** PyPI-uploadable.
   - This repo includes a workflow you can run: `.github/workflows/wheels.yml` (builds manylinux `aarch64` + `x86_64`, plus macOS/Windows wheels).
+  - To publish from GitHub Actions without API tokens, use **PyPI Trusted Publishing**:
+    - PyPI → your project → **Settings** → **Publishing** → **Trusted publishers** → **Add a new trusted publisher**
+    - Provider: **GitHub Actions**
+    - Owner: `Zaidux` (or your GitHub org/user)
+    - Repository: `zexus-interpreter`
+    - Workflow: `.github/workflows/wheels.yml`
+    - Environment: `pypi` (and optionally also add another trusted publisher entry for `testpypi`)
+    - Then either:
+      - Run **Actions → “Build wheels (cibuildwheel)” → Run workflow** and choose `testpypi` first, or
+      - Push a release tag like `v1.7.3` to auto-build + publish
 
 #### Blockchain/Contract issues
 - Remember `TX` is a global context object (uppercase)
