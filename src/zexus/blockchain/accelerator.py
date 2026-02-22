@@ -1008,6 +1008,7 @@ class ExecutionAccelerator:
         """Execute a batch of transactions with acceleration.
 
         Execution priority:
+        0. **GIL-free native** — pure-Rust Rayon parallel (Phase 5, requires .zxc bytecode)
         1. **Multiprocess** — separate OS processes (true GIL-free parallelism)
         2. **Rust batched-GIL** — Rayon parallel groups, one GIL per group
         3. **Python ThreadPool** — fallback when neither is available
@@ -1015,6 +1016,32 @@ class ExecutionAccelerator:
         Sustains 1,800+ TPS with Rust alone, 10,000+ TPS with
         multiprocess + Rust stacked.
         """
+        # ── Priority 0: GIL-free native Rust execution (Phase 5) ──
+        # If transactions carry pre-compiled .zxc bytecode, execute
+        # entirely in Rust with zero GIL acquisitions.
+        if self.rust_bridge and self.rust_bridge.is_native:
+            native_txs = [tx for tx in transactions if "bytecode" in tx]
+            if native_txs:
+                try:
+                    raw = self.rust_bridge.execute_batch_native(native_txs)
+                    if raw is not None:
+                        result = TxBatchResult(total=raw["total"])
+                        result.succeeded = raw["succeeded"]
+                        result.failed = raw["failed"]
+                        result.gas_used = raw["gas_used"]
+                        result.elapsed = raw["elapsed_secs"]
+                        import json as _json
+                        result.receipts = [
+                            _json.loads(r) if isinstance(r, str) else r
+                            for r in raw.get("receipts", [])
+                        ]
+                        self._total_calls += raw["total"]
+                        self._accelerated_calls += raw["total"]
+                        self._total_time += raw["elapsed_secs"]
+                        return result
+                except Exception as exc:
+                    logger.warning("GIL-free native batch failed, falling back: %s", exc)
+
         # ── Priority 1: Multiprocess executor ─────────────────────
         if self.mp_executor:
             try:

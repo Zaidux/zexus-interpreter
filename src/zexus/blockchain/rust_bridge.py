@@ -327,6 +327,48 @@ def _execute_batch_py(
     return result
 
 
+# ── Phase 5: GIL-free Native Batch Execution ──────────────────────────
+
+def execute_batch_native(
+    transactions: List[Dict[str, Any]],
+    max_workers: int = 0,
+    gas_discount: float = 0.6,
+    default_gas_limit: int = 10_000_000,
+) -> Optional[Dict[str, Any]]:
+    """Execute a batch of pre-compiled .zxc transactions entirely in Rust.
+
+    **Zero GIL acquisitions during execution.**  Requires Rust core.
+
+    Parameters
+    ----------
+    transactions : list of dict
+        Each dict must contain ``bytecode`` (bytes), ``contract_address`` (str),
+        ``caller`` (str).  Optional: ``gas_limit``, ``state``, ``gas_discount``.
+    max_workers : int
+        Rayon thread count (0 = auto-detect CPU cores).
+    gas_discount : float
+        Default gas discount for Rust execution (0.6 = 40% cheaper).
+    default_gas_limit : int
+        Default gas limit if not specified per-transaction.
+
+    Returns
+    -------
+    dict or None
+        Dict with keys: total, succeeded, failed, gas_used, gas_saved,
+        throughput, receipts, state_changes, mode='native_gil_free'.
+        Returns None if Rust core is not available.
+    """
+    if not _RUST_AVAILABLE:
+        return None
+
+    executor = _zexus_core.RustBatchExecutor(
+        max_workers=max_workers,
+        gas_discount=gas_discount,
+        default_gas_limit=default_gas_limit,
+    )
+    return executor.execute_batch_native(transactions)
+
+
 # ── Block Validation ───────────────────────────────────────────────────
 
 def validate_chain_headers(
@@ -414,6 +456,28 @@ class RustCoreBridge:
     ) -> BatchResult:
         return execute_batch(
             transactions, vm_callback, max_workers=self._max_workers
+        )
+
+    def execute_batch_native(
+        self,
+        transactions: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Execute a batch of pre-compiled .zxc transactions — zero GIL.
+
+        Each transaction dict must contain:
+          - ``bytecode``: bytes — .zxc serialized bytecode
+          - ``contract_address``: str
+          - ``caller``: str
+          - ``gas_limit``: int (optional)
+          - ``state``: dict (optional)
+          - ``gas_discount``: float (optional)
+
+        Returns a dict with keys: total, succeeded, failed, gas_used,
+        gas_saved, throughput, receipts, state_changes, mode='native_gil_free'.
+        Returns None if Rust is not available.
+        """
+        return execute_batch_native(
+            transactions, max_workers=self._max_workers
         )
 
     # Validation
