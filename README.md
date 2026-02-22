@@ -2592,6 +2592,14 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
 - Consider using `native` keyword for C/C++ FFI
 - Profile with `memory_stats()` to check for leaks
 
+#### PyPI upload fails on Termux with: "unsupported platform tag 'linux_aarch64'"
+- PyPI rejects wheels with generic `linux_*` platform tags (common when building on Termux).
+- **Fix**: upload an sdist (source distribution) and/or a pure-Python wheel:
+  - `python -m pip install --upgrade build twine`
+  - `python -m build`  # creates `dist/*.tar.gz` and (by default) a `py3-none-any.whl`
+  - `python -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl`
+- If you *really* want native extensions, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel) and upload those wheels. Native builds can be enabled locally with `ZEXUS_BUILD_EXTENSIONS=1`, but those wheels are usually **not** PyPI-uploadable when built on Termux.
+
 #### Blockchain/Contract issues
 - Remember `TX` is a global context object (uppercase)
 - Use `persistent storage` for contract state
