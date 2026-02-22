@@ -45,5 +45,6 @@
     }
   },
   "python.analysis.typeCheckingMode": "strict",
-  "chat.agent.maxRequests": 90
+  "chat.agent.maxRequests": 90,
+  "remote.autoForwardPortsFallback": 0
 }

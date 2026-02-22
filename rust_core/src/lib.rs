@@ -24,11 +24,13 @@ mod binary_bytecode;
 mod executor;
 mod hasher;
 mod merkle;
+mod rust_vm;
 mod signature;
 mod validator;
 
 use binary_bytecode::RustBytecodeReader;
 use executor::{RustBatchExecutor, TxBatchResult as RustTxBatchResult};
+use rust_vm::RustVMExecutor;
 use hasher::RustHasher;
 use merkle::RustMerkle;
 use signature::RustSignature;
@@ -46,6 +48,7 @@ fn zexus_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustSignature>()?;
     m.add_class::<RustBlockValidator>()?;
     m.add_class::<RustBytecodeReader>()?;
+    m.add_class::<RustVMExecutor>()?;
 
     // Convenience — quick check from Python:  `zexus_core.is_available()`
     #[pyfn(m)]

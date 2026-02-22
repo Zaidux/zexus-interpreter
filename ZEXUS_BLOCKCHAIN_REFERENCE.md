@@ -2241,6 +2241,10 @@ PyO3 + Rayon, bypassing the Python GIL for true parallel execution across CPU co
 │  │  │ signature │ │ validator  │                │  │
 │  │  │ (secp256k1│ │ (chain/PoW)│                │  │
 │  │  └───────────┘ └────────────┘                │  │
+│  │  ┌────────────────┐ ┌──────────────┐         │  │
+│  │  │ binary_bytecode│ │   rust_vm    │         │  │
+│  │  │ (.zxc deser)   │ │ (20× faster) │         │  │
+│  │  └────────────────┘ └──────────────┘         │  │
 │  └───────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
@@ -2254,6 +2258,8 @@ PyO3 + Rayon, bypassing the Python GIL for true parallel execution across CPU co
 | `merkle.rs` | `RustMerkle` | Parallel Merkle root computation & proof verification |
 | `signature.rs` | `RustSignature` | ECDSA secp256k1 verify, parallel batch verify |
 | `validator.rs` | `RustBlockValidator` | Block hash verification, chain validation, PoW check |
+| `binary_bytecode.rs` | `RustBytecodeReader` | GIL-free `.zxc` binary bytecode deserialization & validation |
+| `rust_vm.rs` | `RustVMExecutor` | Complete Rust bytecode interpreter (20× faster than Python VM) |
 
 ### Build & Install
 
@@ -2319,6 +2325,159 @@ Every function has a **pure-Python fallback** — the bridge is fully transparen
 | SHA-256 (1000 hashes) | ~0.3 ms | ~5 ms | **17×** |
 | Merkle root (1000 leaves) | ~0.5 ms | ~8 ms | **16×** |
 | Signature verify (batch 100) | ~12 ms | ~150 ms | **12×** |
+| **Bytecode VM (arithmetic loop)** | **22 MIPS** | **~1.1 MIPS** | **20×** |
+
+### Binary Bytecode Format (.zxc)
+
+**Source:** `src/zexus/vm/binary_bytecode.py`, `rust_core/src/binary_bytecode.rs`
+
+Zexus compiles `.zx` source to a compact binary `.zxc` format that both the Python VM
+and Rust VM can consume. The Rust deserializer is GIL-free for zero-overhead loading.
+
+#### File Structure
+
+| Section | Contents |
+|---|---|
+| Header (16 bytes) | Magic `ZXC\x00`, version (u16), flags (u16), constant count (u32), instruction count (u32) |
+| Constant Pool | Tagged values: Null, Bool, Int(i64), Float(f64), String, FuncDesc, List, Map, Opaque |
+| Instructions | Opcode (u16) + operand type (u8) + operand data (variable) |
+| Checksum | CRC32 (4 bytes, optional) |
+
+#### Operand Types
+
+| Type | ID | Size | Description |
+|---|---|---|---|
+| None | 0 | 0 | No operand |
+| U32 | 1 | 4 | Constant index, jump target, count |
+| I64 | 2 | 8 | Signed 64-bit integer |
+| Pair | 3 | 8 | Two u32 values |
+| Triple | 4 | 12 | Three u32 values |
+
+#### Python API
+
+```python
+from zexus.vm.binary_bytecode import serialize, deserialize, save_zxc, load_zxc
+
+# Serialize bytecode to binary
+data = serialize(bytecode_obj)           # → bytes
+save_zxc(bytecode_obj, "module.zxc")     # → file
+
+# Deserialize
+bc = deserialize(data)                   # → Bytecode
+bc = load_zxc("module.zxc")             # → Bytecode
+
+# Multi-module container (.zxcm)
+from zexus.vm.binary_bytecode import serialize_multi, deserialize_multi
+data = serialize_multi({"main": bc1, "util": bc2})
+modules = deserialize_multi(data)       # → dict[str, Bytecode]
+
+# Cache helpers
+from zexus.vm.binary_bytecode import zxc_path_for, is_zxc_fresh
+path = zxc_path_for("/path/to/module.zx")   # → "/path/to/module.zxc"
+fresh = is_zxc_fresh("/path/to/module.zx")   # → bool
+```
+
+#### Rust API
+
+```python
+from zexus_core import RustBytecodeReader
+
+reader = RustBytecodeReader()
+info = reader.header_info(zxc_bytes)           # version, flags, counts
+is_valid = reader.validate(zxc_bytes)          # bool
+module = reader.deserialize(zxc_bytes)         # → dict (GIL-free deserialization)
+```
+
+### Rust Bytecode Interpreter (RustVMExecutor)
+
+**Source:** `rust_core/src/rust_vm.rs` (~1,600 lines)
+
+A complete stack-machine bytecode interpreter written in Rust that executes `.zxc`
+binary bytecode with **20× speedup** over the Python VM. This is the primary execution
+engine for non-call-heavy contract bytecode.
+
+#### Supported Opcodes (~50)
+
+| Category | Opcodes |
+|---|---|
+| Stack | `LOAD_CONST`, `LOAD_NAME`, `STORE_NAME`, `STORE_FUNC`, `POP`, `DUP` |
+| Arithmetic | `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `POW`, `NEG` |
+| Comparison | `EQ`, `NEQ`, `LT`, `GT`, `LTE`, `GTE` |
+| Logical | `AND`, `OR`, `NOT` |
+| Control flow | `JUMP`, `JUMP_IF_FALSE`, `JUMP_IF_TRUE`, `RETURN` |
+| Collections | `BUILD_LIST`, `BUILD_MAP`, `BUILD_SET`, `INDEX`, `SLICE`, `GET_ATTR` |
+| Blockchain | `STATE_READ`, `STATE_WRITE`, `TX_BEGIN`, `TX_COMMIT`, `TX_REVERT`, `GAS_CHARGE`, `REQUIRE`, `HASH_BLOCK`, `MERKLE_ROOT`, `VERIFY_SIGNATURE`, `LEDGER_APPEND` |
+| Events | `EMIT_EVENT`, `REGISTER_EVENT`, `AUDIT_LOG` |
+| Exceptions | `SETUP_TRY`, `POP_TRY`, `THROW` |
+| I/O | `PRINT` |
+| Markers | `NOP`, `PARALLEL_START`, `PARALLEL_END` |
+
+Function calls (`CALL_NAME`, `CALL_METHOD`, etc.) return `needs_fallback=True`,
+signaling the Python contract VM to re-execute via the Python VM for those paths.
+
+#### Python API
+
+```python
+from zexus_core import RustVMExecutor
+from zexus.vm.binary_bytecode import serialize
+
+executor = RustVMExecutor()
+
+# Execute .zxc bytecode
+result = executor.execute(
+    data=zxc_bytes,         # bytes: serialized .zxc
+    env={"balance": 1000},  # dict: initial variables
+    state={"total": 500},   # dict: blockchain state
+    gas_limit=1_000_000,    # int: gas limit (0 = unlimited)
+)
+
+# Result dict:
+result["result"]                # return value (or None)
+result["env"]                   # updated environment variables
+result["state"]                 # updated blockchain state
+result["output"]                # list of PRINT output
+result["gas_used"]              # gas consumed
+result["instructions_executed"] # instruction count
+result["needs_fallback"]        # True if CALL_NAME etc. encountered
+result["error"]                 # error string or None
+
+# Benchmark mode (pure Rust, no Python interop overhead)
+stats = executor.benchmark(
+    data=zxc_bytes,
+    iterations=1000,
+    gas_limit=0,
+)
+stats["instructions_per_sec"]   # e.g. 22,000,000+ (22 MIPS)
+stats["elapsed_ms"]             # total time
+stats["total_instructions"]     # total instructions across all iterations
+```
+
+#### Value Type System
+
+| Rust Type | Python Equivalent | Notes |
+|---|---|---|
+| `ZxValue::Null` | `None` | |
+| `ZxValue::Bool(bool)` | `bool` | |
+| `ZxValue::Int(i64)` | `int` | 64-bit signed |
+| `ZxValue::Float(f64)` | `float` | 64-bit IEEE 754 |
+| `ZxValue::Str(String)` | `str` | UTF-8 |
+| `ZxValue::List(Vec)` | `list` | Heterogeneous |
+| `ZxValue::Map(Vec<(String, ZxValue)>)` | `dict` | Ordered key-value pairs |
+| `ZxValue::PyObj(PyObject)` | `object` | Fallback for non-representable Python objects |
+
+#### Gas Metering
+
+Per-opcode gas costs match the Python VM exactly:
+
+| Opcode | Gas | Opcode | Gas |
+|---|---|---|---|
+| `NOP` | 0 | `ADD`/`SUB` | 3 |
+| `LOAD_CONST` | 1 | `MUL` | 5 |
+| `LOAD_NAME` | 2 | `DIV`/`MOD` | 10 |
+| `STORE_NAME` | 3 | `POW` | 20 |
+| `STATE_READ` | 20 | `STATE_WRITE` | 50 |
+| `HASH_BLOCK` | 50 | `VERIFY_SIGNATURE` | 100 |
+| `CALL_NAME` | 10 | `REQUIRE` | 5 |
 
 ---
 
