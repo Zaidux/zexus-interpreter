@@ -2603,6 +2603,7 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
   - `ZEXUS_BUILD_EXTENSIONS=1 python -m build`
   - or `ZEXUS_BUILD_EXTENSIONS=1 python -m pip install .`
 - For publishing native wheels to PyPI, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel). Wheels built on Termux are usually **not** PyPI-uploadable.
+  - This repo includes a workflow you can run: `.github/workflows/wheels.yml` (builds manylinux `aarch64` + `x86_64`, plus macOS/Windows wheels).
 
 #### Blockchain/Contract issues
 - Remember `TX` is a global context object (uppercase)

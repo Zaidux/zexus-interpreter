@@ -1,0 +1,78 @@
+name: Build wheels (cibuildwheel)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up QEMU (Linux aarch64)
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade pip cibuildwheel
+
+      - name: Build wheels
+        env:
+          # Build native extensions into the wheel (setup.py gates this)
+          ZEXUS_BUILD_EXTENSIONS: "1"
+
+          # Build for common CPython versions
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+
+          # Manylinux wheels for x86_64 + aarch64 on Linux
+          CIBW_ARCHS_LINUX: "x86_64 aarch64"
+
+          # Keep CI time reasonable (skip 32-bit, etc.)
+          CIBW_SKIP: "*-musllinux_* pp* *-win32 *-manylinux_i686"
+        run: python -m cibuildwheel --output-dir wheelhouse
+
+      - name: Upload wheels artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  build_sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --sdist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
