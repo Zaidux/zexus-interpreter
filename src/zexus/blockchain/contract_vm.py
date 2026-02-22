@@ -34,6 +34,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import time
 import logging
 from dataclasses import dataclass, field
@@ -694,6 +695,28 @@ class ContractVM:
         result = None
         used_bytecode = False
 
+        # --- Phase 1: try pre-compiled .zxc for this action ---
+        if self._use_bytecode_vm and hasattr(action_obj, 'body'):
+            cached_bc = getattr(action_obj, '_cached_bytecode', None)
+            if cached_bc is None:
+                try:
+                    from ..vm.binary_bytecode import load_zxc, save_zxc
+                    import hashlib as _hl
+                    _action_name = getattr(action_obj, 'name', None)
+                    if _action_name:
+                        _aname = _action_name.value if hasattr(_action_name, 'value') else str(_action_name)
+                        _contract_addr = getattr(self, '_contract_address', '') or ''
+                        _cache_key = _hl.md5(f"{_contract_addr}:{_aname}".encode()).hexdigest()[:16]
+                        _cache_dir = os.path.join(os.path.expanduser("~"), ".zexus", "action_cache")
+                        os.makedirs(_cache_dir, exist_ok=True)
+                        _zxc_path = os.path.join(_cache_dir, f"{_cache_key}.zxc")
+                        if os.path.exists(_zxc_path):
+                            cached_bc = load_zxc(_zxc_path)
+                            action_obj._cached_bytecode = cached_bc
+                            action_obj._cached_zxc_path = _zxc_path
+                except Exception:
+                    pass
+
         # --- Phase 0: bytecoded execution with fallback ---
         if self._use_bytecode_vm and hasattr(action_obj, 'body'):
             try:
@@ -720,6 +743,26 @@ class ContractVM:
                 )
                 used_bytecode = True
                 self._vm_stats["bytecode_executions"] += 1
+
+                # Phase 1: persist compiled bytecode as .zxc for next call
+                if not getattr(action_obj, '_cached_zxc_path', None):
+                    try:
+                        _bc = getattr(evaluator, '_last_compiled_bytecode', None)
+                        if _bc is None and hasattr(evaluator, 'vm_instance'):
+                            _bc = getattr(evaluator.vm_instance, '_last_bytecode', None)
+                        if _bc is not None:
+                            from ..vm.binary_bytecode import save_zxc
+                            import hashlib as _hl
+                            _action_name = getattr(action_obj, 'name', None)
+                            if _action_name:
+                                _aname = _action_name.value if hasattr(_action_name, 'value') else str(_action_name)
+                                _contract_addr = getattr(self, '_contract_address', '') or ''
+                                _cache_key = _hl.md5(f"{_contract_addr}:{_aname}".encode()).hexdigest()[:16]
+                                _cache_dir = os.path.join(os.path.expanduser("~"), ".zexus", "action_cache")
+                                os.makedirs(_cache_dir, exist_ok=True)
+                                save_zxc(os.path.join(_cache_dir, f"{_cache_key}.zxc"), _bc)
+                    except Exception:
+                        pass
                 if self._debug:
                     stats = evaluator.get_vm_stats()
                     logger.debug(

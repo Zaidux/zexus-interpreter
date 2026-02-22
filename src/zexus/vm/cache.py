@@ -26,6 +26,18 @@ from typing import Any, Dict, List, Optional
 
 from .bytecode import Bytecode
 
+# Binary bytecode helpers (Phase 1)
+try:
+    from .binary_bytecode import (
+        serialize as _zxc_serialize,
+        deserialize as _zxc_deserialize,
+        serialize_multi as _zxc_serialize_multi,
+        deserialize_multi as _zxc_deserialize_multi,
+    )
+    _ZXC_AVAILABLE = True
+except Exception:
+    _ZXC_AVAILABLE = False
+
 CACHE_VERSION = 2
 
 
@@ -446,6 +458,8 @@ class BytecodeCache:
         if self.persistent and self.cache_dir:
             for cache_file in self.cache_dir.glob('*.cache'):
                 cache_file.unlink()
+            for cache_file in self.cache_dir.glob('*.zxc'):
+                cache_file.unlink()
             # Clear file cache index
             index_file = self.cache_dir / 'file_index.cache'
             if index_file.exists():
@@ -479,14 +493,20 @@ class BytecodeCache:
     # ==================== Persistent Cache Methods ====================
     
     def _save_to_disk(self, key: str, bytecode: Bytecode):
-        """Save bytecode to disk cache"""
+        """Save bytecode to disk cache (binary .zxc format when available)."""
         if not self.cache_dir:
             return
         
         try:
-            cache_file = self.cache_dir / f"{key}.cache"
-            with open(cache_file, 'wb') as f:
-                pickle.dump(bytecode, f, protocol=pickle.HIGHEST_PROTOCOL)
+            if _ZXC_AVAILABLE:
+                cache_file = self.cache_dir / f"{key}.zxc"
+                data = _zxc_serialize(bytecode)
+                with open(cache_file, 'wb') as f:
+                    f.write(data)
+            else:
+                cache_file = self.cache_dir / f"{key}.cache"
+                with open(cache_file, 'wb') as f:
+                    pickle.dump(bytecode, f, protocol=pickle.HIGHEST_PROTOCOL)
             
             if self.debug:
                 print(f"💾 Cache: Saved to disk {key[:8]}...")
@@ -495,19 +515,29 @@ class BytecodeCache:
                 print(f"⚠️ Cache: Failed to save to disk: {e}")
     
     def _load_from_disk(self, key: str) -> Optional[Bytecode]:
-        """Load bytecode from disk cache"""
+        """Load bytecode from disk cache (.zxc first, then legacy .cache)."""
         if not self.cache_dir:
             return None
         
         try:
+            # Try .zxc binary format first
+            if _ZXC_AVAILABLE:
+                zxc_file = self.cache_dir / f"{key}.zxc"
+                if zxc_file.exists():
+                    with open(zxc_file, 'rb') as f:
+                        data = f.read()
+                    bytecode = _zxc_deserialize(data)
+                    if self.debug:
+                        print(f"💾 Cache: Loaded .zxc from disk {key[:8]}...")
+                    return bytecode
+
+            # Fallback to legacy pickle format
             cache_file = self.cache_dir / f"{key}.cache"
             if cache_file.exists():
                 with open(cache_file, 'rb') as f:
                     bytecode = pickle.load(f)
-                
                 if self.debug:
-                    print(f"💾 Cache: Loaded from disk {key[:8]}...")
-                
+                    print(f"💾 Cache: Loaded .cache from disk {key[:8]}...")
                 return bytecode
         except Exception as e:
             if self.debug:
@@ -516,14 +546,15 @@ class BytecodeCache:
         return None
     
     def _delete_from_disk(self, key: str):
-        """Delete cache entry from disk"""
+        """Delete cache entry from disk (both .zxc and legacy .cache)."""
         if not self.cache_dir:
             return
         
         try:
-            cache_file = self.cache_dir / f"{key}.cache"
-            if cache_file.exists():
-                cache_file.unlink()
+            for suffix in ('.zxc', '.cache'):
+                cache_file = self.cache_dir / f"{key}{suffix}"
+                if cache_file.exists():
+                    cache_file.unlink()
         except Exception as e:
             if self.debug:
                 print(f"⚠️ Cache: Failed to delete from disk: {e}")
@@ -657,25 +688,35 @@ class BytecodeCache:
             self._save_file_cache_index()
     
     def _save_file_bytecode(self, file_key: str, metadata: FileMetadata, bytecodes: List[Bytecode]):
-        """Save file bytecode to disk"""
+        """Save file bytecode to disk (binary .zxc multi-container when available)."""
         if not self.cache_dir:
             return
         
         try:
-            cache_file = self.cache_dir / f"file_{file_key}.cache"
-            data = {
-                'metadata': {
-                    'file_path': metadata.file_path,
-                    'mtime': metadata.mtime,
-                    'size': metadata.size,
-                    'content_hash': metadata.content_hash,
-                    'version': CACHE_VERSION,
-                },
-                'bytecodes': bytecodes,
-                'cached_at': time.time()
+            meta_dict = {
+                'file_path': metadata.file_path,
+                'mtime': metadata.mtime,
+                'size': metadata.size,
+                'content_hash': metadata.content_hash,
+                'version': CACHE_VERSION,
+                'cached_at': time.time(),
             }
-            with open(cache_file, 'wb') as f:
-                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            if _ZXC_AVAILABLE:
+                # Binary envelope: JSON metadata + ZXCM multi-container
+                meta_bytes = json.dumps(meta_dict).encode('utf-8')
+                bc_bytes = _zxc_serialize_multi(bytecodes)
+                cache_file = self.cache_dir / f"file_{file_key}.zxc"
+                with open(cache_file, 'wb') as f:
+                    # 4-byte meta length prefix + meta + bc_bytes
+                    import struct as _st
+                    f.write(_st.pack('<I', len(meta_bytes)))
+                    f.write(meta_bytes)
+                    f.write(bc_bytes)
+            else:
+                cache_file = self.cache_dir / f"file_{file_key}.cache"
+                data = {'metadata': meta_dict, 'bytecodes': bytecodes, 'cached_at': time.time()}
+                with open(cache_file, 'wb') as f:
+                    pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
             
             if self.debug:
                 print(f"💾 FileCache: Saved to disk {file_key[:8]}...")
@@ -684,58 +725,81 @@ class BytecodeCache:
                 print(f"⚠️ FileCache: Failed to save: {e}")
     
     def _load_file_bytecode(self, file_key: str, current_metadata: FileMetadata) -> Optional[List[Bytecode]]:
-        """Load file bytecode from disk and validate"""
+        """Load file bytecode from disk and validate (.zxc first, then legacy)."""
         if not self.cache_dir:
             return None
-        
+
+        cached_meta = None
+        bytecodes = None
+        cached_at = time.time()
+        cache_file = None
+
         try:
-            cache_file = self.cache_dir / f"file_{file_key}.cache"
-            if not cache_file.exists():
+            # Try .zxc binary format first
+            if _ZXC_AVAILABLE:
+                zxc_file = self.cache_dir / f"file_{file_key}.zxc"
+                if zxc_file.exists():
+                    import struct as _st
+                    with open(zxc_file, 'rb') as f:
+                        raw = f.read()
+                    meta_len = _st.unpack_from('<I', raw, 0)[0]
+                    meta_json = raw[4:4 + meta_len]
+                    cached_meta = json.loads(meta_json)
+                    cached_at = cached_meta.get('cached_at', time.time())
+                    bytecodes = _zxc_deserialize_multi(raw[4 + meta_len:])
+                    cache_file = zxc_file
+
+            # Fallback to legacy pickle
+            if bytecodes is None:
+                pkl_file = self.cache_dir / f"file_{file_key}.cache"
+                if pkl_file.exists():
+                    with open(pkl_file, 'rb') as f:
+                        data = pickle.load(f)
+                    cached_meta = data.get('metadata', {})
+                    bytecodes = data.get('bytecodes', [])
+                    cached_at = data.get('cached_at', time.time())
+                    cache_file = pkl_file
+
+            if cached_meta is None or bytecodes is None:
                 return None
-            
-            with open(cache_file, 'rb') as f:
-                data = pickle.load(f)
-            
-            cached_meta = data.get('metadata', {})
+
             # Validate metadata matches
             if (cached_meta.get('mtime') == current_metadata.mtime and
                 cached_meta.get('content_hash') == current_metadata.content_hash and
                 cached_meta.get('version') == CACHE_VERSION):
-                
-                bytecodes = data.get('bytecodes', [])
-                # Store in memory cache too
+
                 self._file_cache[file_key] = {
                     'file_path': current_metadata.file_path,
                     'mtime': current_metadata.mtime,
                     'size': current_metadata.size,
                     'content_hash': current_metadata.content_hash,
                     'bytecodes': bytecodes,
-                    'cached_at': data.get('cached_at', time.time())
+                    'cached_at': cached_at,
                 }
-                
                 if self.debug:
                     print(f"💾 FileCache: Loaded from disk {file_key[:8]}... ({len(bytecodes)} entries)")
                 return bytecodes
             else:
-                # Stale cache, remove it
-                cache_file.unlink()
+                if cache_file:
+                    cache_file.unlink()
                 if self.debug:
                     print(f"🔄 FileCache: Removed stale disk cache {file_key[:8]}...")
         except Exception as e:
             if self.debug:
                 print(f"⚠️ FileCache: Failed to load: {e}")
-        
+
         return None
     
     def _delete_file_bytecode(self, file_key: str):
-        """Delete file bytecode from disk"""
+        """Delete file bytecode from disk (both .zxc and legacy .cache)."""
         if not self.cache_dir:
             return
         
         try:
-            cache_file = self.cache_dir / f"file_{file_key}.cache"
-            if cache_file.exists():
-                cache_file.unlink()
+            for suffix in ('.zxc', '.cache'):
+                cache_file = self.cache_dir / f"file_{file_key}{suffix}"
+                if cache_file.exists():
+                    cache_file.unlink()
         except Exception as e:
             if self.debug:
                 print(f"⚠️ FileCache: Failed to delete: {e}")

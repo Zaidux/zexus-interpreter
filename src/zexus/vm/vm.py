@@ -1010,8 +1010,26 @@ class VM:
                     # Try to compile to bytecode and execute via VM (fast path)
                     try:
                         from .compiler import BytecodeCompiler
-                        compiler = BytecodeCompiler(optimize=True)
-                        compiled_bytecode = compiler.compile(program)
+
+                        # Phase 1: check for co-located .zxc binary first
+                        try:
+                            from .binary_bytecode import load_zxc, save_zxc, is_zxc_fresh, zxc_path_for
+                            _zxc_path = zxc_path_for(candidate)
+                            if is_zxc_fresh(candidate):
+                                compiled_bytecode = load_zxc(_zxc_path)
+                        except Exception:
+                            pass
+
+                        if compiled_bytecode is None:
+                            compiler = BytecodeCompiler(optimize=True)
+                            compiled_bytecode = compiler.compile(program)
+                            # Persist .zxc for next run
+                            if compiled_bytecode:
+                                try:
+                                    from .binary_bytecode import save_zxc, zxc_path_for
+                                    save_zxc(zxc_path_for(candidate), compiled_bytecode)
+                                except Exception:
+                                    pass
                         
                         if compiled_bytecode:
                             # Execute module via VM (fast)

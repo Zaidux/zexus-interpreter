@@ -20,12 +20,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 
+mod binary_bytecode;
 mod executor;
 mod hasher;
 mod merkle;
 mod signature;
 mod validator;
 
+use binary_bytecode::RustBytecodeReader;
 use executor::{RustBatchExecutor, TxBatchResult as RustTxBatchResult};
 use hasher::RustHasher;
 use merkle::RustMerkle;
@@ -43,6 +45,7 @@ fn zexus_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustMerkle>()?;
     m.add_class::<RustSignature>()?;
     m.add_class::<RustBlockValidator>()?;
+    m.add_class::<RustBytecodeReader>()?;
 
     // Convenience — quick check from Python:  `zexus_core.is_available()`
     #[pyfn(m)]

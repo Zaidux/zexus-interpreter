@@ -402,8 +402,8 @@ class TestPersistentCache(unittest.TestCase):
         
         self.cache.put(node, bytecode)
         
-        # Check file was created
-        cache_files = list(Path(self.temp_dir).glob('*.cache'))
+        # Check file was created (either .zxc or .cache format)
+        cache_files = list(Path(self.temp_dir).glob('*.cache')) + list(Path(self.temp_dir).glob('*.zxc'))
         self.assertEqual(len(cache_files), 1)
     
     def test_load_from_disk(self):
@@ -439,15 +439,15 @@ class TestPersistentCache(unittest.TestCase):
             bytecode = builder.build()
             self.cache.put(node, bytecode)
         
-        # Check files exist
-        cache_files = list(Path(self.temp_dir).glob('*.cache'))
+        # Check files exist (either .zxc or .cache format)
+        cache_files = list(Path(self.temp_dir).glob('*.cache')) + list(Path(self.temp_dir).glob('*.zxc'))
         self.assertEqual(len(cache_files), 3)
         
         # Clear cache
         self.cache.clear()
         
         # Files should be gone
-        cache_files = list(Path(self.temp_dir).glob('*.cache'))
+        cache_files = list(Path(self.temp_dir).glob('*.cache')) + list(Path(self.temp_dir).glob('*.zxc'))
         self.assertEqual(len(cache_files), 0)
 
 
