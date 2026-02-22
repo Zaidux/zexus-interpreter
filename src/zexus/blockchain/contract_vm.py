@@ -168,6 +168,7 @@ class ContractVM:
         chain: Chain,
         gas_limit: int = 10_000_000,
         debug: bool = False,
+        use_bytecode_vm: bool = False,
     ):
         if not _VM_AVAILABLE:
             raise RuntimeError(
@@ -177,6 +178,7 @@ class ContractVM:
         self._chain = chain
         self._default_gas_limit = gas_limit
         self._debug = debug
+        self._use_bytecode_vm = use_bytecode_vm
 
         # Deployed contract registry:  address -> SmartContract
         self._contracts: Dict[str, SmartContract] = {}
@@ -187,6 +189,13 @@ class ContractVM:
         # Cross-contract call depth tracking
         self._call_depth: int = 0
         self._max_call_depth: int = 10
+
+        # Phase 0 stats: track bytecode vs tree-walk executions
+        self._vm_stats = {
+            "bytecode_executions": 0,
+            "bytecode_fallbacks": 0,
+            "treewalk_executions": 0,
+        }
 
     # ------------------------------------------------------------------
     # Contract lifecycle
@@ -659,9 +668,13 @@ class ContractVM:
     ) -> Any:
         """Run a contract action's body through the evaluator.
 
-        Depending on whether the action has bytecode or an AST body,
-        we either use the VM directly or fall back to the tree-walking
-        evaluator.
+        When ``self._use_bytecode_vm`` is True the evaluator is created
+        with ``use_vm=True`` so it compiles the action body to bytecode
+        and executes it through the VM (Phase 0).  If bytecoded execution
+        fails for any reason, we transparently fall back to tree-walking.
+
+        When ``self._use_bytecode_vm`` is False (default), we always use
+        tree-walking for maximum reliability.
         """
         from ..object import Environment, Action
         from ..evaluator.core import Evaluator
@@ -678,16 +691,71 @@ class ContractVM:
                 if param_name in args:
                     eval_env.set(param_name, self._wrap_value(args[param_name]))
 
-        # Execute through the evaluator (which will delegate to VM for bytecode)
-        evaluator = Evaluator(use_vm=False)  # use tree-walking for reliability
         result = None
-        try:
-            if hasattr(action_obj, 'body'):
+        used_bytecode = False
+
+        # --- Phase 0: bytecoded execution with fallback ---
+        if self._use_bytecode_vm and hasattr(action_obj, 'body'):
+            try:
+                evaluator = Evaluator(use_vm=True)
+
+                # Wire contract gas metering into the evaluator's VM
+                if evaluator.vm_instance and vm.gas_metering:
+                    evaluator.vm_instance.gas_metering = vm.gas_metering
+                    evaluator.vm_instance.enable_gas_metering = True
+
+                # Inject contract builtins into evaluator's VM
+                if evaluator.vm_instance:
+                    vm_builtins = dict(evaluator.vm_instance.builtins or {})
+                    vm_builtins.update(vm.builtins or {})
+                    evaluator.vm_instance.builtins = vm_builtins
+
+                    # Push blockchain state into the VM's env
+                    evaluator.vm_instance.env["_blockchain_state"] = env.get("_blockchain_state")
+                    evaluator.vm_instance.env["_gas_remaining"] = env.get("_gas_remaining")
+                    evaluator.vm_instance.env["TX"] = env.get("TX")
+
+                result = evaluator.eval_with_vm_support(
+                    action_obj.body, eval_env, debug_mode=self._debug
+                )
+                used_bytecode = True
+                self._vm_stats["bytecode_executions"] += 1
+                if self._debug:
+                    stats = evaluator.get_vm_stats()
+                    logger.debug(
+                        "Bytecoded execution: compiles=%d vm_runs=%d fallbacks=%d",
+                        stats.get("bytecode_compiles", 0),
+                        stats.get("vm_executions", 0),
+                        stats.get("vm_fallbacks", 0),
+                    )
+            except Exception as e:
+                # Bytecoded execution failed — fall back to tree-walk
+                self._vm_stats["bytecode_fallbacks"] += 1
+                logger.debug(
+                    "Bytecoded execution failed, falling back to tree-walk: %s", e
+                )
+                used_bytecode = False
+                result = None
+                # Rebuild eval_env since the failed VM run may have corrupted it
+                eval_env = Environment()
+                for k, v in env.items():
+                    eval_env.set(k, v)
+                if hasattr(action_obj, 'parameters') and action_obj.parameters:
+                    for param in action_obj.parameters:
+                        param_name = param.value if hasattr(param, 'value') else str(param)
+                        if param_name in args:
+                            eval_env.set(param_name, self._wrap_value(args[param_name]))
+
+        # --- Tree-walk execution (default or fallback) ---
+        if not used_bytecode and hasattr(action_obj, 'body'):
+            evaluator = Evaluator(use_vm=False)
+            self._vm_stats["treewalk_executions"] += 1
+            try:
                 result = evaluator.eval_node(action_obj.body, eval_env, [])
-        except Exception as e:
-            if "Requirement failed" in str(e):
-                raise  # Re-raise REQUIRE failures
-            raise
+            except Exception as e:
+                if "Requirement failed" in str(e):
+                    raise  # Re-raise REQUIRE failures
+                raise
 
         # Sync modified vars back to _blockchain_state
         state_adapter = env.get("_blockchain_state")
@@ -699,6 +767,19 @@ class ContractVM:
                     state_adapter[key] = self._unwrap_value(new_val)
 
         return result
+
+    def get_vm_execution_stats(self) -> Dict[str, Any]:
+        """Return Phase 0 execution statistics."""
+        total = sum(self._vm_stats.values())
+        return {
+            **self._vm_stats,
+            "total_executions": total,
+            "bytecode_rate": (
+                self._vm_stats["bytecode_executions"] / total * 100
+                if total > 0 else 0.0
+            ),
+            "use_bytecode_vm": self._use_bytecode_vm,
+        }
 
     # ------------------------------------------------------------------
     # Value wrapping / unwrapping
