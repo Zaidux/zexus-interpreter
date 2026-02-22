@@ -26,6 +26,7 @@ mod hasher;
 mod merkle;
 mod rust_vm;
 mod signature;
+mod state_adapter;
 mod validator;
 
 use binary_bytecode::RustBytecodeReader;
@@ -34,6 +35,7 @@ use rust_vm::RustVMExecutor;
 use hasher::RustHasher;
 use merkle::RustMerkle;
 use signature::RustSignature;
+use state_adapter::RustStateAdapter;
 use validator::RustBlockValidator;
 
 // ── Python module definition ──────────────────────────────────────────
@@ -49,6 +51,7 @@ fn zexus_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustBlockValidator>()?;
     m.add_class::<RustBytecodeReader>()?;
     m.add_class::<RustVMExecutor>()?;
+    m.add_class::<RustStateAdapter>()?;
 
     // Convenience — quick check from Python:  `zexus_core.is_available()`
     #[pyfn(m)]

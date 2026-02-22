@@ -136,6 +136,17 @@ except Exception:
     _FASTOPS_AVAILABLE = False
     _fastops = None
 
+# Rust VM (Phase 3 — adaptive execution)
+try:
+    from zexus_core import RustVMExecutor as _RustVMExecutor
+    _RUST_VM_AVAILABLE = True
+except Exception:
+    _RUST_VM_AVAILABLE = False
+    _RustVMExecutor = None
+
+# Sentinel returned when Rust VM signals needs_fallback
+_RUST_VM_FALLBACK_SENTINEL = object()
+
 # Async Optimizer (Phase 8)
 try:
     from .async_optimizer import AsyncOptimizer, AsyncOptimizationLevel
@@ -425,6 +436,25 @@ class VM:
         self._in_execution = 0
         self._native_jit_auto_enabled = False
         self._native_jit_auto_threshold = 700
+
+        # --- Rust VM Adaptive Routing (Phase 3) ---
+        self._rust_vm_available = _RUST_VM_AVAILABLE
+        self._rust_vm_executor = _RustVMExecutor() if _RUST_VM_AVAILABLE else None
+        self._rust_vm_threshold = 10_000  # Switch to Rust VM when instructions >= this
+        try:
+            _env_thresh = os.environ.get("ZEXUS_RUST_VM_THRESHOLD")
+            if _env_thresh is not None:
+                self._rust_vm_threshold = int(_env_thresh)
+        except (ValueError, TypeError):
+            pass
+        self._rust_vm_enabled = self._rust_vm_available  # Can be disabled at runtime
+        self._rust_vm_stats = {
+            "rust_executions": 0,
+            "rust_fallbacks": 0,
+            "python_executions": 0,
+            "total_rust_ops": 0,
+        }
+
         self._env_version = 0
         self._name_cache: Dict[str, Tuple[Any, int]] = {}
         self._method_cache: Dict[Tuple[type, str], Any] = {}
@@ -1704,6 +1734,126 @@ class VM:
         if tag == "LIST": return [self._eval_hl_op(e) for e in op[1]]
         return None
 
+    # ==================== Rust VM Adaptive Routing (Phase 3) ====================
+
+    def _execute_via_rust_vm(self, bytecode, debug=False):
+        """Serialize bytecode to .zxc and execute via the Rust VM.
+
+        Returns the result value on success, or ``_RUST_VM_FALLBACK_SENTINEL``
+        if the Rust VM signals it needs a Python fallback (e.g. for
+        CALL_NAME / CALL_METHOD that need Python interop).
+        """
+        from .binary_bytecode import serialize as _serialize_zxc
+
+        # Serialize bytecode → .zxc binary
+        zxc_data = _serialize_zxc(bytecode, include_checksum=True)
+
+        # Build env dict for Rust (only simple serializable values)
+        rust_env = {}
+        for k, v in self.env.items():
+            if isinstance(v, (int, float, str, bool, type(None))):
+                rust_env[k] = v
+            elif isinstance(v, ZInteger):
+                rust_env[k] = v.value
+            elif isinstance(v, ZFloat):
+                rust_env[k] = v.value
+            elif isinstance(v, ZString):
+                rust_env[k] = v.value
+            elif isinstance(v, ZBoolean):
+                rust_env[k] = v.value
+            elif isinstance(v, (ZNull, type(None))):
+                rust_env[k] = None
+            # Skip non-serializable values (callables, AST nodes, etc.)
+
+        # Build state dict (if blockchain state exists)
+        rust_state = {}
+        bc_state = self.env.get("_blockchain_state")
+        if bc_state and isinstance(bc_state, dict):
+            for k, v in bc_state.items():
+                if isinstance(v, (int, float, str, bool, type(None))):
+                    rust_state[k] = v
+
+        # Gas limit
+        gas_limit = 0
+        if self.gas_metering:
+            remaining_fn = getattr(self.gas_metering, "remaining", None)
+            if callable(remaining_fn):
+                try:
+                    rem = remaining_fn()
+                    if isinstance(rem, (int, float)) and rem > 0:
+                        gas_limit = int(rem)
+                except Exception:
+                    pass
+            if gas_limit == 0:
+                gas_limit_val = getattr(self.gas_metering, "gas_limit", 0) or 0
+                gas_used_val = getattr(self.gas_metering, "gas_used", 0) or 0
+                if isinstance(gas_limit_val, (int, float)) and isinstance(gas_used_val, (int, float)):
+                    if gas_limit_val > gas_used_val:
+                        gas_limit = int(gas_limit_val - gas_used_val)
+
+        # Execute via Rust VM
+        result_dict = self._rust_vm_executor.execute(
+            zxc_data,
+            env=rust_env or None,
+            state=rust_state or None,
+            gas_limit=gas_limit,
+        )
+
+        # Check for fallback
+        if result_dict.get("needs_fallback", False):
+            self._rust_vm_stats["rust_fallbacks"] += 1
+            if debug:
+                print("[VM] Rust VM needs Python fallback — delegating to Python VM")
+            return _RUST_VM_FALLBACK_SENTINEL
+
+        # Check for errors
+        error = result_dict.get("error")
+        if error:
+            if "OutOfGas" in str(error):
+                if self.gas_metering:
+                    raise OutOfGasError(str(error))
+                raise RuntimeError(str(error))
+            if "RequireFailed" in str(error):
+                raise RuntimeError(str(error))
+            raise RuntimeError(f"Rust VM error: {error}")
+
+        # Success — update stats
+        self._rust_vm_stats["rust_executions"] += 1
+        self._rust_vm_stats["total_rust_ops"] += result_dict.get("instructions_executed", 0)
+
+        # Bridge gas usage back to Python metering
+        if self.gas_metering:
+            rust_gas = result_dict.get("gas_used", 0)
+            if rust_gas > 0:
+                gas_used_attr = getattr(self.gas_metering, "gas_used", None)
+                if gas_used_attr is not None:
+                    self.gas_metering.gas_used = gas_used_attr + rust_gas
+                add_gas = getattr(self.gas_metering, "add_gas", None)
+                if add_gas:
+                    add_gas(rust_gas)
+
+        # Merge Rust env back into Python env
+        rust_env_out = result_dict.get("env", {})
+        if rust_env_out:
+            for k, v in rust_env_out.items():
+                self.env[k] = v
+
+        # Merge blockchain state back
+        rust_state_out = result_dict.get("state", {})
+        if rust_state_out and bc_state is not None:
+            for k, v in rust_state_out.items():
+                bc_state[k] = v
+
+        if debug:
+            print(f"[VM] Rust VM executed: ops={result_dict.get('instructions_executed', 0)} "
+                  f"gas={result_dict.get('gas_used', 0)}")
+
+        return result_dict.get("result")
+
+    def get_rust_vm_stats(self):
+        """Return statistics about Rust VM usage."""
+        return dict(self._rust_vm_stats)
+
     # ==================== Fast Synchronous Dispatch (Performance Mode) ====================
 
     def _run_stack_bytecode_sync(self, bytecode, debug=False):
@@ -1735,6 +1885,19 @@ class VM:
                 pass
             except Exception:
                 pass
+        
+        # Rust VM adaptive routing (Phase 3) — delegate to Rust when
+        # the program is large enough to amortise serialisation overhead.
+        if (self._rust_vm_enabled
+                and self._rust_vm_executor is not None
+                and len(instrs) >= self._rust_vm_threshold):
+            try:
+                rust_result = self._execute_via_rust_vm(bytecode, debug)
+                if rust_result is not _RUST_VM_FALLBACK_SENTINEL:
+                    return rust_result
+                # Rust signalled needs_fallback — continue to Python VM
+            except Exception:
+                self._rust_vm_stats["rust_fallbacks"] += 1
         
         # Fast stack implementation
         stack: List[Any] = []

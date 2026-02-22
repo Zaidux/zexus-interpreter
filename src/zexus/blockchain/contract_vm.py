@@ -58,6 +58,14 @@ except ImportError:
     GasCost = None  # type: ignore
     OutOfGasError = None  # type: ignore
 
+# Rust VM (Phase 3 — adaptive contract execution)
+try:
+    from zexus_core import RustVMExecutor as _RustVMExecutor
+    _RUST_VM_AVAILABLE = True
+except Exception:
+    _RUST_VM_AVAILABLE = False
+    _RustVMExecutor = None  # type: ignore
+
 # SmartContract from security module
 try:
     from ..security import SmartContract
@@ -196,7 +204,19 @@ class ContractVM:
             "bytecode_executions": 0,
             "bytecode_fallbacks": 0,
             "treewalk_executions": 0,
+            "rust_executions": 0,
+            "rust_fallbacks": 0,
         }
+
+        # Rust VM executor (Phase 3 — adaptive contract execution)
+        self._rust_vm_executor = _RustVMExecutor() if _RUST_VM_AVAILABLE else None
+        self._rust_vm_threshold = 10_000
+        try:
+            _env_thresh = os.environ.get("ZEXUS_RUST_VM_THRESHOLD")
+            if _env_thresh is not None:
+                self._rust_vm_threshold = int(_env_thresh)
+        except (ValueError, TypeError):
+            pass
 
     # ------------------------------------------------------------------
     # Contract lifecycle
@@ -717,6 +737,16 @@ class ContractVM:
                 except Exception:
                     pass
 
+        # --- Phase 3: Rust VM execution for large contracts ---
+        if (self._rust_vm_executor is not None
+                and self._use_bytecode_vm
+                and hasattr(action_obj, 'body')):
+            rust_result = self._try_rust_vm_execution(
+                action_obj, env, args, vm, cached_bc
+            )
+            if rust_result is not None:
+                used_bytecode, result = rust_result
+
         # --- Phase 0: bytecoded execution with fallback ---
         if self._use_bytecode_vm and hasattr(action_obj, 'body'):
             try:
@@ -811,9 +841,163 @@ class ContractVM:
 
         return result
 
+    def _try_rust_vm_execution(
+        self,
+        action_obj: Any,
+        env: Dict[str, Any],
+        args: Dict[str, Any],
+        vm: "ZexusVM",
+        cached_bc: Any,
+    ) -> Optional[Tuple[bool, Any]]:
+        """Attempt to run an action through the Rust VM.
+
+        Returns ``(True, result)`` on success, ``None`` if the Rust VM
+        is unavailable or signals a fallback.  The caller should fall
+        through to Phase 0 / tree-walk when ``None`` is returned.
+        """
+        try:
+            from ..vm.binary_bytecode import serialize as _serialize_zxc
+
+            # We need serializable bytecode — either from the .zxc cache
+            # or by compiling now.
+            zxc_data = None
+            bc = cached_bc
+            if bc is None:
+                # Try to compile to bytecode so we can check instruction count
+                from ..evaluator.core import Evaluator
+                evaluator = Evaluator(use_vm=True)
+                try:
+                    bc = evaluator.compile_to_bytecode(action_obj.body)
+                except Exception:
+                    return None
+
+            # Check threshold
+            instr_count = len(getattr(bc, "instructions", []))
+            if instr_count < self._rust_vm_threshold:
+                return None  # Too small — let Python handle it
+
+            # Serialize
+            zxc_data = _serialize_zxc(bc, include_checksum=True)
+
+            # Build state dict from ContractStateAdapter
+            state_adapter = env.get("_blockchain_state")
+            rust_state = {}
+            if state_adapter and isinstance(state_adapter, dict):
+                for k, v in state_adapter.items():
+                    if isinstance(v, (int, float, str, bool, type(None))):
+                        rust_state[k] = v
+
+            # Build env dict (simple values only)
+            from ..object import (
+                Integer as ZInteger, Float as ZFloat,
+                Boolean as ZBoolean, String as ZString, Null as ZNull,
+            )
+            rust_env = {}
+            for k, v in env.items():
+                if isinstance(v, (int, float, str, bool, type(None))):
+                    rust_env[k] = v
+                elif isinstance(v, ZInteger):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZFloat):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZString):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZBoolean):
+                    rust_env[k] = v.value
+                elif isinstance(v, ZNull):
+                    rust_env[k] = None
+
+            # Add action parameters
+            if hasattr(action_obj, 'parameters') and action_obj.parameters:
+                for param in action_obj.parameters:
+                    param_name = param.value if hasattr(param, 'value') else str(param)
+                    if param_name in args:
+                        v = args[param_name]
+                        if isinstance(v, (int, float, str, bool, type(None))):
+                            rust_env[param_name] = v
+
+            # Gas limit
+            gas_limit = 0
+            if vm.gas_metering:
+                remaining_fn = getattr(vm.gas_metering, "remaining", None)
+                if callable(remaining_fn):
+                    try:
+                        rem = remaining_fn()
+                        if isinstance(rem, (int, float)) and rem > 0:
+                            gas_limit = int(rem)
+                    except Exception:
+                        pass
+                if gas_limit == 0:
+                    gl = getattr(vm.gas_metering, "gas_limit", 0) or 0
+                    gu = getattr(vm.gas_metering, "gas_used", 0) or 0
+                    if isinstance(gl, (int, float)) and isinstance(gu, (int, float)):
+                        if gl > gu:
+                            gas_limit = int(gl - gu)
+
+            # Execute
+            result_dict = self._rust_vm_executor.execute(
+                zxc_data,
+                env=rust_env or None,
+                state=rust_state or None,
+                gas_limit=gas_limit,
+            )
+
+            # Fallback?
+            if result_dict.get("needs_fallback", False):
+                self._vm_stats["rust_fallbacks"] += 1
+                return None
+
+            # Error?
+            error = result_dict.get("error")
+            if error:
+                if "OutOfGas" in str(error):
+                    raise RuntimeError(str(error))
+                if "RequireFailed" in str(error):
+                    raise RuntimeError(str(error))
+                # Other errors — fall back
+                self._vm_stats["rust_fallbacks"] += 1
+                return None
+
+            # Success — bridge gas back
+            if vm.gas_metering:
+                rust_gas = result_dict.get("gas_used", 0)
+                if rust_gas > 0:
+                    current_used = getattr(vm.gas_metering, "gas_used", None)
+                    if current_used is not None:
+                        vm.gas_metering.gas_used = current_used + rust_gas
+                    add_fn = getattr(vm.gas_metering, "add_gas", None)
+                    if add_fn:
+                        add_fn(rust_gas)
+
+            # Merge state back into ContractStateAdapter
+            rust_state_out = result_dict.get("state", {})
+            if rust_state_out and state_adapter is not None:
+                for k, v in rust_state_out.items():
+                    state_adapter[k] = v
+
+            self._vm_stats["rust_executions"] += 1
+            if self._debug:
+                logger.debug(
+                    "Rust VM execution: ops=%d gas=%d",
+                    result_dict.get("instructions_executed", 0),
+                    result_dict.get("gas_used", 0),
+                )
+
+            return (True, result_dict.get("result"))
+
+        except Exception as e:
+            self._vm_stats["rust_fallbacks"] += 1
+            logger.debug("Rust VM execution failed, falling back: %s", e)
+            return None
+
     def get_vm_execution_stats(self) -> Dict[str, Any]:
-        """Return Phase 0 execution statistics."""
-        total = sum(self._vm_stats.values())
+        """Return Phase 0-3 execution statistics."""
+        total = (
+            self._vm_stats["bytecode_executions"]
+            + self._vm_stats["bytecode_fallbacks"]
+            + self._vm_stats["treewalk_executions"]
+            + self._vm_stats["rust_executions"]
+        )
         return {
             **self._vm_stats,
             "total_executions": total,
@@ -821,7 +1005,13 @@ class ContractVM:
                 self._vm_stats["bytecode_executions"] / total * 100
                 if total > 0 else 0.0
             ),
+            "rust_rate": (
+                self._vm_stats["rust_executions"] / total * 100
+                if total > 0 else 0.0
+            ),
             "use_bytecode_vm": self._use_bytecode_vm,
+            "rust_vm_available": self._rust_vm_executor is not None,
+            "rust_vm_threshold": self._rust_vm_threshold,
         }
 
     # ------------------------------------------------------------------
