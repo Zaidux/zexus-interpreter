@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-// Zexus Blockchain — Rust Bytecode Interpreter (Phase 2)
+// Zexus Blockchain — Rust Bytecode Interpreter (Phase 2 + Phase 6)
 // ─────────────────────────────────────────────────────────────────────
 //
 // A complete stack-machine bytecode interpreter written in Rust that
@@ -11,6 +11,11 @@
 //   2.  Convert ZxcModule into VM-internal representation (VmProgram)
 //   3.  Execute VmProgram on the RustVM stack machine
 //   4.  Return result to Python via PyO3
+//
+// Phase 6: Contract builtins (keccak256, verify_sig, emit, get_balance,
+//   transfer, block_number, block_timestamp) execute in pure Rust.
+//   Cross-contract calls (contract_call, static_call, delegate_call)
+//   still fall back to Python when needed.
 //
 // Value system:
 //   The VM operates on `ZxValue` — a Rust enum covering all Zexus
@@ -37,6 +42,9 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::binary_bytecode::{self, Operand, ZxcModule, ZxcValue};
+use crate::signature::verify_single;
+use sha2::{Digest, Sha256};
+use tiny_keccak::{Hasher as TinyHasher, Keccak};
 
 // ── Opcode constants (mirrors Python Opcode IntEnum) ─────────────────
 
@@ -586,6 +594,9 @@ pub struct RustVM {
     // Audit log
     audit_log: Vec<(String, ZxValue)>,
 
+    // Contract events (Phase 6) — collected by emit() builtin and EMIT_EVENT opcode
+    events: Vec<(String, ZxValue)>,
+
     // Output capture (for PRINT)
     output: Vec<String>,
 
@@ -621,6 +632,7 @@ impl RustVM {
             try_stack: Vec::new(),
             ledger: Vec::new(),
             audit_log: Vec::new(),
+            events: Vec::new(),
             output: Vec::new(),
             instructions_executed: 0,
         }
@@ -1146,13 +1158,68 @@ impl RustVM {
                 }
 
                 // ── Function calls ───────────────────────────────
-                // These require Python interop for general callables.
-                // For pure-Rust execution, we handle simple builtins
-                // and signal NeedsPythonFallback for complex cases.
-                Op::CALL_NAME | Op::CALL_TOP | Op::CALL_METHOD
-                | Op::CALL_BUILTIN | Op::CALL_FUNC_CONST => {
-                    // For Phase 2 MVP: signal fallback to Python for calls
-                    // Phase 3+ will inline common builtins
+                // CALL_BUILTIN dispatches to Rust-native builtins (Phase 6).
+                // CALL_NAME also checks builtins before falling back.
+                // Other call types still require Python interop.
+
+                Op::CALL_BUILTIN => {
+                    let (name_idx, argc) = match &operand {
+                        Operand::Pair(a, b) => (*a, *b as usize),
+                        Operand::U32(idx) => (*idx, 0usize),
+                        _ => {
+                            return Err(VmError::RuntimeError(
+                                "Invalid CALL_BUILTIN operand".into(),
+                            ));
+                        }
+                    };
+                    let name = self.const_str(name_idx);
+                    // Dynamic gas: base 8 + 2*argc
+                    if argc > 0 {
+                        self.consume_gas_dynamic(Op::NOP, argc as u64 * 2)?;
+                    }
+                    let mut args = Vec::with_capacity(argc);
+                    for _ in 0..argc {
+                        args.push(self.pop());
+                    }
+                    args.reverse();
+                    let result = self.dispatch_builtin(&name, &args)?;
+                    self.push(result);
+                }
+
+                Op::CALL_NAME => {
+                    let (name_idx, argc) = match &operand {
+                        Operand::Pair(a, b) => (*a, *b as usize),
+                        Operand::U32(idx) => (*idx, 0usize),
+                        _ => {
+                            return Err(VmError::RuntimeError(
+                                "Invalid CALL_NAME operand".into(),
+                            ));
+                        }
+                    };
+                    let name = self.const_str(name_idx);
+                    // Dynamic gas: base 10 + 2*argc
+                    if argc > 0 {
+                        self.consume_gas_dynamic(Op::NOP, argc as u64 * 2)?;
+                    }
+                    let mut args = Vec::with_capacity(argc);
+                    for _ in 0..argc {
+                        args.push(self.pop());
+                    }
+                    args.reverse();
+
+                    // Check if it's a known builtin first
+                    if Self::is_known_builtin(&name) {
+                        let result = self.dispatch_builtin(&name, &args)?;
+                        self.push(result);
+                    } else {
+                        // Check env for user-defined functions
+                        // For now, fall back to Python for non-builtin calls
+                        return Err(VmError::NeedsPythonFallback);
+                    }
+                }
+
+                Op::CALL_TOP | Op::CALL_METHOD | Op::CALL_FUNC_CONST => {
+                    // These require Python interop for general callables
                     return Err(VmError::NeedsPythonFallback);
                 }
 
@@ -1286,14 +1353,13 @@ impl RustVM {
                 }
 
                 Op::VERIFY_SIGNATURE => {
-                    // Simplified: pop pubkey, message, signature
-                    // Full ECDSA verification would go through RustSignature
+                    // Full ECDSA-secp256k1 verification via RustSignature
                     if self.stack.len() >= 3 {
-                        let _pk = self.pop();
-                        let _msg = self.pop();
-                        let _sig = self.pop();
-                        // TODO: wire through k256 verification
-                        self.push(ZxValue::Bool(false));
+                        let pk = self.pop();
+                        let msg = self.pop();
+                        let sig = self.pop();
+                        let result = Self::builtin_verify_sig(&sig, &msg, &pk);
+                        self.push(ZxValue::Bool(result));
                     } else {
                         self.push(ZxValue::Bool(false));
                     }
@@ -1339,10 +1405,22 @@ impl RustVM {
                     }
                 }
 
-                Op::EMIT_EVENT | Op::REGISTER_EVENT => {
-                    // Events: pop data, store for Python to collect
+                Op::EMIT_EVENT => {
+                    // Pop event data and name, store in events list
+                    let data = self.pop();
+                    let name_val = match &operand {
+                        Operand::U32(idx) => self.const_str(*idx),
+                        _ => {
+                            let n = self.pop();
+                            n.display_str()
+                        }
+                    };
+                    self.events.push((name_val, data));
+                }
+
+                Op::REGISTER_EVENT => {
+                    // Event registration is a no-op at runtime — schema is compile-time
                     let _data = self.pop();
-                    // No-op in pure Rust — Python collects events post-execution
                 }
 
                 Op::AUDIT_LOG => {
@@ -1440,6 +1518,555 @@ impl RustVM {
     /// Get the ledger entries.
     pub fn get_ledger(&self) -> &[ZxValue] {
         &self.ledger
+    }
+
+    /// Get collected events (from emit() builtin and EMIT_EVENT opcode).
+    pub fn get_events(&self) -> &[(String, ZxValue)] {
+        &self.events
+    }
+
+    // ── Phase 6: Contract Builtins ──────────────────────────────────
+
+    /// List of builtin names handled in pure Rust.
+    const KNOWN_BUILTINS: &'static [&'static str] = &[
+        "keccak256",
+        "verify_sig",
+        "emit",
+        "get_balance",
+        "transfer",
+        "block_number",
+        "block_timestamp",
+        "sha256",
+        "print",
+        "len",
+        "str",
+        "int",
+        "float",
+        "type",
+        "abs",
+        "min",
+        "max",
+        "to_string",
+        "to_int",
+        "to_float",
+        "keys",
+        "values",
+        "push",
+        "pop",
+        "contains",
+        "index_of",
+        "slice",
+        "reverse",
+        "sort",
+        "concat",
+        "split",
+        "join",
+        "trim",
+        "upper",
+        "lower",
+        "starts_with",
+        "ends_with",
+        "replace",
+        "substring",
+        "char_at",
+    ];
+
+    /// Check if a name refers to a known Rust-native builtin.
+    fn is_known_builtin(name: &str) -> bool {
+        Self::KNOWN_BUILTINS.contains(&name)
+    }
+
+    /// Dispatch a builtin call by name.  Returns the result or an error.
+    fn dispatch_builtin(&mut self, name: &str, args: &[ZxValue]) -> Result<ZxValue, VmError> {
+        match name {
+            // ── Crypto ───────────────────────────────────────
+            "keccak256" => {
+                let data = args.first().cloned().unwrap_or(ZxValue::Str(String::new()));
+                Ok(Self::builtin_keccak256(&data))
+            }
+            "sha256" => {
+                let data = args.first().cloned().unwrap_or(ZxValue::Str(String::new()));
+                Ok(Self::builtin_sha256(&data))
+            }
+            "verify_sig" => {
+                if args.len() < 3 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                Ok(ZxValue::Bool(Self::builtin_verify_sig(
+                    &args[0], &args[1], &args[2],
+                )))
+            }
+
+            // ── Events ───────────────────────────────────────
+            "emit" => {
+                let event_name = args
+                    .first()
+                    .map(|v| v.display_str())
+                    .unwrap_or_default();
+                let event_data = args.get(1).cloned().unwrap_or(ZxValue::Null);
+                self.events.push((event_name, event_data));
+                Ok(ZxValue::Null)
+            }
+
+            // ── Chain info ───────────────────────────────────
+            "block_number" => {
+                let val = self
+                    .env
+                    .get("_block_number")
+                    .cloned()
+                    .unwrap_or(ZxValue::Int(0));
+                Ok(val)
+            }
+            "block_timestamp" => {
+                let val = self
+                    .env
+                    .get("_block_timestamp")
+                    .cloned()
+                    .unwrap_or(ZxValue::Float(0.0));
+                Ok(val)
+            }
+
+            // ── Balance / Transfer ───────────────────────────
+            "get_balance" => {
+                let addr = args
+                    .first()
+                    .map(|v| v.display_str())
+                    .unwrap_or_default();
+                let key = format!("_balance:{}", addr);
+                let balance = self
+                    .blockchain_state
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or(ZxValue::Int(0));
+                Ok(balance)
+            }
+            "transfer" => {
+                if args.len() < 2 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                let to_addr = args[0].display_str();
+                let amount = args[1].as_int();
+                if amount <= 0 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                // Get caller address from env
+                let caller = self
+                    .env
+                    .get("_caller")
+                    .map(|v| v.display_str())
+                    .unwrap_or_default();
+                let from_key = format!("_balance:{}", caller);
+                let to_key = format!("_balance:{}", to_addr);
+
+                let from_balance = self
+                    .blockchain_state
+                    .get(&from_key)
+                    .map(|v| v.as_int())
+                    .unwrap_or(0);
+                if from_balance < amount {
+                    return Ok(ZxValue::Bool(false));
+                }
+                let to_balance = self
+                    .blockchain_state
+                    .get(&to_key)
+                    .map(|v| v.as_int())
+                    .unwrap_or(0);
+                // Overflow check
+                if to_balance.checked_add(amount).is_none() {
+                    return Ok(ZxValue::Bool(false));
+                }
+                // Apply transfer
+                if self.in_transaction {
+                    self.tx_pending
+                        .insert(from_key, ZxValue::Int(from_balance - amount));
+                    self.tx_pending
+                        .insert(to_key, ZxValue::Int(to_balance + amount));
+                } else {
+                    self.blockchain_state
+                        .insert(from_key, ZxValue::Int(from_balance - amount));
+                    self.blockchain_state
+                        .insert(to_key, ZxValue::Int(to_balance + amount));
+                }
+                Ok(ZxValue::Bool(true))
+            }
+
+            // ── I/O ──────────────────────────────────────────
+            "print" => {
+                let text = args
+                    .iter()
+                    .map(|v| v.display_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                self.output.push(text);
+                Ok(ZxValue::Null)
+            }
+
+            // ── Type / Conversion builtins ───────────────────
+            "len" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::Str(s) => Ok(ZxValue::Int(s.len() as i64)),
+                    ZxValue::List(v) => Ok(ZxValue::Int(v.len() as i64)),
+                    ZxValue::Map(v) => Ok(ZxValue::Int(v.len() as i64)),
+                    _ => Ok(ZxValue::Int(0)),
+                }
+            }
+            "str" | "to_string" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                Ok(ZxValue::Str(val.display_str()))
+            }
+            "int" | "to_int" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::Str(s) => {
+                        let i = s.parse::<i64>().unwrap_or(0);
+                        Ok(ZxValue::Int(i))
+                    }
+                    _ => Ok(ZxValue::Int(val.as_int())),
+                }
+            }
+            "float" | "to_float" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::Str(s) => {
+                        let f = s.parse::<f64>().unwrap_or(0.0);
+                        Ok(ZxValue::Float(f))
+                    }
+                    _ => Ok(ZxValue::Float(val.as_float())),
+                }
+            }
+            "type" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                let t = match &val {
+                    ZxValue::Null => "null",
+                    ZxValue::Bool(_) => "bool",
+                    ZxValue::Int(_) => "int",
+                    ZxValue::Float(_) => "float",
+                    ZxValue::Str(_) => "string",
+                    ZxValue::List(_) => "list",
+                    ZxValue::Map(_) => "map",
+                    ZxValue::PyObj(_) => "object",
+                };
+                Ok(ZxValue::Str(t.to_string()))
+            }
+            "abs" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Int(0));
+                match &val {
+                    ZxValue::Int(i) => Ok(ZxValue::Int(i.abs())),
+                    ZxValue::Float(f) => Ok(ZxValue::Float(f.abs())),
+                    _ => Ok(ZxValue::Int(val.as_int().abs())),
+                }
+            }
+            "min" => {
+                if args.len() < 2 {
+                    return Ok(args.first().cloned().unwrap_or(ZxValue::Null));
+                }
+                let a = &args[0];
+                let b = &args[1];
+                match a.partial_cmp(b) {
+                    Some(std::cmp::Ordering::Less) | Some(std::cmp::Ordering::Equal) => {
+                        Ok(a.clone())
+                    }
+                    _ => Ok(b.clone()),
+                }
+            }
+            "max" => {
+                if args.len() < 2 {
+                    return Ok(args.first().cloned().unwrap_or(ZxValue::Null));
+                }
+                let a = &args[0];
+                let b = &args[1];
+                match a.partial_cmp(b) {
+                    Some(std::cmp::Ordering::Greater) | Some(std::cmp::Ordering::Equal) => {
+                        Ok(a.clone())
+                    }
+                    _ => Ok(b.clone()),
+                }
+            }
+
+            // ── Collection builtins ──────────────────────────
+            "keys" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::Map(pairs) => {
+                        let keys: Vec<ZxValue> =
+                            pairs.iter().map(|(k, _)| ZxValue::Str(k.clone())).collect();
+                        Ok(ZxValue::List(keys))
+                    }
+                    _ => Ok(ZxValue::List(vec![])),
+                }
+            }
+            "values" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::Map(pairs) => {
+                        let vals: Vec<ZxValue> =
+                            pairs.iter().map(|(_, v)| v.clone()).collect();
+                        Ok(ZxValue::List(vals))
+                    }
+                    _ => Ok(ZxValue::List(vec![])),
+                }
+            }
+            "push" => {
+                // push(list, item) → list with item appended
+                if args.len() < 2 {
+                    return Ok(args.first().cloned().unwrap_or(ZxValue::Null));
+                }
+                match &args[0] {
+                    ZxValue::List(items) => {
+                        let mut new_list = items.clone();
+                        new_list.push(args[1].clone());
+                        Ok(ZxValue::List(new_list))
+                    }
+                    _ => Ok(args[0].clone()),
+                }
+            }
+            "pop" => {
+                // pop(list) → last element (or null)
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match &val {
+                    ZxValue::List(items) => {
+                        Ok(items.last().cloned().unwrap_or(ZxValue::Null))
+                    }
+                    _ => Ok(ZxValue::Null),
+                }
+            }
+            "contains" => {
+                if args.len() < 2 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                match &args[0] {
+                    ZxValue::List(items) => {
+                        let found = items.iter().any(|item| item == &args[1]);
+                        Ok(ZxValue::Bool(found))
+                    }
+                    ZxValue::Str(s) => {
+                        let needle = args[1].display_str();
+                        Ok(ZxValue::Bool(s.contains(&needle)))
+                    }
+                    ZxValue::Map(pairs) => {
+                        let key = args[1].display_str();
+                        let found = pairs.iter().any(|(k, _)| k == &key);
+                        Ok(ZxValue::Bool(found))
+                    }
+                    _ => Ok(ZxValue::Bool(false)),
+                }
+            }
+            "index_of" => {
+                if args.len() < 2 {
+                    return Ok(ZxValue::Int(-1));
+                }
+                match &args[0] {
+                    ZxValue::List(items) => {
+                        let pos = items.iter().position(|item| item == &args[1]);
+                        Ok(ZxValue::Int(pos.map(|p| p as i64).unwrap_or(-1)))
+                    }
+                    ZxValue::Str(s) => {
+                        let needle = args[1].display_str();
+                        let pos = s.find(&needle);
+                        Ok(ZxValue::Int(pos.map(|p| p as i64).unwrap_or(-1)))
+                    }
+                    _ => Ok(ZxValue::Int(-1)),
+                }
+            }
+            "slice" => {
+                // slice(collection, start, end?)
+                let coll = args.first().cloned().unwrap_or(ZxValue::Null);
+                let start = args.get(1).map(|v| v.as_int()).unwrap_or(0).max(0) as usize;
+                let end_arg = args.get(2);
+                match &coll {
+                    ZxValue::List(items) => {
+                        let end = end_arg
+                            .map(|v| v.as_int().max(0) as usize)
+                            .unwrap_or(items.len())
+                            .min(items.len());
+                        let start = start.min(end);
+                        Ok(ZxValue::List(items[start..end].to_vec()))
+                    }
+                    ZxValue::Str(s) => {
+                        let chars: Vec<char> = s.chars().collect();
+                        let end = end_arg
+                            .map(|v| v.as_int().max(0) as usize)
+                            .unwrap_or(chars.len())
+                            .min(chars.len());
+                        let start = start.min(end);
+                        Ok(ZxValue::Str(chars[start..end].iter().collect()))
+                    }
+                    _ => Ok(ZxValue::Null),
+                }
+            }
+            "reverse" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match val {
+                    ZxValue::List(mut items) => {
+                        items.reverse();
+                        Ok(ZxValue::List(items))
+                    }
+                    ZxValue::Str(s) => Ok(ZxValue::Str(s.chars().rev().collect())),
+                    _ => Ok(val),
+                }
+            }
+            "sort" => {
+                let val = args.first().cloned().unwrap_or(ZxValue::Null);
+                match val {
+                    ZxValue::List(mut items) => {
+                        items.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        Ok(ZxValue::List(items))
+                    }
+                    _ => Ok(val),
+                }
+            }
+            "concat" => {
+                // concat(a, b) — concatenate strings or lists
+                if args.len() < 2 {
+                    return Ok(args.first().cloned().unwrap_or(ZxValue::Null));
+                }
+                match (&args[0], &args[1]) {
+                    (ZxValue::Str(a), ZxValue::Str(b)) => {
+                        Ok(ZxValue::Str(format!("{}{}", a, b)))
+                    }
+                    (ZxValue::List(a), ZxValue::List(b)) => {
+                        let mut result = a.clone();
+                        result.extend(b.iter().cloned());
+                        Ok(ZxValue::List(result))
+                    }
+                    _ => Ok(ZxValue::Str(format!(
+                        "{}{}",
+                        args[0].display_str(),
+                        args[1].display_str()
+                    ))),
+                }
+            }
+
+            // ── String builtins ──────────────────────────────
+            "split" => {
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                let sep = args.get(1).map(|v| v.display_str()).unwrap_or_else(|| " ".to_string());
+                let parts: Vec<ZxValue> = s.split(&sep).map(|p| ZxValue::Str(p.to_string())).collect();
+                Ok(ZxValue::List(parts))
+            }
+            "join" => {
+                // join(list, separator)
+                let list = args.first().cloned().unwrap_or(ZxValue::List(vec![]));
+                let sep = args.get(1).map(|v| v.display_str()).unwrap_or_else(|| ",".to_string());
+                match &list {
+                    ZxValue::List(items) => {
+                        let joined: String = items
+                            .iter()
+                            .map(|v| v.display_str())
+                            .collect::<Vec<_>>()
+                            .join(&sep);
+                        Ok(ZxValue::Str(joined))
+                    }
+                    _ => Ok(ZxValue::Str(list.display_str())),
+                }
+            }
+            "trim" => {
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                Ok(ZxValue::Str(s.trim().to_string()))
+            }
+            "upper" => {
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                Ok(ZxValue::Str(s.to_uppercase()))
+            }
+            "lower" => {
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                Ok(ZxValue::Str(s.to_lowercase()))
+            }
+            "starts_with" => {
+                if args.len() < 2 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                let s = args[0].display_str();
+                let prefix = args[1].display_str();
+                Ok(ZxValue::Bool(s.starts_with(&prefix)))
+            }
+            "ends_with" => {
+                if args.len() < 2 {
+                    return Ok(ZxValue::Bool(false));
+                }
+                let s = args[0].display_str();
+                let suffix = args[1].display_str();
+                Ok(ZxValue::Bool(s.ends_with(&suffix)))
+            }
+            "replace" => {
+                // replace(string, old, new)
+                if args.len() < 3 {
+                    return Ok(args.first().cloned().unwrap_or(ZxValue::Null));
+                }
+                let s = args[0].display_str();
+                let old = args[1].display_str();
+                let new = args[2].display_str();
+                Ok(ZxValue::Str(s.replace(&old, &new)))
+            }
+            "substring" => {
+                // substring(string, start, end?)
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                let chars: Vec<char> = s.chars().collect();
+                let start = args.get(1).map(|v| v.as_int().max(0) as usize).unwrap_or(0);
+                let end = args
+                    .get(2)
+                    .map(|v| v.as_int().max(0) as usize)
+                    .unwrap_or(chars.len())
+                    .min(chars.len());
+                let start = start.min(end);
+                Ok(ZxValue::Str(chars[start..end].iter().collect()))
+            }
+            "char_at" => {
+                let s = args.first().map(|v| v.display_str()).unwrap_or_default();
+                let idx = args.get(1).map(|v| v.as_int().max(0) as usize).unwrap_or(0);
+                let ch = s.chars().nth(idx);
+                Ok(ch
+                    .map(|c| ZxValue::Str(c.to_string()))
+                    .unwrap_or(ZxValue::Null))
+            }
+
+            // ── Cross-contract calls (require Python) ────────
+            "contract_call" | "static_call" | "delegate_call" => {
+                Err(VmError::NeedsPythonFallback)
+            }
+
+            // ── Unknown ──────────────────────────────────────
+            _ => Err(VmError::NeedsPythonFallback),
+        }
+    }
+
+    // ── Builtin implementations ─────────────────────────────────────
+
+    /// Keccak-256 hash → hex string.
+    fn builtin_keccak256(data: &ZxValue) -> ZxValue {
+        let input = data.display_str();
+        let mut hasher = Keccak::v256();
+        let mut output = [0u8; 32];
+        hasher.update(input.as_bytes());
+        hasher.finalize(&mut output);
+        ZxValue::Str(hex::encode(output))
+    }
+
+    /// SHA-256 hash → hex string.
+    fn builtin_sha256(data: &ZxValue) -> ZxValue {
+        let input = data.display_str();
+        let hash = Sha256::digest(input.as_bytes());
+        ZxValue::Str(hex::encode(hash))
+    }
+
+    /// ECDSA-secp256k1 signature verification.
+    fn builtin_verify_sig(sig: &ZxValue, msg: &ZxValue, pk: &ZxValue) -> bool {
+        let sig_bytes = Self::zxvalue_to_bytes(sig);
+        let msg_bytes = Self::zxvalue_to_bytes(msg);
+        let pk_bytes = Self::zxvalue_to_bytes(pk);
+        verify_single(&msg_bytes, &sig_bytes, &pk_bytes)
+    }
+
+    /// Convert ZxValue to bytes (for crypto operations).
+    fn zxvalue_to_bytes(val: &ZxValue) -> Vec<u8> {
+        match val {
+            ZxValue::Str(s) => {
+                // Try hex decode first, then fall back to raw bytes
+                hex::decode(s).unwrap_or_else(|_| s.as_bytes().to_vec())
+            }
+            _ => val.display_str().as_bytes().to_vec(),
+        }
     }
 }
 
@@ -1598,6 +2225,16 @@ impl RustVMExecutor {
             py_output.append(line)?;
         }
         result_dict.set_item("output", py_output)?;
+
+        // Events (Phase 6)
+        let py_events = PyList::empty_bound(py);
+        for (name, data) in vm.get_events() {
+            let ev = PyDict::new_bound(py);
+            ev.set_item("event", name)?;
+            ev.set_item("data", zx_to_py(py, data))?;
+            py_events.append(ev)?;
+        }
+        result_dict.set_item("events", py_events)?;
 
         // Stats
         let (instr_count, gas_used, _gas_limit) = vm.get_stats();

@@ -1081,6 +1081,21 @@ class ContractVM:
                 elif isinstance(v, ZNull):
                     rust_env[k] = None
 
+            # Phase 6: Inject chain info for Rust builtins
+            if "_block_number" not in rust_env:
+                try:
+                    rust_env["_block_number"] = self._chain.height
+                except Exception:
+                    rust_env["_block_number"] = 0
+            if "_block_timestamp" not in rust_env:
+                try:
+                    tip = self._chain.tip
+                    rust_env["_block_timestamp"] = (
+                        tip.header.timestamp if tip else 0.0
+                    )
+                except Exception:
+                    rust_env["_block_timestamp"] = 0.0
+
             # Build args dict (simple values)
             rust_args = {}
             for k, v in args.items():
@@ -1117,6 +1132,19 @@ class ContractVM:
                     state_adapter.clear()
                     state_adapter.update(new_state)
                 state_adapter.commit()
+
+                # Phase 6: Collect events emitted by Rust builtins
+                rust_events = result_dict.get("events", [])
+                import time as _time
+                for ev in rust_events:
+                    ev_name = ev.get("event", "") if isinstance(ev, dict) else str(ev)
+                    ev_data = ev.get("data", None) if isinstance(ev, dict) else None
+                    logs.append({
+                        "event": ev_name,
+                        "data": ev_data,
+                        "timestamp": _time.time(),
+                        "contract": contract_address,
+                    })
 
                 self._vm_stats["rust_executions"] += 1
 

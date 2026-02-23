@@ -592,18 +592,31 @@ class TestRustVMViaRouting:
 class TestFallbackBehaviour:
 
     def test_call_name_triggers_fallback(self):
-        """CALL_NAME should trigger needs_fallback in Rust VM."""
+        """CALL_NAME with unknown function triggers needs_fallback in Rust VM.
+        
+        Note: Phase 6 added Rust-native dispatch for known builtins via
+        CALL_NAME, so only *unknown* names trigger fallback now.
+        """
         RustVMExecutor = _try_import_executor()
         executor = RustVMExecutor()
 
-        # Program with CALL_NAME (needs Python interop)
-        data = _make_zxc(["print", "hello"], [
+        # Program with CALL_NAME for an unknown function (needs Python interop)
+        data = _make_zxc(["my_custom_func", "hello"], [
             (Opcode.LOAD_CONST, 1),     # "hello"
-            (Opcode.CALL_NAME, 0),      # call print("hello")
+            (Opcode.CALL_NAME, 0),      # call my_custom_func("hello")
             (Opcode.RETURN, None),
         ])
         result = executor.execute(data)
         assert result["needs_fallback"] is True
+
+        # But known builtins via CALL_NAME should NOT fall back (Phase 6)
+        data2 = _make_zxc(["print", "hello"], [
+            (Opcode.LOAD_CONST, 1),     # "hello"
+            (Opcode.CALL_NAME, 0),      # call print("hello")
+            (Opcode.RETURN, None),
+        ])
+        result2 = executor.execute(data2)
+        assert result2["needs_fallback"] is False
 
     def test_fallback_to_python_vm(self):
         """When Rust VM falls back, Python VM should handle the execution."""
@@ -621,7 +634,7 @@ class TestFallbackBehaviour:
         # via the executor:
         RustVMExecutor = _try_import_executor()
         executor = RustVMExecutor()
-        data = _make_zxc(["test_fn", "arg1"], [
+        data = _make_zxc(["unknown_fn", "arg1"], [
             (Opcode.LOAD_CONST, 1),
             (Opcode.CALL_NAME, 0),
             (Opcode.RETURN, None),

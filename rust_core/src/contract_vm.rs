@@ -384,6 +384,16 @@ impl RustContractVM {
                 }
                 let _ = d.set_item("env", new_env_py);
 
+                // Phase 6: Return events emitted by Rust builtins
+                let events_list = PyList::empty_bound(py);
+                for (event_name, event_data) in vm.get_events() {
+                    let ev = PyDict::new_bound(py);
+                    let _ = ev.set_item("event", event_name.as_str());
+                    let _ = ev.set_item("data", zx_to_py(py, event_data));
+                    let _ = events_list.append(ev);
+                }
+                let _ = d.set_item("events", events_list);
+
                 Ok(d_py)
             }
             Err(crate::rust_vm::VmError::OutOfGas {

@@ -127,6 +127,9 @@ struct NativeTxReceipt {
     state_changes: HashMap<String, ZxValue>,
     #[serde(skip)]
     new_state: HashMap<String, ZxValue>,
+    /// Events emitted during execution (Phase 6).
+    #[serde(skip)]
+    events: Vec<(String, ZxValue)>,
     needs_fallback: bool,
     index: usize,
 }
@@ -145,6 +148,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
                 error: format!("Deserialization: {}", e),
                 state_changes: HashMap::new(),
                 new_state: HashMap::new(),
+                events: Vec::new(),
                 needs_fallback: true,
                 index: input.index,
             };
@@ -167,6 +171,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
     let (instr_count, gas_used, _) = vm.get_stats();
     let gas_full = ((gas_used as f64) / input.gas_discount).round() as u64;
     let gas_saved = gas_full.saturating_sub(gas_used);
+    let events = vm.get_events().to_vec();
 
     match result {
         Ok(_) => {
@@ -196,6 +201,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
                 error: String::new(),
                 state_changes: changes,
                 new_state,
+                events,
                 needs_fallback: false,
                 index: input.index,
             }
@@ -208,6 +214,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
             error: "NeedsPythonFallback".into(),
             state_changes: HashMap::new(),
             new_state: HashMap::new(),
+            events,
             needs_fallback: true,
             index: input.index,
         },
@@ -219,6 +226,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
             error: format!("OutOfGas: used={}, limit={}, op={}", used, limit, opcode),
             state_changes: HashMap::new(),
             new_state: HashMap::new(),
+            events,
             needs_fallback: false,
             index: input.index,
         },
@@ -230,6 +238,7 @@ fn execute_native_tx(input: &NativeTxInput) -> NativeTxReceipt {
             error: format!("{}", e),
             state_changes: HashMap::new(),
             new_state: HashMap::new(),
+            events,
             needs_fallback: false,
             index: input.index,
         },
@@ -755,6 +764,19 @@ impl RustBatchExecutor {
             }
         }
         let _ = d.set_item("state_changes", changes_dict);
+
+        // Events collected across all receipts (Phase 6)
+        let events_list = PyList::empty_bound(py);
+        for r in &all_receipts {
+            for (event_name, event_data) in &r.events {
+                let ev = PyDict::new_bound(py);
+                let _ = ev.set_item("event", event_name.as_str());
+                let _ = ev.set_item("data", crate::rust_vm::zx_to_py(py, event_data));
+                let _ = ev.set_item("index", r.index);
+                let _ = events_list.append(ev);
+            }
+        }
+        let _ = d.set_item("events", events_list);
 
         Ok(d.to_object(py))
     }
