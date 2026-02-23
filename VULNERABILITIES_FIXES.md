@@ -66,13 +66,13 @@
 
 | ID | Area | Finding | Status |
 |----|------|---------|--------|
-| I1 | Compilers | VM compiler has `ForStatement`; evaluator compiler does not | ⬜ Not started |
-| I2 | Compilers | Evaluator compiler supports ~18 statement types the VM compiler does not (`NativeStatement`, `DeferStatement`, `PatternStatement`, `LambdaExpression`, `SpawnExpression`, `EmitStatement`, `ProtocolStatement`, etc.) | ⬜ Not started |
-| I3 | Compilers | `PropertyAccessExpression` emits different opcodes (`INDEX` vs `GET_ATTR`) between compilers | ⬜ Not started |
-| I4 | Compilers | `PrintStatement` multi-value support only in VM compiler | ⬜ Not started |
-| I5 | Compilers | `LetStatement` destructuring only in VM compiler | ⬜ Not started |
-| I6 | Compilers | `ContinueStatement` semantics differ (jump-to-loop-start vs custom `CONTINUE` opcode) | ⬜ Not started |
-| I7 | Compilers | `EXPORT` opcode not handled in sync execution path | ⬜ Not started |
+| I1 | Compilers | VM compiler has `ForStatement`; evaluator compiler does not | ✅ Done |
+| I2 | Compilers | Evaluator compiler supports ~18 statement types the VM compiler does not (`NativeStatement`, `DeferStatement`, `PatternStatement`, `LambdaExpression`, `SpawnExpression`, `EmitStatement`, `ProtocolStatement`, etc.) | ✅ Done |
+| I3 | Compilers | `PropertyAccessExpression` emits different opcodes (`INDEX` vs `GET_ATTR`) between compilers | ✅ Done |
+| I4 | Compilers | `PrintStatement` multi-value support only in VM compiler | ✅ Done |
+| I5 | Compilers | `LetStatement` destructuring only in VM compiler | ✅ Done |
+| I6 | Compilers | `ContinueStatement` semantics differ (jump-to-loop-start vs custom `CONTINUE` opcode) | ✅ Done |
+| I7 | Compilers | `EXPORT` opcode not handled in sync execution path | ✅ Done |
 
 ---
 

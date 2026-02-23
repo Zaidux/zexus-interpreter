@@ -271,15 +271,51 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_LetStatement(self, node: zexus_ast.LetStatement):
         """Compile let statement"""
-        # Compile the value expression
+        # Support destructuring patterns: let {a, b: x} = expr; let [x, y, ..rest] = expr
+        if isinstance(getattr(node, "name", None), zexus_ast.DestructurePattern):
+            self._compile_node(node.value)
+            pattern = node.name
+            if pattern.kind == 'map':
+                for source_key, target_name in pattern.bindings:
+                    self.builder.emit("DUP")
+                    self.builder.emit_constant(source_key)
+                    self.builder.emit("INDEX")
+                    self.builder.emit_store(target_name)
+                self.builder.emit("POP")
+                return
+            if pattern.kind == 'list':
+                for idx, target_name in pattern.bindings:
+                    self.builder.emit("DUP")
+                    self.builder.emit_constant(idx)
+                    self.builder.emit("INDEX")
+                    self.builder.emit_store(target_name)
+                if pattern.rest:
+                    rest_start = len(pattern.bindings)
+                    self.builder.emit("DUP")
+                    self.builder.emit_constant(rest_start)
+                    self.builder.emit_constant(None)
+                    self.builder.emit("SLICE")
+                    self.builder.emit_store(pattern.rest)
+                self.builder.emit("POP")
+                return
+
+            self.errors.append(f"Unsupported destructure pattern kind: {pattern.kind}")
+            self.builder.emit("POP")
+            return
+
+        # Regular identifier assignment
         self._compile_node(node.value)
-        # Store it
         name = str(node.name.value).strip()
         self.builder.emit_store(name)
     
     def _compile_ConstStatement(self, node: zexus_ast.ConstStatement):
         """Compile const statement"""
-        # Similar to let for now
+        # Const supports the same destructuring patterns as let.
+        if isinstance(getattr(node, "name", None), zexus_ast.DestructurePattern):
+            # Reuse let destructuring behavior
+            fake_let = node
+            return self._compile_LetStatement(fake_let)
+
         self._compile_node(node.value)
         name = str(node.name.value).strip()
         self.builder.emit_store(name)
@@ -293,10 +329,18 @@ class EvaluatorBytecodeCompiler:
         self.builder.emit("RETURN")
     
     def _compile_ContinueStatement(self, node: zexus_ast.ContinueStatement):
-        """Compile continue statement - enables error recovery mode"""
-        # Emit a special instruction or constant to signal continue mode
-        # For now, emit a CONTINUE instruction that the VM can handle
-        self.builder.emit("CONTINUE")
+        """Compile continue statement.
+
+        Behavior (mirrors VM compiler):
+        - Inside a loop: jump to the loop's continue target
+        - Outside a loop: enable continue-on-error mode
+        """
+        if self._loop_stack:
+            continue_label = self._loop_stack[-1].get('continue')
+            if continue_label:
+                self.builder.emit_jump(continue_label)
+                return
+        self.builder.emit("ENABLE_ERROR_MODE")
 
     def _compile_BreakStatement(self, node: zexus_ast.BreakStatement):
         """Compile break statement by jumping to loop end label"""
@@ -359,6 +403,53 @@ class EvaluatorBytecodeCompiler:
         self._loop_stack.pop()
 
         # While statements don't return values by default
+        self.builder.emit_constant(None)
+
+    def _compile_ForStatement(self, node):
+        """Compile classic for loop (initializer; condition; increment) { body }.
+
+        Note: The core parser currently focuses on for-each loops, but other
+        parsing strategies / legacy ASTs may still produce ForStatement nodes.
+        This keeps the evaluator bytecode compiler aligned with the VM compiler.
+        """
+        start_label = f"for_start_{id(node)}"
+        end_label = f"for_end_{id(node)}"
+        continue_label = start_label if getattr(node, "increment", None) is None else f"for_continue_{id(node)}"
+
+        # Initializer
+        initializer = getattr(node, "initializer", None)
+        if initializer is not None:
+            self._compile_node(initializer)
+
+        # Track loop labels for break/continue
+        self._loop_stack.append({'start': start_label, 'end': end_label, 'continue': continue_label})
+
+        # Condition
+        self.builder.mark_label(start_label)
+        condition = getattr(node, "condition", None)
+        if condition is not None:
+            self._compile_node(condition)
+            self.builder.emit_jump_if_false(end_label)
+
+        # Body
+        body = getattr(node, "body", None)
+        if body is not None:
+            self._compile_node(body)
+
+        # Increment
+        increment = getattr(node, "increment", None)
+        if increment is not None:
+            self.builder.mark_label(continue_label)
+            self._compile_node(increment)
+            self.builder.emit("POP")
+
+        # Jump back to condition
+        self.builder.emit_jump(start_label)
+
+        # End
+        self.builder.mark_label(end_label)
+        self._loop_stack.pop()
+
         self.builder.emit_constant(None)
     
     def _compile_ForEachStatement(self, node: zexus_ast.ForEachStatement):
@@ -468,14 +559,18 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_PrintStatement(self, node: zexus_ast.PrintStatement):
         """Compile print statement"""
-        # Compile the value to print
+        # PrintStatement can have value (single) or values (multiple)
+        if hasattr(node, 'values') and node.values:
+            for val in node.values:
+                self._compile_node(val)
+                self.builder.emit("PRINT")
+            return
+
         if hasattr(node, 'value') and node.value:
             self._compile_node(node.value)
         else:
-            # Empty print
             self.builder.emit_constant("")
-        
-        # Emit PRINT opcode
+
         self.builder.emit("PRINT")
 
     def _compile_UseStatement(self, node: zexus_ast.UseStatement):
@@ -1307,7 +1402,7 @@ class EvaluatorBytecodeCompiler:
         # List of supported node types
         supported = {
             'Program', 'ExpressionStatement', 'LetStatement', 'ConstStatement',
-            'ReturnStatement', 'ContinueStatement', 'IfStatement', 'WhileStatement', 'ForEachStatement',
+            'ReturnStatement', 'ContinueStatement', 'IfStatement', 'WhileStatement', 'ForStatement', 'ForEachStatement',
             'BlockStatement', 'ActionStatement', 'FunctionStatement', 'PrintStatement',
             'Identifier', 'IntegerLiteral', 'FloatLiteral',
             'StringLiteral', 'Boolean', 'ListLiteral', 'MapLiteral', 'NullLiteral',
@@ -1415,7 +1510,7 @@ def should_use_vm_for_node(node) -> bool:
     node_type = type(node).__name__
     
     # Always use VM for loops
-    if node_type in ['WhileStatement', 'ForEachStatement']:
+    if node_type in ['WhileStatement', 'ForStatement', 'ForEachStatement']:
         return True
     
     # Use VM for complex functions

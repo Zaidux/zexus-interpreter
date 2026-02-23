@@ -139,6 +139,20 @@ class BytecodeCompiler:
                 f"Failed to compile {node_type}: {exc}"
             ) from exc
 
+    def _emit_vm_builtin_call(self, builtin_name: str, payload, discard_result: bool = True) -> None:
+        """Emit a VM-builtin call with the AST payload as a constant.
+
+        This is used to keep the VM bytecode compiler aligned with the evaluator
+        bytecode compiler for directive-like statements that the VM can delegate
+        to higher-level helpers when available.
+        """
+        payload_idx = self._add_constant(payload)
+        self._emit(Opcode.LOAD_CONST, payload_idx)
+        name_idx = self._add_constant(builtin_name)
+        self._emit(Opcode.CALL_NAME, (name_idx, 1))
+        if discard_result:
+            self._emit(Opcode.POP)
+
     def _unsupported_message(self, node_type: str) -> str:
         """Return a friendly message for unsupported nodes."""
         hints = {
@@ -800,6 +814,38 @@ class BytecodeCompiler:
         # Call gc(action)
         self._emit(Opcode.CALL_NAME, (gc_idx, 1))
         self._emit(Opcode.POP)
+
+    # ------------------------------------------------------------------
+    # Directive-like statements (delegate to VM helpers when available)
+    # ------------------------------------------------------------------
+
+    def _compile_NativeStatement(self, node):
+        """Compile native statement via VM helper (if provided)."""
+        self._emit_vm_builtin_call("__vm_native_statement__", node, discard_result=False)
+
+    def _compile_InlineStatement(self, node):
+        """Compile inline optimization directive via VM helper."""
+        self._emit_vm_builtin_call("__vm_inline_statement__", node, discard_result=False)
+
+    def _compile_BufferStatement(self, node):
+        """Compile buffer directive via VM helper."""
+        self._emit_vm_builtin_call("__vm_buffer_statement__", node, discard_result=False)
+
+    def _compile_SIMDStatement(self, node):
+        """Compile SIMD directive via VM helper."""
+        self._emit_vm_builtin_call("__vm_simd_statement__", node, discard_result=False)
+
+    def _compile_DeferStatement(self, node):
+        """Compile defer directive via VM helper."""
+        self._emit_vm_builtin_call("__vm_defer_statement__", node, discard_result=False)
+
+    def _compile_EmitStatement(self, node):
+        """Compile emit statement via VM helper."""
+        self._emit_vm_builtin_call("__vm_emit_statement__", node, discard_result=False)
+
+    def _compile_ProtocolStatement(self, node):
+        """Compile protocol statement via VM helper."""
+        self._emit_vm_builtin_call("__vm_protocol_statement__", node, discard_result=False)
 
     
     def _compile_ContractStatement(self, node):

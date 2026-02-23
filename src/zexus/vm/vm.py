@@ -2104,6 +2104,46 @@ class VM:
                     cond = cond.value
                 if cond:
                     ip = operand
+            elif op_name == "IMPORT":
+                # Mirror async IMPORT behavior (minimal)
+                try:
+                    if isinstance(operand, (list, tuple)) and operand:
+                        mod_name = const(operand[0])
+                        alias = const(operand[1]) if len(operand) > 1 else ""
+                        names = const(operand[2]) if len(operand) > 2 else []
+                        is_named = const(operand[3]) if len(operand) > 3 else False
+                    else:
+                        mod_name = const(operand)
+                        alias, names, is_named = "", [], False
+                    self._execute_import(mod_name, alias=alias or "", names=names, is_named=bool(is_named))
+                except Exception:
+                    pass
+            elif op_name == "EXPORT":
+                # vm/compiler.py emits: LOAD_NAME <name_idx>; EXPORT <name_idx>
+                try:
+                    if isinstance(operand, int):
+                        name = const(operand)
+                        value = stack_pop() if stack else None
+                    elif isinstance(operand, (list, tuple)) and operand:
+                        name = const(operand[0])
+                        value = stack_pop() if stack else None
+                        if len(operand) > 1:
+                            value = const(operand[1])
+                    else:
+                        name = stack_pop() if stack else None
+                        value = stack_pop() if stack else None
+
+                    export_fn = getattr(self.env, "export", None)
+                    if callable(export_fn):
+                        try:
+                            export_fn(name, value)
+                        except Exception:
+                            pass
+                    else:
+                        self.env[name] = value
+                    self._bump_env_version(name, value)
+                except Exception:
+                    pass
             elif op_name == "RETURN":
                 return stack_pop() if stack else None
             elif op_name == "BUILD_LIST":
@@ -4333,15 +4373,20 @@ class VM:
                     self._execute_import(mod_name, alias=alias or "", names=names, is_named=bool(is_named))
 
                 elif op_name == "EXPORT":
+                    # vm/compiler.py emits: LOAD_NAME <name_idx>; EXPORT <name_idx>
+                    # Support both legacy tuple operand and int operand.
                     name = None
                     value = None
-                    if isinstance(operand, (list, tuple)) and operand:
+                    if isinstance(operand, int):
+                        name = const(operand)
+                        value = stack.pop() if stack else None
+                    elif isinstance(operand, (list, tuple)) and operand:
                         name = const(operand[0])
+                        value = stack.pop() if stack else None
                         if len(operand) > 1:
                             value = const(operand[1])
-                    if name is None:
+                    else:
                         name = stack.pop() if stack else None
-                    if value is None:
                         value = stack.pop() if stack else None
 
                     export_fn = getattr(self.env, "export", None)
