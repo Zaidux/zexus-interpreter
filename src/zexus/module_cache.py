@@ -103,6 +103,9 @@ def cache_contract_ast(source_hash: str, ast: Any) -> None:
 def get_module_candidates(file_path: str, importer_file: str = None) -> list[str]:
     """Get candidate paths for a module, checking zpm_modules etc.
     
+    SECURITY (H7): All resolved candidates are confined to the project root (cwd).
+    Absolute paths and traversals outside the project are rejected.
+    
     Args:
         file_path: The module path to import
         importer_file: The absolute path of the file doing the importing (for relative imports)
@@ -111,10 +114,16 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
         List of candidate absolute paths to check
     """
     candidates = []
+    project_root = os.path.realpath(os.getcwd())
+    
+    def _is_within_sandbox(resolved: str) -> bool:
+        real = os.path.realpath(resolved)
+        return real == project_root or real.startswith(project_root + os.sep)
     
     if os.path.isabs(file_path):
-        # Absolute path - use as-is
-        candidates.append(file_path)
+        # SECURITY: Absolute paths are only accepted if within project_root
+        if _is_within_sandbox(file_path):
+            candidates.append(file_path)
     else:
         # Relative path - resolve based on importer's directory
         if importer_file and file_path.startswith('./'):
@@ -123,7 +132,7 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
             resolved_path = os.path.join(importer_dir, file_path[2:])  # Remove './'
             candidates.append(resolved_path)
             # Also consider project-root relative paths like "./tests/..."
-            candidates.append(os.path.join(os.getcwd(), file_path[2:]))
+            candidates.append(os.path.join(project_root, file_path[2:]))
         elif importer_file and file_path.startswith('../'):
             # Parent directory relative to importing file
             importer_dir = os.path.dirname(importer_file)
@@ -135,18 +144,20 @@ def get_module_candidates(file_path: str, importer_file: str = None) -> list[str
                 importer_dir = os.path.dirname(importer_file)
                 candidates.append(os.path.join(importer_dir, file_path))
             # Then relative to current working directory
-            candidates.append(os.path.join(os.getcwd(), file_path))
+            candidates.append(os.path.join(project_root, file_path))
         
         # Also check zpm_modules directory
-        candidates.append(os.path.join(os.getcwd(), 'zpm_modules', file_path))
+        candidates.append(os.path.join(project_root, 'zpm_modules', file_path))
 
     # Try adding typical extensions (.zx, .zexus)
     extended_candidates = []
     for candidate in candidates:
-        extended_candidates.append(candidate)
-        if not candidate.endswith(('.zx', '.zexus')):
-            extended_candidates.append(candidate + '.zx')
-            extended_candidates.append(candidate + '.zexus')
+        # SECURITY: Only keep candidates that resolve within the project root
+        if _is_within_sandbox(candidate):
+            extended_candidates.append(candidate)
+            if not candidate.endswith(('.zx', '.zexus')):
+                extended_candidates.append(candidate + '.zx')
+                extended_candidates.append(candidate + '.zexus')
     
     return extended_candidates
 

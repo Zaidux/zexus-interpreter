@@ -342,6 +342,12 @@ class BytecodeBuilder:
         idx = self.emit("JUMP_IF_FALSE", None)
         self._forward_refs.setdefault(label, []).append(idx)
         return idx
+
+    def emit_jump_if_true(self, label: str) -> int:
+        """Emit a conditional jump (true) to a label"""
+        idx = self.emit("JUMP_IF_TRUE", None)
+        self._forward_refs.setdefault(label, []).append(idx)
+        return idx
     
     def resolve_labels(self):
         """Resolve all forward label references"""

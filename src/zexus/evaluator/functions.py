@@ -4082,7 +4082,9 @@ class FunctionEvaluatorMixin:
                     print(f"⚠️  on_exit hook error: {str(e)}")
             
             print(f"👋 Exiting with code {exit_code}")
-            sys.exit(exit_code)
+            # SECURITY (H4): Raise SystemExit instead of calling sys.exit()
+            # so it can be caught by the interpreter's top-level handler
+            raise SystemExit(exit_code)
         
         def _on_start(*a):
             """

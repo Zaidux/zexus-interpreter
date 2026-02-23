@@ -315,20 +315,32 @@ class ListPool:
             return [None] * size
         
         pool = self.pools[size]
-        lst = pool.acquire([None] * size)
-        
-        # Update aggregate stats
-        if pool.stats.hits > 0:
+        hits_before = pool.stats.hits
+        misses_before = pool.stats.misses
+
+        # IMPORTANT: Do not allocate a new list as a "default" argument here.
+        # The pool already has a list factory; allocating on every call defeats pooling.
+        lst = pool.acquire()
+
+        # Update aggregate stats (per-call)
+        was_hit = pool.stats.hits != hits_before
+        was_miss = pool.stats.misses != misses_before
+        if was_hit:
             self.stats.hits += 1
             self.stats.reuses += 1
-        else:
+        elif was_miss:
             self.stats.misses += 1
             self.stats.total_created += 1
-        
+
         # Ensure list is the right size and cleared
-        if len(lst) != size:
-            lst.clear()
-            lst.extend([None] * size)
+        if size == 0:
+            if lst:
+                lst.clear()
+        elif len(lst) != size:
+            lst[:] = [None] * size
+        else:
+            # Fast reset for correct-size lists
+            lst[:] = [None] * size
         
         return lst
     

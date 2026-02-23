@@ -436,6 +436,9 @@ class VM:
         self._in_execution = 0
         self._native_jit_auto_enabled = False
         self._native_jit_auto_threshold = 700
+        # SECURITY (H9): Call-depth tracking to prevent unbounded recursion
+        self._call_depth = 0
+        self._MAX_CALL_DEPTH = 256
 
         # --- Rust VM Adaptive Routing (Phase 3 + Phase 6) ---
         self._rust_vm_available = _RUST_VM_AVAILABLE
@@ -1147,17 +1150,29 @@ class VM:
                     self._bump_env_version(key, value)
             return module_env
 
-        try:
-            mod = importlib.import_module(module_path)
-            key = alias or module_path
-            self.env[key] = mod
-            self._bump_env_version(key, mod)
-            return mod
-        except Exception:
-            key = alias or module_path
-            self.env[key] = None
-            self._bump_env_version(key, None)
-            return None
+        # SECURITY (H6): Only allow safe Python stdlib modules via importlib.
+        # Dangerous modules (os, subprocess, socket, ctypes, etc.) are blocked.
+        _SAFE_PYTHON_MODULES = frozenset({
+            'math', 'json', 'hashlib', 'base64', 'collections', 'datetime',
+            'decimal', 'fractions', 'itertools', 'functools', 'operator',
+            'string', 'textwrap', 'unicodedata', 'enum', 'dataclasses',
+            'copy', 'pprint', 'reprlib', 'numbers', 'cmath', 'statistics',
+            'random', 'secrets', 'uuid', 're', 'struct', 'binascii',
+            'html', 'urllib.parse', 'ipaddress', 'typing', 'abc',
+        })
+        if module_path in _SAFE_PYTHON_MODULES:
+            try:
+                mod = importlib.import_module(module_path)
+                key = alias or module_path
+                self.env[key] = mod
+                self._bump_env_version(key, mod)
+                return mod
+            except Exception:
+                pass
+        key = alias or module_path
+        self.env[key] = None
+        self._bump_env_version(key, None)
+        return None
 
     def _get_cached_method(self, target: Any, method_name: str):
         if target is None:
@@ -1255,7 +1270,23 @@ class VM:
                         pct = (count / total_ops * 100) if total_ops else 0.0
                         print(f"[VM PROFILE] {op_name} count={count} pct={pct:.2f}%")
             return result
-            
+        except Exception:
+            # LOGIC (L4): If an exception escapes a TX block, revert state to snapshot.
+            if self.env.get("_in_transaction", False):
+                try:
+                    self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                    self.env["_tx_pending_state"] = {}
+                    self.env.pop("_tx_snapshot", None)
+                    if self.use_memory_manager and "_tx_memory_snapshot" in self.env:
+                        self._managed_objects = dict(self.env["_tx_memory_snapshot"])
+                        del self.env["_tx_memory_snapshot"]
+                    tx_stack = self.env.get("_tx_stack", [])
+                    if tx_stack:
+                        tx_stack.pop()
+                    self.env["_in_transaction"] = bool(tx_stack)
+                except Exception:
+                    pass
+            raise
         finally:
             self._in_execution = max(0, getattr(self, "_in_execution", 1) - 1)
             self._total_execution_time += (time.perf_counter() - start_time)
@@ -1535,12 +1566,9 @@ class VM:
         return {'jit_enabled': False}
 
     def _ensure_recursion_headroom(self, minimum: int = 5000):
-        try:
-            current = sys.getrecursionlimit()
-            if current < minimum:
-                sys.setrecursionlimit(minimum)
-        except Exception:
-            pass
+        # SECURITY (H13): No longer increases sys.setrecursionlimit.
+        # VM-level call depth is enforced by _call_depth / _MAX_CALL_DEPTH instead.
+        pass
 
     def clear_jit_cache(self):
         if self.use_jit and self.jit_compiler:
@@ -1598,25 +1626,13 @@ class VM:
                     del self._managed_objects[name]
             return {'collected': collected, 'gc_time': gc_time}
         
-        # Fallback: Manual environment cleanup for non-managed memory
-        # Clear variables that are no longer referenced
+        # Fallback: Without a memory manager, do NOT delete user variables.
+        # Deleting non-underscore env keys breaks program state and can silently
+        # corrupt execution. Keep this as a no-op to preserve semantics.
         if force:
-            initial_count = len(self.env)
-            # Keep only builtins and parent env references
-            keys_to_remove = []
-            for key in list(self.env.keys()):
-                # Don't remove special keys or builtins
-                if not key.startswith('_') and key not in self.builtins:
-                    keys_to_remove.append(key)
-            
-            # Remove temporary variables
-            for key in keys_to_remove:
-                del self.env[key]
-            
-            cleared = initial_count - len(self.env)
-            return {'collected': cleared, 'message': 'Environment variables cleared'}
-        
-        return {'collected': 0, 'message': 'Memory manager disabled or not forced'}
+            return {'collected': 0, 'message': 'No-op: memory manager disabled (force ignored)'}
+
+        return {'collected': 0, 'message': 'Memory manager disabled'}
 
 
     def _allocate_managed(self, value: Any, name: str = None, root: bool = False) -> int:
@@ -2017,7 +2033,19 @@ class VM:
             elif op_name == "MOD":
                 b = stack_pop() if stack else 1
                 a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                if a is None: a = 0
+                if b is None: b = 1
                 stack_append(a % b if b != 0 else 0)
+            elif op_name == "POW":
+                b = stack_pop() if stack else 1
+                a = stack_pop() if stack else 0
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                if a is None: a = 0
+                if b is None: b = 0
+                stack_append(a ** b)
             elif op_name == "EQ":
                 b = stack_pop() if stack else None
                 a = stack_pop() if stack else None
@@ -2049,6 +2077,18 @@ class VM:
             elif op_name == "NOT":
                 a = stack_pop() if stack else False
                 stack_append(not a)
+            elif op_name == "AND":
+                b = stack_pop() if stack else False
+                a = stack_pop() if stack else False
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(bool(a) and bool(b))
+            elif op_name == "OR":
+                b = stack_pop() if stack else False
+                a = stack_pop() if stack else False
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                stack_append(bool(a) or bool(b))
             elif op_name == "NEG":
                 a = stack_pop() if stack else 0
                 stack_append(-a)
@@ -2057,6 +2097,12 @@ class VM:
             elif op_name == "JUMP_IF_FALSE":
                 cond = stack_pop() if stack else None
                 if not cond:
+                    ip = operand
+            elif op_name == "JUMP_IF_TRUE":
+                cond = stack_pop() if stack else None
+                if hasattr(cond, 'value'):
+                    cond = cond.value
+                if cond:
                     ip = operand
             elif op_name == "RETURN":
                 return stack_pop() if stack else None
@@ -2579,6 +2625,20 @@ class VM:
         """Synchronous callable invocation for fast dispatch."""
         if fn is None:
             return None
+        # SECURITY (H9): Enforce call-depth limit
+        if self._call_depth >= self._MAX_CALL_DEPTH:
+            raise RecursionError(
+                f"VM call depth exceeded maximum ({self._MAX_CALL_DEPTH}). "
+                "Possible infinite recursion."
+            )
+        self._call_depth += 1
+        try:
+            return self._invoke_callable_sync_inner(fn, args)
+        finally:
+            self._call_depth -= 1
+
+    def _invoke_callable_sync_inner(self, fn, args):
+        """Inner implementation of callable invocation."""
         real_fn = fn.fn if hasattr(fn, "fn") else fn
         ZAction, ZLambda = _get_action_types()
         if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
@@ -2783,14 +2843,20 @@ class VM:
         _cached_ZAction, _cached_ZLambda = _get_action_types()
 
         class _EvalStack:
-            __slots__ = ("data", "sp")
+            __slots__ = ("data", "sp", "_max_depth")
+            _MAX_STACK_DEPTH = 100_000  # SECURITY (H8): prevent unbounded stack growth
 
             def __init__(self, capacity: int):
                 base = max(32, capacity)
                 self.data = [None] * base
                 self.sp = 0
+                self._max_depth = _EvalStack._MAX_STACK_DEPTH
 
             def _ensure_capacity(self):
+                if self.sp >= self._max_depth:
+                    raise OverflowError(
+                        f"VM stack overflow: depth {self.sp} exceeds maximum {self._max_depth}"
+                    )
                 if self.sp >= len(self.data):
                     self.data.extend([None] * len(self.data))
 
@@ -3387,10 +3453,24 @@ class VM:
             try:
                 import os as _os
                 if path:
-                    # SECURITY (C11): Sandbox file reads to cwd
+                    # SECURITY (C11): Sandbox file reads to the module root (env __DIR__) when present.
+                    # This keeps sandboxing while allowing tests/runtime to set the project root without
+                    # relying on global process CWD.
                     sandbox = _os.getcwd()
+                    try:
+                        env_dir = env_get("__DIR__", None)
+                        if env_dir:
+                            sandbox = _os.path.realpath(str(env_dir))
+                    except Exception:
+                        pass
+
                     if isinstance(path, str) and '\x00' not in path:
-                        resolved = _os.path.realpath(_os.path.join(sandbox, path))
+                        candidate = path
+                        if _os.path.isabs(candidate):
+                            resolved = _os.path.realpath(candidate)
+                        else:
+                            resolved = _os.path.realpath(_os.path.join(sandbox, candidate))
+
                         if resolved == sandbox or resolved.startswith(sandbox + _os.sep):
                             if _os.path.exists(resolved):
                                 with open(resolved, 'r') as f:
@@ -4005,10 +4085,16 @@ class VM:
                     if hasattr(b, 'value'): b = b.value
                     stack.append(a / b if b != 0 else 0)
                 elif op_name == "MOD":
-                    b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                    b = _unwrap(stack.pop() if stack else 1)
+                    a = _unwrap(stack.pop() if stack else 0)
+                    if a is None: a = 0
+                    if b is None: b = 1
                     stack.append(a % b if b != 0 else 0)
                 elif op_name == "POW":
-                    b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
+                    b = _unwrap(stack.pop() if stack else 0)
+                    a = _unwrap(stack.pop() if stack else 0)
+                    if a is None: a = 0
+                    if b is None: b = 0
                     stack.append(a ** b)
                 elif op_name == "NEG":
                     a = stack.pop() if stack else 0
@@ -4034,6 +4120,14 @@ class VM:
                 elif op_name == "NOT":
                     a = stack.pop() if stack else False
                     stack.append(not a)
+                elif op_name == "AND":
+                    b = _unwrap(stack.pop() if stack else False)
+                    a = _unwrap(stack.pop() if stack else False)
+                    stack.append(bool(a) and bool(b))
+                elif op_name == "OR":
+                    b = _unwrap(stack.pop() if stack else False)
+                    a = _unwrap(stack.pop() if stack else False)
+                    stack.append(bool(a) or bool(b))
     
                 # --- Control Flow ---
                 elif op_name == "JUMP":
@@ -4041,6 +4135,9 @@ class VM:
                 elif op_name == "JUMP_IF_FALSE":
                     cond = stack.pop() if stack else None
                     if not cond: ip = operand
+                elif op_name == "JUMP_IF_TRUE":
+                    cond = _unwrap(stack.pop() if stack else None)
+                    if cond: ip = operand
                 elif op_name == "RETURN":
                     return stack.pop() if stack else None
     
@@ -4262,10 +4359,25 @@ class VM:
                     path = stack.pop() if stack else None
                     try:
                         if path is not None:
-                            # SECURITY (C12): Sandbox file writes to cwd
+                            # SECURITY (C12): Sandbox file writes to the module root (env __DIR__) when present.
                             import os as _os_w
                             sandbox = _os_w.getcwd()
-                            resolved = _os_w.path.realpath(_os_w.path.join(sandbox, str(path)))
+                            try:
+                                env_dir = self.env.get("__DIR__", None)
+                                if env_dir:
+                                    sandbox = _os_w.path.realpath(str(env_dir))
+                            except Exception:
+                                pass
+
+                            path_str = str(path)
+                            if "\x00" in path_str:
+                                stack.append(False)
+                                continue
+
+                            if _os_w.path.isabs(path_str):
+                                resolved = _os_w.path.realpath(path_str)
+                            else:
+                                resolved = _os_w.path.realpath(_os_w.path.join(sandbox, path_str))
                             if not (resolved == sandbox or resolved.startswith(sandbox + _os_w.sep)):
                                 stack.append(False)  # path traversal denied
                             else:
@@ -4660,6 +4772,22 @@ class VM:
                     if debug: print(f"[VM ERROR RECOVERY] {e}")
                     self.env.setdefault("_errors", []).append(str(e))
                 else:
+                    # LOGIC (L4): If an exception escapes a TX block, revert state to snapshot.
+                    if self.env.get("_in_transaction", False):
+                        try:
+                            self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
+                            self.env["_tx_pending_state"] = {}
+                            self.env.pop("_tx_snapshot", None)
+                            if self.use_memory_manager and "_tx_memory_snapshot" in self.env:
+                                self._managed_objects = dict(self.env["_tx_memory_snapshot"])
+                                del self.env["_tx_memory_snapshot"]
+                            tx_stack = self.env.get("_tx_stack", [])
+                            if tx_stack:
+                                tx_stack.pop()
+                            self.env["_in_transaction"] = bool(tx_stack)
+                        except Exception:
+                            # Best-effort revert; never swallow the original exception.
+                            pass
                     raise
 
         if profile_ops and opcode_counts is not None:
@@ -4795,7 +4923,7 @@ class VM:
                     res = await res
             return self._unwrap_after_builtin(res)
         except Exception as e:
-            return e
+            return ZEvaluationError(f"{type(e).__name__}: {e}")
 
     def _to_coro(self, fn, args):
         if asyncio.iscoroutinefunction(fn):

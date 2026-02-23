@@ -17,7 +17,6 @@ Enhanced: File-based persistent caching for faster repeat runs
 
 import hashlib
 import json
-import pickle
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -271,8 +270,9 @@ class BytecodeCache:
             constants_size = 0
             for const in bytecode.constants:
                 try:
-                    constants_size += len(pickle.dumps(const))
-                except (TypeError, pickle.PicklingError):
+                    import sys as _sys
+                    constants_size += _sys.getsizeof(const)
+                except (TypeError, ValueError):
                     constants_size += 100  # Fallback estimate
             
             # Add metadata overhead
@@ -504,9 +504,9 @@ class BytecodeCache:
                 with open(cache_file, 'wb') as f:
                     f.write(data)
             else:
-                cache_file = self.cache_dir / f"{key}.cache"
-                with open(cache_file, 'wb') as f:
-                    pickle.dump(bytecode, f, protocol=pickle.HIGHEST_PROTOCOL)
+                # SECURITY (H14): Legacy pickle format disabled — use .zxc only
+                if self.debug:
+                    print(f"⚠️ Cache: Skipping disk save (pickle disabled, .zxc not available)")
             
             if self.debug:
                 print(f"💾 Cache: Saved to disk {key[:8]}...")
@@ -531,14 +531,9 @@ class BytecodeCache:
                         print(f"💾 Cache: Loaded .zxc from disk {key[:8]}...")
                     return bytecode
 
-            # Fallback to legacy pickle format
-            cache_file = self.cache_dir / f"{key}.cache"
-            if cache_file.exists():
-                with open(cache_file, 'rb') as f:
-                    bytecode = pickle.load(f)
-                if self.debug:
-                    print(f"💾 Cache: Loaded .cache from disk {key[:8]}...")
-                return bytecode
+            # SECURITY (H14): Legacy pickle .cache format disabled
+            # Only .zxc binary format is supported for disk cache
+            pass
         except Exception as e:
             if self.debug:
                 print(f"⚠️ Cache: Failed to load from disk: {e}")
@@ -713,10 +708,9 @@ class BytecodeCache:
                     f.write(meta_bytes)
                     f.write(bc_bytes)
             else:
-                cache_file = self.cache_dir / f"file_{file_key}.cache"
-                data = {'metadata': meta_dict, 'bytecodes': bytecodes, 'cached_at': time.time()}
-                with open(cache_file, 'wb') as f:
-                    pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+                # SECURITY (H14): Legacy pickle format disabled
+                if self.debug:
+                    print(f"⚠️ FileCache: Skipping disk save (pickle disabled, .zxc not available)")
             
             if self.debug:
                 print(f"💾 FileCache: Saved to disk {file_key[:8]}...")
@@ -749,16 +743,8 @@ class BytecodeCache:
                     bytecodes = _zxc_deserialize_multi(raw[4 + meta_len:])
                     cache_file = zxc_file
 
-            # Fallback to legacy pickle
-            if bytecodes is None:
-                pkl_file = self.cache_dir / f"file_{file_key}.cache"
-                if pkl_file.exists():
-                    with open(pkl_file, 'rb') as f:
-                        data = pickle.load(f)
-                    cached_meta = data.get('metadata', {})
-                    bytecodes = data.get('bytecodes', [])
-                    cached_at = data.get('cached_at', time.time())
-                    cache_file = pkl_file
+            # SECURITY (H14): Legacy pickle format disabled
+            pass
 
             if cached_meta is None or bytecodes is None:
                 return None
@@ -810,10 +796,11 @@ class BytecodeCache:
             return
         
         try:
-            index_file = self.cache_dir / 'file_index.cache'
+            # SECURITY (H14): Use JSON instead of pickle for index
+            index_file = self.cache_dir / 'file_index.json'
             if index_file.exists():
-                with open(index_file, 'rb') as f:
-                    index = pickle.load(f)
+                with open(index_file, 'r') as f:
+                    index = json.load(f)
                 if self.debug:
                     print(f"📂 FileCache: Loaded index with {len(index)} files")
         except Exception as e:
@@ -826,7 +813,8 @@ class BytecodeCache:
             return
         
         try:
-            index_file = self.cache_dir / 'file_index.cache'
+            # SECURITY (H14): Use JSON instead of pickle for index
+            index_file = self.cache_dir / 'file_index.json'
             # Just save file keys and metadata (not bytecode)
             index = {
                 key: {
@@ -837,8 +825,8 @@ class BytecodeCache:
                 }
                 for key, data in self._file_cache.items()
             }
-            with open(index_file, 'wb') as f:
-                pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(index_file, 'w') as f:
+                json.dump(index, f)
         except Exception as e:
             if self.debug:
                 print(f"⚠️ FileCache: Failed to save index: {e}")
@@ -985,18 +973,8 @@ class BytecodeCache:
                 cached.get('content_hash') == metadata.content_hash):
                 return True
         
-        # Check disk cache
-        if self.persistent and self.cache_dir:
-            cache_file = self.cache_dir / f"file_{file_key}.cache"
-            if cache_file.exists():
-                try:
-                    with open(cache_file, 'rb') as f:
-                        data = pickle.load(f)
-                    cached_meta = data.get('metadata', {})
-                    return (cached_meta.get('mtime') == metadata.mtime and
-                            cached_meta.get('content_hash') == metadata.content_hash)
-                except Exception:
-                    pass
+        # SECURITY (H14): Legacy pickle .cache disk cache disabled
+        # Only .zxc format is used for disk caching now
         
         return False
     

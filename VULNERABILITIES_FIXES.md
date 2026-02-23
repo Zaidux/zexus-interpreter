@@ -10,19 +10,19 @@
 
 | ID | Area | File | Finding | Status |
 |----|------|------|---------|--------|
-| C1 | Interp | `evaluator/functions.py` ~L2654 | `exec()` in `_eval_file` — arbitrary Python code execution when evaluating `.py` files | ⬜ Not started |
-| C2 | Interp | `evaluator/functions.py` ~L2680 | `subprocess.run(['node', ...])` for `.js` files — arbitrary Node.js execution | ⬜ Not started |
-| C3 | Interp | `evaluator/statements.py` ~L3327 | `ctypes.CDLL(node.library_name)` in `eval_native_statement` — arbitrary native code loading | ⬜ Not started |
-| C4 | Interp | `object.py` ~L599 | `File` class has zero path traversal protection — read/write any file on system | ⬜ Not started |
-| C5 | Interp | `persistence.py` ~L155 | `scope_id` path traversal in `PersistentStorage` — attacker-controlled DB path | ⬜ Not started |
-| C6 | Interp | `security.py` | `contract_id` path traversal in `ContractStorage` — same issue | ⬜ Not started |
-| C7 | Interp | `persistence.py` | `delete_persistent_scope` — path traversal enables arbitrary file deletion | ⬜ Not started |
-| C8 | Interp | `evaluator/functions.py` ~L4303 | `daemonize()` builtin forks the interpreter — background daemon creation | ⬜ Not started |
-| C9 | Interp | `evaluator/functions.py` | `env_set` allows arbitrary env var manipulation (PATH, LD_PRELOAD injection) | ⬜ Not started |
-| C10 | VM | `vm/binary_bytecode.py` ~L394 | `pickle.loads()` on untrusted `.zxc` bytecode — RCE via crafted cache files | ⬜ Not started |
-| C11 | VM | `vm/vm.py` ~L3388 | `READ` opcode opens any file path with no sandboxing | ⬜ Not started |
-| C12 | VM | `vm/vm.py` ~L4250 | `WRITE` opcode writes to any path with no restriction | ⬜ Not started |
-| C13 | VM | `vm/vm.py` ~L3519 | Fast-loop path bypasses gas metering entirely — infinite loops run forever | ⬜ Not started |
+| C1 | Interp | `evaluator/functions.py` ~L2654 | `exec()` in `_eval_file` — arbitrary Python code execution when evaluating `.py` files | ✅ Done |
+| C2 | Interp | `evaluator/functions.py` ~L2680 | `subprocess.run(['node', ...])` for `.js` files — arbitrary Node.js execution | ✅ Done |
+| C3 | Interp | `evaluator/statements.py` ~L3327 | `ctypes.CDLL(node.library_name)` in `eval_native_statement` — arbitrary native code loading | ✅ Done |
+| C4 | Interp | `object.py` ~L599 | `File` class has zero path traversal protection — read/write any file on system | ✅ Done |
+| C5 | Interp | `persistence.py` ~L155 | `scope_id` path traversal in `PersistentStorage` — attacker-controlled DB path | ✅ Done |
+| C6 | Interp | `security.py` | `contract_id` path traversal in `ContractStorage` — same issue | ✅ Done |
+| C7 | Interp | `persistence.py` | `delete_persistent_scope` — path traversal enables arbitrary file deletion | ✅ Done |
+| C8 | Interp | `evaluator/functions.py` ~L4303 | `daemonize()` builtin forks the interpreter — background daemon creation | ✅ Done |
+| C9 | Interp | `evaluator/functions.py` | `env_set` allows arbitrary env var manipulation (PATH, LD_PRELOAD injection) | ✅ Done |
+| C10 | VM | `vm/binary_bytecode.py` ~L394 | `pickle.loads()` on untrusted `.zxc` bytecode — RCE via crafted cache files | ✅ Done |
+| C11 | VM | `vm/vm.py` ~L3388 | `READ` opcode opens any file path with no sandboxing | ✅ Done |
+| C12 | VM | `vm/vm.py` ~L4250 | `WRITE` opcode writes to any path with no restriction | ✅ Done |
+| C13 | VM | `vm/vm.py` ~L3519 | Fast-loop path bypasses gas metering entirely — infinite loops run forever | ✅ Done |
 
 ---
 
@@ -30,20 +30,20 @@
 
 | ID | Area | File | Finding | Status |
 |----|------|------|---------|--------|
-| H1 | Interp | `security.py` ~L528 | Broken CIDR validation — uses string prefix match instead of proper network math | ⬜ Not started |
-| H2 | Interp | `security.py` | User-controlled regex in `emit_event` — ReDoS vector | ⬜ Not started |
-| H3 | Interp | `evaluator/expressions.py` ~L373 | Unbounded string repetition `"x" * n` — memory exhaustion | ⬜ Not started |
-| H4 | Interp | `evaluator/functions.py` ~L4109 | `exit_program()` calls `sys.exit()` directly | ⬜ Not started |
-| H5 | Interp | `evaluator/statements.py` ~L2233 | `__import__('time')` inline pattern instead of module-level import | ⬜ Not started |
-| H6 | VM | `vm/vm.py` ~L1151 | `importlib.import_module()` with user-controlled module path — full host access | ⬜ Not started |
-| H7 | VM | `vm/vm.py` ~L1000 | Path traversal in module import resolution (`use "../../etc/secrets.zx"`) | ⬜ Not started |
-| H8 | VM | `vm/vm.py` ~L2756 | Unbounded stack growth — no maximum stack depth | ⬜ Not started |
-| H9 | VM | `vm/vm.py` ~L2580 | Unbounded recursion via `_invoke_callable_sync` — no call-depth limit | ⬜ Not started |
-| H10 | VM | `vm/vm.py` ~L3394 | Bare `except:` in `_op_read` catches `SystemExit`/`KeyboardInterrupt` | ⬜ Not started |
-| H11 | VM | `evaluator/bytecode_compiler.py` ~L1195 | Bare `except:` in `_try_constant_operation` catches everything | ⬜ Not started |
-| H12 | VM | `vm/vm.py` (90+ instances) | ~90 silent `except Exception: pass` blocks mask real bugs | ⬜ Not started |
-| H13 | VM | `vm/vm.py` ~L1543 | `_ensure_recursion_headroom` actively increases `sys.setrecursionlimit` to 5000 | ⬜ Not started |
-| H14 | VM | `vm/cache.py` ~L509 | `pickle.dump()`/`pickle.load()` in bytecode cache — RCE via cache poisoning | ⬜ Not started |
+| H1 | Interp | `security.py` ~L528 | Broken CIDR validation — uses string prefix match instead of proper network math | ✅ Done |
+| H2 | Interp | `security.py` | User-controlled regex in `emit_event` — ReDoS vector | ✅ Done |
+| H3 | Interp | `evaluator/expressions.py` ~L373 | Unbounded string repetition "x" * n — memory exhaustion | ✅ Done |
+| H4 | Interp | `evaluator/functions.py` ~L4109 | `exit_program()` calls `sys.exit()` directly | ✅ Done |
+| H5 | Interp | `evaluator/statements.py` ~L2233 | `__import__('time')` inline pattern instead of module-level import | ✅ Done |
+| H6 | VM | `vm/vm.py` ~L1151 | `importlib.import_module()` with user-controlled module path — full host access | ✅ Done |
+| H7 | VM | `vm/vm.py` ~L1000 | Path traversal in module import resolution (`use "../../etc/secrets.zx"`) | ✅ Done |
+| H8 | VM | `vm/vm.py` ~L2756 | Unbounded stack growth — no maximum stack depth | ✅ Done |
+| H9 | VM | `vm/vm.py` ~L2580 | Unbounded recursion via `_invoke_callable_sync` — no call-depth limit | ✅ Done |
+| H10 | VM | `vm/vm.py` ~L3394 | Bare `except:` in `_op_read` catches `SystemExit`/`KeyboardInterrupt` | ✅ Done |
+| H11 | VM | `evaluator/bytecode_compiler.py` ~L1195 | Bare `except:` in `_try_constant_operation` catches everything | ✅ Done |
+| H12 | VM | `vm/vm.py` (90+ instances) | ~90 silent `except Exception: pass` blocks mask real bugs | ⏸ Deferred |
+| H13 | VM | `vm/vm.py` ~L1543 | `_ensure_recursion_headroom` actively increases `sys.setrecursionlimit` to 5000 | ✅ Done |
+| H14 | VM | `vm/cache.py` ~L509 | `pickle.dump()`/`pickle.load()` in bytecode cache — RCE via cache poisoning | ✅ Done |
 
 ---
 
@@ -51,14 +51,14 @@
 
 | ID | Area | File | Finding | Status |
 |----|------|------|---------|--------|
-| L1 | VM | `vm/vm.py` | `JUMP_IF_TRUE` opcode not handled in any execution path — falls through silently | ⬜ Not started |
-| L2 | VM | `vm/vm.py` | `AND` / `OR` opcodes not handled in sync or async loops — only register variants work | ⬜ Not started |
-| L3 | VM | `evaluator/bytecode_compiler.py` ~L598 | `RequireStatement` emits broken bytecode — `JUMP_IF_TRUE` with `None` operand, never patched | ⬜ Not started |
-| L4 | VM | `evaluator/bytecode_compiler.py` ~L571 | `TxStatement` has no exception-safety — crashes leave transactions uncommitted/unreverted | ⬜ Not started |
-| L5 | VM | `vm/vm.py` ~L2020 | `MOD` opcode doesn't unwrap `.value` in sync path (unlike ADD/SUB/MUL/DIV) | ⬜ Not started |
-| L6 | VM | `vm/vm.py` | `POW` opcode same issue — no `.value` unwrapping in sync path | ⬜ Not started |
-| L7 | VM | `vm/vm.py` ~L4781 | `_call_builtin_async_obj` returns the exception object itself as a value | ⬜ Not started |
-| L8 | VM | `vm/vm.py` ~L1603 | `collect_garbage(force=True)` deletes all user variables that don't start with `_` | ⬜ Not started |
+| L1 | VM | `vm/vm.py` | `JUMP_IF_TRUE` opcode not handled in any execution path — falls through silently | ✅ Done |
+| L2 | VM | `vm/vm.py` | `AND` / `OR` opcodes not handled in sync or async loops — only register variants work | ✅ Done |
+| L3 | VM | `evaluator/bytecode_compiler.py` ~L598 | `RequireStatement` emits broken bytecode — `JUMP_IF_TRUE` with `None` operand, never patched | ✅ Done |
+| L4 | VM | `evaluator/bytecode_compiler.py` ~L571 | `TxStatement` has no exception-safety — crashes leave transactions uncommitted/unreverted | ✅ Done |
+| L5 | VM | `vm/vm.py` ~L2020 | `MOD` opcode doesn't unwrap `.value` in sync path (unlike ADD/SUB/MUL/DIV) | ✅ Done |
+| L6 | VM | `vm/vm.py` | `POW` opcode same issue — no `.value` unwrapping in sync path | ✅ Done |
+| L7 | VM | `vm/vm.py` ~L4781 | `_call_builtin_async_obj` returns the exception object itself as a value | ✅ Done |
+| L8 | VM | `vm/vm.py` ~L1603 | `collect_garbage(force=True)` deletes all user variables that don't start with `_` | ✅ Done |
 
 ---
 

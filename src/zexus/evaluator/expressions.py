@@ -367,13 +367,27 @@ class ExpressionEvaluatorMixin:
             return self.eval_string_infix(operator, left, right)
         
         # String repetition: "x" * 100 or 100 * "x"
+        # SECURITY (H3): Cap repetition to prevent memory exhaustion
         elif operator == "*":
+            _MAX_STRING_REPEAT = 1_000_000  # 1 MB max
             if isinstance(left, String) and isinstance(right, Integer):
-                # "x" * 100
-                return String(left.value * right.value)
+                n = right.value
+                if n < 0:
+                    n = 0
+                if n > _MAX_STRING_REPEAT:
+                    return EvaluationError(
+                        f"String repetition count {n} exceeds maximum ({_MAX_STRING_REPEAT})"
+                    )
+                return String(left.value * n)
             elif isinstance(left, Integer) and isinstance(right, String):
-                # 100 * "x"
-                return String(right.value * left.value)
+                n = left.value
+                if n < 0:
+                    n = 0
+                if n > _MAX_STRING_REPEAT:
+                    return EvaluationError(
+                        f"String repetition count {n} exceeds maximum ({_MAX_STRING_REPEAT})"
+                    )
+                return String(right.value * n)
         
         # Array Concatenation
         elif operator == "+" and isinstance(left, List) and isinstance(right, List):

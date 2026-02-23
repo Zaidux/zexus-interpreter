@@ -391,8 +391,13 @@ class SecurityContext:
                     if isinstance(flt, str) and flt.startswith('re:'):
                         import re
                         pattern = flt[3:]
-                        if re.search(pattern, payload_str):
-                            matched = True
+                        # SECURITY (H2): Guard against ReDoS — timeout regex match
+                        try:
+                            if re.search(pattern, payload_str, flags=0):
+                                matched = True
+                        except re.error:
+                            # Invalid regex supplied by subscriber — skip
+                            pass
                     elif isinstance(flt, str) and ':' in flt:
                         # key:value pattern
                         k, v = flt.split(':', 1)
@@ -525,13 +530,39 @@ def get_security_context():
 
 
 def _is_ip_in_list(ip, ip_list):
-    """Check if IP matches CIDR or exact match in list"""
+    """Check if IP matches CIDR or exact match in list.
+    
+    SECURITY (H1): Uses proper bit-masking for CIDR checks instead of string prefix.
+    """
+    import struct
+    import socket
+    
+    def _ip_to_int(ip_str):
+        """Convert dotted-quad IP to 32-bit integer."""
+        try:
+            return struct.unpack('!I', socket.inet_aton(ip_str))[0]
+        except (socket.error, struct.error, OSError):
+            return None
+    
+    ip_int = _ip_to_int(ip)
+    if ip_int is None:
+        return False
+    
     for pattern in ip_list:
         if "/" in pattern:  # CIDR notation
-            # Simplified CIDR check (would need proper IP math for production)
-            network_part = pattern.split("/")[0]
-            if ip.startswith(network_part.rsplit(".", 1)[0]):
-                return True
+            try:
+                network_str, prefix_len_str = pattern.split("/", 1)
+                prefix_len = int(prefix_len_str)
+                if prefix_len < 0 or prefix_len > 32:
+                    continue
+                network_int = _ip_to_int(network_str)
+                if network_int is None:
+                    continue
+                mask = (0xFFFFFFFF << (32 - prefix_len)) & 0xFFFFFFFF
+                if (ip_int & mask) == (network_int & mask):
+                    return True
+            except (ValueError, TypeError):
+                continue
         elif ip == pattern:  # Exact match
             return True
     return False

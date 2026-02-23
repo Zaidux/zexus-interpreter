@@ -41,13 +41,26 @@ _SHARED_CACHE: Optional[BytecodeCache] = None
 
 
 def get_shared_cache() -> BytecodeCache:
-    """Get the global shared bytecode cache (persistent across runs)"""
+    """Get the global shared bytecode cache.
+
+    Note: The compiler stores AST objects (e.g., LoadExpression/FindExpression) inside
+    bytecode constants for VM keyword builtins.
+
+    Persisting these bytecodes to disk can cause order-dependent behavior during tests
+    because the same codebase is imported under multiple module namespaces (e.g.
+    `zexus.*` and `src.zexus.*`), producing distinct AST classes that are not
+    interchangeable at runtime.
+    """
     global _SHARED_CACHE
     if _SHARED_CACHE is None:
+        # Default to in-memory only under pytest to avoid cross-test contamination.
+        is_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST"))
+        persist_env = os.environ.get("ZEXUS_BYTECODE_CACHE_PERSISTENT")
+        persist_requested = bool(persist_env) and persist_env.lower() not in ("0", "false", "off")
         _SHARED_CACHE = BytecodeCache(
             max_size=2000,
             max_memory_mb=100,
-            persistent=True,  # Enable disk persistence
+            persistent=(persist_requested and not is_pytest),
             debug=False
         )
     return _SHARED_CACHE
@@ -161,11 +174,6 @@ class EvaluatorBytecodeCompiler:
             cached = self.cache.get(node)
             if cached:
                 return cached
-            
-            # Check pattern cache (similar code structure)
-            pattern_cached = self.cache.get_by_pattern(node)
-            if pattern_cached:
-                return pattern_cached
         
         # Cache miss - compile
         self.builder = BytecodeBuilder()
@@ -184,10 +192,12 @@ class EvaluatorBytecodeCompiler:
             
             bytecode.set_metadata('created_by', 'evaluator')
             
-            # Store in caches
+            # Store in cache
+            # NOTE: Pattern-cache reuse is intentionally disabled here because the current
+            # pattern hashing ignores literal/name fields, which can return bytecode with
+            # incorrect embedded constants/identifiers for “similar” nodes.
             if use_cache and self.cache:
                 self.cache.put(node, bytecode)
-                self.cache.put_by_pattern(node, bytecode)
             
             return bytecode
             
@@ -600,7 +610,7 @@ class EvaluatorBytecodeCompiler:
         
         # Jump if true (condition passes)
         pass_label = f"require_pass_{id(node)}"
-        self.builder.emit("JUMP_IF_TRUE", None)
+        self.builder.emit_jump_if_true(pass_label)
         
         # Condition failed - revert
         if hasattr(node, 'message') and node.message:
@@ -1183,7 +1193,8 @@ class EvaluatorBytecodeCompiler:
             elif op == 'OR':
                 return BooleanObj(bool(v1) or bool(v2))
             
-        except:
+        except Exception:
+            # SECURITY (H11): Narrowed from bare except: to Exception
             pass
         
         return None

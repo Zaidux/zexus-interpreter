@@ -2228,9 +2228,11 @@ class StatementEvaluatorMixin:
             
             # Set up TX context
             from ..object import Map, String, Integer
+            # SECURITY (H5): Use module-level import instead of __import__
+            import time as _time_mod
             tx_context = Map({
                 String("caller"): String("system"),  # Default caller
-                String("timestamp"): Integer(int(__import__('time').time())),
+                String("timestamp"): Integer(int(_time_mod.time())),
             })
             contract_env.set("TX", tx_context)
             
