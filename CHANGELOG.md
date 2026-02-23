@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.1] - 2026-02-23
+
+### 🐛 Bug Fixes — Ziver Chain Phase 0 Audit
+
+All 21 issues discovered during the Ziver Chain Phase 0 audit ([ISSUE7](issues/ISSUE7.md)) have been resolved.
+
+**Critical (P0):**
+- **`emit` keyword broken** (INT-003) — Added EMIT to all three parser statement-starter sets, context rules, and `_parse_block_statements` handler. Implemented `_parse_emit_statement_block` in the context parser. Blockchain event emission now works inside and outside contracts.
+- **`protocol` keyword not recognized** (INT-001) — Added PROTOCOL to both strategy parser starters, context rules, traditional parser dispatch, and implemented `parse_protocol_statement` / `_parse_protocol_statement_block` methods. Fixed `eval_protocol_statement` to handle both string and AST method entries.
+- **`implements` keyword broken** (INT-002) — Fixed `_parse_contract_statement_block` to detect `implements` between contract name and opening brace, passing the protocol name to ContractStatement.
+
+**High (P1):**
+- **Entity compilation crash in VM** (VM-001) — Rewrote `_compile_EntityStatement` in `vm/compiler.py` to use `node.properties` and `node.methods` (the actual AST attributes) instead of non-existent `node.body`.
+- **Imported functions return Action objects in VM** (VM-003) — Fixed `_call_builtin_async_obj` in `vm/vm.py` — changed broad `except Exception: pass` to properly detect ZAction/ZLambda and return None instead of falling through to return the raw function object.
+- **`map.has()` / `map.get()` broken** (INT-013/INT-014) — Fixed key normalization in `evaluator/functions.py` to try both plain string and String-wrapped keys for Map lookup.
+
+**Medium (P2):**
+- **ExportStatement unsupported in VM** (VM-002) — Added `_compile_ExportStatement` to both `vm/compiler.py` and `evaluator/bytecode_compiler.py`.
+- **Entity constructor argument mismatch** (VM-004) — Added `_check_EntityStatement` to `type_checker.py` to register entities as constructors and skip strict arity validation for single-map-arg entity construction.
+- **`string()` + builtin module returns type name in VM** (VM-005) — Fixed CALL_METHOD handler (both sync and async paths) to invoke `Builtin.fn` when module methods are stored as Builtin objects in dicts.
+- **`bc.create_genesis_block()` returns function object in VM** (INT-012) — Same root cause and fix as VM-005.
+- **`persistent storage` no-op** (INT-004) — Rewrote `eval_persistent_statement` to initialize PersistentStorage SQLite backend, use `set_persistent`/`get_persistent`, and restore persisted values on startup. Fixed broken `sys.modules` guard in `_init_persistence`.
+
+**Low (P3):**
+- **Missing directive builtins** (INT-005 through INT-009) — Registered `track_memory()`, `cache()`, `throttle()`, `audit()`, and `verify()` as builtin functions via new `_register_missing_directive_builtins()` method.
+- **`watch variable { ... }` parse error** (INT-010) — Added Form 3 (expression followed by block, no `=>` arrow) to both the context and traditional parsers.
+- **`list.is_empty()` missing** (INT-015) — Added `is_empty` method to List method dispatch.
+- **`list.count()` inconsistency** (INT-016) — Confirmed already working; no change needed.
+- **`protect` modifier syntax** (INT-011) — Clarified: `protect(target, {rules})` call syntax is the correct form and already works.
+
+### 📁 Files Changed
+
+- `src/zexus/parser/strategy_context.py` — emit, protocol, implements, watch form 3
+- `src/zexus/parser/strategy_structural.py` — emit, protocol statement starters
+- `src/zexus/parser/parser.py` — protocol dispatch, watch form 3
+- `src/zexus/vm/compiler.py` — EntityStatement rewrite, ExportStatement
+- `src/zexus/vm/vm.py` — async call fix, Builtin.fn dispatch in CALL_METHOD
+- `src/zexus/evaluator/bytecode_compiler.py` — ExportStatement, EmitStatement, ProtocolStatement
+- `src/zexus/evaluator/functions.py` — map.has/get key normalization, list.is_empty, 5 new builtins
+- `src/zexus/evaluator/statements.py` — persistent storage wiring, protocol evaluator
+- `src/zexus/object.py` — persistence init fix, memory tracking init fix
+- `src/zexus/type_checker.py` — entity constructor registration and flexible arity
+
+### 🧪 Testing
+
+- **1851 tests pass**, 0 regressions
+- Integration test covers: track_memory, cache, throttle, audit, verify, list.is_empty, list.count, map.has, map.get, protocol/implements, emit, watch
+
+---
+
 ## [1.8.0] - 2026-02-23
 
 ### ✨ Language Features
@@ -638,6 +688,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.8.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.8...v1.7.1

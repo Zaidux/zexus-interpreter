@@ -83,7 +83,7 @@ if _BUILD_EXT:
 
 setup(
     name='zexus',
-    version='1.8.0',
+    version='1.8.1',
     author='Zaidux',
     author_email='devnull@example.com',
     description='A modern, security-first programming language with blockchain support',
