@@ -6,6 +6,164 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.0] - 2026-02-23
+
+### ✨ Language Features
+
+**Syntax Additions:**
+- **Compound assignment operators** — `+=`, `-=`, `*=`, `/=`, `%=` with lexer tokens, parser infix rules, and eval handler
+- **String interpolation** — `"Hello ${name}"` via extended `read_string()` in the lexer
+- **Block comments** — `/* */` support via extended `skip_whitespace()` in the lexer
+- **Multiline strings** — triple-quote `"""..."""` support
+- **Single-quoted strings** — `'...'` now recognized by the lexer
+- **Exponentiation operator** — `**` with lexer token, parser rule, and existing VM `POW` opcode
+- **`finally` clause** — added to `TryCatchStatement` AST node and evaluator
+- **Destructuring assignment** — `let {a, b} = map; let [x, y] = list` with map, list, rename, and rest patterns in parser, evaluator, and VM
+
+### 🛠 Developer Tooling
+
+- **Circular import detection** — `_LOADING_SET` with `begin_loading`/`end_loading` guards in evaluator + VM module loading
+- **LSP go-to-definition** — recursive AST walker, symbol provider, and server parsing fix for jump-to-source in editors
+- **Remote ZPM registry** — HTTP client with auth, tarball download/extraction in registry + installer (replaces stubbed registry)
+- **Static type checking pass** — `StaticTypeChecker` AST walker with scoped symbol table, parameter/return/assignment type checking (optional pre-runtime analysis)
+
+### 🎯 Major New Capabilities
+
+- **Debug Adapter Protocol (DAP)** — Full DAP JSON wire protocol server (`dap_server.py`), `DebugEngine` state machine with breakpoints/stepping/pause, VS Code adapter shim, `eval_node()` hook with zero-cost when inactive, AST line/column tracking
+- **GUI Backend** — `TkBackend` (tkinter: windows, buttons, labels, text boxes, canvas) + `WebBackend` (HTML/CSS/SVG generation via stdlib `http.server`, event relay via POST), lazy-loaded in `renderer.__init__`
+- **True Concurrent EventLoop** — persistent shared `asyncio.EventLoop` on dedicated background thread (`event_loop.py`), `submit()`/`spawn()`/`shutdown()` API, evaluator `_resolve_awaitable` and `eval_async_expression` ported from raw threads, VM `_run_coroutine_sync` ported, `AsyncChannel` with `asyncio.Queue`
+- **WASM Compilation Target** — `WasmCompiler` translates Zexus `Bytecode` → valid `.wasm` binary (LEB128 encoding, all sections, i64 stack), supports arithmetic/comparisons/logic/control-flow/locals/POW, CLI `zx compile --target wasm`
+
+### 🔗 Blockchain Production Hardening
+
+- **CA-signed TLS, mTLS, certificate pinning** for P2P networking (`network.py`)
+- **Pluggable storage backends** — SQLite, LevelDB, and RocksDB support (`storage.py`)
+- **Production monitoring** — Prometheus metrics integration (`monitoring.py`)
+- **Load testing framework** — TPS validation with latency percentiles (`loadtest.py`)
+- **Dependency audit** — actionable install warnings for missing optional packages (`__init__.py`)
+
+### 🚀 Rust-First Execution Pipeline (Phases 0–6)
+
+Complete migration of contract execution from Python to Rust, achieving **102,000+ TPS** with zero Python fallbacks for builtin-heavy contracts.
+
+#### Phase 0 — Bytecode Compilation for Contracts
+- Added `use_bytecode_vm` feature flag to `ContractVM` enabling bytecoded execution with automatic tree-walk fallback
+- Shared gas metering, builtins, and blockchain state between contract VM and evaluator VM
+- Execution stats tracking via `get_vm_execution_stats()`
+- **17/17 test cases passed** — 100% bytecode rate, zero fallbacks
+
+#### Phase 1 — Binary Bytecode Format (`.zxc`)
+- Defined `.zxc` binary bytecode specification: 16-byte header, typed constant pool (9 tags + OPAQUE), variable-width instructions, CRC32 checksum
+- Python serializer/deserializer: `serialize()`, `deserialize()`, `save_zxc()`, `load_zxc()`
+- Multi-bytecode container support for file-level caching
+- GIL-free Rust deserializer via `RustBytecodeReader` PyO3 class
+- Wired into VM module loading, disk cache, and contract VM per-action caching
+- **20:1 compression** vs Python tuple format; **43/43 tests passed**
+
+#### Phase 2 — Rust Bytecode Interpreter
+- Complete Rust stack-machine bytecode interpreter (`rust_vm.rs`, ~1,600 lines)
+- `ZxValue` enum with all runtime types; `Op` enum mapping ~50 opcodes with per-opcode gas costs
+- Full opcode coverage: stack ops, arithmetic, comparison, logical, control flow, collections, blockchain ops, exception handling
+- Nested transaction support with snapshot/rollback
+- **22 MIPS throughput** — **20.7× speedup** over Python VM; **70/70 tests passed**
+
+#### Phase 3 — Adaptive VM Routing + Rust State Adapter
+- Adaptive routing: programs ≥10,000 ops automatically delegate to Rust VM (configurable via `ZEXUS_RUST_VM_THRESHOLD`)
+- Transparent fallback for unsupported ops (e.g., `CALL_NAME`); runtime toggle via `vm._rust_vm_enabled`
+- `RustStateAdapter` PyO3 class (~280 lines): in-memory HashMap cache with dirty-tracking, bulk load/flush, nested transactions
+- Gas metering bridge: Python passes gas budget to Rust, Rust `gas_used` bridges back
+- Contract VM integration with Phase 3 tier before bytecoded execution
+- **48/48 tests passed** — up to **55× speedup** for direct Rust execution
+
+#### Phase 4 — Rust ContractVM Orchestration + Gas Optimizations
+- `RustContractVM` PyO3 class (~633 lines): full lifecycle with reentrancy guard, call-depth check, state snapshot, gas discount, receipt generation
+- Batch execution via `execute_batch()` with sequential state chaining
+- **Gas optimizations**: STATE_WRITE 50→30 gas (40%), STORE_FUNC 5→3, Rust 0.6× discount (40% cheaper)
+- State diff computation and comprehensive receipt fields (gas_used, gas_saved, state_changes, output, revert_reason)
+- **>100,000 TPS** simple execution, **>200,000 TPS** stress; **30/30 tests passed**
+
+#### Phase 5 — GIL-Free Batch Execution
+- `execute_batch_native()` on `RustBatchExecutor` — pure-Rust parallel batch with **zero GIL acquisitions** during VM execution
+- Single GIL touch to parse input, then `py.allow_threads()` for entire compute phase
+- Rayon `par_iter()` across contract groups with sequential state chaining within groups
+- `AtomicU64` counters for lock-free gas/stats aggregation
+- Priority 0 tier in `accelerator.py`; backward compatible with existing `execute_batch()`
+- **Up to 3.6× speedup** over batched-GIL; **221,593 TPS** peak; **23/23 tests passed**
+
+#### Phase 6 — Rust Builtins (Zero Python Fallback)
+- Ported all 40+ contract builtins to Rust: crypto (keccak256, sha256, verify_sig), state (transfer, get_balance), events (emit), block info, type/conversion, collection, and string builtins
+- `dispatch_builtin()` match-based dispatch + `KNOWN_BUILTINS` static check
+- `CALL_NAME` handler checks `is_known_builtin()` first, fallback only for unknown names
+- Balance model with underflow/overflow protection
+- **191,148 ops/s** single keccak256, **102,320 TPS** batch CALL_NAME dispatch, **0 Python fallbacks**; **59/59 tests passed**
+
+### ⚡ Performance
+
+| Metric | Value |
+|--------|-------|
+| Single keccak256 (Rust VM) | **191,148 ops/s** |
+| Batch keccak256 (1,000 txns) | **72,414 TPS** |
+| Mixed builtins (keccak + emit + transfer) | **34,007 TPS** |
+| String builtins (upper + replace + split) | **75,420 TPS** |
+| CALL_NAME dispatch (keccak256) | **102,320 TPS** |
+| Rust VM throughput | **22 MIPS** (20.7× over Python) |
+| GIL-free batch peak | **221,593 TPS** |
+| Python fallbacks | **0** |
+| VM overhead per call | **3.7 µs** |
+
+### 🔧 Gas Optimizations
+- `STATE_WRITE` cost reduced from 50 to 30 gas (40% savings)
+- `STORE_FUNC` aligned: Python 5→3 gas (matched to Rust)
+- Rust gas discount: 0.6× multiplier (40% cheaper reflecting hardware-level efficiency)
+- Dynamic scaling for `BUILD_LIST` (+1/element), `BUILD_MAP` (+2/pair), `BUILD_SET` (+1/element)
+- Static call optimization: read-only calls use `enable_gas_light` for reduced metering
+
+### 📦 New Files
+- `rust_core/src/rust_vm.rs` — Rust bytecode interpreter (~1,600 lines)
+- `rust_core/src/state_adapter.rs` — `RustStateAdapter` PyO3 class (~280 lines)
+- `rust_core/src/contract_vm.rs` — `RustContractVM` PyO3 class (~633 lines)
+- `rust_core/src/binary_bytecode.rs` — Rust GIL-free `.zxc` deserializer (~544 lines)
+- `src/zexus/vm/binary_bytecode.py` — Python `.zxc` serializer/deserializer (~660 lines)
+- `src/zexus/dap_server.py` — Full DAP JSON wire protocol server
+- `src/zexus/renderer/` — TkBackend + WebBackend GUI renderers
+- `src/zexus/event_loop.py` — Persistent asyncio EventLoop on background thread
+- `src/zexus/wasm_compiler.py` — WASM compilation target
+- `src/zexus/static_type_checker.py` — Static type checking pass
+- `src/zexus/blockchain/monitoring.py` — Prometheus metrics integration
+- `src/zexus/blockchain/loadtest.py` — Load testing framework
+- `src/zexus/blockchain/storage.py` — Pluggable storage backends
+- `tests/vm/test_rust_vm.py` — 70 tests
+- `tests/vm/test_binary_bytecode.py` — 43 tests
+- `tests/vm/test_phase3_adaptive.py` — 48 tests
+- `tests/vm/test_phase4_contract_vm.py` — 30 tests
+- `tests/vm/test_phase5_gil_free.py` — 23 tests
+- `tests/vm/test_phase6_builtins.py` — 59 tests
+- `tests/blockchain/test_phase0_bytecode_vm.py` — 17 tests
+
+### 🔄 Changed Files
+- `src/zexus/lexer.py` — Compound assignment tokens, `**` operator, block comments, string interpolation, single-quoted strings, multiline strings
+- `src/zexus/zexus_ast.py` — `finally` clause on `TryCatchStatement`, destructuring AST nodes
+- `src/zexus/parser/` — Compound assignment infix rules, destructuring patterns, `**` precedence, `finally` parsing
+- `src/zexus/evaluator/` — Compound assignment handler, `finally` execution, destructuring eval, circular import guards, async EventLoop integration
+- `src/zexus/vm/vm.py` — Destructuring opcodes, circular import detection, Rust VM adaptive routing, threshold config, module `.zxc` loading
+- `src/zexus/vm/cache.py` — Disk persistence uses `.zxc` binary format
+- `src/zexus/vm/gas_metering.py` — STATE_WRITE=30, STORE_FUNC=3
+- `src/zexus/lsp/` — Go-to-definition symbol provider, AST walker
+- `src/zexus/zpm/` — Remote registry HTTP client, auth, tarball download/extraction
+- `src/zexus/blockchain/contract_vm.py` — Phase 0–4 bytecoded/Rust execution tiers, `.zxc` caching, chain info injection, event collection
+- `src/zexus/blockchain/rust_bridge.py` — `execute_batch_native()` GIL-free API
+- `src/zexus/blockchain/accelerator.py` — Priority 0 GIL-free native tier
+- `src/zexus/blockchain/network.py` — CA-signed TLS, mTLS, certificate pinning
+- `rust_core/src/executor.rs` — Native batch execution, events in receipts
+- `rust_core/src/lib.rs` — Registered `binary_bytecode`, `rust_vm`, `state_adapter`, `RustContractVM` modules
+- `rust_core/Cargo.toml` — Updated dependencies
+
+### 🧪 Testing
+- **290 new tests** across Phases 0–6 (17 + 43 + 70 + 48 + 30 + 23 + 59)
+- **1,792+ total tests pass** with zero regressions
+
+---
+
 ## [1.7.2] - 2026-01-14
 
 ### ⚡ Performance
@@ -480,6 +638,7 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.8.0]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.8...v1.7.1
 [1.6.8]: https://github.com/Zaidux/zexus-interpreter/compare/v1.6.7...v1.6.8

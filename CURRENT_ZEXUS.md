@@ -1,6 +1,6 @@
 # Zexus Interpreter — Complete Deep-Dive Report
 
-> Generated: February 14, 2026 | Version: 1.7.2 | Codebase: ~40,000+ lines of Python
+> Generated: February 14, 2026 | Version: 1.8.0 | Codebase: ~40,000+ lines of Python
 
 ---
 
