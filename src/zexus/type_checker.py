@@ -290,6 +290,31 @@ class StaticTypeChecker:
             self._check_block(stmt.body, ret_ts)
         self._pop_scope()
 
+    def _check_EntityStatement(self, stmt):
+        """Register entity as a callable constructor.
+        
+        Entity constructors can be called two ways:
+        - Positional: Point(3, 4)  — N args matching N properties
+        - Map style:  Point{x: 3, y: 4}  — parsed as 1 MapLiteral arg
+        
+        We register with _is_entity_constructor marker so _check_call
+        can skip strict arity validation for the single-map-arg case.
+        """
+        name = stmt.name.value if hasattr(stmt.name, 'value') else str(stmt.name)
+        param_types: List[Tuple[str, Optional[TypeSpec]]] = []
+        for prop in (stmt.properties or []):
+            prop_name = prop.get('name', '') if isinstance(prop, dict) else getattr(prop, 'name', '')
+            prop_type = prop.get('type', None) if isinstance(prop, dict) else getattr(prop, 'type', None)
+            ts = _resolve_annotation(prop_type)
+            param_types.append((prop_name, ts))
+        if name:
+            self._scope.define_callable(name, param_types, None)
+            self._scope.define(name, TypeSpec(BaseType.ANY))
+            # Mark this name as an entity constructor for flexible arity
+            if not hasattr(self._scope, '_entity_names'):
+                self._scope._entity_names = set()
+            self._scope._entity_names.add(name)
+
     def _check_FunctionStatement(self, stmt: ast.FunctionStatement):
         # Reuse action logic
         name = stmt.name if isinstance(stmt.name, str) else getattr(stmt.name, "value", None)
@@ -382,14 +407,28 @@ class StaticTypeChecker:
         params, _ = sig
         args = call.arguments or []
 
-        # Arity check
+        # Check if this is an entity constructor — they accept flexible arity
+        # (either N positional args or 1 MapLiteral arg for {field: value} syntax)
+        is_entity = False
+        scope = self._scope
+        while scope:
+            if hasattr(scope, '_entity_names') and fn_name in scope._entity_names:
+                is_entity = True
+                break
+            scope = scope.parent
+        
+        # Arity check (skip for entity constructors with single map arg)
         expected = len(params)
         got = len(args)
         if got != expected:
-            self._error(
-                f"'{fn_name}' expects {expected} argument(s) but got {got}",
-                call,
-            )
+            if is_entity and got == 1:
+                # Entity{field: value} syntax — single MapLiteral arg is valid
+                pass
+            else:
+                self._error(
+                    f"'{fn_name}' expects {expected} argument(s) but got {got}",
+                    call,
+                )
 
         # Per-argument type check
         for i, (pname, pts) in enumerate(params):

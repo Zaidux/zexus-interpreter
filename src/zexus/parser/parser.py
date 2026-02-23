@@ -140,6 +140,7 @@ class UltimateParser:
             REQUIRE: self.parse_require_statement,
             REVERT: self.parse_revert_statement,
             LIMIT: self.parse_limit_statement,
+            PROTOCOL: self.parse_protocol_statement,
         }
 
         # Traditional parser setup (fallback)
@@ -2817,24 +2818,30 @@ class UltimateParser:
             self.errors.append(f"Line {token.line}:{token.column} - Expected expression after 'watch'")
             return None
 
-        # Expect '=>' (LAMBDA token)
-        if not self.expect_peek(LAMBDA):
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' in watch statement")
-            return None
+        # Check for '=>' (LAMBDA token) — optional; allow watch expr { ... } form
+        if self.peek_token_is(LAMBDA):
+            self.next_token()  # consume '=>'
 
-        # Parse reaction (block or expression)
-        if self.peek_token_is(LBRACE):
+            # Parse reaction (block or expression)
+            if self.peek_token_is(LBRACE):
+                self.next_token()
+                reaction = self.parse_block("watch")
+            else:
+                self.next_token()
+                reaction_block = BlockStatement()
+                stmt = self.parse_statement()
+                if stmt is None:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
+                    return None
+                reaction_block.statements.append(stmt)
+                reaction = reaction_block
+        elif self.peek_token_is(LBRACE):
+            # Form: watch expr { ... }
             self.next_token()
             reaction = self.parse_block("watch")
         else:
-            self.next_token()
-            reaction_block = BlockStatement()
-            stmt = self.parse_statement()
-            if stmt is None:
-                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
-                return None
-            reaction_block.statements.append(stmt)
-            reaction = reaction_block
+            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '=>' or '{{' in watch statement")
+            return None
 
         if reaction is None:
             self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected reaction after '=>'")
@@ -4450,6 +4457,54 @@ class UltimateParser:
                     self.next_token()
         
         return InterfaceStatement(name=interface_name, methods=methods, properties=properties)
+
+    def parse_protocol_statement(self):
+        """Parse protocol definition statement
+        
+        protocol Greetable {
+            action greet() -> string
+            action farewell()
+        }
+        """
+        token = self.cur_token
+        self.next_token()
+        
+        # protocol Name { ... }
+        if not self.cur_token_is(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected protocol name")
+            return None
+        
+        protocol_name = Identifier(self.cur_token.literal)
+        self.next_token()
+        
+        methods = []
+        
+        if self.cur_token_is(LBRACE):
+            self.next_token()
+            while not self.cur_token_is(RBRACE) and self.cur_token.type != EOF:
+                if self.cur_token_is(ACTION) or self.cur_token_is(FUNCTION):
+                    self.next_token()
+                    if self.cur_token_is(IDENT):
+                        methods.append(self.cur_token.literal)
+                        self.next_token()
+                        # Skip past params and return type annotation
+                        while not self.cur_token_is(SEMICOLON) and not self.cur_token_is(RBRACE) and self.cur_token.type != EOF:
+                            self.next_token()
+                        if self.cur_token_is(SEMICOLON):
+                            self.next_token()
+                    else:
+                        self.next_token()
+                elif self.cur_token_is(IDENT):
+                    methods.append(self.cur_token.literal)
+                    self.next_token()
+                    while not self.cur_token_is(SEMICOLON) and not self.cur_token_is(RBRACE) and self.cur_token.type != EOF:
+                        self.next_token()
+                    if self.cur_token_is(SEMICOLON):
+                        self.next_token()
+                else:
+                    self.next_token()
+        
+        return ProtocolStatement(name=protocol_name, methods=methods)
 
     def parse_type_alias_statement(self):
         """Parse type alias statement"""

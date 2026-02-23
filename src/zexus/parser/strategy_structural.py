@@ -46,7 +46,7 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH, MATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, ATOMIC,
+              CHANNEL, ATOMIC, EMIT, PROTOCOL,
               # Blockchain keywords
               LEDGER, STATE, REQUIRE, REVERT, LIMIT
           }
@@ -1212,7 +1212,7 @@ class StructuralAnalyzer:
               DEFER, PATTERN, ENUM, STREAM, WATCH,
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
-              CHANNEL, ATOMIC, ASYNC,  # Added ASYNC to recognize async expressions as statement boundaries
+              CHANNEL, ATOMIC, ASYNC, EMIT, PROTOCOL,
               LBRACE  # Added LBRACE to recognize standalone blocks as statements
           }
 

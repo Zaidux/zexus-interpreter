@@ -4796,11 +4796,16 @@ class StatementEvaluatorMixin:
         # Store method signatures
         methods = {}
         for method in node.methods:
-            method_name = method.name.value if hasattr(method.name, 'value') else str(method.name)
-            methods[method_name] = {
-                'params': method.parameters if hasattr(method, 'parameters') else [],
-                'return_type': method.return_type if hasattr(method, 'return_type') else None
-            }
+            # methods may be strings (from context parser) or ActionStatement objects
+            if isinstance(method, str):
+                method_name = method
+                methods[method_name] = {'params': [], 'return_type': None}
+            else:
+                method_name = method.name.value if hasattr(method.name, 'value') else str(method.name) if hasattr(method, 'name') else str(method)
+                methods[method_name] = {
+                    'params': method.parameters if hasattr(method, 'parameters') else [],
+                    'return_type': method.return_type if hasattr(method, 'return_type') else None
+                }
         
         # Create protocol object
         protocol_def = {
@@ -4825,6 +4830,22 @@ class StatementEvaluatorMixin:
         # Get variable name
         var_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
         
+        # Ensure persistence backend is initialised on this environment
+        if hasattr(env, '_persistent_storage') and env._persistent_storage is None:
+            try:
+                from ..persistence import PersistentStorage, MemoryTracker
+                # Derive scope from the contract name if available, else use a default
+                scope = env.get("__contract_name__") or "global"
+                if hasattr(scope, 'value'):
+                    scope = scope.value
+                scope = str(scope)
+                env._persistent_storage = PersistentStorage(scope)
+                if env._memory_tracker is None:
+                    env._memory_tracker = MemoryTracker()
+                    env._memory_tracker.start_tracking()
+            except (ImportError, Exception):
+                pass  # Persistence module not available — fall through to regular storage
+        
         # Evaluate initial value if provided
         value = NULL
         if node.initial_value:
@@ -4835,8 +4856,17 @@ class StatementEvaluatorMixin:
         # Mark as persistent in environment (special marker)
         env.set(f"__persistent_{var_name}__", True)
         
-        # Store the actual value
-        env.set(var_name, value)
+        # Store via the persistence layer if available, otherwise regular
+        if hasattr(env, 'set_persistent') and hasattr(env, '_persistent_storage') and env._persistent_storage is not None:
+            env.set_persistent(var_name, value)
+        else:
+            env.set(var_name, value)
+        
+        # On startup, restore the previously-persisted value (overrides default)
+        if hasattr(env, 'get_persistent') and hasattr(env, '_persistent_storage') and env._persistent_storage is not None:
+            persisted = env.get_persistent(var_name)
+            if persisted is not None:
+                env.store[var_name] = persisted
         
         return NULL
 

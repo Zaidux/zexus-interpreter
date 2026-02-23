@@ -547,6 +547,24 @@ class EvaluatorBytecodeCompiler:
     def _compile_PatternStatement(self, node: zexus_ast.PatternStatement):
         """Compile pattern matching directives to VM builtins."""
         self._emit_vm_builtin_call("__vm_pattern_statement__", node, discard_result=False)
+
+    def _compile_ExportStatement(self, node):
+        """Compile export statement - no-op for bytecode.
+        
+        Export is a declaration/annotation; the names being exported
+        are already defined by their own declarations (contract, action, etc.).
+        The evaluator handles export registration at module level.
+        """
+        # Export names are registered by the evaluator, not bytecode
+        pass
+
+    def _compile_EmitStatement(self, node):
+        """Compile emit statement to VM builtin call."""
+        self._emit_vm_builtin_call("__vm_emit_statement__", node, discard_result=False)
+
+    def _compile_ProtocolStatement(self, node):
+        """Compile protocol statement to VM builtin call."""
+        self._emit_vm_builtin_call("__vm_protocol_statement__", node, discard_result=False)
     
     # === Blockchain Statement Compilation ===
     

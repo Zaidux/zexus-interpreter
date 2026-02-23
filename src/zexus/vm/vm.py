@@ -2203,7 +2203,17 @@ class VM:
                             result = attr(*args)
                         elif isinstance(target, dict) and method_name in target:
                             candidate = target[method_name]
-                            result = candidate(*args) if callable(candidate) else candidate
+                            # Handle Builtin objects (have .fn), ZAction/ZLambda (have .call),
+                            # and regular callables
+                            if callable(candidate):
+                                result = candidate(*args)
+                            elif hasattr(candidate, 'fn') and callable(candidate.fn):
+                                # Builtin from evaluator — call inner fn
+                                result = candidate.fn(*args)
+                            elif hasattr(candidate, 'call') and callable(candidate.call):
+                                result = candidate.call(*args)
+                            else:
+                                result = candidate
                         else:
                             result = attr
                 except Exception:
@@ -3166,7 +3176,16 @@ class VM:
                         result = attr(*args)
                     elif isinstance(target, dict) and method_name in target:
                         candidate = target[method_name]
-                        result = candidate(*args) if callable(candidate) else candidate
+                        # Handle Builtin objects (have .fn), ZAction/ZLambda (have .call),
+                        # and regular callables
+                        if callable(candidate):
+                            result = candidate(*args)
+                        elif hasattr(candidate, 'fn') and callable(candidate.fn):
+                            result = candidate.fn(*args)
+                        elif hasattr(candidate, 'call') and callable(candidate.call):
+                            result = candidate.call(*args)
+                        else:
+                            result = candidate
                     else:
                         result = attr
                 if _verbose_active and self._call_method_trace_count <= 25:
@@ -4731,7 +4750,11 @@ class VM:
                                 print(f"[VM TRACE] action error: {result.message}")
                         return self._unwrap_after_builtin(result)
             except Exception:
-                pass
+                # ZAction/ZLambda handling failed — but don't silently swallow
+                # If this was a ZAction, we should NOT fall through to the callable check
+                # because ZAction objects are not directly callable and would be returned raw
+                if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
+                    return None
             
             if not callable(real_fn): return real_fn
             

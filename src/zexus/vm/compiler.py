@@ -939,30 +939,44 @@ class BytecodeCompiler:
         # Push name
         self._emit(Opcode.LOAD_CONST, name_idx)
         
-        # Compile body members
+        # Compile properties and methods from EntityStatement's actual attributes
         member_count = 0
-        if hasattr(node.body, 'statements'):
-            for stmt in node.body.statements:
-                stmt_type = type(stmt).__name__
-                # Reuse state/action compilation
-                if stmt_type in ('StateStatement', 'ActionStatement'):
-                    if stmt_type == 'StateStatement':
-                         # Value
-                        if getattr(stmt, 'initial_value', None):
-                            self._compile_node(stmt.initial_value)
-                        else:
-                            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
-                        # Name
-                        self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
-                    elif stmt_type == 'ActionStatement':
-                        self._compile_node(stmt)
-                        self._emit(Opcode.LOAD_NAME, self._add_constant(stmt.name.value))
-                        self._emit(Opcode.LOAD_CONST, self._add_constant(stmt.name.value))
-                    
-                    member_count += 1
+        
+        # Compile properties (list of dicts with 'name', 'type', 'default_value')
+        for prop in (node.properties or []):
+            prop_name = prop.get('name', '') if isinstance(prop, dict) else getattr(prop, 'name', '')
+            default_val = prop.get('default_value', None) if isinstance(prop, dict) else getattr(prop, 'default_value', None)
+            
+            if default_val is not None:
+                self._compile_node(default_val)
+            else:
+                self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+            self._emit(Opcode.LOAD_CONST, self._add_constant(prop_name))
+            member_count += 1
+        
+        # Compile methods (list of ActionStatement)
+        for method in (node.methods or []):
+            self._compile_node(method)
+            method_name = method.name.value if hasattr(method.name, 'value') else str(method.name)
+            self._emit(Opcode.LOAD_NAME, self._add_constant(method_name))
+            self._emit(Opcode.LOAD_CONST, self._add_constant(method_name))
+            member_count += 1
 
         self._emit(Opcode.DEFINE_ENTITY, member_count)
         self._emit(Opcode.STORE_NAME, name_idx)
+
+    def _compile_ExportStatement(self, node):
+        """Compile export statement - marks names for module export.
+        
+        Export is a declaration/annotation; the exported names are already
+        defined by their own declarations, so this just emits EXPORT opcodes
+        to register them in the module's export table.
+        """
+        for name_node in (node.names or []):
+            name = name_node.value if hasattr(name_node, 'value') else str(name_node)
+            name_idx = self._add_constant(name)
+            self._emit(Opcode.LOAD_NAME, name_idx)
+            self._emit(Opcode.EXPORT, name_idx)
 
     def _compile_DataStatement(self, node):
         """Compile Data/Dataclass definition"""

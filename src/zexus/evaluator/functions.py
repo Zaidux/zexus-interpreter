@@ -565,6 +565,8 @@ class FunctionEvaluatorMixin:
                 found = any(elem.value == target.value for elem in obj.elements 
                           if hasattr(elem, 'value') and hasattr(target, 'value'))
                 return TRUE if found else FALSE
+            elif method_name == "is_empty":
+                return TRUE if len(obj.elements) == 0 else FALSE
         
         # === Coroutine Methods ===
         from ..object import Coroutine
@@ -593,11 +595,23 @@ class FunctionEvaluatorMixin:
             
             if method_name == "has":
                 key = args[0].value if hasattr(args[0], 'value') else str(args[0])
-                return TRUE if key in obj.pairs else FALSE
+                # Try plain key first, then try String-wrapped key for normalization
+                if key in obj.pairs:
+                    return TRUE
+                str_key = String(key) if isinstance(key, str) else key
+                if str_key in obj.pairs:
+                    return TRUE
+                return FALSE
             elif method_name == "get":
                 key = args[0].value if hasattr(args[0], 'value') else str(args[0])
                 default = args[1] if len(args) > 1 else NULL
-                return obj.pairs.get(key, default)
+                # Try plain key first, then String-wrapped key for normalization
+                if key in obj.pairs:
+                    return obj.pairs[key]
+                str_key = String(key) if isinstance(key, str) else key
+                if str_key in obj.pairs:
+                    return obj.pairs[str_key]
+                return default
             elif method_name == "keys":
                 # Return array of all keys
                 return List([String(k) if isinstance(k, str) else k for k in obj.pairs.keys()])
@@ -3828,6 +3842,94 @@ class FunctionEvaluatorMixin:
             "mock_dependency": Builtin(_mock_dependency, "mock_dependency"),
             "clear_mocks": Builtin(_clear_mocks, "clear_mocks"),
             "set_execution_mode": Builtin(_set_execution_mode, "set_execution_mode"),
+        })
+
+        # ----- INT-005 through INT-009: missing directive builtins -----
+        self._register_missing_directive_builtins()
+
+    def _register_missing_directive_builtins(self):
+        """Register track_memory, cache, throttle, audit, verify builtins (INT-005..INT-009)."""
+
+        def _track_memory(*a):
+            """Enable memory tracking: track_memory() or track_memory(options_map)"""
+            env = getattr(self, '_current_env', None)
+            if env and hasattr(env, 'enable_memory_tracking'):
+                env.enable_memory_tracking()
+                return String("Memory tracking enabled")
+            return String("Memory tracking enabled (no-op — persistence module not loaded)")
+
+        def _cache(*a):
+            """Declare a named cache: cache(name, options_map)
+            Options: {ttl: seconds}
+            Returns the cache handle (currently a lightweight Map stub).
+            """
+            name = str(a[0].value) if a and hasattr(a[0], 'value') else "default"
+            ttl = 300  # default 5 min
+            if len(a) >= 2 and hasattr(a[1], 'pairs'):
+                for k, v in a[1].pairs.items():
+                    key_str = k.value if hasattr(k, 'value') else str(k)
+                    if key_str == "ttl" and hasattr(v, 'value'):
+                        ttl = int(v.value)
+            # Store cache metadata in environment
+            env = getattr(self, '_current_env', None)
+            if env:
+                env.set(f"__cache_{name}_ttl__", Integer(ttl))
+            return Map({String("name"): String(name), String("ttl"): Integer(ttl)})
+
+        def _throttle(*a):
+            """Set up rate-limiting: throttle(name, options_map)
+            Options: {requests_per_minute: N}
+            """
+            name = str(a[0].value) if a and hasattr(a[0], 'value') else "default"
+            rpm = 60
+            if len(a) >= 2 and hasattr(a[1], 'pairs'):
+                for k, v in a[1].pairs.items():
+                    key_str = k.value if hasattr(k, 'value') else str(k)
+                    if key_str == "requests_per_minute" and hasattr(v, 'value'):
+                        rpm = int(v.value)
+            env = getattr(self, '_current_env', None)
+            if env:
+                env.set(f"__throttle_{name}_rpm__", Integer(rpm))
+            return Map({String("name"): String(name), String("requests_per_minute"): Integer(rpm)})
+
+        def _audit(*a):
+            """Log an audit event: audit(event_name, data_map)"""
+            event_name = str(a[0].value) if a and hasattr(a[0], 'value') else "unknown"
+            data = a[1] if len(a) >= 2 else NULL
+            # Store in environment audit trail
+            env = getattr(self, '_current_env', None)
+            if env:
+                trail = env.get("__audit_trail__")
+                if trail is None or not isinstance(trail, List):
+                    trail = List([])
+                    env.set("__audit_trail__", trail)
+                trail.elements.append(Map({String("event"): String(event_name), String("data"): data}))
+            return String(f"Audit logged: {event_name}")
+
+        def _verify(*a):
+            """Alias for require(): verify(condition, message)
+            Throws if condition is falsy.
+            """
+            if len(a) < 1:
+                return EvaluationError("verify() requires at least 1 argument: condition")
+            condition = a[0]
+            msg = str(a[1].value) if len(a) >= 2 and hasattr(a[1], 'value') else "Verification failed"
+            # Truthy check
+            is_truthy = True
+            if hasattr(condition, 'value'):
+                is_truthy = bool(condition.value)
+            elif condition is NULL or condition is FALSE:
+                is_truthy = False
+            if not is_truthy:
+                return EvaluationError(msg)
+            return TRUE
+
+        self.builtins.update({
+            "track_memory": Builtin(_track_memory, "track_memory"),
+            "cache": Builtin(_cache, "cache"),
+            "throttle": Builtin(_throttle, "throttle"),
+            "audit": Builtin(_audit, "audit"),
+            "verify": Builtin(_verify, "verify"),
         })
     
     def _register_main_entry_point_builtins(self):

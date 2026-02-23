@@ -15,7 +15,8 @@ STATEMENT_STARTERS = {
     STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
     SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
     REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
-    PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE
+    PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE,
+    EMIT, PROTOCOL, SEAL
 }
 
 _MEANINGFUL_TOKEN_TYPES = {
@@ -162,6 +163,10 @@ class ContextStackParser:
             ANIMATION: self._parse_animation_statement,
             CLOCK: self._parse_clock_statement,
             GC: self._parse_gc_statement_block,
+            # EMIT handler
+            EMIT: self._parse_emit_statement_block,
+            # PROTOCOL handler
+            PROTOCOL: self._parse_protocol_statement_block,
         }
 
     def push_context(self, context_type, context_name=None):
@@ -1558,9 +1563,18 @@ class ContextStackParser:
         except Exception:
             pass
 
-        # 1. Extract Name
+        # 1. Extract Name and optional implements clause
         contract_name = tokens[1].literal if tokens[1].type == IDENT else "UnknownContract"
-        parser_debug(f"  📝 Contract Name: {contract_name}")
+        implements = None
+        
+        # Check for 'implements' keyword: contract Name implements ProtocolName { ... }
+        for idx in range(2, min(len(tokens), 5)):
+            if idx < len(tokens) and tokens[idx].type == IMPLEMENTS:
+                if idx + 1 < len(tokens) and tokens[idx + 1].type == IDENT:
+                    implements = Identifier(tokens[idx + 1].literal)
+                break
+        
+        parser_debug(f"  📝 Contract Name: {contract_name}" + (f" implements {implements}" if implements else ""))
 
         # 2. Identify Block Boundaries
         brace_start = -1
@@ -1935,7 +1949,8 @@ class ContextStackParser:
         contract_stmt = ContractStatement(
             name=Identifier(contract_name),
             body=body_block,
-            modifiers=None
+            modifiers=None,
+            implements=implements
         )
         
         # Add backward compatibility attributes
@@ -3152,6 +3167,67 @@ class ContextStackParser:
                     name=Identifier(package_name if package_name else 'anonymous'),
                     body=body
                 ))
+                
+                i = j
+                continue
+
+            elif token.type == EMIT:
+                # Parse EMIT statement: emit EventName(args)
+                j = i + 1
+                emit_tokens = [token]
+                paren_nest = 0
+                
+                # Collect until end of emit statement (close paren or semicolon/newline boundary)
+                while j < len(tokens):
+                    tj = tokens[j]
+                    if tj.type == LPAREN:
+                        paren_nest += 1
+                    elif tj.type == RPAREN:
+                        paren_nest -= 1
+                        if paren_nest == 0:
+                            emit_tokens.append(tj)
+                            j += 1
+                            break
+                    elif tj.type == SEMICOLON and paren_nest == 0:
+                        j += 1
+                        break
+                    emit_tokens.append(tj)
+                    j += 1
+                
+                parser_debug(f"    📝 Found emit statement: {[t.literal for t in emit_tokens]}")
+                
+                block_info = {'tokens': emit_tokens}
+                stmt = self._parse_emit_statement_block(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+                
+                i = j
+                continue
+
+            elif token.type == PROTOCOL:
+                # Parse PROTOCOL statement: protocol Name { action method1() ... }
+                j = i + 1
+                proto_tokens = [token]
+                brace_nest = 0
+                
+                while j < len(tokens):
+                    tj = tokens[j]
+                    proto_tokens.append(tj)
+                    if tj.type == LBRACE:
+                        brace_nest += 1
+                    elif tj.type == RBRACE:
+                        brace_nest -= 1
+                        if brace_nest == 0:
+                            j += 1
+                            break
+                    j += 1
+                
+                parser_debug(f"    📝 Found protocol statement: {[t.literal for t in proto_tokens[:10]]}")
+                
+                block_info = {'tokens': proto_tokens}
+                stmt = self._parse_protocol_statement_block(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
                 
                 i = j
                 continue
@@ -7667,9 +7743,156 @@ class ContextStackParser:
                 
             parser_debug("  ✅ Watch statement (explicit)")
             return WatchStatement(reaction=reaction, watched_expr=watched_expr)
-            
+
+        # Form 3: watch expr { ... } (expression followed by block, no arrow)
+        brace_idx = -1
+        for i, t in enumerate(tokens):
+            if t.type == LBRACE:
+                brace_idx = i
+                break
+
+        if brace_idx > 1:
+            expr_tokens = tokens[1:brace_idx]
+            reaction_tokens = tokens[brace_idx:]
+            watched_expr = self._parse_expression(expr_tokens)
+            if reaction_tokens and reaction_tokens[0].type == LBRACE:
+                inner = reaction_tokens[1:-1] if reaction_tokens[-1].type == RBRACE else reaction_tokens[1:]
+                stmts = self._parse_block_statements(inner)
+                reaction = BlockStatement()
+                reaction.statements = stmts
+            else:
+                reaction = self._parse_expression(reaction_tokens)
+            parser_debug("  ✅ Watch statement (variable)")
+            return WatchStatement(reaction=reaction, watched_expr=watched_expr)
+
         parser_debug("  ❌ Invalid watch syntax")
         return None
+
+    def _parse_emit_statement_block(self, block_info, all_tokens):
+        """Parse emit statement.
+        
+        Form: emit EventName(arg1, arg2, ...)
+        Example: emit Transfer("0xALICE", "0xBOB", 100)
+        """
+        parser_debug("🔧 [Context] Parsing emit statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != EMIT:
+            parser_debug("  ❌ Expected EMIT keyword")
+            return None
+        
+        # Token 1 should be the event name (IDENT)
+        if len(tokens) < 2 or tokens[1].type != IDENT:
+            parser_debug("  ❌ Expected event name after emit")
+            return None
+        
+        event_name = Identifier(tokens[1].literal)
+        
+        # Parse arguments if present: emit EventName(arg1, arg2)
+        arguments = []
+        if len(tokens) > 2 and tokens[2].type == LPAREN:
+            # Find matching RPAREN
+            paren_depth = 0
+            arg_start = 3
+            for idx in range(2, len(tokens)):
+                if tokens[idx].type == LPAREN:
+                    paren_depth += 1
+                elif tokens[idx].type == RPAREN:
+                    paren_depth -= 1
+                    if paren_depth == 0:
+                        # Parse arguments between parens
+                        arg_tokens = tokens[3:idx]
+                        if arg_tokens:
+                            # Split by commas at depth 0
+                            current_arg = []
+                            inner_depth = 0
+                            for at in arg_tokens:
+                                if at.type == LPAREN:
+                                    inner_depth += 1
+                                elif at.type == RPAREN:
+                                    inner_depth -= 1
+                                if at.type == COMMA and inner_depth == 0:
+                                    if current_arg:
+                                        expr = self._parse_expression(current_arg)
+                                        if expr:
+                                            arguments.append(expr)
+                                        current_arg = []
+                                else:
+                                    current_arg.append(at)
+                            if current_arg:
+                                expr = self._parse_expression(current_arg)
+                                if expr:
+                                    arguments.append(expr)
+                        break
+        
+        parser_debug(f"  ✅ Emit statement: {event_name} with {len(arguments)} args")
+        return EmitStatement(event_name, arguments)
+
+    def _parse_protocol_statement_block(self, block_info, all_tokens):
+        """Parse protocol statement.
+        
+        Form: protocol Name { action method1() action method2(arg) -> type }
+        Example: protocol Greetable { action greet() -> string }
+        """
+        parser_debug("🔧 [Context] Parsing protocol statement")
+        tokens = block_info.get('tokens', [])
+        
+        if not tokens or tokens[0].type != PROTOCOL:
+            parser_debug("  ❌ Expected PROTOCOL keyword")
+            return None
+        
+        # Token 1 should be protocol name
+        if len(tokens) < 2 or tokens[1].type != IDENT:
+            parser_debug("  ❌ Expected protocol name")
+            return None
+        
+        protocol_name = Identifier(tokens[1].literal)
+        
+        # Parse method signatures from brace block
+        methods = []
+        brace_start = -1
+        for idx, t in enumerate(tokens):
+            if t.type == LBRACE:
+                brace_start = idx
+                break
+        
+        if brace_start != -1:
+            # Find matching RBRACE
+            brace_end = len(tokens) - 1
+            for idx in range(len(tokens) - 1, brace_start, -1):
+                if tokens[idx].type == RBRACE:
+                    brace_end = idx
+                    break
+            
+            # Parse inner tokens for method signatures
+            inner = tokens[brace_start + 1:brace_end]
+            i = 0
+            while i < len(inner):
+                t = inner[i]
+                # Look for action/function keyword or bare identifiers as method names
+                if t.type in (ACTION, FUNCTION):
+                    i += 1
+                    if i < len(inner) and inner[i].type == IDENT:
+                        methods.append(inner[i].literal)
+                        # Skip past params and return type
+                        while i < len(inner) and inner[i].type != SEMICOLON and inner[i].type != ACTION and inner[i].type != FUNCTION:
+                            i += 1
+                        if i < len(inner) and inner[i].type == SEMICOLON:
+                            i += 1
+                        continue
+                elif t.type == IDENT:
+                    methods.append(t.literal)
+                    # Skip to next method
+                    i += 1
+                    while i < len(inner) and inner[i].type != SEMICOLON and inner[i].type != ACTION and inner[i].type != FUNCTION:
+                        i += 1
+                    if i < len(inner) and inner[i].type == SEMICOLON:
+                        i += 1
+                    continue
+                i += 1
+        
+        parser_debug(f"  ✅ Protocol statement: {protocol_name} with methods: {methods}")
+        return ProtocolStatement(name=protocol_name, methods=methods)
 
     def _parse_protect_statement(self, block_info, all_tokens):
         """Parse protect statement.

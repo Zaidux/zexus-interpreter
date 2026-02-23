@@ -996,13 +996,10 @@ class Environment:
         """Initialize persistence system if scope is provided"""
         if self.persistence_scope:
             try:
-                # Lazy import to avoid circular dependencies
-                import sys
-                if 'zexus.persistence' in sys.modules:
-                    from .persistence import PersistentStorage, MemoryTracker
-                    self._persistent_storage = PersistentStorage(self.persistence_scope)
-                    self._memory_tracker = MemoryTracker()
-                    self._memory_tracker.start_tracking()
+                from .persistence import PersistentStorage, MemoryTracker
+                self._persistent_storage = PersistentStorage(self.persistence_scope)
+                self._memory_tracker = MemoryTracker()
+                self._memory_tracker.start_tracking()
             except (ImportError, Exception):
                 # Persistence module not available or error - continue without it
                 pass
@@ -1042,12 +1039,9 @@ class Environment:
         """Enable memory leak detection"""
         if not self._memory_tracker:
             try:
-                # Lazy import
-                import sys
-                if 'zexus.persistence' in sys.modules:
-                    from .persistence import MemoryTracker
-                    self._memory_tracker = MemoryTracker()
-                    self._memory_tracker.start_tracking()
+                from .persistence import MemoryTracker
+                self._memory_tracker = MemoryTracker()
+                self._memory_tracker.start_tracking()
             except (ImportError, Exception):
                 pass
     
