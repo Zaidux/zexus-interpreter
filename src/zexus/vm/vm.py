@@ -437,10 +437,10 @@ class VM:
         self._native_jit_auto_enabled = False
         self._native_jit_auto_threshold = 700
 
-        # --- Rust VM Adaptive Routing (Phase 3) ---
+        # --- Rust VM Adaptive Routing (Phase 3 + Phase 6) ---
         self._rust_vm_available = _RUST_VM_AVAILABLE
         self._rust_vm_executor = _RustVMExecutor() if _RUST_VM_AVAILABLE else None
-        self._rust_vm_threshold = 10_000  # Switch to Rust VM when instructions >= this
+        self._rust_vm_threshold = 0  # Phase 6: route ALL programs through Rust by default
         try:
             _env_thresh = os.environ.get("ZEXUS_RUST_VM_THRESHOLD")
             if _env_thresh is not None:

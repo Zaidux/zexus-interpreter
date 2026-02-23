@@ -216,9 +216,9 @@ class ContractVM:
             "rust_fallbacks": 0,
         }
 
-        # Rust VM executor (Phase 3 — adaptive contract execution)
+        # Rust VM executor (Phase 3 + Phase 6 — Rust-first execution)
         self._rust_vm_executor = _RustVMExecutor() if _RUST_VM_AVAILABLE else None
-        self._rust_vm_threshold = 10_000
+        self._rust_vm_threshold = 0  # Phase 6: route ALL contracts through Rust by default
         try:
             _env_thresh = os.environ.get("ZEXUS_RUST_VM_THRESHOLD")
             if _env_thresh is not None:
