@@ -391,9 +391,13 @@ def _deserialize_constant(r: _Reader) -> Any:
             result[key] = val
         return result
     elif tag == ConstTag.OPAQUE:
-        import pickle
-        data = r.raw_bytes()
-        return pickle.loads(data)
+        # SECURITY (C10): pickle.loads() removed — arbitrary code execution risk.
+        # Skip the raw bytes but refuse to deserialize.
+        _data = r.raw_bytes()
+        raise ValueError(
+            "OPAQUE constant tag is disabled for security (pickle deserialization). "
+            "Re-compile the .zxc file with a safe serialization format."
+        )
     else:
         raise ValueError(f"Unknown constant tag: 0x{tag:02x}")
 

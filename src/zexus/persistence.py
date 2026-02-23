@@ -12,7 +12,8 @@ from threading import Lock
 from typing import Dict, Any, Optional, Set
 from .object import (
     Object, Integer, Float, String, Boolean as BooleanObj, 
-    Null, NULL, List, Map, EntityInstance
+    Null, NULL, List, Map, EntityInstance,
+    _sanitize_identifier
 )
 
 # Storage directory for persistent data
@@ -142,8 +143,9 @@ class PersistentStorage:
     
     def __init__(self, scope_id: str, storage_dir: str = PERSISTENCE_DIR,
                  max_items: int = None, max_size_mb: int = None):
-        self.scope_id = scope_id
-        self.db_path = os.path.join(storage_dir, f"{scope_id}.sqlite")
+        # SECURITY (C5): Sanitize scope_id to prevent path traversal
+        self.scope_id = _sanitize_identifier(scope_id, "scope_id")
+        self.db_path = os.path.join(storage_dir, f"{self.scope_id}.sqlite")
         self.conn = None
         self.lock = Lock()
         
@@ -499,6 +501,8 @@ def list_persistent_scopes() -> list:
 
 def delete_persistent_scope(scope_name: str):
     """Delete a persistent storage scope"""
+    # SECURITY (C7): Sanitize scope_name to prevent path traversal / arbitrary deletion
+    scope_name = _sanitize_identifier(scope_name, "scope_name")
     db_path = os.path.join(PERSISTENCE_DIR, f"{scope_name}.sqlite")
     if os.path.exists(db_path):
         os.remove(db_path)

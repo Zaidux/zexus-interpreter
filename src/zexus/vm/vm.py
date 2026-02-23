@@ -3385,13 +3385,19 @@ class VM:
         def _op_read(_):
             path = stack.pop() if stack else None
             try:
-                import os
-                if path and os.path.exists(path):
-                    with open(path, 'r') as f:
-                        stack.append(f.read())
-                else:
-                    stack.append(None)
-            except:
+                import os as _os
+                if path:
+                    # SECURITY (C11): Sandbox file reads to cwd
+                    sandbox = _os.getcwd()
+                    if isinstance(path, str) and '\x00' not in path:
+                        resolved = _os.path.realpath(_os.path.join(sandbox, path))
+                        if resolved == sandbox or resolved.startswith(sandbox + _os.sep):
+                            if _os.path.exists(resolved):
+                                with open(resolved, 'r') as f:
+                                    stack.append(f.read())
+                                return
+                stack.append(None)
+            except (IOError, OSError, PermissionError):
                 stack.append(None)
 
         def _op_store_func(operand):
@@ -3475,6 +3481,7 @@ class VM:
             (self.enable_fast_loop or auto_fast_loop)
             and not profile_ops
             and not gas_enabled  # Never skip gas metering (including gas_light)
+            and not gas_light    # SECURITY (C13): also block fast loop under gas_light
             and not trace_interval
             and trace_ip_range is None
             and not trace_loads_active
@@ -3491,6 +3498,8 @@ class VM:
                 reasons.append("opcode_profile")
             if gas_enabled and not gas_light:
                 reasons.append("gas")
+            if gas_light:
+                reasons.append("gas_light")
             if trace_interval:
                 reasons.append("trace_interval")
             if trace_ip_range is not None:
@@ -4253,12 +4262,19 @@ class VM:
                     path = stack.pop() if stack else None
                     try:
                         if path is not None:
-                            with open(path, "w") as f:
-                                if isinstance(payload, bytes):
-                                    f.write(payload.decode("utf-8"))
-                                else:
-                                    f.write(str(payload) if payload is not None else "")
-                            stack.append(True)
+                            # SECURITY (C12): Sandbox file writes to cwd
+                            import os as _os_w
+                            sandbox = _os_w.getcwd()
+                            resolved = _os_w.path.realpath(_os_w.path.join(sandbox, str(path)))
+                            if not (resolved == sandbox or resolved.startswith(sandbox + _os_w.sep)):
+                                stack.append(False)  # path traversal denied
+                            else:
+                                with open(resolved, "w") as f:
+                                    if isinstance(payload, bytes):
+                                        f.write(payload.decode("utf-8"))
+                                    else:
+                                        f.write(str(payload) if payload is not None else "")
+                                stack.append(True)
                         else:
                             stack.append(False)
                     except Exception:

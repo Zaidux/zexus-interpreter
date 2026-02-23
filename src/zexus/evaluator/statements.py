@@ -3318,7 +3318,17 @@ class StatementEvaluatorMixin:
     # === PERFORMANCE OPTIMIZATION STATEMENTS ===
     
     def eval_native_statement(self, node, env, stack_trace):
-        """Evaluate native statement - call C/C++ code directly."""
+        """Evaluate native statement - call C/C++ code directly.
+        
+        SECURITY (C3): Requires ZEXUS_ALLOW_NATIVE=1 environment variable.
+        Disabled by default to prevent arbitrary native code loading via ctypes.
+        """
+        import os as _os
+        if _os.environ.get('ZEXUS_ALLOW_NATIVE') != '1':
+            return EvaluationError(
+                "Native statements are disabled for security. "
+                "Set ZEXUS_ALLOW_NATIVE=1 environment variable to enable ctypes FFI."
+            )
         try:
             import ctypes
             

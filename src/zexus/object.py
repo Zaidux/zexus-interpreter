@@ -3,8 +3,66 @@ import time
 import random
 import json
 import os
+import re
 import sys
 from threading import Lock
+
+
+# ===============================================
+# SECURITY: Path & Identifier Sanitization (v1.8.1)
+# ===============================================
+
+def _safe_resolve_path(path: str, sandbox: str = None) -> str:
+    """Resolve *path* and ensure it stays within *sandbox* (default: cwd).
+
+    Raises ``PermissionError`` if the resolved path escapes the sandbox.
+    Rejects paths that contain null bytes.
+    """
+    if "\x00" in path:
+        raise PermissionError("Path contains null bytes")
+    if sandbox is None:
+        sandbox = os.getcwd()
+    sandbox = os.path.realpath(sandbox)
+    resolved = os.path.realpath(os.path.join(sandbox, path))
+    # Ensure the resolved path is still within the sandbox
+    if not (resolved == sandbox or resolved.startswith(sandbox + os.sep)):
+        raise PermissionError(
+            f"Path traversal denied: '{path}' resolves outside the project directory"
+        )
+    return resolved
+
+
+# Regex: only alphanumeric, underscore, hyphen, dot allowed in identifiers
+_SAFE_ID_RE = re.compile(r'^[A-Za-z0-9_.\-]+$')
+
+
+def _sanitize_identifier(name: str, label: str = "identifier") -> str:
+    """Ensure *name* is a safe filesystem identifier (no path separators, no traversal).
+
+    Raises ``ValueError`` on invalid input.
+    """
+    if not name or not isinstance(name, str):
+        raise ValueError(f"Invalid {label}: must be a non-empty string")
+    if not _SAFE_ID_RE.match(name):
+        raise ValueError(
+            f"Invalid {label} '{name}': only alphanumeric, underscore, hyphen, "
+            f"and dot characters are allowed"
+        )
+    # Extra guard: reject hidden-file tricks and double-dot
+    if name.startswith('.') or '..' in name:
+        raise ValueError(f"Invalid {label} '{name}': leading dot or '..' not allowed")
+    return name
+
+
+# Env vars that must never be modified by Zexus programs
+BLOCKED_ENV_VARS = frozenset({
+    'PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES',
+    'DYLD_LIBRARY_PATH', 'PYTHONPATH', 'PYTHONSTARTUP', 'PYTHONHOME',
+    'NODE_PATH', 'NODE_OPTIONS', 'PERL5LIB', 'RUBYLIB',
+    'CLASSPATH', 'HOME', 'USER', 'SHELL', 'LOGNAME',
+    'SSH_AUTH_SOCK', 'GPG_AGENT_INFO',
+})
+
 
 class Object:
     def inspect(self):
@@ -600,9 +658,12 @@ class File(Object):
         try:
             if isinstance(path, String):
                 path = path.value
-            with open(path, 'r', encoding='utf-8') as f:
+            resolved = _safe_resolve_path(path)
+            with open(resolved, 'r', encoding='utf-8') as f:
                 # Files are external data sources - return untrusted strings
                 return String(f.read(), is_trusted=False)
+        except PermissionError as e:
+            return EvaluationError(f"File read denied: {str(e)}")
         except Exception as e:
             return EvaluationError(f"File read error: {str(e)}")
 
@@ -613,9 +674,12 @@ class File(Object):
                 path = path.value
             if isinstance(content, String):
                 content = content.value
-            with open(path, 'w', encoding='utf-8') as f:
+            resolved = _safe_resolve_path(path)
+            with open(resolved, 'w', encoding='utf-8') as f:
                 f.write(content)
             return Boolean(True)
+        except PermissionError as e:
+            return EvaluationError(f"File write denied: {str(e)}")
         except Exception as e:
             return EvaluationError(f"File write error: {str(e)}")
 
@@ -623,7 +687,11 @@ class File(Object):
     def exists(path):
         if isinstance(path, String):
             path = path.value
-        return Boolean(os.path.exists(path))
+        try:
+            resolved = _safe_resolve_path(path)
+            return Boolean(os.path.exists(resolved))
+        except PermissionError:
+            return Boolean(False)
 
     # === MEDIUM TIER ===
     @staticmethod

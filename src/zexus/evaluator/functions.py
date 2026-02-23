@@ -2648,46 +2648,22 @@ class FunctionEvaluatorMixin:
                     return EvaluationError(f"eval_file() zexus execution error: {str(e)}")
             
             elif language == "py" or language == "python":
-                # Execute Python code
-                try:
-                    exec_globals = {}
-                    exec(content, exec_globals)
-                    # Return the result if there's a 'result' variable
-                    if 'result' in exec_globals:
-                        result_val = exec_globals['result']
-                        # Convert Python types to Zexus types
-                        if isinstance(result_val, str):
-                            return String(result_val)
-                        elif isinstance(result_val, int):
-                            return Integer(result_val)
-                        elif isinstance(result_val, float):
-                            return Float(result_val)
-                        elif isinstance(result_val, bool):
-                            return Boolean(result_val)
-                        elif isinstance(result_val, list):
-                            return List([Integer(x) if isinstance(x, int) else String(str(x)) for x in result_val])
-                    return NULL
-                except Exception as e:
-                    return EvaluationError(f"eval_file() python execution error: {str(e)}")
+                # SECURITY (C1): exec() disabled — arbitrary Python execution is unsafe
+                return EvaluationError(
+                    "eval_file() for Python is disabled for security reasons. "
+                    "Use Zexus native code or the FFI bridge instead."
+                )
             
             elif language in ["cpp", "c++", "c", "rs", "rust", "go"]:
                 # For compiled languages, try to compile and run
                 return EvaluationError(f"eval_file() for {language} requires compilation - not yet implemented")
             
             elif language == "js" or language == "javascript":
-                # Execute JavaScript (if Node.js is available)
-                try:
-                    result = subprocess.run(['node', '-e', content], 
-                                          capture_output=True, 
-                                          text=True, 
-                                          timeout=5)
-                    if result.returncode != 0:
-                        return EvaluationError(f"JavaScript error: {result.stderr}")
-                    return String(result.stdout.strip())
-                except FileNotFoundError:
-                    return EvaluationError("Node.js not found - cannot execute JavaScript")
-                except Exception as e:
-                    return EvaluationError(f"eval_file() js execution error: {str(e)}")
+                # SECURITY (C2): subprocess.run(['node',...]) disabled — arbitrary JS execution is unsafe
+                return EvaluationError(
+                    "eval_file() for JavaScript is disabled for security reasons. "
+                    "Use Zexus native code instead."
+                )
             
             else:
                 return EvaluationError(f"Unsupported language: {language}")
@@ -4269,22 +4245,18 @@ class FunctionEvaluatorMixin:
             """
             Run the current process as a background daemon.
             
-            Detaches from terminal and runs in background. On Unix systems, this
-            performs a double fork to properly daemonize. On Windows, it's a no-op.
-            
-            Usage:
-                if is_main() {
-                    daemonize()
-                    # Now running as daemon
-                    run(my_server_task)
-                }
-            
-            Optional arguments:
-                daemonize()              # Use defaults
-                daemonize(working_dir)   # Set working directory
+            SECURITY (C8): Requires ZEXUS_ALLOW_DAEMON=1 environment variable.
+            Disabled by default to prevent untrusted scripts from forking.
             """
             import os
             import sys
+            
+            # Security gate: must be explicitly opted-in
+            if os.environ.get('ZEXUS_ALLOW_DAEMON') != '1':
+                return EvaluationError(
+                    "daemonize() is disabled for security. "
+                    "Set ZEXUS_ALLOW_DAEMON=1 environment variable to enable."
+                )
             
             # Check if we're on a Unix-like system
             if not hasattr(os, 'fork'):
@@ -4928,7 +4900,13 @@ class FunctionEvaluatorMixin:
             return String(value)
         
         def _env_set(*a):
-            """Set environment variable: env_set("VAR_NAME", "value")"""
+            """Set environment variable: env_set("VAR_NAME", "value")
+            
+            SECURITY (C9): Blocks modification of security-sensitive env vars
+            (PATH, LD_PRELOAD, PYTHONPATH, etc.).
+            """
+            from ..object import BLOCKED_ENV_VARS
+            
             if len(a) != 2:
                 return EvaluationError("env_set() takes 2 arguments: var_name, value")
             
@@ -4937,6 +4915,12 @@ class FunctionEvaluatorMixin:
             
             var_name = var_name_obj.value if isinstance(var_name_obj, String) else str(var_name_obj)
             value = value_obj.value if isinstance(value_obj, String) else str(value_obj)
+            
+            # Security: block sensitive environment variables
+            if var_name.upper() in BLOCKED_ENV_VARS:
+                return EvaluationError(
+                    f"env_set() denied: '{var_name}' is a protected environment variable"
+                )
             
             os.environ[var_name] = value
             return TRUE

@@ -1,0 +1,141 @@
+# Zexus v1.8.1 — Vulnerability Fixes Roadmap
+
+**Created:** 2026-02-23  
+**Audit scope:** Interpreter (evaluator layer, 7 files) + VM runtime & compilers (5 files)  
+**Total findings:** 69  
+
+---
+
+## Phase 0 — CRITICAL (13 findings)
+
+| ID | Area | File | Finding | Status |
+|----|------|------|---------|--------|
+| C1 | Interp | `evaluator/functions.py` ~L2654 | `exec()` in `_eval_file` — arbitrary Python code execution when evaluating `.py` files | ⬜ Not started |
+| C2 | Interp | `evaluator/functions.py` ~L2680 | `subprocess.run(['node', ...])` for `.js` files — arbitrary Node.js execution | ⬜ Not started |
+| C3 | Interp | `evaluator/statements.py` ~L3327 | `ctypes.CDLL(node.library_name)` in `eval_native_statement` — arbitrary native code loading | ⬜ Not started |
+| C4 | Interp | `object.py` ~L599 | `File` class has zero path traversal protection — read/write any file on system | ⬜ Not started |
+| C5 | Interp | `persistence.py` ~L155 | `scope_id` path traversal in `PersistentStorage` — attacker-controlled DB path | ⬜ Not started |
+| C6 | Interp | `security.py` | `contract_id` path traversal in `ContractStorage` — same issue | ⬜ Not started |
+| C7 | Interp | `persistence.py` | `delete_persistent_scope` — path traversal enables arbitrary file deletion | ⬜ Not started |
+| C8 | Interp | `evaluator/functions.py` ~L4303 | `daemonize()` builtin forks the interpreter — background daemon creation | ⬜ Not started |
+| C9 | Interp | `evaluator/functions.py` | `env_set` allows arbitrary env var manipulation (PATH, LD_PRELOAD injection) | ⬜ Not started |
+| C10 | VM | `vm/binary_bytecode.py` ~L394 | `pickle.loads()` on untrusted `.zxc` bytecode — RCE via crafted cache files | ⬜ Not started |
+| C11 | VM | `vm/vm.py` ~L3388 | `READ` opcode opens any file path with no sandboxing | ⬜ Not started |
+| C12 | VM | `vm/vm.py` ~L4250 | `WRITE` opcode writes to any path with no restriction | ⬜ Not started |
+| C13 | VM | `vm/vm.py` ~L3519 | Fast-loop path bypasses gas metering entirely — infinite loops run forever | ⬜ Not started |
+
+---
+
+## Phase 1 — HIGH (14 findings)
+
+| ID | Area | File | Finding | Status |
+|----|------|------|---------|--------|
+| H1 | Interp | `security.py` ~L528 | Broken CIDR validation — uses string prefix match instead of proper network math | ⬜ Not started |
+| H2 | Interp | `security.py` | User-controlled regex in `emit_event` — ReDoS vector | ⬜ Not started |
+| H3 | Interp | `evaluator/expressions.py` ~L373 | Unbounded string repetition `"x" * n` — memory exhaustion | ⬜ Not started |
+| H4 | Interp | `evaluator/functions.py` ~L4109 | `exit_program()` calls `sys.exit()` directly | ⬜ Not started |
+| H5 | Interp | `evaluator/statements.py` ~L2233 | `__import__('time')` inline pattern instead of module-level import | ⬜ Not started |
+| H6 | VM | `vm/vm.py` ~L1151 | `importlib.import_module()` with user-controlled module path — full host access | ⬜ Not started |
+| H7 | VM | `vm/vm.py` ~L1000 | Path traversal in module import resolution (`use "../../etc/secrets.zx"`) | ⬜ Not started |
+| H8 | VM | `vm/vm.py` ~L2756 | Unbounded stack growth — no maximum stack depth | ⬜ Not started |
+| H9 | VM | `vm/vm.py` ~L2580 | Unbounded recursion via `_invoke_callable_sync` — no call-depth limit | ⬜ Not started |
+| H10 | VM | `vm/vm.py` ~L3394 | Bare `except:` in `_op_read` catches `SystemExit`/`KeyboardInterrupt` | ⬜ Not started |
+| H11 | VM | `evaluator/bytecode_compiler.py` ~L1195 | Bare `except:` in `_try_constant_operation` catches everything | ⬜ Not started |
+| H12 | VM | `vm/vm.py` (90+ instances) | ~90 silent `except Exception: pass` blocks mask real bugs | ⬜ Not started |
+| H13 | VM | `vm/vm.py` ~L1543 | `_ensure_recursion_headroom` actively increases `sys.setrecursionlimit` to 5000 | ⬜ Not started |
+| H14 | VM | `vm/cache.py` ~L509 | `pickle.dump()`/`pickle.load()` in bytecode cache — RCE via cache poisoning | ⬜ Not started |
+
+---
+
+## Phase 2 — LOGIC BUGS (8 findings)
+
+| ID | Area | File | Finding | Status |
+|----|------|------|---------|--------|
+| L1 | VM | `vm/vm.py` | `JUMP_IF_TRUE` opcode not handled in any execution path — falls through silently | ⬜ Not started |
+| L2 | VM | `vm/vm.py` | `AND` / `OR` opcodes not handled in sync or async loops — only register variants work | ⬜ Not started |
+| L3 | VM | `evaluator/bytecode_compiler.py` ~L598 | `RequireStatement` emits broken bytecode — `JUMP_IF_TRUE` with `None` operand, never patched | ⬜ Not started |
+| L4 | VM | `evaluator/bytecode_compiler.py` ~L571 | `TxStatement` has no exception-safety — crashes leave transactions uncommitted/unreverted | ⬜ Not started |
+| L5 | VM | `vm/vm.py` ~L2020 | `MOD` opcode doesn't unwrap `.value` in sync path (unlike ADD/SUB/MUL/DIV) | ⬜ Not started |
+| L6 | VM | `vm/vm.py` | `POW` opcode same issue — no `.value` unwrapping in sync path | ⬜ Not started |
+| L7 | VM | `vm/vm.py` ~L4781 | `_call_builtin_async_obj` returns the exception object itself as a value | ⬜ Not started |
+| L8 | VM | `vm/vm.py` ~L1603 | `collect_garbage(force=True)` deletes all user variables that don't start with `_` | ⬜ Not started |
+
+---
+
+## Phase 3 — COMPILER INCONSISTENCIES (7 findings)
+
+| ID | Area | Finding | Status |
+|----|------|---------|--------|
+| I1 | Compilers | VM compiler has `ForStatement`; evaluator compiler does not | ⬜ Not started |
+| I2 | Compilers | Evaluator compiler supports ~18 statement types the VM compiler does not (`NativeStatement`, `DeferStatement`, `PatternStatement`, `LambdaExpression`, `SpawnExpression`, `EmitStatement`, `ProtocolStatement`, etc.) | ⬜ Not started |
+| I3 | Compilers | `PropertyAccessExpression` emits different opcodes (`INDEX` vs `GET_ATTR`) between compilers | ⬜ Not started |
+| I4 | Compilers | `PrintStatement` multi-value support only in VM compiler | ⬜ Not started |
+| I5 | Compilers | `LetStatement` destructuring only in VM compiler | ⬜ Not started |
+| I6 | Compilers | `ContinueStatement` semantics differ (jump-to-loop-start vs custom `CONTINUE` opcode) | ⬜ Not started |
+| I7 | Compilers | `EXPORT` opcode not handled in sync execution path | ⬜ Not started |
+
+---
+
+## Phase 4 — MEDIUM (15 findings)
+
+| ID | Area | File | Finding | Status |
+|----|------|------|---------|--------|
+| M1 | Interp | `security.py` ~L659 | Bare `except:` in `SmartContract.__del__` | ⬜ Not started |
+| M2 | Interp | `security.py` | ~10 silent `except Exception: pass` in `emit_event` | ⬜ Not started |
+| M3 | Interp | `security.py` / `persistence.py` | `STORAGE_DIR`/`PERSISTENCE_DIR` created at import time | ⬜ Not started |
+| M4 | Interp | `evaluator/core.py` ~L500 | Duplicate isinstance fallback chain duplicating dispatch table | ⬜ Not started |
+| M5 | Interp | `object.py` / `security.py` | Duplicate `EntityDefinition`/`EntityInstance` definitions | ⬜ Not started |
+| M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ⬜ Not started |
+| M7 | Interp | `evaluator/functions.py` ~L2696 | Triple definition of `_require` builtin — first two are dead code | ⬜ Not started |
+| M8 | Interp | `evaluator/core.py` ~L99 | `_ensure_recursion_headroom` silently raises Python recursion limit | ⬜ Not started |
+| M9 | Interp | `object.py` ~L732 | `lock_file` has no timeout — potential hang forever | ⬜ Not started |
+| M10 | Interp | `evaluator/statements.py` | Sandbox `except Exception: pass` swallows VFS init errors | ⬜ Not started |
+| M11 | Interp | `security.py` | Thread-local evaluator creation with no cleanup | ⬜ Not started |
+| M12 | VM | `vm/vm.py` ~L2406 vs ~L4676 | `_LEDGER` has 10K cap sync but unbounded async — memory exhaustion | ⬜ Not started |
+| M13 | VM | `vm/vm.py` ~L4586 | `_audit_log` list grows without bound — memory exhaustion | ⬜ Not started |
+| M14 | VM | `vm/vm.py` ~L672 | VM pool doesn't clear `env`/`_closure_cells`/`_name_cache` — stale data leak | ⬜ Not started |
+| M15 | VM | `vm/vm.py` ~L1910 | Stack underflow silently returns `None` vs async path raises `IndexError` — inconsistent | ⬜ Not started |
+
+---
+
+## Phase 5 — LOW / INFO (12 findings)
+
+| ID | Area | File | Finding | Status |
+|----|------|------|---------|--------|
+| LI1 | Interp | `persistence.py` | `PersistentStorage.clear()` updates stats before deletion — stale immediately | ⬜ Not started |
+| LI2 | Interp | `persistence.py` | `PersistentStorage.get()` calls `_update_usage_stats()` on every read — doubles cost | ⬜ Not started |
+| LI3 | Interp | `persistence.py` | `EntityInstance` deserialization loses methods and computed properties | ⬜ Not started |
+| LI4 | Interp | `evaluator/expressions.py` ~L150 | `eval_identifier` imports `traceback` on every miss (should be module-level) | ⬜ Not started |
+| LI5 | Interp | `evaluator/functions.py` ~L2810 | Builtins dict has duplicate keys: `"require"`, `"random"`, `"input"`, `"sleep"` appear twice | ⬜ Not started |
+| LI6 | Interp | `evaluator/expressions.py` ~L880 | `eval_await_expression` busy-waits with `time.sleep(0.001)` spin loop | ⬜ Not started |
+| LI7 | Interp | `evaluator/core.py` | `_env_to_dict` walks outer environments without depth limit | ⬜ Not started |
+| LI8 | Interp | `evaluator/functions.py` | `memory_stats()` fallback calls `gc.get_objects()` — extremely slow, meaningless result | ⬜ Not started |
+| LI9 | Interp | `evaluator/functions.py` ~L5000 | `sanitize_input` regex-based SQL keyword stripping is bypassable and corrupts data | ⬜ Not started |
+| LI10 | Interp | `security.py` | `AuthConfig.validate_token` unconditionally returns `True` | ⬜ Not started |
+| LI11 | VM | `vm/vm.py` | `POW` allows exponent DoS (`10 ** 10000000`) — no guard on magnitude | ⬜ Not started |
+| LI12 | VM | `evaluator/bytecode_compiler.py` | `_compile_PropertyAccessExpression` defined twice — first is dead code | ⬜ Not started |
+
+---
+
+## Severity Summary
+
+| Phase | Severity | Count |
+|-------|----------|-------|
+| 0 | CRITICAL | 13 |
+| 1 | HIGH | 14 |
+| 2 | LOGIC BUG | 8 |
+| 3 | COMPILER INCONSISTENCY | 7 |
+| 4 | MEDIUM | 15 |
+| 5 | LOW / INFO | 12 |
+| | **Total** | **69** |
+
+---
+
+## Fix Strategy
+
+- **Phase 0 (Critical):** Path sanitization helpers, sandbox enforcement, pickle removal, gas metering fix
+- **Phase 1 (High):** CIDR validation, ReDoS protection, resource limits, exception narrowing
+- **Phase 2 (Logic Bugs):** Missing opcode handlers, broken bytecode emission, value unwrapping
+- **Phase 3 (Compiler Inconsistencies):** Missing statement compilers, unified opcode semantics
+- **Phase 4 (Medium):** Dead code removal, error handling improvements, resource caps
+- **Phase 5 (Low/Info):** Performance optimizations, stub completions, minor cleanups

@@ -31,7 +31,8 @@ except ImportError:
 
 from zexus.object import (
     Environment, Map, String, Integer, Float, Boolean as BooleanObj,
-    Builtin, List, Null, EvaluationError as ObjectEvaluationError, NULL
+    Builtin, List, Null, EvaluationError as ObjectEvaluationError, NULL,
+    _sanitize_identifier
 )
 
 try:
@@ -1029,6 +1030,9 @@ class ContractStorage:
 
     def __init__(self, contract_id, db_type=None):
         self.transaction_log = []
+        
+        # SECURITY (C6): Sanitize contract_id to prevent path traversal
+        contract_id = _sanitize_identifier(str(contract_id), "contract_id")
         
         # Determine storage type: explicit > env var > default (memory)
         if db_type is None:
