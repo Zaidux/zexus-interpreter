@@ -5,6 +5,8 @@ import json
 import os
 import re
 import sys
+import threading
+import atexit
 from threading import Lock
 
 
@@ -547,10 +549,43 @@ class Coroutine(Object):
 
 # === ENTITY OBJECTS ===
 
+# Thread-local evaluator cache for entity/contract method execution.
+# Kept lazy to avoid circular imports at module import time.
+_entity_evaluator_cache = threading.local()
+
+
+def _get_cached_evaluator():
+    evaluator = getattr(_entity_evaluator_cache, "evaluator", None)
+    if evaluator is None:
+        from .evaluator.core import Evaluator
+        evaluator = Evaluator()
+        _entity_evaluator_cache.evaluator = evaluator
+    return evaluator
+
+
+def _clear_cached_evaluator():
+    if hasattr(_entity_evaluator_cache, "evaluator"):
+        del _entity_evaluator_cache.evaluator
+
+
+# Best-effort cleanup for the current thread at interpreter shutdown.
+atexit.register(_clear_cached_evaluator)
+
 class EntityDefinition(Object):
-    def __init__(self, name, properties, parent=None):
+    """Entity definition.
+
+    MEDIUM (M5): This is the canonical EntityDefinition implementation.
+    It supports:
+    - properties as either a dict (new format) or list (legacy format)
+    - optional methods (Action objects)
+    - optional parent entity (inheritance)
+    - optional dependency injection for marked properties
+    """
+
+    def __init__(self, name, properties, methods=None, parent=None):
         self.name = name
-        self.properties = properties  # List of property definitions
+        self.properties = properties  # dict or list
+        self.methods = methods or {}
         self.parent = parent  # Optional parent entity for inheritance
         
     def type(self):
@@ -564,33 +599,169 @@ class EntityDefinition(Object):
         else:
             props_str = ", ".join([f"{prop['name']}: {prop['type']}" for prop in self.properties])
         return f"entity {self.name} {{ {props_str} }}"
+
+    def get_all_properties(self):
+        """Get all properties including inherited ones (parent first)."""
+        props = {}
+        if self.parent:
+            try:
+                props.update(self.parent.get_all_properties())
+            except Exception:
+                pass
+        if isinstance(self.properties, dict):
+            props.update(self.properties)
+        else:
+            # Legacy list format: [{name,type,default_value?}, ...]
+            for prop in self.properties:
+                try:
+                    props[prop['name']] = prop
+                except Exception:
+                    continue
+        return props
         
     def create_instance(self, initial_values=None):
-        """Create an instance of this entity with optional initial values"""
-        return EntityInstance(self, initial_values or {})
+        """Create an instance of this entity with optional initial values."""
+        injected_values = dict(initial_values or {})
+
+        # Dependency injection support: fill missing injected deps with container values.
+        injected_deps = getattr(self, 'injected_deps', None)
+        if injected_deps:
+            try:
+                from .dependency_injection import get_di_registry
+                registry = get_di_registry()
+                container = registry.get_container("__main__")
+            except Exception:
+                container = None
+
+            for dep_name in injected_deps:
+                if dep_name in injected_values:
+                    continue
+                if container is None:
+                    injected_values[dep_name] = NULL
+                    continue
+                try:
+                    injected_values[dep_name] = container.get(dep_name)
+                except BaseException:
+                    injected_values[dep_name] = NULL
+
+        return EntityInstance(self, injected_values)
 
 class EntityInstance(Object):
     def __init__(self, entity_def, values):
         self.entity_def = entity_def
-        self.values = values
+        self.data = values or {}
+        # Backward compatibility alias
+        self.values = self.data
+        self._validate_properties()
         
     def type(self):
         return "ENTITY_INSTANCE"
         
     def inspect(self):
-        values_str = ", ".join([f"{k}: {v.inspect()}" for k, v in self.values.items()])
+        values_str = ", ".join([
+            f"{k}: {v.inspect() if hasattr(v, 'inspect') else v}" for k, v in self.data.items()
+        ])
         return f"{self.entity_def.name} {{ {values_str} }}"
+
+    def __str__(self):
+        return self.inspect()
+
+    def __repr__(self):
+        return self.__str__()
+
+    def _validate_properties(self):
+        """Populate missing injected/default values for declared properties."""
+        try:
+            all_props = self.entity_def.get_all_properties()
+        except Exception:
+            all_props = {}
+
+        for prop_name, prop_config in all_props.items():
+            if prop_name in self.data:
+                continue
+
+            # New-format dict config
+            if isinstance(prop_config, dict):
+                if prop_config.get("injected", False):
+                    try:
+                        from .dependency_injection import get_di_registry
+                        registry = get_di_registry()
+                        container = registry.get_container("__main__")
+                        if container is not None:
+                            self.data[prop_name] = container.get(prop_name)
+                        else:
+                            self.data[prop_name] = NULL
+                    except Exception:
+                        self.data[prop_name] = NULL
+                    continue
+
+                if "default_value" in prop_config:
+                    self.data[prop_name] = prop_config.get("default_value")
+                    continue
+
+            # Legacy list config may include default_value
+            if isinstance(prop_config, dict) and "default_value" in prop_config:
+                self.data[prop_name] = prop_config.get("default_value")
         
     def get(self, property_name):
-        return self.values.get(property_name, NULL)
+        return self.data.get(property_name, NULL)
         
     def set(self, property_name, value):
-        # Check if property exists in entity definition
-        prop_def = next((prop for prop in self.entity_def.properties if prop['name'] == property_name), None)
-        if prop_def:
-            self.values[property_name] = value
-            return TRUE
-        return FALSE
+        # Check if property exists in entity definition (including inherited props)
+        try:
+            props = self.entity_def.get_all_properties()
+            if property_name not in props:
+                return FALSE
+        except Exception:
+            # Legacy list-only entity definitions
+            try:
+                prop_def = next(
+                    (prop for prop in self.entity_def.properties if prop.get('name') == property_name),
+                    None,
+                )
+                if not prop_def:
+                    return FALSE
+            except Exception:
+                return FALSE
+
+        existing = self.data.get(property_name)
+        if existing is not None and existing.__class__.__name__ == 'SealedObject':
+            return EvaluationError(f"Cannot modify sealed property: {property_name}")
+
+        self.data[property_name] = value
+        return TRUE
+
+    def call_method(self, method_name, args):
+        """Call an entity method (Action) defined on the entity definition."""
+        if not hasattr(self.entity_def, 'methods') or method_name not in self.entity_def.methods:
+            return EvaluationError(f"Method '{method_name}' not supported for ENTITY_INSTANCE")
+
+        method = self.entity_def.methods[method_name]
+
+        # Create a new environment for method execution
+        from .environment import Environment as ExecEnvironment
+        method_env = ExecEnvironment(outer=method.env if hasattr(method, 'env') else None)
+        method_env.set('this', self)
+
+        # Bind method parameters
+        if hasattr(method, 'parameters'):
+            for i, param in enumerate(method.parameters):
+                if i >= len(args):
+                    break
+                if hasattr(param, 'name'):
+                    param_name = param.name.value if hasattr(param.name, 'value') else str(param.name)
+                elif hasattr(param, 'value'):
+                    param_name = param.value
+                else:
+                    param_name = str(param)
+                method_env.set(param_name, args[i])
+
+        evaluator = _get_cached_evaluator()
+
+        result = evaluator.eval_node(method.body, method_env, stack_trace=[])
+        if isinstance(result, ReturnValue):
+            return result.value
+        return result
 
 # === UTILITY CLASSES ===
 
@@ -797,18 +968,65 @@ class File(Object):
     _lock = Lock()
 
     @staticmethod
-    def lock_file(path):
-        """Lock file for exclusive access"""
+    def lock_file(path, timeout=None):
+        """Lock file for exclusive access.
+
+        SECURITY (M9): Previously this could block forever and hang the interpreter.
+        A default timeout is applied (configurable via env var).
+
+        Args:
+            path: File path (string or String)
+            timeout: Optional seconds (Integer/Float/str/number). If omitted, uses
+                $ZEXUS_FILE_LOCK_TIMEOUT_SECONDS (default: 30).
+        """
         try:
             if isinstance(path, String):
                 path = path.value
 
-            with File._lock:
-                if path not in File._file_locks:
-                    File._file_locks[path] = Lock()
+            # Normalize key to reduce accidental duplicate lock objects
+            try:
+                lock_key = os.path.realpath(str(path))
+            except Exception:
+                lock_key = str(path)
 
-                File._file_locks[path].acquire()
+            timeout_seconds = None
+            if timeout is None:
+                env_timeout = os.environ.get("ZEXUS_FILE_LOCK_TIMEOUT_SECONDS", "30")
+                try:
+                    timeout_seconds = float(env_timeout)
+                except Exception:
+                    timeout_seconds = 30.0
+            else:
+                if isinstance(timeout, Integer):
+                    timeout_seconds = float(timeout.value)
+                elif isinstance(timeout, Float):
+                    timeout_seconds = float(timeout.value)
+                elif isinstance(timeout, String):
+                    timeout_seconds = float(timeout.value)
+                else:
+                    timeout_seconds = float(timeout)
+
+            if timeout_seconds is not None and timeout_seconds < 0:
+                timeout_seconds = 0.0
+
+            with File._lock:
+                lock_obj = File._file_locks.get(lock_key)
+                if lock_obj is None:
+                    lock_obj = Lock()
+                    File._file_locks[lock_key] = lock_obj
+
+            # Acquire without holding the global map lock
+            acquired = False
+            if timeout_seconds is None:
+                # Shouldn't happen, but keep backward-compatible behavior
+                lock_obj.acquire()
+                acquired = True
+            else:
+                acquired = lock_obj.acquire(timeout=timeout_seconds)
+
+            if acquired:
                 return Boolean(True)
+            return EvaluationError(f"File lock timeout after {timeout_seconds:.3f}s")
         except Exception as e:
             return EvaluationError(f"File lock error: {str(e)}")
 
@@ -819,10 +1037,22 @@ class File(Object):
             if isinstance(path, String):
                 path = path.value
 
+            try:
+                lock_key = os.path.realpath(str(path))
+            except Exception:
+                lock_key = str(path)
+
             with File._lock:
-                if path in File._file_locks:
-                    File._file_locks[path].release()
-                    return Boolean(True)
+                lock_obj = File._file_locks.get(lock_key)
+                if lock_obj is not None:
+                    try:
+                        if hasattr(lock_obj, "locked") and not lock_obj.locked():
+                            return Boolean(False)
+                        lock_obj.release()
+                        return Boolean(True)
+                    except RuntimeError:
+                        # Release on an unlocked lock
+                        return Boolean(False)
                 return Boolean(False)
         except Exception as e:
             return EvaluationError(f"File unlock error: {str(e)}")

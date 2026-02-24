@@ -80,15 +80,15 @@
 
 | ID | Area | File | Finding | Status |
 |----|------|------|---------|--------|
-| M1 | Interp | `security.py` ~L659 | Bare `except:` in `SmartContract.__del__` | ⬜ Not started |
-| M2 | Interp | `security.py` | ~10 silent `except Exception: pass` in `emit_event` | ⬜ Not started |
-| M3 | Interp | `security.py` / `persistence.py` | `STORAGE_DIR`/`PERSISTENCE_DIR` created at import time | ⬜ Not started |
-| M4 | Interp | `evaluator/core.py` ~L500 | Duplicate isinstance fallback chain duplicating dispatch table | ⬜ Not started |
-| M5 | Interp | `object.py` / `security.py` | Duplicate `EntityDefinition`/`EntityInstance` definitions | ⬜ Not started |
+| M1 | Interp | `security.py` ~L659 | Bare `except:` in `SmartContract.__del__` | ✅ Done |
+| M2 | Interp | `security.py` | ~10 silent `except Exception: pass` in `emit_event` | ✅ Done |
+| M3 | Interp | `security.py` / `persistence.py` | `STORAGE_DIR`/`PERSISTENCE_DIR` created at import time | ✅ Done |
+| M4 | Interp | `evaluator/core.py` ~L500 | Duplicate isinstance fallback chain duplicating dispatch table | ✅ Done |
+| M5 | Interp | `object.py` / `security.py` | Duplicate `EntityDefinition`/`EntityInstance` definitions | ✅ Done |
 | M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ⬜ Not started |
 | M7 | Interp | `evaluator/functions.py` ~L2696 | Triple definition of `_require` builtin — first two are dead code | ⬜ Not started |
-| M8 | Interp | `evaluator/core.py` ~L99 | `_ensure_recursion_headroom` silently raises Python recursion limit | ⬜ Not started |
-| M9 | Interp | `object.py` ~L732 | `lock_file` has no timeout — potential hang forever | ⬜ Not started |
+| M8 | Interp | `evaluator/core.py` ~L99 | `_ensure_recursion_headroom` silently raises Python recursion limit | ✅ Done |
+| M9 | Interp | `object.py` ~L732 | `lock_file` has no timeout — potential hang forever | ✅ Done |
 | M10 | Interp | `evaluator/statements.py` | Sandbox `except Exception: pass` swallows VFS init errors | ⬜ Not started |
 | M11 | Interp | `security.py` | Thread-local evaluator creation with no cleanup | ⬜ Not started |
 | M12 | VM | `vm/vm.py` ~L2406 vs ~L4676 | `_LEDGER` has 10K cap sync but unbounded async — memory exhaustion | ⬜ Not started |

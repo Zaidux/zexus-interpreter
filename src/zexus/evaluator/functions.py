@@ -2668,59 +2668,6 @@ class FunctionEvaluatorMixin:
             else:
                 return EvaluationError(f"Unsupported language: {language}")
         
-        # Contract Assertions
-        def _require(*a):
-            """Assert a condition in smart contracts: require(condition, message)
-            
-            Throws an error if condition is false. Essential for contract validation.
-            
-            Example:
-                require(balance >= amount, "Insufficient balance")
-                require(sender == owner, "Not authorized")
-                require(value > 0, "Amount must be positive")
-            """
-            if len(a) < 1 or len(a) > 2:
-                return EvaluationError("require() takes 1-2 arguments: require(condition, [message])")
-            
-            condition = a[0]
-            message = a[1].value if len(a) > 1 and isinstance(a[1], String) else "Requirement failed"
-            
-            # Check if condition is truthy
-            from .utils import is_truthy
-            if not is_truthy(condition):
-                # Return error with contract-specific formatting
-                return EvaluationError(f"Contract requirement failed: {message}")
-            
-            # Condition passed, return NULL
-            return NULL
-        
-        # Contract Assertions
-        def _require(*a):
-            """Assert a condition in smart contracts: require(condition, message)
-            
-            Throws an error if condition is false. Essential for contract validation.
-            Note: This is a fallback for contexts where the require statement isn't available.
-            
-            Example:
-                require(balance >= amount, "Insufficient balance")
-                require(sender == owner, "Not authorized")
-                require(value > 0, "Amount must be positive")
-            """
-            if len(a) < 1 or len(a) > 2:
-                return EvaluationError("require() takes 1-2 arguments: require(condition, [message])")
-            
-            condition = a[0]
-            message = a[1].value if len(a) > 1 and isinstance(a[1], String) else "Requirement failed"
-            
-            # Check if condition is truthy
-            from .utils import is_truthy
-            if not is_truthy(condition):
-                # Return error with contract-specific formatting
-                return EvaluationError(f"Contract requirement failed: {message}")
-            
-            # Condition passed, return NULL
-            return NULL
-        
         # Map/Object helper functions
         def _keys(*a):
             """Get all keys from a map: keys(map) -> [key1, key2, ...]"""
@@ -2773,8 +2720,6 @@ class FunctionEvaluatorMixin:
             "to_hex": Builtin(_to_hex, "to_hex"),
             "from_hex": Builtin(_from_hex, "from_hex"),
             "sqrt": Builtin(_sqrt, "sqrt"),
-            "require": Builtin(_require, "require"),
-            "require": Builtin(_require, "require"),
             "input": Builtin(_input, "input"),
             "hash_password": Builtin(_hash_password, "hash_password"),
             "verify_password": Builtin(_verify_password, "verify_password"),

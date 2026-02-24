@@ -2,6 +2,7 @@
 import traceback
 import asyncio
 import os
+import re
 import sys
 from .. import zexus_ast
 from ..object import Environment, EvaluationError, Null, Boolean as BooleanObj, Map, EmbeddedCode, List, Action, LambdaFunction, String, ReturnValue, Builtin, Integer, Float
@@ -97,160 +98,127 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             self.use_vm = previous_use_vm
 
     def _ensure_recursion_headroom(self, minimum: int = 5000):
-        """Ensure Python's recursion limit can accommodate deep language recursion."""
+        """(M8) Keep recursion usable, but avoid an unbounded recursion-limit jump.
+
+        The interpreter's evaluation strategy uses Python recursion for AST
+        traversal and function calls. With the default Python recursion limit,
+        relatively small program recursion (e.g., factorial(100)) can trigger
+        `RecursionError`.
+
+        Default behavior:
+        - Raise the recursion limit to a conservative target (3000) if the
+          current limit is lower.
+        - Never raise above `minimum`.
+
+        Opt-in override:
+        - Set `ZEXUS_PYTHON_RECURSION_LIMIT=<int>` to request a specific limit.
+
+        Opt-out:
+        - Set `ZEXUS_DISABLE_RECURSION_LIMIT_RAISE=1` to disable any adjustment.
+        """
+        if os.getenv("ZEXUS_DISABLE_RECURSION_LIMIT_RAISE") == "1":
+            return
+
+        requested = os.getenv("ZEXUS_PYTHON_RECURSION_LIMIT")
+        default_target = 3000
+
         try:
             current = sys.getrecursionlimit()
-            if current < minimum:
-                sys.setrecursionlimit(minimum)
+            requested_limit = int(requested) if requested else default_target
+            if requested_limit <= 0:
+                return
+
+            target = min(max(current, requested_limit), minimum)
+            if target > current:
+                sys.setrecursionlimit(target)
         except Exception:
-            pass
+            return
 
     def _initialize_dispatch_table(self):
-        """Precompute handlers for ALL node types to eliminate isinstance overhead.
-        
-        Every AST node type gets an O(1) dict lookup instead of walking
-        a ~117-branch isinstance chain. This yields ~28%+ faster evaluation
-        on typical programs.
+        """Precompute handlers for AST node types to eliminate isinstance overhead.
+
+        (M4) This table is the single dispatch source of truth.
         """
-        try:
-            # Core hot-path nodes with dedicated handler methods
-            self._node_handlers = {
-                zexus_ast.Program: self._handle_program_node,
-                zexus_ast.ExpressionStatement: self._handle_expression_statement,
-                zexus_ast.BlockStatement: self._handle_block_statement,
-                zexus_ast.ReturnStatement: self._handle_return_statement,
-                zexus_ast.LetStatement: self._handle_let_statement,
-                zexus_ast.ConstStatement: self._handle_const_statement,
-                zexus_ast.AssignmentExpression: self._handle_assignment_expression,
-                zexus_ast.IfStatement: self._handle_if_statement,
-                zexus_ast.WhileStatement: self._handle_while_statement,
-                zexus_ast.ActionStatement: self._handle_action_statement,
-                zexus_ast.FunctionStatement: self._handle_function_statement,
-                zexus_ast.Identifier: self._handle_identifier,
-                zexus_ast.IntegerLiteral: self._handle_integer_literal,
-                zexus_ast.Boolean: self._handle_boolean_literal,
-                zexus_ast.NullLiteral: self._handle_null_literal,
-                zexus_ast.ThisExpression: self._handle_this_expression,
-                zexus_ast.InfixExpression: self._handle_infix_expression,
-                zexus_ast.PrefixExpression: self._handle_prefix_expression,
-                zexus_ast.CallExpression: self._handle_call_expression,
-                zexus_ast.PropertyAccessExpression: self._handle_property_access_expression,
-                zexus_ast.MethodCallExpression: self._handle_method_call_expression,
-                zexus_ast.ListLiteral: self._handle_list_literal,
-                zexus_ast.StringLiteral: self._handle_string_literal,
-                zexus_ast.StringInterpolationExpression: self._handle_string_interpolation,
-                zexus_ast.FloatLiteral: self._handle_float_literal,
-                zexus_ast.MapLiteral: self._handle_map_literal,
-                zexus_ast.LambdaExpression: self._handle_lambda_expression,
-                zexus_ast.ActionLiteral: self._handle_action_literal,
-                zexus_ast.ForEachStatement: self._handle_foreach_statement,
-                zexus_ast.PrintStatement: self._handle_print_statement,
-                zexus_ast.DataStatement: self._handle_data_statement,
-                zexus_ast.TryCatchStatement: self._handle_try_catch_statement,
-                zexus_ast.ThrowStatement: self._handle_throw_statement,
-                zexus_ast.ContractStatement: self._handle_contract_statement,
-                zexus_ast.ExportStatement: self._handle_export_statement,
-                zexus_ast.UseStatement: self._handle_use_statement,
-                zexus_ast.FromStatement: self._handle_from_statement,
-                zexus_ast.IfExpression: self._handle_if_expression,
-                zexus_ast.TernaryExpression: self._handle_ternary_expression,
-                zexus_ast.ContinueStatement: self._handle_continue_statement,
-                zexus_ast.BreakStatement: self._handle_break_statement,
-            }
 
-            # Extend with ALL remaining node types — each delegates to its
-            # corresponding eval_* method, eliminating the isinstance fallback.
-            _extended_dispatch = {
-                # Security statements
-                zexus_ast.SealStatement: 'eval_seal_statement',
-                zexus_ast.RestrictStatement: 'eval_restrict_statement',
-                zexus_ast.SandboxStatement: 'eval_sandbox_statement',
-                zexus_ast.TrailStatement: 'eval_trail_statement',
-                zexus_ast.CapabilityStatement: 'eval_capability_statement',
-                zexus_ast.GrantStatement: 'eval_grant_statement',
-                zexus_ast.RevokeStatement: 'eval_revoke_statement',
-                zexus_ast.ValidateStatement: 'eval_validate_statement',
-                zexus_ast.SanitizeStatement: 'eval_sanitize_statement',
-                zexus_ast.InjectStatement: 'eval_inject_statement',
-                zexus_ast.ImmutableStatement: 'eval_immutable_statement',
-                zexus_ast.ProtectStatement: 'eval_protect_statement',
-                zexus_ast.VerifyStatement: 'eval_verify_statement',
-                # Blockchain / state
-                zexus_ast.TxStatement: 'eval_tx_statement',
-                zexus_ast.EntityStatement: 'eval_entity_statement',
-                zexus_ast.LedgerStatement: 'eval_ledger_statement',
-                zexus_ast.StateStatement: 'eval_state_statement',
-                zexus_ast.RequireStatement: 'eval_require_statement',
-                zexus_ast.RevertStatement: 'eval_revert_statement',
-                zexus_ast.LimitStatement: 'eval_limit_statement',
-                zexus_ast.ProtocolStatement: 'eval_protocol_statement',
-                zexus_ast.PersistentStatement: 'eval_persistent_statement',
-                zexus_ast.EmitStatement: 'eval_emit_statement',
-                zexus_ast.ModifierDeclaration: 'eval_modifier_declaration',
-                # UI
-                zexus_ast.ScreenStatement: 'eval_screen_statement',
-                zexus_ast.ColorStatement: 'eval_color_statement',
-                zexus_ast.CanvasStatement: 'eval_canvas_statement',
-                zexus_ast.GraphicsStatement: 'eval_graphics_statement',
-                zexus_ast.AnimationStatement: 'eval_animation_statement',
-                zexus_ast.ClockStatement: 'eval_clock_statement',
-                zexus_ast.ComponentStatement: 'eval_component_statement',
-                zexus_ast.ThemeStatement: 'eval_theme_statement',
-                # Concurrency
-                zexus_ast.ChannelStatement: 'eval_channel_statement',
-                zexus_ast.SendStatement: 'eval_send_statement',
-                zexus_ast.ReceiveStatement: 'eval_receive_statement',
-                zexus_ast.AtomicStatement: 'eval_atomic_statement',
-                # Language features
-                zexus_ast.WatchStatement: 'eval_watch_statement',
-                zexus_ast.DeferStatement: 'eval_defer_statement',
-                zexus_ast.PatternStatement: 'eval_pattern_statement',
-                zexus_ast.EnumStatement: 'eval_enum_statement',
-                zexus_ast.StreamStatement: 'eval_stream_statement',
-                zexus_ast.DebugStatement: 'eval_debug_statement',
-                zexus_ast.LogStatement: 'eval_log_statement',
-                zexus_ast.ImportLogStatement: 'eval_import_log_statement',
-                zexus_ast.ExternalDeclaration: 'eval_external_declaration',
-                zexus_ast.ExactlyStatement: 'eval_exactly_statement',
-                zexus_ast.NativeStatement: 'eval_native_statement',
-                zexus_ast.GCStatement: 'eval_gc_statement',
-                zexus_ast.InlineStatement: 'eval_inline_statement',
-                zexus_ast.BufferStatement: 'eval_buffer_statement',
-                zexus_ast.SIMDStatement: 'eval_simd_statement',
-                zexus_ast.EmbeddedCodeStatement: 'eval_embedded_code_statement',
-                zexus_ast.MiddlewareStatement: 'eval_middleware_statement',
-                zexus_ast.AuthStatement: 'eval_auth_statement',
-                zexus_ast.ThrottleStatement: 'eval_throttle_statement',
-                zexus_ast.CacheStatement: 'eval_cache_statement',
-                zexus_ast.InterfaceStatement: 'eval_interface_statement',
-                zexus_ast.TypeAliasStatement: 'eval_type_alias_statement',
-                zexus_ast.ModuleStatement: 'eval_module_statement',
-                zexus_ast.PackageStatement: 'eval_package_statement',
-                zexus_ast.UsingStatement: 'eval_using_statement',
-                # Expressions
-                zexus_ast.MatchExpression: 'eval_match_expression',
-                zexus_ast.AwaitExpression: 'eval_await_expression',
-                zexus_ast.AsyncExpression: 'eval_async_expression',
-                zexus_ast.FindExpression: 'eval_find_expression',
-                zexus_ast.LoadExpression: 'eval_load_expression',
-                zexus_ast.FileImportExpression: 'eval_file_import_expression',
-                zexus_ast.NullishExpression: 'eval_nullish_expression',
-                zexus_ast.SliceExpression: 'eval_slice_expression',
-                zexus_ast.EmbeddedLiteral: 'eval_embedded_literal',
-                zexus_ast.TXExpression: 'eval_tx_expression',
-                zexus_ast.HashExpression: 'eval_hash_expression',
-                zexus_ast.SignatureExpression: 'eval_signature_expression',
-                zexus_ast.VerifySignatureExpression: 'eval_verify_signature_expression',
-                zexus_ast.GasExpression: 'eval_gas_expression',
-            }
-            for ast_type, method_name in _extended_dispatch.items():
-                method = getattr(self, method_name, None)
-                if method:
-                    self._node_handlers[ast_type] = lambda node, env, st, m=method: m(node, env, st)
+        def _camel_to_snake(name: str) -> str:
+            # Handles acronyms reasonably (e.g., TXExpression -> tx_expression)
+            s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+            return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
-        except AttributeError:
-            # AST variants may omit certain nodes; keep table empty in that case
-            self._node_handlers = {}
+        def _ast(name: str):
+            return getattr(zexus_ast, name, None)
+
+        self._node_handlers = {}
+
+        # Core hot-path nodes with dedicated handler methods
+        _core = {
+            "Program": self._handle_program_node,
+            "ExpressionStatement": self._handle_expression_statement,
+            "BlockStatement": self._handle_block_statement,
+            "ReturnStatement": self._handle_return_statement,
+            "LetStatement": self._handle_let_statement,
+            "ConstStatement": self._handle_const_statement,
+            "AssignmentExpression": self._handle_assignment_expression,
+            "IfStatement": self._handle_if_statement,
+            "WhileStatement": self._handle_while_statement,
+            "ActionStatement": self._handle_action_statement,
+            "FunctionStatement": self._handle_function_statement,
+            "Identifier": self._handle_identifier,
+            "IntegerLiteral": self._handle_integer_literal,
+            "Boolean": self._handle_boolean_literal,
+            "NullLiteral": self._handle_null_literal,
+            "ThisExpression": self._handle_this_expression,
+            "InfixExpression": self._handle_infix_expression,
+            "PrefixExpression": self._handle_prefix_expression,
+            "CallExpression": self._handle_call_expression,
+            "PropertyAccessExpression": self._handle_property_access_expression,
+            "MethodCallExpression": self._handle_method_call_expression,
+            "ListLiteral": self._handle_list_literal,
+            "StringLiteral": self._handle_string_literal,
+            "StringInterpolationExpression": self._handle_string_interpolation,
+            "FloatLiteral": self._handle_float_literal,
+            "MapLiteral": self._handle_map_literal,
+            "LambdaExpression": self._handle_lambda_expression,
+            "ActionLiteral": self._handle_action_literal,
+            "ForEachStatement": self._handle_foreach_statement,
+            "PrintStatement": self._handle_print_statement,
+            "DataStatement": self._handle_data_statement,
+            "TryCatchStatement": self._handle_try_catch_statement,
+            "ThrowStatement": self._handle_throw_statement,
+            "ContractStatement": self._handle_contract_statement,
+            "ExportStatement": self._handle_export_statement,
+            "UseStatement": self._handle_use_statement,
+            "FromStatement": self._handle_from_statement,
+            "IfExpression": self._handle_if_expression,
+            "TernaryExpression": self._handle_ternary_expression,
+            "ContinueStatement": self._handle_continue_statement,
+            "BreakStatement": self._handle_break_statement,
+        }
+        for ast_name, handler in _core.items():
+            ast_type = _ast(ast_name)
+            if ast_type is not None:
+                self._node_handlers[ast_type] = handler
+
+        # Auto-register remaining node classes that follow the eval_<snake_case> convention.
+        base_node = getattr(zexus_ast, "Node", None)
+        for ast_name, ast_type in vars(zexus_ast).items():
+            if not isinstance(ast_type, type):
+                continue
+            if ast_type in self._node_handlers:
+                continue
+            if base_node is not None and ast_type is base_node:
+                continue
+
+            try:
+                if base_node is not None and not issubclass(ast_type, base_node):
+                    continue
+            except Exception:
+                continue
+
+            method_name = f"eval_{_camel_to_snake(ast_name)}"
+            method = getattr(self, method_name, None)
+            if callable(method):
+                self._node_handlers[ast_type] = lambda node, env, st, m=method: m(node, env, st)
 
     def _handle_program_node(self, node, env, stack_trace):
         debug_log("  Program node", f"{len(node.statements)} statements")
@@ -492,670 +460,23 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         node_type = type(node)
 
         handler = self._node_handlers.get(node_type)
-        if handler:
-            return handler(node, env, stack_trace)
+        if handler is None:
+            return EvaluationError(f"Unsupported AST node type: {node_type.__name__}")
 
         try:
-            # === STATEMENTS ===
-            if isinstance(node, zexus_ast.Program):
-                debug_log("  Program node", f"{len(node.statements)} statements")
-                return self.ceval_program(node.statements, env)
-
-            elif isinstance(node, zexus_ast.ExpressionStatement):
-                debug_log("  ExpressionStatement node")
-                return self.eval_node(node.expression, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.BlockStatement):
-                debug_log("  BlockStatement node", f"{len(node.statements)} statements")
-                return self.eval_block_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ReturnStatement):
-                debug_log("  ReturnStatement node")
-                return self.eval_return_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ContinueStatement):
-                debug_log("  ContinueStatement node")
-                return self.eval_continue_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.BreakStatement):
-                debug_log("  BreakStatement node")
-                return self.eval_break_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.LetStatement):
-                return self.eval_let_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ConstStatement):
-                return self.eval_const_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.DataStatement):
-                return self.eval_data_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.AssignmentExpression):
-                debug_log("  AssignmentExpression node")
-                return self.eval_assignment_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.TryCatchStatement):
-                return self.eval_try_catch_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ThrowStatement):
-                debug_log("  ThrowStatement node")
-                return self.eval_throw_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.IfStatement):
-                debug_log("  IfStatement node")
-                return self.eval_if_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.WhileStatement):
-                debug_log("  WhileStatement node")
-                return self.eval_while_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ForEachStatement):
-                debug_log("  ForEachStatement node", f"for each {node.item.value}")
-                return self.eval_foreach_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.WatchStatement):
-                debug_log("  WatchStatement node")
-                return self.eval_watch_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.SealStatement):
-                return self.eval_seal_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.RestrictStatement):
-                return self.eval_restrict_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.SandboxStatement):
-                return self.eval_sandbox_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.TrailStatement):
-                return self.eval_trail_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.TxStatement):
-                return self.eval_tx_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.EntityStatement):
-                return self.eval_entity_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ContractStatement):
-                return self.eval_contract_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ExportStatement):
-                return self.eval_export_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.UseStatement):
-                debug_log("  UseStatement node", node.file_path)
-                return self.eval_use_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.FromStatement):
-                debug_log("  FromStatement node", node.file_path)
-                return self.eval_from_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.VerifyStatement):
-                return self.eval_verify_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ProtectStatement):
-                return self.eval_protect_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.MiddlewareStatement):
-                return self.eval_middleware_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.AuthStatement):
-                return self.eval_auth_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ThrottleStatement):
-                return self.eval_throttle_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.CacheStatement):
-                return self.eval_cache_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.PrintStatement):
-                debug_log("  PrintStatement node")
-                return self.eval_print_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ScreenStatement):
-                debug_log("  ScreenStatement node", node.name.value)
-                return self.eval_screen_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.EmbeddedCodeStatement):
-                debug_log("  EmbeddedCodeStatement node", node.name.value)
-                return self.eval_embedded_code_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.ColorStatement):
-                debug_log("  ColorStatement node", node.name.value)
-                return self.eval_color_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.CanvasStatement):
-                debug_log("  CanvasStatement node", node.name.value)
-                return self.eval_canvas_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.GraphicsStatement):
-                debug_log("  GraphicsStatement node", node.name.value)
-                return self.eval_graphics_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.AnimationStatement):
-                debug_log("  AnimationStatement node", node.name.value)
-                return self.eval_animation_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.ClockStatement):
-                debug_log("  ClockStatement node", node.name.value)
-                return self.eval_clock_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ComponentStatement):
-                debug_log("  ComponentStatement node", node.name.value)
-                return self.eval_component_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ThemeStatement):
-                debug_log("  ThemeStatement node", node.name.value)
-                return self.eval_theme_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.DebugStatement):
-                debug_log("  DebugStatement node")
-                return self.eval_debug_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ExternalDeclaration):
-                debug_log("  ExternalDeclaration node", node.name.value)
-                return self.eval_external_declaration(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ExactlyStatement):
-                debug_log("  ExactlyStatement node")
-                return self.eval_exactly_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ActionStatement):
-                debug_log("  ActionStatement node", f"action {node.name.value}")
-                return self.eval_action_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.FunctionStatement):
-                debug_log("  FunctionStatement node", f"function {node.name.value}")
-                debug_log("  FunctionStatement evaluate", f"{node.name.value} modifiers={getattr(node, 'modifiers', [])}")
-                return self.eval_function_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.NativeStatement):
-                debug_log("  NativeStatement node", f"native {node.function_name}")
-                return self.eval_native_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.GCStatement):
-                debug_log("  GCStatement node", f"gc {node.action}")
-                return self.eval_gc_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.InlineStatement):
-                debug_log("  InlineStatement node", f"inline {node.function_name}")
-                return self.eval_inline_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.BufferStatement):
-                debug_log("  BufferStatement node", f"buffer {node.buffer_name}")
-                return self.eval_buffer_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.SIMDStatement):
-                debug_log("  SIMDStatement node")
-                return self.eval_simd_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.DeferStatement):
-                debug_log("  DeferStatement node")
-                return self.eval_defer_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.PatternStatement):
-                debug_log("  PatternStatement node")
-                return self.eval_pattern_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.EnumStatement):
-                debug_log("  EnumStatement node", f"enum {node.name}")
-                return self.eval_enum_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.StreamStatement):
-                debug_log("  StreamStatement node", f"stream {node.stream_name}")
-                return self.eval_stream_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.WatchStatement):
-                debug_log("  WatchStatement node")
-                return self.eval_watch_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.LogStatement):
-                debug_log("  LogStatement node")
-                return self.eval_log_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ImportLogStatement):
-                debug_log("  ImportLogStatement node", "log <<")
-                return self.eval_import_log_statement(node, env, stack_trace)
-            
-            # === NEW SECURITY STATEMENTS ===
-            elif isinstance(node, zexus_ast.CapabilityStatement):
-                debug_log("  CapabilityStatement node", f"capability {node.name}")
-                return self.eval_capability_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.GrantStatement):
-                debug_log("  GrantStatement node", f"grant {node.entity_name}")
-                return self.eval_grant_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.RevokeStatement):
-                debug_log("  RevokeStatement node", f"revoke {node.entity_name}")
-                return self.eval_revoke_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ValidateStatement):
-                debug_log("  ValidateStatement node")
-                return self.eval_validate_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.SanitizeStatement):
-                debug_log("  SanitizeStatement node")
-                return self.eval_sanitize_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.InjectStatement):
-                debug_log("  InjectStatement node")
-                return self.eval_inject_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ImmutableStatement):
-                debug_log("  ImmutableStatement node", f"immutable {node.target}")
-                return self.eval_immutable_statement(node, env, stack_trace)
-            
-            # === COMPLEXITY & LARGE PROJECT MANAGEMENT STATEMENTS ===
-            elif isinstance(node, zexus_ast.InterfaceStatement):
-                debug_log("  InterfaceStatement node", f"interface {node.name.value}")
-                return self.eval_interface_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.TypeAliasStatement):
-                debug_log("  TypeAliasStatement node", f"type_alias {node.name.value}")
-                return self.eval_type_alias_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ModuleStatement):
-                debug_log("  ModuleStatement node", f"module {node.name.value}")
-                return self.eval_module_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.PackageStatement):
-                debug_log("  PackageStatement node", f"package {node.name.value}")
-                return self.eval_package_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.UsingStatement):
-                debug_log("  UsingStatement node", f"using {node.resource_name.value}")
-                return self.eval_using_statement(node, env, stack_trace)
-            
-            # === EXPRESSIONS ===
-            # === CONCURRENCY & PERFORMANCE STATEMENTS ===
-            elif isinstance(node, zexus_ast.ChannelStatement):
-                debug_log("  ChannelStatement node", f"channel {node.name.value}")
-                return self.eval_channel_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.SendStatement):
-                debug_log("  SendStatement node", "send to channel")
-                return self.eval_send_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.ReceiveStatement):
-                debug_log("  ReceiveStatement node", "receive from channel")
-                return self.eval_receive_statement(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.AtomicStatement):
-                debug_log("  AtomicStatement node", "atomic operation")
-                return self.eval_atomic_statement(node, env, stack_trace)
-
-            # === BLOCKCHAIN STATEMENTS ===
-            elif isinstance(node, zexus_ast.LedgerStatement):
-                debug_log("  LedgerStatement node", f"ledger {node.name.value}")
-                return self.eval_ledger_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.StateStatement):
-                debug_log("  StateStatement node", f"state {node.name.value}")
-                return self.eval_state_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.RequireStatement):
-                debug_log("  RequireStatement node", "require condition")
-                return self.eval_require_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.RevertStatement):
-                debug_log("  RevertStatement node", "revert transaction")
-                return self.eval_revert_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.LimitStatement):
-                debug_log("  LimitStatement node", "set gas limit")
-                return self.eval_limit_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ProtocolStatement):
-                debug_log("  ProtocolStatement node", f"protocol {node.name}")
-                return self.eval_protocol_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.PersistentStatement):
-                debug_log("  PersistentStatement node", f"persistent {node.name}")
-                return self.eval_persistent_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.EmitStatement):
-                debug_log("  EmitStatement node", f"emit {node.event_name}")
-                return self.eval_emit_statement(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ModifierDeclaration):
-                debug_log("  ModifierDeclaration node", f"modifier {node.name}")
-                return self.eval_modifier_declaration(node, env, stack_trace)
-
-            # === EXPRESSIONS ===
-            elif isinstance(node, zexus_ast.Identifier):
-                debug_log("  Identifier node", node.value)
-                return self.eval_identifier(node, env)
-            
-            elif isinstance(node, zexus_ast.IntegerLiteral):
-                debug_log("  IntegerLiteral node", node.value)
-                return Integer(node.value)
-            
-            elif node_type == zexus_ast.FloatLiteral or isinstance(node, zexus_ast.FloatLiteral):
-                debug_log("  FloatLiteral node", getattr(node, 'value', 'unknown'))
-                try:
-                    val = getattr(node, 'value', None)
-                    return Float(val)
-                except Exception:
-                    return EvaluationError(f"Invalid float literal: {getattr(node, 'value', None)}")
-            
-            elif isinstance(node, zexus_ast.StringLiteral):
-                debug_log("  StringLiteral node", node.value)
-                # Process escape sequences in the string
-                value = node.value
-                value = value.replace('\\n', '\n')
-                value = value.replace('\\t', '\t')
-                value = value.replace('\\r', '\r')
-                value = value.replace('\\\\', '\\')
-                value = value.replace('\\"', '"')
-                value = value.replace("\\'", "'")
-                # String literals are trusted (not from external input)
-                return String(value, is_trusted=True)
-            
-            elif isinstance(node, zexus_ast.StringInterpolationExpression):
-                return self._handle_string_interpolation(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.Boolean):
-                debug_log("  Boolean node", f"value: {node.value}")
-                return BooleanObj(node.value)
-            
-            elif isinstance(node, zexus_ast.NullLiteral):
-                debug_log("  NullLiteral node")
-                return NULL
-            
-            elif isinstance(node, zexus_ast.ThisExpression):
-                debug_log("  ThisExpression node")
-                return self.eval_this_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.InfixExpression):
-                debug_log("  InfixExpression node", f"{node.left} {node.operator} {node.right}")
-                return self.eval_infix_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.PrefixExpression):
-                debug_log("  PrefixExpression node", f"{node.operator} {node.right}")
-                return self.eval_prefix_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.IfExpression):
-                debug_log("  IfExpression node")
-                return self.eval_if_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.TernaryExpression):
-                debug_log("  TernaryExpression node")
-                return self.eval_ternary_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.NullishExpression):
-                debug_log("  NullishExpression node")
-                return self.eval_nullish_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.AwaitExpression):
-                debug_log("  AwaitExpression node")
-                return self.eval_await_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.FindExpression):
-                debug_log("  FindExpression node")
-                return self.eval_find_expression(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.LoadExpression):
-                debug_log("  LoadExpression node")
-                return self.eval_load_expression(node, env, stack_trace)
-
-            elif isinstance(node, zexus_ast.FileImportExpression):
-                debug_log("  FileImportExpression node", "<< file import")
-                return self.eval_file_import_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.MethodCallExpression):
-                debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")
-                return self.eval_method_call_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.CallExpression):
-                debug_log("🚀 CallExpression node", f"Calling {node.function}")
-                return self.eval_call_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.AsyncExpression):
-                debug_log("⚡ AsyncExpression node", f"Async execution of {node.expression}")
-                return self.eval_async_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.MatchExpression):
-                debug_log("🎯 MatchExpression node", "Pattern matching")
-                return self.eval_match_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.ListLiteral):
-                debug_log("  ListLiteral node", f"{len(node.elements)} elements")
-                elems = self.eval_expressions(node.elements, env)
-                if is_error(elems):
-                    return elems
-                return List(elems)
-            
-            elif isinstance(node, zexus_ast.MapLiteral):
-                debug_log("  MapLiteral node", f"{len(node.pairs)} pairs")
-                pairs = {}
-                for k, v in node.pairs:
-                    # If the key is a bare identifier (e.g. io.read) treat it as a string key
-                    if isinstance(k, zexus_ast.Identifier):
-                        key_str = k.value
-                    else:
-                        key = self.eval_node(k, env, stack_trace)
-                        if is_error(key):
-                            return key
-                        key_str = key.inspect()
-
-                    val = self.eval_node(v, env, stack_trace)
-                    if is_error(val):
-                        return val
-                    pairs[key_str] = val
-                return Map(pairs)
-            
-            elif isinstance(node, zexus_ast.ActionLiteral):
-                debug_log("  ActionLiteral node")
-                return Action(node.parameters, node.body, env)
-            
-            elif isinstance(node, zexus_ast.LambdaExpression):
-                debug_log("  LambdaExpression node")
-                return LambdaFunction(node.parameters, node.body, env)
-            
-            elif isinstance(node, zexus_ast.EmbeddedLiteral):
-                debug_log("  EmbeddedLiteral node")
-                return EmbeddedCode("embedded_block", node.language, node.code)
-            
-            elif isinstance(node, zexus_ast.PropertyAccessExpression):
-                debug_log("  PropertyAccessExpression node", f"{node.object}.{node.property}")
-                obj = self.eval_node(node.object, env, stack_trace)
-                if is_error(obj): 
-                    return obj
-                
-                # Unwrap ReturnValue if present
-                if isinstance(obj, ReturnValue):
-                    obj = obj.value
-                
-                # Determine property name based on whether it's computed (obj[expr]) or literal (obj.prop)
-                if hasattr(node, 'computed') and node.computed:
-                    # Computed property (obj[expr]) - always evaluate the expression
-                    prop_result = self.eval_node(node.property, env, stack_trace)
-                    if is_error(prop_result):
-                        return prop_result
-                    property_name = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
-                elif isinstance(node.property, zexus_ast.Identifier):
-                    # Literal property (obj.prop) - use the identifier name directly
-                    property_name = node.property.value
-                elif isinstance(node.property, zexus_ast.IntegerLiteral):
-                    # Direct integer index like arr[0] (for backwards compatibility)
-                    property_name = node.property.value
-                else:
-                    # Fallback: evaluate the property expression
-                    prop_result = self.eval_node(node.property, env, stack_trace)
-                    if is_error(prop_result):
-                        return prop_result
-                    property_name = prop_result.value if hasattr(prop_result, 'value') else str(prop_result)
-                
-                if isinstance(obj, EmbeddedCode):
-                    if property_name == "code":
-                        return String(obj.code)
-                    elif property_name == "language":
-                        return String(obj.language)
-                
-                # Enforcement: consult security restrictions before returning
-                try:
-                    from ..security import get_security_context
-                    ctx = get_security_context()
-                    target = f"{getattr(node.object, 'value', str(node.object))}.{property_name}"
-                    restriction = ctx.get_restriction(target)
-                except Exception:
-                    restriction = None
-
-                # Handle Builtin objects (for static methods like TypeName.default())
-                if isinstance(obj, Builtin):
-                    if hasattr(obj, 'static_methods') and property_name in obj.static_methods:
-                        return obj.static_methods[property_name]
-                    return NULL
-
-                # Handle Module objects
-                try:
-                    from ..complexity_system import Module as _Module
-                except ImportError:
-                    _Module = None
-                if _Module is not None and isinstance(obj, _Module):
-                    val = obj.get(property_name)
-                    if val is None:
-                        return NULL
-                    if restriction:
-                        rule = restriction.get('restriction')
-                        if rule == 'redact':
-                            return String('***REDACTED***')
-                        if rule == 'admin-only':
-                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
-                            if not is_admin:
-                                return EvaluationError('Access denied: admin required')
-                    return val
-
-                # Handle Map objects
-                if isinstance(obj, Map):
-                    # Try string key first
-                    val = obj.pairs.get(property_name, NULL)
-                    if val == NULL:
-                        # Try with String object key (for dataclasses and other String-keyed maps)
-                        str_key = String(property_name)
-                        val = obj.pairs.get(str_key, NULL)
-                    
-                    # Check if this is a computed property
-                    computed_props = obj.pairs.get(String("__computed__"))
-                    if computed_props and isinstance(computed_props, dict) and property_name in computed_props:
-                        # Evaluate computed property
-                        computed_expr = computed_props[property_name]
-                        
-                        # Create environment with all field values in scope
-                        from ..environment import Environment
-                        compute_env = Environment(outer=env)
-                        compute_env.set('this', obj)
-                        
-                        # Add all regular fields to environment
-                        for key, value in obj.pairs.items():
-                            if isinstance(key, String) and not key.value.startswith('__'):
-                                compute_env.set(key.value, value)
-                        
-                        # Evaluate the computed expression
-                        result = self.eval_node(computed_expr, compute_env, stack_trace)
-                        return result if not is_error(result) else NULL
-                    
-                    # apply restriction if present
-                    if restriction:
-                        rule = restriction.get('restriction')
-                        if rule == 'redact':
-                            return String('***REDACTED***')
-                        if rule == 'admin-only':
-                            # check environment flag for admin
-                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
-                            if not is_admin:
-                                return EvaluationError('Access denied: admin required')
-                    return val
-
-                # Check for objects with get_attr method (e.g., ContractReference)
-                if hasattr(obj, 'get_attr') and callable(obj.get_attr):
-                    val = obj.get_attr(property_name)
-                    if is_error(val):
-                        return val
-                    if restriction:
-                        rule = restriction.get('restriction')
-                        if rule == 'redact':
-                            return String('***REDACTED***')
-                        if rule == 'admin-only':
-                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
-                            if not is_admin:
-                                return EvaluationError('Access denied: admin required')
-                    return val
-
-                if hasattr(obj, 'get') and callable(obj.get):
-                    val = obj.get(property_name)
-                    if restriction:
-                        rule = restriction.get('restriction')
-                        if rule == 'redact':
-                            return String('***REDACTED***')
-                        if rule == 'admin-only':
-                            is_admin = bool(env.get('__is_admin__')) if env and hasattr(env, 'get') else False
-                            if not is_admin:
-                                return EvaluationError('Access denied: admin required')
-                    return val
-
-            elif isinstance(node, zexus_ast.SliceExpression):
-                debug_log("  SliceExpression node", f"{node.object}[{node.start}:{node.end}]")
-                obj = self.eval_node(node.object, env, stack_trace)
-                if is_error(obj):
-                    return obj
-
-                start_val = None
-                end_val = None
-                if node.start is not None:
-                    start_val = self.eval_node(node.start, env, stack_trace)
-                    if is_error(start_val):
-                        return start_val
-                    start_val = start_val.value if hasattr(start_val, 'value') else start_val
-                if node.end is not None:
-                    end_val = self.eval_node(node.end, env, stack_trace)
-                    if is_error(end_val):
-                        return end_val
-                    end_val = end_val.value if hasattr(end_val, 'value') else end_val
-
-                if isinstance(obj, List):
-                    return List(obj.elements[start_val:end_val])
-                if isinstance(obj, String):
-                    return String(obj.value[start_val:end_val])
-                if isinstance(obj, list):
-                    return obj[start_val:end_val]
-                if isinstance(obj, str):
-                    return obj[start_val:end_val]
-                return NULL
-
-                return NULL
-            
-            # === BLOCKCHAIN EXPRESSIONS ===
-            elif isinstance(node, zexus_ast.TXExpression):
-                debug_log("  TXExpression node", f"tx.{node.property_name}")
-                return self.eval_tx_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.HashExpression):
-                debug_log("  HashExpression node", "hash()")
-                return self.eval_hash_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.SignatureExpression):
-                debug_log("  SignatureExpression node", "signature()")
-                return self.eval_signature_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.VerifySignatureExpression):
-                debug_log("  VerifySignatureExpression node", "verify_sig()")
-                return self.eval_verify_signature_expression(node, env, stack_trace)
-            
-            elif isinstance(node, zexus_ast.GasExpression):
-                debug_log("  GasExpression node", f"gas.{node.property_name}")
-                return self.eval_gas_expression(node, env, stack_trace)
-            
-            # Fallback
-            debug_log("  Unknown node type", node_type)
-            return EvaluationError(f"Unknown node type: {node_type}", stack_trace=stack_trace)
-        
+            return handler(node, env, stack_trace)
+        except RecursionError:
+            return EvaluationError(
+                "Maximum recursion depth exceeded while evaluating AST (Python recursion limit). "
+                "Consider simplifying deeply nested expressions or enabling the VM.",
+                stack_trace=stack_trace,
+            )
         except Exception as e:
-            # Enhanced error with stack trace
             error_msg = f"Internal error: {str(e)}"
             debug_log("  Exception in eval_node", error_msg)
             traceback.print_exc()
-            return EvaluationError(error_msg, stack_trace=stack_trace[-5:])  # Last 5 frames
+            trimmed_trace = stack_trace[-5:] if isinstance(stack_trace, list) else stack_trace
+            return EvaluationError(error_msg, stack_trace=trimmed_trace)
 
 # Additional VM-related methods
     def _initialize_vm(self):

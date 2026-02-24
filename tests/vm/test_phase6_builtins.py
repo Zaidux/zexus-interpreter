@@ -18,6 +18,9 @@ Covers:
 import pytest
 import time
 
+# Rust-only test module: skip cleanly when the optional extension isn't installed.
+zexus_core = pytest.importorskip("zexus_core")
+
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def _make_bytecode(constants, instructions):
@@ -30,8 +33,7 @@ def _make_bytecode(constants, instructions):
 
 def _exec(data, env=None, state=None, gas_limit=0):
     """Execute .zxc bytes via RustVMExecutor."""
-    from zexus_core import RustVMExecutor
-    exe = RustVMExecutor()
+    exe = zexus_core.RustVMExecutor()
     return exe.execute(data, env=env, state=state, gas_limit=gas_limit)
 
 

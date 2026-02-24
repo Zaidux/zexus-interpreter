@@ -2092,8 +2092,10 @@ class StatementEvaluatorMixin:
             sandbox_fs = builder.build()
             sandbox_env.set('__sandbox_vfs__', sandbox_fs)
             sandbox_env.set('__sandbox_id__', sandbox_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            # MEDIUM (M10): If sandbox isolation can't be established, do not
+            # execute the sandbox body under a weaker (or non-existent) policy.
+            return EvaluationError(f"Sandbox initialization failed: {exc}")
 
         # Ensure default sandbox policy exists
         try:
@@ -4201,107 +4203,6 @@ class StatementEvaluatorMixin:
                     debug_log("eval_using_statement", f"Cleaned up resource: {resource_name}")
                 except Exception as e:
                     debug_log("eval_using_statement", f"Error cleaning up resource: {e}")
-
-    # === CONCURRENCY & PERFORMANCE STATEMENT EVALUATORS ===
-
-    def eval_channel_statement(self, node, env, stack_trace):
-        """Evaluate channel statement - declare a message passing channel."""
-        from ..concurrency_system import get_concurrency_manager
-        
-        manager = get_concurrency_manager()
-        
-        # Get channel name
-        channel_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
-        
-        # Get element type if specified
-        element_type = None
-        if hasattr(node, 'element_type') and node.element_type:
-            element_type = str(node.element_type)
-        
-        # Get capacity if specified
-        capacity = 0
-        if hasattr(node, 'capacity') and node.capacity:
-            capacity = self.eval_node(node.capacity, env, stack_trace)
-            if isinstance(capacity, Integer):
-                capacity = capacity.value
-            else:
-                capacity = 0
-        
-        # Create channel
-        channel = manager.create_channel(channel_name, element_type, capacity)
-        debug_log("eval_channel_statement", f"Created channel: {channel_name}")
-        
-        # Store in environment
-        env.set(channel_name, channel)
-        return String(f"Channel '{channel_name}' created")
-
-    def eval_send_statement(self, node, env, stack_trace):
-        """Evaluate send statement - send value to a channel."""
-        
-        # Evaluate channel expression
-        channel = self.eval_node(node.channel_expr, env, stack_trace)
-        
-        # Evaluate value to send
-        value = self.eval_node(node.value_expr, env, stack_trace)
-        
-        # Send to channel
-        if hasattr(channel, 'send'):
-            try:
-                channel.send(value, timeout=5.0)
-                debug_log("eval_send_statement", f"Sent to channel: {value}")
-                return String(f"Value sent to channel")
-            except Exception as e:
-                return String(f"Error sending to channel: {e}")
-        else:
-            return String(f"Error: not a valid channel")
-
-    def eval_receive_statement(self, node, env, stack_trace):
-        """Evaluate receive statement - receive value from a channel."""
-        
-        # Evaluate channel expression
-        channel = self.eval_node(node.channel_expr, env, stack_trace)
-        
-        # Receive from channel
-        if hasattr(channel, 'receive'):
-            try:
-                value = channel.receive(timeout=5.0)
-                debug_log("eval_receive_statement", f"Received from channel: {value}")
-                
-                # Bind to target if specified
-                if hasattr(node, 'target') and node.target:
-                    target_name = node.target.value if hasattr(node.target, 'value') else str(node.target)
-                    env.set(target_name, value)
-                
-                return value if value is not None else NULL
-            except Exception as e:
-                return String(f"Error receiving from channel: {e}")
-        else:
-            return String(f"Error: not a valid channel")
-
-    def eval_atomic_statement(self, node, env, stack_trace):
-        """Evaluate atomic statement - execute indivisible operation."""
-        from ..concurrency_system import get_concurrency_manager
-        
-        manager = get_concurrency_manager()
-        
-        # Create/get atomic region
-        atomic_id = f"atomic_{id(node)}"
-        atomic = manager.create_atomic(atomic_id)
-        
-        # Execute atomically
-        def execute_block():
-            if hasattr(node, 'body') and node.body:
-                # Atomic block
-                return self.eval_node(node.body, env, stack_trace)
-            elif hasattr(node, 'expr') and node.expr:
-                # Atomic expression
-                return self.eval_node(node.expr, env, stack_trace)
-            return NULL
-        
-        result = atomic.execute(execute_block)
-        debug_log("eval_atomic_statement", "Atomic operation completed")
-        
-        return result if result is not NULL else NULL
 
     # === BLOCKCHAIN STATEMENT EVALUATION ===
     

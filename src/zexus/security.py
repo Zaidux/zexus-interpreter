@@ -14,7 +14,10 @@ import sqlite3
 import time
 import hashlib
 import threading
+import logging
 from zexus.config import config as zexus_config
+
+logger = logging.getLogger(__name__)
 
 # Try importing advanced database drivers
 try:
@@ -32,7 +35,11 @@ except ImportError:
 from zexus.object import (
     Environment, Map, String, Integer, Float, Boolean as BooleanObj,
     Builtin, List, Null, EvaluationError as ObjectEvaluationError, NULL,
-    _sanitize_identifier
+    _sanitize_identifier,
+    EntityDefinition,
+    EntityInstance,
+    _get_cached_evaluator,
+    _clear_cached_evaluator,
 )
 
 try:
@@ -40,13 +47,6 @@ try:
 except ImportError:  # Fallback if optional type missing
     ContractReference = None
 
-# =============================================
-# Shared Evaluator Cache for Performance
-# =============================================
-# Creating a new Evaluator() for every contract method call is expensive
-# This cache provides thread-local evaluators that can be reused
-
-_evaluator_cache = threading.local()
 _vm_action_context = threading.local()
 
 def _get_vm_action_context() -> bool:
@@ -55,33 +55,36 @@ def _get_vm_action_context() -> bool:
 def _set_vm_action_context(flag: bool) -> None:
     _vm_action_context.disable_vm = bool(flag)
 
-def _get_cached_evaluator():
-    """Get a cached evaluator instance for the current thread.
-    
-    This significantly improves performance for contract method calls
-    by avoiding repeated Evaluator() initialization overhead.
-    """
-    if not hasattr(_evaluator_cache, 'evaluator'):
-        from zexus.evaluator.core import Evaluator
-        _evaluator_cache.evaluator = Evaluator()
-    return _evaluator_cache.evaluator
+__all__ = [
+    # Re-export entity classes for backwards compatibility
+    "EntityDefinition",
+    "EntityInstance",
+]
 
-def _clear_evaluator_cache():
-    """Clear the evaluator cache (useful for testing)."""
-    if hasattr(_evaluator_cache, 'evaluator'):
-        del _evaluator_cache.evaluator
-
-# =============================================
-
-# Ensure storage directory exists
+# Storage directory roots (created lazily)
 STORAGE_DIR = "chain_data"
-if not os.path.exists(STORAGE_DIR):
-    os.makedirs(STORAGE_DIR)
-
-# Audit logging directory
 AUDIT_DIR = os.path.join(STORAGE_DIR, "audit_logs")
-if not os.path.exists(AUDIT_DIR):
-    os.makedirs(AUDIT_DIR)
+
+
+def _ensure_storage_dirs() -> None:
+    """Ensure storage directories exist.
+
+    MEDIUM (M3): Avoid filesystem writes at import time; create directories only
+    when storage/audit features are actually used.
+    """
+    os.makedirs(STORAGE_DIR, exist_ok=True)
+    os.makedirs(AUDIT_DIR, exist_ok=True)
+
+
+def _ensure_parent_dir(path: str) -> None:
+    """Ensure the parent directory for a path exists.
+
+    MEDIUM (M3): Used to lazily create storage directories only when a feature
+    actually persists data.
+    """
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
 
 class AuditLog:
@@ -95,6 +98,8 @@ class AuditLog:
         self.entries = []  # In-memory audit log
         self.max_entries = max_entries
         self.persist_to_file = persist_to_file
+        if self.persist_to_file:
+            _ensure_storage_dirs()
         self.audit_file = os.path.join(AUDIT_DIR, f"audit_{uuid.uuid4().hex[:8]}.jsonl")
     
     def log(self, data_name, action, data_type, timestamp=None, additional_context=None):
@@ -369,7 +374,6 @@ class SecurityContext:
         - For matching trails, record a derived audit entry and also print to stdout.
         """
         try:
-            # simple stringify payload for filtering
             payload_str = json.dumps(payload) if not isinstance(payload, str) else payload
         except Exception:
             try:
@@ -396,8 +400,7 @@ class SecurityContext:
                             if re.search(pattern, payload_str, flags=0):
                                 matched = True
                         except re.error:
-                            # Invalid regex supplied by subscriber — skip
-                            pass
+                            logger.debug("Invalid trail regex filter; skipping", exc_info=True)
                     elif isinstance(flt, str) and ':' in flt:
                         # key:value pattern
                         k, v = flt.split(':', 1)
@@ -413,6 +416,7 @@ class SecurityContext:
                         if flt in payload_str:
                             matched = True
                 except Exception:
+                    logger.debug("Trail filter evaluation failed; skipping trail", exc_info=True)
                     matched = False
 
                 if not matched:
@@ -430,7 +434,7 @@ class SecurityContext:
             try:
                 self.audit_log.entries.append(entry)
             except Exception:
-                pass
+                logger.debug("Failed to append trail entry to audit_log.entries", exc_info=True)
 
             # Deliver to configured sinks
             for sink in list(self.trail_sinks):
@@ -439,16 +443,15 @@ class SecurityContext:
                     if stype == 'stdout':
                         print(f"[TRAIL:{tid}] {event_type} -> {payload_str}")
                     elif stype == 'file':
+                        _ensure_storage_dirs()
                         path = sink.get('path') or os.path.join(AUDIT_DIR, 'trails.jsonl')
-                        try:
-                            with open(path, 'a', encoding='utf-8') as sf:
-                                sf.write(json.dumps(entry) + '\n')
-                        except Exception:
-                            pass
+                        with open(path, 'a', encoding='utf-8') as sf:
+                            sf.write(json.dumps(entry) + '\n')
                     elif stype == 'sqlite':
+                        _ensure_storage_dirs()
                         db_path = sink.get('db_path') or os.path.join(STORAGE_DIR, 'trails.db')
+                        conn = sqlite3.connect(db_path, check_same_thread=False)
                         try:
-                            conn = sqlite3.connect(db_path, check_same_thread=False)
                             cur = conn.cursor()
                             cur.execute('''CREATE TABLE IF NOT EXISTS trails (
                                 id TEXT PRIMARY KEY,
@@ -461,18 +464,14 @@ class SecurityContext:
                                 entry['id'], entry['trail_id'], entry['event_type'], entry['payload'], entry['timestamp']
                             ))
                             conn.commit()
+                        finally:
                             conn.close()
-                        except Exception:
-                            pass
                     elif stype == 'callback':
                         cb = sink.get('callback')
-                        try:
-                            if callable(cb):
-                                cb(entry)
-                        except Exception:
-                            pass
+                        if callable(cb):
+                            cb(entry)
                 except Exception:
-                    pass
+                    logger.debug("Trail sink delivery failed", exc_info=True)
 
 
     def register_verify_check(self, name, check_func):
@@ -572,177 +571,7 @@ def _is_ip_in_list(ip, ip_list):
 # ENTITY SYSTEM - Object-Oriented Data Structures
 # ===============================================
 
-class EntityDefinition:
-    """Represents an entity definition with properties and methods"""
-
-    def __init__(self, name, properties, methods=None, parent=None):
-        self.name = name
-        self.properties = properties  # {prop_name: {type, default_value}}
-        self.methods = methods or {}   # {method_name: Action}
-        self.parent = parent          # Parent entity (inheritance)
-
-    def create_instance(self, values=None):
-        """Create an instance of this entity with dependency injection support"""
-        # Perform dependency injection for marked properties
-        injected_values = values or {}
-        
-        # Check if this entity has injected dependencies
-        if hasattr(self, 'injected_deps') and self.injected_deps:
-            from zexus.dependency_injection import get_di_registry
-            
-            registry = get_di_registry()
-            # Use __main__ as default module context
-            container = registry.get_container("__main__")
-            
-            for dep_name in self.injected_deps:
-                if dep_name not in injected_values:
-                    # Try to inject from DI container
-                    try:
-                        injected_value = container.get(dep_name)
-                        injected_values[dep_name] = injected_value
-                    except BaseException as e:
-                        # Dependency not available - use NULL placeholder
-                        from zexus.object import NULL
-                        injected_values[dep_name] = NULL
-        
-        instance = EntityInstance(self, injected_values)
-        return instance
-
-    def get_all_properties(self):
-        """Get all properties including inherited ones, in correct order (parent first, then child)"""
-        props = {}
-        # First add parent properties
-        if self.parent:
-            parent_props = self.parent.get_all_properties()
-            props.update(parent_props)
-        # Then add/override with child properties
-        props.update(self.properties)
-        return props
-
-
-class EntityInstance:
-    """Represents an instance of an entity"""
-
-    def __init__(self, entity_def, values):
-        self.entity_def = entity_def
-        self.data = values or {}
-        self._validate_properties()
-
-    def _validate_properties(self):
-        """Validate that all required properties are present and inject dependencies"""
-        all_props = self.entity_def.get_all_properties()
-        for prop_name, prop_config in all_props.items():
-            if prop_name not in self.data:
-                # Check if this is an injected dependency
-                if prop_config.get("injected", False):
-                    # Try to inject from DI registry
-                    try:
-                        from zexus.dependency_injection import get_di_registry
-                        from zexus.object import NULL
-                        registry = get_di_registry()
-                        container = registry.get_container("__main__")
-                        if container:
-                            injected_value = container.get(prop_name)
-                            self.data[prop_name] = injected_value
-                        else:
-                            # No container, set to NULL
-                            self.data[prop_name] = NULL
-                    except Exception:
-                        # If injection fails, set to NULL
-                        from zexus.object import NULL
-                        self.data[prop_name] = NULL
-                elif "default_value" in prop_config:
-                    self.data[prop_name] = prop_config["default_value"]
-
-    def get(self, property_name):
-        """Get property value"""
-        return self.data.get(property_name)
-
-    def set(self, property_name, value):
-        """Set property value (prevent modification if property is sealed)"""
-        if property_name not in self.entity_def.get_all_properties():
-            raise ValueError(f"Unknown property: {property_name}")
-        existing = self.data.get(property_name)
-        # Avoid importing SealedObject here to prevent circular imports; use name-based check
-        if existing is not None and existing.__class__.__name__ == 'SealedObject':
-            raise ValueError(f"Cannot modify sealed property: {property_name}")
-        self.data[property_name] = value
-
-    def to_dict(self):
-        """Convert to dictionary"""
-        return self.data
-    
-    def __str__(self):
-        """String representation of entity instance"""
-        entity_name = self.entity_def.name if hasattr(self.entity_def, 'name') else 'Entity'
-        # Format properties nicely
-        props = []
-        for key, value in self.data.items():
-            # Convert value to a readable string
-            if hasattr(value, 'value'):
-                # Object wrapper with value attribute (Integer, String, etc.)
-                props.append(f"{key}={value.value}")
-            elif hasattr(value, '__class__') and hasattr(value.__class__, '__name__'):
-                if value.__class__.__name__ in ['EntityInstance', 'SealedObject']:
-                    props.append(f"{key}=<{value.__class__.__name__}>")
-                else:
-                    try:
-                        props.append(f"{key}={value}")
-                    except:
-                        props.append(f"{key}=<object>")
-            else:
-                props.append(f"{key}={value}")
-        props_str = ", ".join(props)
-        return f"{entity_name}({props_str})"
-    
-    def __repr__(self):
-        """Python representation"""
-        return self.__str__()
-    
-    def call_method(self, method_name, args):
-        """Call a method on this entity instance"""
-        if method_name not in self.entity_def.methods:
-            from zexus.object import EvaluationError
-            return EvaluationError(f"Method '{method_name}' not supported for ENTITY_INSTANCE")
-        
-        # Get the method (Action or Function)
-        method = self.entity_def.methods[method_name]
-        
-        # Create a new environment for the method execution
-        from zexus.environment import Environment
-        method_env = Environment(outer=method.env if hasattr(method, 'env') else None)
-        
-        # Bind 'this' to the current instance in the method environment
-        method_env.set('this', self)
-        
-        # Bind method parameters to arguments
-        if hasattr(method, 'parameters'):
-            for i, param in enumerate(method.parameters):
-                if i < len(args):
-                    # Handle both Identifier objects and ParameterNode objects
-                    if hasattr(param, 'name'):
-                        # It's a ParameterNode with name and type
-                        param_name = param.name.value if hasattr(param.name, 'value') else str(param.name)
-                    elif hasattr(param, 'value'):
-                        # It's an Identifier
-                        param_name = param.value
-                    else:
-                        # Fallback to string representation
-                        param_name = str(param)
-                    method_env.set(param_name, args[i])
-        
-        # Use cached evaluator for performance (avoids repeated Evaluator() initialization)
-        evaluator = _get_cached_evaluator()
-        
-        # Execute the method body with stack trace
-        result = evaluator.eval_node(method.body, method_env, stack_trace=[])
-        
-        # Unwrap return values
-        from zexus.object import ReturnValue
-        if isinstance(result, ReturnValue):
-            return result.value
-        
-        return result
+# MEDIUM (M5): EntityDefinition/EntityInstance are provided by `zexus.object`.
 
 
 # ===============================================
@@ -819,6 +648,7 @@ class InMemoryBackend(StorageBackend):
 class SQLiteBackend(StorageBackend):
     def __init__(self, db_path):
         import sqlite3
+        _ensure_parent_dir(db_path)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         
@@ -895,6 +725,7 @@ class SQLiteBackend(StorageBackend):
 class LevelDBBackend(StorageBackend):
     def __init__(self, db_path):
         if not _LEVELDB_AVAILABLE: raise ImportError("plyvel not installed")
+        _ensure_parent_dir(db_path)
         self.db = plyvel.DB(db_path, create_if_missing=True)
 
     def set(self, key, value):
@@ -919,6 +750,7 @@ class LevelDBBackend(StorageBackend):
 class RocksDBBackend(StorageBackend):
     def __init__(self, db_path):
         if not _ROCKSDB_AVAILABLE: raise ImportError("rocksdb not installed")
+        _ensure_parent_dir(db_path)
         self.db = rocksdb.DB(db_path, rocksdb.Options(create_if_missing=True))
 
     def set(self, key, value):
@@ -1078,11 +910,16 @@ class ContractStorage:
         if db_type == "memory":
             self.backend = InMemoryBackend()
         elif db_type == "leveldb" and _LEVELDB_AVAILABLE:
+            _ensure_parent_dir(base_path)
             self.backend = LevelDBBackend(base_path)
         elif db_type == "rocksdb" and _ROCKSDB_AVAILABLE:
-            self.backend = RocksDBBackend(f"{base_path}.rdb")
+            db_path = f"{base_path}.rdb"
+            _ensure_parent_dir(db_path)
+            self.backend = RocksDBBackend(db_path)
         elif db_type == "sqlite":
-            self.backend = SQLiteBackend(f"{base_path}.sqlite")
+            db_path = f"{base_path}.sqlite"
+            _ensure_parent_dir(db_path)
+            self.backend = SQLiteBackend(db_path)
         else:
             # Unknown type, fall back to memory
             self.backend = InMemoryBackend()
@@ -1573,12 +1410,21 @@ class SmartContract:
         register_contract(self)
     
     def __del__(self):
-        """Ensure storage is committed on cleanup"""
+        """Best-effort commit on cleanup.
+
+        Destructors must never raise; however, silently swallowing exceptions
+        can hide storage corruption or shutdown bugs. We log in debug mode.
+        """
         try:
-            if hasattr(self, 'storage'):
-                self.storage.commit_batch(force=True)
-        except:
-            pass  # Ignore errors during cleanup
+            storage = getattr(self, 'storage', None)
+            if storage is not None:
+                storage.commit_batch(force=True)
+        except Exception as exc:
+            try:
+                if zexus_config.should_log('debug'):
+                    print(f"⚠️ SmartContract.__del__ commit failed: {exc}")
+            except Exception:
+                pass
 
     def instantiate(self, args=None):
         """Create a new instance of this contract when called like ZiverWallet()."""

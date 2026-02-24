@@ -18,7 +18,15 @@ from .object import (
 
 # Storage directory for persistent data
 PERSISTENCE_DIR = os.path.expanduser("~/.zexus/persistence")
-os.makedirs(PERSISTENCE_DIR, exist_ok=True)
+
+
+def _ensure_persistence_dir(path: str = PERSISTENCE_DIR) -> None:
+    """Ensure persistence directory exists.
+
+    MEDIUM (M3): Directory creation is deferred until persistence is actually used
+    to avoid surprising filesystem writes at import time.
+    """
+    os.makedirs(path, exist_ok=True)
 
 
 # ===============================================
@@ -143,6 +151,7 @@ class PersistentStorage:
     
     def __init__(self, scope_id: str, storage_dir: str = PERSISTENCE_DIR,
                  max_items: int = None, max_size_mb: int = None):
+        _ensure_persistence_dir(storage_dir)
         # SECURITY (C5): Sanitize scope_id to prevent path traversal
         self.scope_id = _sanitize_identifier(scope_id, "scope_id")
         self.db_path = os.path.join(storage_dir, f"{self.scope_id}.sqlite")
