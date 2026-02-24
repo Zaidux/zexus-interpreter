@@ -670,6 +670,22 @@ class VM:
         """Return a child VM to the pool for reuse."""
         if hasattr(self, "_vm_pool") and self._vm_pool is not None:
              if len(self._vm_pool) < 1000:
+                 # MEDIUM (M14): Scrub references that could leak state across pooled VMs.
+                 try:
+                     vm.env = None
+                 except Exception:
+                     pass
+                 for attr in ("_closure_cells", "_name_cache", "_method_cache", "_events", "_tasks"):
+                     try:
+                         val = getattr(vm, attr, None)
+                         if isinstance(val, dict):
+                             val.clear()
+                     except Exception:
+                         pass
+                 try:
+                     vm._parent_env = None
+                 except Exception:
+                     pass
                  self._vm_pool.append(vm)
 
     @classmethod
@@ -1920,8 +1936,10 @@ class VM:
         stack_append = stack.append
         # stack_pop = stack.pop
         def stack_pop():
+            # MEDIUM (M15): Match the main VM stack behaviour; stack underflow
+            # should not silently return None.
             if not stack:
-                return None
+                raise IndexError("pop from empty stack")
             return stack.pop()
         
         ip = 0
@@ -2045,7 +2063,7 @@ class VM:
                 if hasattr(b, 'value'): b = b.value
                 if a is None: a = 0
                 if b is None: b = 0
-                stack_append(a ** b)
+                stack_append(_safe_pow(a, b))
             elif op_name == "EQ":
                 b = stack_pop() if stack else None
                 a = stack_pop() if stack else None
@@ -2490,6 +2508,7 @@ class VM:
             elif op_name == "LEDGER_APPEND":
                 entry = stack_pop()
                 ledger = env.setdefault("_ledger", [])
+                # MEDIUM (M12): Keep ledger bounded to prevent memory exhaustion.
                 if len(ledger) < 10000:  # Size limit
                     if isinstance(entry, dict) and "timestamp" not in entry:
                         entry["timestamp"] = time.time()
@@ -2525,8 +2544,16 @@ class VM:
                 data = stack_pop(); action = stack_pop()
                 if hasattr(action, 'value'): action = action.value
                 if hasattr(data, 'value'): data = data.value
-                env.setdefault("_audit_log", []).append(
-                    {"timestamp": ts, "action": action, "data": data})
+                # MEDIUM (M13): Cap audit log growth to prevent memory exhaustion.
+                audit = env.setdefault("_audit_log", [])
+                entry = {"timestamp": ts, "action": action, "data": data}
+                if len(audit) >= 10000:
+                    # Drop oldest entries; keep most recent.
+                    try:
+                        del audit[:1000]
+                    except Exception:
+                        audit[:] = audit[-9000:]
+                audit.append(entry)
 
             elif op_name == "RESTRICT_ACCESS":
                 restriction = stack_pop(); prop = stack_pop(); obj = stack_pop()
@@ -3544,7 +3571,7 @@ class VM:
             "MUL": _binary_op(lambda a, b: a * b),
             "DIV": _binary_op(lambda a, b: a / b if b != 0 else 0),
             "MOD": _binary_op(lambda a, b: a % b if b != 0 else 0),
-            "POW": _binary_op(lambda a, b: a ** b),
+            "POW": _binary_op(lambda a, b: _safe_pow(a, b)),
             "NEG": _op_neg,
             "EQ": _binary_bool_op(lambda a, b: a == b),
             "NEQ": _binary_bool_op(lambda a, b: a != b),
@@ -3813,7 +3840,7 @@ class VM:
                         self._jit_registers = {}
                     self._jit_registers[reg] = value
 
-                elif op_name == "LOAD_VAR_REG":
+                    res = _safe_pow(v1, v2)
                     reg, name_idx = operand
                     name = const(name_idx)
                     value = _resolve(name)
@@ -4135,7 +4162,7 @@ class VM:
                     a = _unwrap(stack.pop() if stack else 0)
                     if a is None: a = 0
                     if b is None: b = 0
-                    stack.append(a ** b)
+                    stack.append(_safe_pow(a, b))
                 elif op_name == "NEG":
                     a = stack.pop() if stack else 0
                     stack.append(-a)
@@ -4753,7 +4780,13 @@ class VM:
                     data = data.value if hasattr(data, 'value') else data
                     
                     entry = {"timestamp": ts, "action": action, "data": data}
-                    self.env.setdefault("_audit_log", []).append(entry)
+                    audit = self.env.setdefault("_audit_log", [])
+                    if len(audit) >= 10000:
+                        try:
+                            del audit[:1000]
+                        except Exception:
+                            audit[:] = audit[-9000:]
+                    audit.append(entry)
                     if self.debug: print(f"[AUDIT] {entry}")
     
                 elif op_name == "RESTRICT_ACCESS":
@@ -4798,7 +4831,9 @@ class VM:
                     entry = stack.pop() if stack else None
                     if isinstance(entry, dict) and "timestamp" not in entry:
                         entry["timestamp"] = time.time()
-                    self.env.setdefault("_ledger", []).append(entry)
+                    ledger = self.env.setdefault("_ledger", [])
+                    if len(ledger) < 10000:
+                        ledger.append(entry)
 
                 elif op_name in ("PARALLEL_START", "PARALLEL_END"):
                     # Marker ops for parallel execution - no-op in stack VM
@@ -5210,6 +5245,56 @@ class VM:
 
 def create_vm(mode: str = "auto", use_jit: bool = True, **kwargs) -> VM:
     return VM(mode=VMMode(mode.lower()), use_jit=use_jit, **kwargs)
+
+
+def _safe_pow(a, b, *, max_exp: int = 10000, max_bits: int = 8192):
+    """Bound exponentiation to avoid exponent DoS.
+
+    LI11: Prevent pathological cases like `10 ** 10_000_000`.
+    The guard is intentionally conservative; it applies mainly to integer
+    exponentiation.
+    """
+    try:
+        # Normalize wrapped evaluator objects
+        if hasattr(a, 'value'):
+            a = a.value
+        if hasattr(b, 'value'):
+            b = b.value
+
+        # Only guard integer-ish exponentiation; float pow is already bounded by
+        # IEEE semantics but can still be expensive for huge integer exponents.
+        if isinstance(b, bool):
+            b_int = int(b)
+        elif isinstance(b, int):
+            b_int = b
+        else:
+            # If exponent isn't an int, fall back to Python pow
+            return a ** b
+
+        if abs(b_int) > max_exp:
+            raise OverflowError(f"POW exponent too large: {b_int}")
+
+        # Rough bit-growth guard for integer base
+        if isinstance(a, bool):
+            a_int = int(a)
+        elif isinstance(a, int):
+            a_int = a
+        else:
+            a_int = None
+
+        if a_int is not None and b_int >= 0:
+            # If base is -1, 0, 1 then pow is cheap
+            if a_int not in (-1, 0, 1):
+                est_bits = max(1, abs(a_int).bit_length()) * b_int
+                if est_bits > max_bits:
+                    raise OverflowError(
+                        f"POW result too large (estimated {est_bits} bits > {max_bits})"
+                    )
+
+        return a ** b_int
+    except Exception:
+        # Let callers decide how to surface the error
+        raise
 
 def create_high_performance_vm() -> VM:
     return create_vm(

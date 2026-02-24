@@ -102,6 +102,8 @@ setup(
     install_requires=[
         'click>=8.0',
         'rich>=10.0',
+        'pygls>=1.0.0',
+        'pygments>=2.0',
     ],
     extras_require={
         'dev': [
@@ -126,6 +128,23 @@ setup(
             'websockets>=12.0',
             'aiohttp>=3.9',
             'httpx>=0.27',
+        ],
+        'security': [
+            'bcrypt>=4.0',
+            'psutil>=5.9',
+        ],
+        'rust': [
+            'maturin>=1.5',
+        ],
+        'full': [
+            'web3>=5.0',
+            'eth-account>=0.5',
+            'websockets>=12.0',
+            'aiohttp>=3.9',
+            'httpx>=0.27',
+            'bcrypt>=4.0',
+            'psutil>=5.9',
+            'maturin>=1.5',
         ],
     },
     entry_points={

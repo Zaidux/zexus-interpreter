@@ -7,6 +7,16 @@ cd /workspaces/zexus-interpreter
 ./install.sh
 ```
 
+### Install Matrix
+
+| Goal | Command | Notes |
+|---|---|---|
+| Minimal (interpreter + CLI) | `pip install zexus` | Pure-Python; best for quick scripting. |
+| Full runtime (blockchain + networking + helpers) | `pip install "zexus[full]"` | Installs optional deps needed for most advanced features. |
+| From source (recommended for contributors) | `./install.sh` | Installs `.[full]` and best-effort builds Rust VM when `cargo` exists. |
+| Enable Rust VM (`zexus_core`) | `pip install maturin && maturin develop -m rust_core/Cargo.toml --release` | Requires Rust toolchain (`cargo`). Falls back to Python VM if unavailable. |
+
+
 ## Memory Safety (Safer than Rust)
 
 ### Safe Arrays

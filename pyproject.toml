@@ -43,6 +43,7 @@ dependencies = [
     "click>=8.0",
     "rich>=10.0",
     "pygls>=1.0.0",
+    "pygments>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -62,18 +63,37 @@ jit = [
     "Cython>=0.29",
 ]
 
-[project.urls]
-Homepage = "https://github.com/Zaidux/zexus-interpreter"
-Documentation = "https://github.com/Zaidux/zexus-interpreter/blob/main/docs/"
-Repository = "https://github.com/Zaidux/zexus-interpreter"
-Issues = "https://github.com/Zaidux/zexus-interpreter/issues"
-Changelog = "https://github.com/Zaidux/zexus-interpreter/blob/main/CHANGELOG.md"
+# Optional runtime features
+lsp = [
+    "pygls>=1.0.0",
+]
+network = [
+    "websockets>=12.0",
+    "aiohttp>=3.9",
+    "httpx>=0.27",
+]
+security = [
+    "bcrypt>=4.0",
+    "psutil>=5.9",
+]
 
-[project.scripts]
-zx = "zexus.cli.main:cli"
-zexus = "zexus.cli.main:cli"
-zx-pypy = "zexus.cli.main:cli"
+# Tooling to build the Rust VM extension from source (best-effort)
+rust = [
+    "maturin>=1.5",
+]
 
+# Convenience: install everything needed for the most complete experience.
+# Note: some optional deps may require system tooling (e.g., Rust for the VM).
+full = [
+    "web3>=5.0",
+    "eth-account>=0.5",
+    "websockets>=12.0",
+    "aiohttp>=3.9",
+    "httpx>=0.27",
+    "bcrypt>=4.0",
+    "psutil>=5.9",
+    "maturin>=1.5",
+]
 [tool.setuptools]
 package-dir = {"" = "src"}
 

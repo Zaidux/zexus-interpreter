@@ -36,6 +36,23 @@ All 21 issues discovered during the Ziver Chain Phase 0 audit ([ISSUE7](issues/I
 - **`list.count()` inconsistency** (INT-016) — Confirmed already working; no change needed.
 - **`protect` modifier syntax** (INT-011) — Clarified: `protect(target, {rules})` call syntax is the correct form and already works.
 
+### 🔒 Security & Quality Remediation (Phases 0–5)
+
+This release also includes the complete remediation work tracked in `VULNERABILITIES_FIXES.md`:
+
+- **Phase 0 (Critical):** sandboxing + path safety + dangerous native/exec gating + gas metering guards.
+- **Phase 1 (High):** ReDoS protections, stronger import/module sandboxing, unsafe cache reuse removal.
+- **Phase 2 (Logic bugs):** missing opcode handlers, safer TX exception behavior, jump patching correctness.
+- **Phase 3 (Compiler consistency):** evaluator/VM compiler parity (EXPORT/print multi-value/destructuring/continue semantics).
+- **Phase 4 (Medium):** dead-code removals, safer cleanup/error handling, bounded logs/ledgers, VM pool state scrubbing.
+- **Phase 5 (Low/Info):** performance cleanups (no busy-wait await), bounded env serialization, safer input sanitization, token validation heuristic.
+
+### 📦 Installation Improvements
+
+- Added `zexus[full]` extra to install common optional dependencies for blockchain/network/security helpers.
+- `install.sh` now installs `.[full]` and best-effort builds the optional Rust VM (`zexus_core`) when `cargo` is available.
+- npm `postinstall` installs `zexus[full]` and best-effort builds `zexus_core` when Rust toolchain is available.
+
 ### 📁 Files Changed
 
 - `src/zexus/parser/strategy_context.py` — emit, protocol, implements, watch form 3
@@ -51,7 +68,7 @@ All 21 issues discovered during the Ziver Chain Phase 0 audit ([ISSUE7](issues/I
 
 ### 🧪 Testing
 
-- **1851 tests pass**, 0 regressions
+- **1852 tests pass**, 0 regressions
 - Integration test covers: track_memory, cache, throttle, audit, verify, list.is_empty, list.count, map.has, map.get, protocol/implements, emit, watch
 
 ---

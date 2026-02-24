@@ -1,5 +1,6 @@
 # src/zexus/evaluator/expressions.py
 import os
+import traceback as _tb
 
 from ..zexus_ast import (
     IntegerLiteral, FloatLiteral, StringLiteral, ListLiteral, MapLiteral,
@@ -139,7 +140,6 @@ class ExpressionEvaluatorMixin:
             if hasattr(env, 'store'):
                 env_keys = list(env.store.keys())
             # Use direct print to ensure visibility during debugging
-            import traceback as _tb
             stack_snip = ''.join(_tb.format_stack(limit=5)[-3:])
             # print(f"[DEBUG] Identifier not found: {node.value}; env_keys={env_keys}\nStack snippet:\n{stack_snip}")
         except Exception:
@@ -858,23 +858,14 @@ class ExpressionEvaluatorMixin:
                             error_msg += f"\n  Promise created at: {awaitable.stack_trace}"
                         return EvaluationError(error_msg)
                 else:
-                    # Promise is still pending - this shouldn't happen with current implementation
-                    # but we can spin-wait briefly
-                    import time
-                    max_wait = 1.0  # 1 second timeout
-                    waited = 0.0
-                    while not awaitable.is_resolved() and waited < max_wait:
-                        time.sleep(0.001)  # 1ms
-                        waited += 0.001
-                    
-                    if awaitable.is_resolved():
-                        try:
-                            result = awaitable.get_value()
-                            return result if result is not None else NULL
-                        except Exception as e:
-                            return EvaluationError(f"Promise rejected: {e}")
-                    else:
-                        return EvaluationError("Await timeout: promise did not resolve")
+                    # LI6: Avoid busy-waiting (sleep(0.001)) which burns CPU and
+                    # makes await non-deterministic. In the current interpreter,
+                    # unresolved promises are not awaited synchronously.
+                    return EvaluationError(
+                        "Awaited promise is still pending. "
+                        "This runtime does not support blocking awaits; "
+                        "ensure the promise resolves before awaiting it."
+                    )
             
             # Await a Coroutine
             elif obj_type == "COROUTINE":

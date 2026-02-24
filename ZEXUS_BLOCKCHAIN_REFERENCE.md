@@ -2221,6 +2221,14 @@ public L1/L2 chains, consortium networks, and enterprise blockchains.
 
 **Source:** `rust_core/` (Cargo/PyO3), `src/zexus/blockchain/rust_bridge.py`
 
+### Install Matrix (Blockchain + Rust Core)
+
+| Goal | Command | Notes |
+|---|---|---|
+| Blockchain features (Python) | `pip install "zexus[full]"` | Pulls optional deps commonly needed for blockchain/network/security helpers. |
+| Rust core (native VM + batch executor) | `pip install maturin && maturin develop -m rust_core/Cargo.toml --release` | Requires Rust toolchain (`cargo`). If not installed, Zexus uses pure-Python fallback automatically. |
+| From source (best developer experience) | `./install.sh` | Installs `.[full]` and best-effort builds `zexus_core` when Rust is available. |
+
 The Rust execution core is the **primary execution engine** for all Zexus programs.
 When `zexus_core` is installed, all bytecode execution routes through the Rust VM
 automatically — no opt-in or configuration needed. The threshold is `0` by default,

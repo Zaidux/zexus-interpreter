@@ -289,10 +289,9 @@ class PersistentStorage:
             
             if row is None:
                 return None
-            
-            
-            # Update usage stats
-            self._update_usage_stats()
+
+            # LI2: Reads should not force a full usage-stats refresh.
+            # Usage is updated on writes/deletes/clear.
             return self._deserialize({'type': row[0], 'value': row[1]})
     
     def delete(self, name: str):
@@ -301,6 +300,7 @@ class PersistentStorage:
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM variables WHERE name = ?', (name,))
             self.conn.commit()
+            self._update_usage_stats()
     
     def is_const(self, name: str) -> bool:
         """Check if a variable is const"""
@@ -320,12 +320,11 @@ class PersistentStorage:
     def clear(self):
         """Clear all persisted variables"""
         with self.lock:
-            
-            # Update usage stats
-            self._update_usage_stats()
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM variables')
             self.conn.commit()
+            # LI1: update stats after mutation, not before.
+            self._update_usage_stats()
 
     def _key_to_str(self, key):
         """Convert a Zexus object key to a Python string for JSON serialization."""
@@ -361,11 +360,24 @@ class PersistentStorage:
             return {'type': 'null', 'value': json.dumps(None)}
         elif isinstance(obj, EntityInstance):
             serialized_values = {k: self._serialize(v) for k, v in obj.values.items()}
+
+            # LI3: Preserve entity shape so deserialization can rebuild a usable
+            # EntityDefinition (properties + inheritance layout) even if methods
+            # can't be persisted.
+            prop_names = []
+            try:
+                if hasattr(obj, 'entity_def') and hasattr(obj.entity_def, 'get_all_properties'):
+                    prop_names = list(obj.entity_def.get_all_properties().keys())
+            except Exception:
+                prop_names = []
+            if not prop_names:
+                prop_names = list(serialized_values.keys())
             return {
                 'type': 'entity_instance',
                 'value': json.dumps({
                     'entity_name': obj.entity_def.name,
-                    'values': serialized_values
+                    'values': serialized_values,
+                    'properties': prop_names,
                 })
             }
         else:
@@ -394,15 +406,19 @@ class PersistentStorage:
             pairs = {k: self._deserialize(v) for k, v in value.items()}
             return Map(pairs)
         elif obj_type == 'entity_instance':
-            # Note: This creates a basic EntityInstance without full EntityDefinition
-            # For production, you'd need to store/restore the entity definition
+            # LI3: Rebuild a minimally useful EntityDefinition from persisted
+            # property names. Methods/computed properties are not persisted.
             from .object import EntityDefinition
             entity_name = value['entity_name']
             serialized_values = value['values']
             deserialized_values = {k: self._deserialize(v) for k, v in serialized_values.items()}
-            
-            # Create minimal entity definition
-            entity_def = EntityDefinition(entity_name, [])
+
+            prop_names = value.get('properties') or list(deserialized_values.keys())
+            try:
+                props = {name: {"type": "any", "default_value": NULL} for name in prop_names}
+            except Exception:
+                props = {}
+            entity_def = EntityDefinition(entity_name, props)
             return EntityInstance(entity_def, deserialized_values)
         else:
             return String(str(value))

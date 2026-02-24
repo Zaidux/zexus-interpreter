@@ -19,13 +19,25 @@ if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1
     exit 1
 fi
 
-# Install dependencies first
-echo "📦 Installing dependencies..."
-pip install click rich pygments
+# Install Zexus (and optional extras) in development mode
+echo "📦 Installing Zexus + dependencies..."
+python3 -m pip install --upgrade pip
 
-# Install Zexus in development mode
-echo "🔧 Installing Zexus..."
-pip install -e .
+# "full" pulls in blockchain + networking + security helpers and the tooling
+# needed to compile the Rust VM (best-effort).
+python3 -m pip install -e ".[full]"
+
+# Best-effort: build/install Rust VM extension if Rust toolchain is present.
+if command -v cargo &> /dev/null; then
+    if [ -f "rust_core/Cargo.toml" ]; then
+        echo "🦀 Building Rust VM extension (zexus_core)..."
+        python3 -m pip install --upgrade maturin
+        # Install into the current Python environment.
+        python3 -m maturin develop -m rust_core/Cargo.toml --release || echo "⚠️  Rust VM build failed; continuing with pure-Python VM."
+    fi
+else
+    echo "ℹ️  Rust toolchain not found (cargo missing); skipping Rust VM build."
+fi
 
 # Verify installation
 if command -v zx &> /dev/null; then

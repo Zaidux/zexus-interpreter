@@ -85,16 +85,16 @@
 | M3 | Interp | `security.py` / `persistence.py` | `STORAGE_DIR`/`PERSISTENCE_DIR` created at import time | ✅ Done |
 | M4 | Interp | `evaluator/core.py` ~L500 | Duplicate isinstance fallback chain duplicating dispatch table | ✅ Done |
 | M5 | Interp | `object.py` / `security.py` | Duplicate `EntityDefinition`/`EntityInstance` definitions | ✅ Done |
-| M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ⬜ Not started |
-| M7 | Interp | `evaluator/functions.py` ~L2696 | Triple definition of `_require` builtin — first two are dead code | ⬜ Not started |
+| M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ✅ Done |
+| M7 | Interp | `evaluator/functions.py` ~L2696 | Triple definition of `_require` builtin — first two are dead code | ✅ Done |
 | M8 | Interp | `evaluator/core.py` ~L99 | `_ensure_recursion_headroom` silently raises Python recursion limit | ✅ Done |
 | M9 | Interp | `object.py` ~L732 | `lock_file` has no timeout — potential hang forever | ✅ Done |
-| M10 | Interp | `evaluator/statements.py` | Sandbox `except Exception: pass` swallows VFS init errors | ⬜ Not started |
-| M11 | Interp | `security.py` | Thread-local evaluator creation with no cleanup | ⬜ Not started |
-| M12 | VM | `vm/vm.py` ~L2406 vs ~L4676 | `_LEDGER` has 10K cap sync but unbounded async — memory exhaustion | ⬜ Not started |
-| M13 | VM | `vm/vm.py` ~L4586 | `_audit_log` list grows without bound — memory exhaustion | ⬜ Not started |
-| M14 | VM | `vm/vm.py` ~L672 | VM pool doesn't clear `env`/`_closure_cells`/`_name_cache` — stale data leak | ⬜ Not started |
-| M15 | VM | `vm/vm.py` ~L1910 | Stack underflow silently returns `None` vs async path raises `IndexError` — inconsistent | ⬜ Not started |
+| M10 | Interp | `evaluator/statements.py` | Sandbox `except Exception: pass` swallows VFS init errors | ✅ Done |
+| M11 | Interp | `security.py` | Thread-local evaluator creation with no cleanup | ✅ Done |
+| M12 | VM | `vm/vm.py` ~L2406 vs ~L4676 | `_LEDGER` has 10K cap sync but unbounded async — memory exhaustion | ✅ Done |
+| M13 | VM | `vm/vm.py` ~L4586 | `_audit_log` list grows without bound — memory exhaustion | ✅ Done |
+| M14 | VM | `vm/vm.py` ~L672 | VM pool doesn't clear `env`/`_closure_cells`/`_name_cache` — stale data leak | ✅ Done |
+| M15 | VM | `vm/vm.py` ~L1910 | Stack underflow silently returns `None` vs async path raises `IndexError` — inconsistent | ✅ Done |
 
 ---
 
@@ -102,18 +102,18 @@
 
 | ID | Area | File | Finding | Status |
 |----|------|------|---------|--------|
-| LI1 | Interp | `persistence.py` | `PersistentStorage.clear()` updates stats before deletion — stale immediately | ⬜ Not started |
-| LI2 | Interp | `persistence.py` | `PersistentStorage.get()` calls `_update_usage_stats()` on every read — doubles cost | ⬜ Not started |
-| LI3 | Interp | `persistence.py` | `EntityInstance` deserialization loses methods and computed properties | ⬜ Not started |
-| LI4 | Interp | `evaluator/expressions.py` ~L150 | `eval_identifier` imports `traceback` on every miss (should be module-level) | ⬜ Not started |
-| LI5 | Interp | `evaluator/functions.py` ~L2810 | Builtins dict has duplicate keys: `"require"`, `"random"`, `"input"`, `"sleep"` appear twice | ⬜ Not started |
-| LI6 | Interp | `evaluator/expressions.py` ~L880 | `eval_await_expression` busy-waits with `time.sleep(0.001)` spin loop | ⬜ Not started |
-| LI7 | Interp | `evaluator/core.py` | `_env_to_dict` walks outer environments without depth limit | ⬜ Not started |
-| LI8 | Interp | `evaluator/functions.py` | `memory_stats()` fallback calls `gc.get_objects()` — extremely slow, meaningless result | ⬜ Not started |
-| LI9 | Interp | `evaluator/functions.py` ~L5000 | `sanitize_input` regex-based SQL keyword stripping is bypassable and corrupts data | ⬜ Not started |
-| LI10 | Interp | `security.py` | `AuthConfig.validate_token` unconditionally returns `True` | ⬜ Not started |
-| LI11 | VM | `vm/vm.py` | `POW` allows exponent DoS (`10 ** 10000000`) — no guard on magnitude | ⬜ Not started |
-| LI12 | VM | `evaluator/bytecode_compiler.py` | `_compile_PropertyAccessExpression` defined twice — first is dead code | ⬜ Not started |
+| LI1 | Interp | `persistence.py` | `PersistentStorage.clear()` updates stats before deletion — stale immediately | ✅ Done |
+| LI2 | Interp | `persistence.py` | `PersistentStorage.get()` calls `_update_usage_stats()` on every read — doubles cost | ✅ Done |
+| LI3 | Interp | `persistence.py` | `EntityInstance` deserialization loses methods and computed properties | ✅ Done |
+| LI4 | Interp | `evaluator/expressions.py` ~L150 | `eval_identifier` imports `traceback` on every miss (should be module-level) | ✅ Done |
+| LI5 | Interp | `evaluator/functions.py` ~L2810 | Builtins dict has duplicate keys: `"require"`, `"random"`, `"input"`, `"sleep"` appear twice | ✅ Done |
+| LI6 | Interp | `evaluator/expressions.py` ~L880 | `eval_await_expression` busy-waits with `time.sleep(0.001)` spin loop | ✅ Done |
+| LI7 | Interp | `evaluator/core.py` | `_env_to_dict` walks outer environments without depth limit | ✅ Done |
+| LI8 | Interp | `evaluator/functions.py` | `memory_stats()` fallback calls `gc.get_objects()` — extremely slow, meaningless result | ✅ Done |
+| LI9 | Interp | `evaluator/functions.py` ~L5000 | `sanitize_input` regex-based SQL keyword stripping is bypassable and corrupts data | ✅ Done |
+| LI10 | Interp | `security.py` | `AuthConfig.validate_token` unconditionally returns `True` | ✅ Done |
+| LI11 | VM | `vm/vm.py` | `POW` allows exponent DoS (`10 ** 10000000`) — no guard on magnitude | ✅ Done |
+| LI12 | VM | `evaluator/bytecode_compiler.py` | `_compile_PropertyAccessExpression` defined twice — first is dead code | ✅ Done |
 
 ---
 

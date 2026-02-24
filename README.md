@@ -588,6 +588,22 @@ verify balance >= amount {
 pip install zexus
 ```
 
+### Full Install (Blockchain + Networking + Security Helpers)
+
+```bash
+pip install "zexus[full]"
+```
+
+### Install Matrix
+
+| Goal | Command | Notes |
+|---|---|---|
+| Minimal (interpreter + CLI) | `pip install zexus` | Pure-Python install. |
+| Full runtime features | `pip install "zexus[full]"` | Installs optional deps for blockchain/network/security helpers. |
+| From source | `./install.sh` | Installs `.[full]` and attempts Rust VM build when `cargo` exists. |
+| Optional Rust VM (`zexus_core`) | `pip install maturin && maturin develop -m rust_core/Cargo.toml --release` | Requires Rust toolchain; otherwise Zexus falls back automatically. |
+| Node/npm distribution | `npm i zexus` | Runs `pip install --user "zexus[full]"` and best-effort builds `zexus_core` if Rust is available. |
+
 **Includes:**
 - `zx` - Main Zexus CLI
 - `zpm` - Zexus Package Manager
@@ -597,14 +613,26 @@ pip install zexus
 ```bash
 git clone https://github.com/Zaidux/zexus-interpreter.git
 cd zexus-interpreter
-pip install -e .
+./install.sh
+
+# Or, directly via pip:
+pip install -e ".[full]"
+```
+
+### Optional: Enable Rust VM (`zexus_core`)
+
+If you have a Rust toolchain installed (`cargo` on PATH), you can build the Rust VM extension from source:
+
+```bash
+pip install maturin
+maturin develop -m rust_core/Cargo.toml --release
 ```
 
 ### Verify Installation
 
 ```bash
-zx --version   # Should show: Zexus v1.6.3
-zpm --version  # Should show: ZPM v1.6.3
+zx --version
+zpm --version
 ```
 
 ---

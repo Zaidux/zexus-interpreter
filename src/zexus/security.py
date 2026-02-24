@@ -1958,8 +1958,33 @@ class AuthConfig:
 
     def validate_token(self, token):
         """Validate a token"""
-        # In production, this would validate with OAuth provider
-        return True
+        # LI10: Don't unconditionally accept tokens.
+        # This is still a lightweight heuristic (no provider integration), but it
+        # rejects obviously invalid/empty values.
+        if token is None:
+            return False
+
+        try:
+            token_str = token.value if hasattr(token, 'value') else str(token)
+        except Exception:
+            return False
+
+        token_str = token_str.strip()
+        if not token_str:
+            return False
+
+        if token_str.lower().startswith("bearer "):
+            token_str = token_str[7:].strip()
+            if not token_str:
+                return False
+
+        # Accept JWT-like tokens (three base64url-ish segments) or opaque tokens
+        # with a reasonable minimum length.
+        parts = token_str.split('.')
+        if len(parts) == 3 and all(parts):
+            return True
+
+        return len(token_str) >= 16
 
     def is_token_expired(self, token_data):
         """Check if token is expired"""

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "zexus-core"
+version = "0.4.0"
+description = "High-performance Rust execution core for the Zexus blockchain (PyO3 extension)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name = "Zaidux" }
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[tool.maturin]
+module-name = "zexus_core"
+manifest-path = "Cargo.toml"
+features = ["pyo3/extension-module"]

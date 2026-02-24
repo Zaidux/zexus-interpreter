@@ -52,6 +52,7 @@
   "files": [
     "bin/",
     "src/",
+    "rust_core/",
     "zexus.json",
     "shared_config.json",
     "README.md",

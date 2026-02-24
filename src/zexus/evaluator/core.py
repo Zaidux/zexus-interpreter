@@ -786,11 +786,27 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             "__vm_pattern_statement__": Builtin(_vm_pattern_statement, "__vm_pattern_statement__"),
         }
 
-    def _env_to_dict(self, env):
-        """Convert Environment object to dict for VM"""
+    def _env_to_dict(self, env, *, _depth: int = 0, _max_depth: int = 64, _seen=None):
+        """Convert Environment object to dict for VM.
+
+        LI7: Guard against cycles and unbounded `outer` chains.
+        """
         result = {}
         try:
             from ..object import String, Integer, Float, Boolean, List, Map, NULL
+
+            if env is None:
+                return result
+
+            if _seen is None:
+                _seen = set()
+            env_id = id(env)
+            if env_id in _seen:
+                return result
+            _seen.add(env_id)
+
+            if _depth >= _max_depth:
+                return result
             
             def to_python(obj):
                 """Convert evaluator object to Python primitive"""
@@ -813,7 +829,12 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             
             # Get outer environment if available
             if hasattr(env, 'outer') and env.outer:
-                outer_dict = self._env_to_dict(env.outer)
+                outer_dict = self._env_to_dict(
+                    env.outer,
+                    _depth=_depth + 1,
+                    _max_depth=_max_depth,
+                    _seen=_seen,
+                )
                 # Don't overwrite inner scope
                 for k, v in outer_dict.items():
                     if k not in result:

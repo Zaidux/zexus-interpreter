@@ -2767,10 +2767,8 @@ class FunctionEvaluatorMixin:
             "uppercase": Builtin(_uppercase, "uppercase"),
             "lowercase": Builtin(_lowercase, "lowercase"),
             "split": Builtin(_split, "split"),
-            "random": Builtin(_random, "random"),
             "persist_set": Builtin(_persist_set, "persist_set"),
             "persist_get": Builtin(_persist_get, "persist_get"),
-            "input": Builtin(_input, "input"),
             "len": Builtin(_len, "len"),
             "type": Builtin(_type, "type"),
             "first": Builtin(_first, "first"),
@@ -3139,7 +3137,6 @@ class FunctionEvaluatorMixin:
             "receive": Builtin(_receive, "receive"),
             "close_channel": Builtin(_close_channel, "close_channel"),
             "async": Builtin(_async, "async"),
-            "sleep": Builtin(_sleep, "sleep"),
             "spawn": Builtin(_spawn, "spawn"),
             "wait_group": Builtin(_wait_group, "wait_group"),
             "wg_add": Builtin(_wg_add, "wg_add"),
@@ -3557,8 +3554,10 @@ class FunctionEvaluatorMixin:
         
         def _memory_stats(*a):
             """Get memory tracking statistics: memory_stats()"""
-            import sys
             import gc
+            import os
+            import sys
+            import tracemalloc
             
             # Get process memory usage
             try:
@@ -3568,12 +3567,24 @@ class FunctionEvaluatorMixin:
                 current_bytes = mem_info.rss  # Resident Set Size
                 peak_bytes = getattr(mem_info, 'peak_wset', mem_info.rss)  # Windows has peak_wset
             except (ImportError, AttributeError):
-                # Fallback: use Python's internal memory tracking
-                current_bytes = sys.getsizeof(gc.get_objects())
-                peak_bytes = current_bytes
+                # LI8: Avoid gc.get_objects() (very slow). Prefer OS ru_maxrss or tracemalloc.
+                current_bytes = 0
+                peak_bytes = 0
+                try:
+                    import resource
+                    ru = resource.getrusage(resource.RUSAGE_SELF)
+                    # Linux: KB, macOS: bytes
+                    ru_maxrss = getattr(ru, 'ru_maxrss', 0) or 0
+                    if sys.platform == 'darwin':
+                        peak_bytes = int(ru_maxrss)
+                    else:
+                        peak_bytes = int(ru_maxrss) * 1024
+                    current_bytes = peak_bytes
+                except Exception:
+                    if tracemalloc.is_tracing():
+                        current_bytes, peak_bytes = tracemalloc.get_traced_memory()
             
-            # Get GC statistics
-            gc_count = len(gc.get_objects())
+            # Get GC statistics (fast)
             gc_collections = sum(gc.get_count())
             
             # Get environment-specific tracking if available
@@ -3587,7 +3598,7 @@ class FunctionEvaluatorMixin:
                 String("current"): Integer(current_bytes),
                 String("peak"): Integer(peak_bytes),
                 String("gc_count"): Integer(gc_collections),
-                String("objects"): Integer(gc_count),
+                String("objects"): Integer(-1),
                 String("tracked_objects"): Integer(tracked_objects)
             })
         
@@ -4918,22 +4929,23 @@ class FunctionEvaluatorMixin:
                 return String("strong")
         
         def _sanitize_input(*a):
-            """Sanitize user input by removing dangerous characters"""
+            """Sanitize user input without corrupting data.
+
+            LI9: This is *not* an SQL-injection defense and must not attempt to
+            strip SQL keywords (bypassable + corrupts user data). Prefer
+            parameterized queries for DB APIs.
+            """
             if len(a) != 1:
                 return EvaluationError("sanitize_input() takes 1 argument")
             
             val = a[0]
             input_str = val.value if isinstance(val, String) else str(val)
             
-            # Remove potentially dangerous characters
-            # Remove HTML tags
-            sanitized = re.sub(r'<[^>]+>', '', input_str)
-            # Remove script tags
-            sanitized = re.sub(r'<script[^>]*>.*?</script>', '', sanitized, flags=re.IGNORECASE)
-            # Remove SQL injection patterns
-            sanitized = re.sub(r'(;|--|\'|\"|\bOR\b|\bAND\b)', '', sanitized, flags=re.IGNORECASE)
-            
-            return String(sanitized)
+            sanitized = input_str.replace("\x00", "")
+            sanitized = sanitized.replace("\r\n", "\n").replace("\r", "\n")
+            # Preserve original trust level if we received a String.
+            is_trusted = val.is_trusted if isinstance(val, String) else False
+            return String(sanitized, sanitized_for="generic", is_trusted=is_trusted)
         
         def _validate_length(*a):
             """Validate string length: validate_length(value, min, max)"""
