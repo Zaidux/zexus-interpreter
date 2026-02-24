@@ -1,2 +1,12 @@
-#!/usr/bin/env bash
-python3 -m zexus.dev "$@"
+#!/usr/bin/env node
+const { spawn } = require('child_process');
+const proc = spawn('python3', ['-m', 'zexus.dev', ...process.argv.slice(2)], { stdio: 'inherit' });
+proc.on('error', (err) => {
+  if (err.code === 'ENOENT') {
+    console.error('Error: python3 not found. Please install Python 3.8+ to use Zexus.');
+    process.exit(1);
+  }
+  console.error('Error:', err.message);
+  process.exit(1);
+});
+proc.on('close', (code) => process.exit(code ?? 1));

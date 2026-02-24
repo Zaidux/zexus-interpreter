@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zexus"
-version = "1.8.1"
+version = "1.8.2"
 description = "A modern, security-first programming language with blockchain support"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -45,6 +45,15 @@ dependencies = [
     "pygls>=1.0.0",
     "pygments>=2.0",
 ]
+
+[project.scripts]
+zx = "zexus.cli.main:cli"
+zexus = "zexus.cli.main:cli"
+zpm = "zexus.cli.zpm:cli"
+zx-run = "zexus.cli.main:cli"
+zx-dev = "zexus.cli.main:cli"
+zx-deploy = "zexus.cli.main:cli"
+zpics = "zexus.cli.main:cli"
 
 [project.optional-dependencies]
 dev = [

@@ -1,17 +1,12 @@
 Metadata-Version: 2.4
 Name: zexus
-Version: 1.7.2
+Version: 1.8.2
 Summary: A modern, security-first programming language with blockchain support
 Home-page: https://github.com/Zaidux/zexus-interpreter
 Author: Zaidux
 Author-email: Zaidux <zaiduabubakar777@gmail.com>
 Maintainer-email: Zaidux <zaiduabubakar888@gmail.com>
 License: MIT
-Project-URL: Homepage, https://github.com/Zaidux/zexus-interpreter
-Project-URL: Documentation, https://github.com/Zaidux/zexus-interpreter/blob/main/docs/
-Project-URL: Repository, https://github.com/Zaidux/zexus-interpreter
-Project-URL: Issues, https://github.com/Zaidux/zexus-interpreter/issues
-Project-URL: Changelog, https://github.com/Zaidux/zexus-interpreter/blob/main/CHANGELOG.md
 Keywords: programming-language,interpreter,compiler,blockchain,smart-contracts,security,policy-as-code
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
@@ -32,6 +27,7 @@ License-File: LICENSE
 Requires-Dist: click>=8.0
 Requires-Dist: rich>=10.0
 Requires-Dist: pygls>=1.0.0
+Requires-Dist: pygments>=2.0
 Provides-Extra: dev
 Requires-Dist: pytest>=6.0; extra == "dev"
 Requires-Dist: pytest-cov>=2.0; extra == "dev"
@@ -44,6 +40,26 @@ Requires-Dist: eth-account>=0.5; extra == "blockchain"
 Provides-Extra: jit
 Requires-Dist: llvmlite>=0.41.0; extra == "jit"
 Requires-Dist: Cython>=0.29; extra == "jit"
+Provides-Extra: lsp
+Requires-Dist: pygls>=1.0.0; extra == "lsp"
+Provides-Extra: network
+Requires-Dist: websockets>=12.0; extra == "network"
+Requires-Dist: aiohttp>=3.9; extra == "network"
+Requires-Dist: httpx>=0.27; extra == "network"
+Provides-Extra: security
+Requires-Dist: bcrypt>=4.0; extra == "security"
+Requires-Dist: psutil>=5.9; extra == "security"
+Provides-Extra: rust
+Requires-Dist: maturin>=1.5; extra == "rust"
+Provides-Extra: full
+Requires-Dist: web3>=5.0; extra == "full"
+Requires-Dist: eth-account>=0.5; extra == "full"
+Requires-Dist: websockets>=12.0; extra == "full"
+Requires-Dist: aiohttp>=3.9; extra == "full"
+Requires-Dist: httpx>=0.27; extra == "full"
+Requires-Dist: bcrypt>=4.0; extra == "full"
+Requires-Dist: psutil>=5.9; extra == "full"
+Requires-Dist: maturin>=1.5; extra == "full"
 Dynamic: author
 Dynamic: home-page
 Dynamic: license-file
@@ -53,7 +69,7 @@ Dynamic: requires-python
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.7.2-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.8.1-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
@@ -118,9 +134,9 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ---
 
-## 🎉 What's New in v1.7.2
+## 🎉 What's New in v1.8.1
 
-### Latest Features (v1.7.2)
+### Latest Features (v1.8.1)
 
 ✅ **FIND Keyword** - Declarative project search that resolves exact module paths with scope filtering and smart suggestions  
 ✅ **LOAD Keyword & Manager** - Provider-aware configuration loader with built-in ENV, JSON, and YAML support plus caching  
@@ -639,6 +655,22 @@ verify balance >= amount {
 pip install zexus
 ```
 
+### Full Install (Blockchain + Networking + Security Helpers)
+
+```bash
+pip install "zexus[full]"
+```
+
+### Install Matrix
+
+| Goal | Command | Notes |
+|---|---|---|
+| Minimal (interpreter + CLI) | `pip install zexus` | Pure-Python install. |
+| Full runtime features | `pip install "zexus[full]"` | Installs optional deps for blockchain/network/security helpers. |
+| From source | `./install.sh` | Installs `.[full]` and attempts Rust VM build when `cargo` exists. |
+| Optional Rust VM (`zexus_core`) | `pip install maturin && maturin develop -m rust_core/Cargo.toml --release` | Requires Rust toolchain; otherwise Zexus falls back automatically. |
+| Node/npm distribution | `npm i zexus` | Runs `pip install --user "zexus[full]"` and best-effort builds `zexus_core` if Rust is available. |
+
 **Includes:**
 - `zx` - Main Zexus CLI
 - `zpm` - Zexus Package Manager
@@ -648,14 +680,26 @@ pip install zexus
 ```bash
 git clone https://github.com/Zaidux/zexus-interpreter.git
 cd zexus-interpreter
-pip install -e .
+./install.sh
+
+# Or, directly via pip:
+pip install -e ".[full]"
+```
+
+### Optional: Enable Rust VM (`zexus_core`)
+
+If you have a Rust toolchain installed (`cargo` on PATH), you can build the Rust VM extension from source:
+
+```bash
+pip install maturin
+maturin develop -m rust_core/Cargo.toml --release
 ```
 
 ### Verify Installation
 
 ```bash
-zx --version   # Should show: Zexus v1.6.3
-zpm --version  # Should show: ZPM v1.6.3
+zx --version
+zpm --version
 ```
 
 ---
@@ -2642,6 +2686,29 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
 - Use `--use-vm` flag for explicit VM mode
 - Consider using `native` keyword for C/C++ FFI
 - Profile with `memory_stats()` to check for leaks
+
+#### PyPI upload fails on Termux with: "unsupported platform tag 'linux_aarch64'"
+- PyPI rejects wheels with generic `linux_*` platform tags (common when building on Termux).
+- **Fix**: upload an sdist (source distribution) and/or a pure-Python wheel:
+  - `python -m pip install --upgrade build twine`
+  - `python -m build`  # creates `dist/*.tar.gz` and (by default) a `py3-none-any.whl`
+  - `python -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl`
+- `ZEXUS_BUILD_EXTENSIONS=1 python -m build` means: **build the optional native extensions** (Cython/C/C++) *in addition* to the Python code (it does not skip Python). This produces a **platform-specific** wheel.
+- If you want “everything compiled” locally, use:
+  - `ZEXUS_BUILD_EXTENSIONS=1 python -m build`
+  - or `ZEXUS_BUILD_EXTENSIONS=1 python -m pip install .`
+- For publishing native wheels to PyPI, build them in a manylinux environment (e.g. GitHub Actions + cibuildwheel). Wheels built on Termux are usually **not** PyPI-uploadable.
+  - This repo includes a workflow you can run: `.github/workflows/wheels.yml` (builds manylinux `aarch64` + `x86_64`, plus macOS/Windows wheels).
+  - To publish from GitHub Actions without API tokens, use **PyPI Trusted Publishing**:
+    - PyPI → your project → **Settings** → **Publishing** → **Trusted publishers** → **Add a new trusted publisher**
+    - Provider: **GitHub Actions**
+    - Owner: `Zaidux` (or your GitHub org/user)
+    - Repository: `zexus-interpreter`
+    - Workflow: `.github/workflows/wheels.yml`
+    - Environment: `pypi` (and optionally also add another trusted publisher entry for `testpypi`)
+    - Then either:
+      - Run **Actions → “Build wheels (cibuildwheel)” → Run workflow** and choose `testpypi` first, or
+      - Push a release tag like `v1.7.3` to auto-build + publish
 
 #### Blockchain/Contract issues
 - Remember `TX` is a global context object (uppercase)

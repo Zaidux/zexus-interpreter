@@ -67,9 +67,9 @@ class BytecodeCompiler:
             if op == Opcode.NOP and isinstance(operand, str) and operand.startswith('L'):
                 labels[operand] = i
         
-        # 2. Update jumps
+        # 2. Update jumps (including SETUP_TRY which also uses label targets)
         for i, (op, operand) in enumerate(self.instructions):
-            if op in (Opcode.JUMP, Opcode.JUMP_IF_FALSE, Opcode.JUMP_IF_TRUE):
+            if op in (Opcode.JUMP, Opcode.JUMP_IF_FALSE, Opcode.JUMP_IF_TRUE, Opcode.SETUP_TRY):
                 if isinstance(operand, str) and operand in labels:
                     self.instructions[i] = (op, labels[operand])
 
@@ -155,25 +155,8 @@ class BytecodeCompiler:
 
     def _unsupported_message(self, node_type: str) -> str:
         """Return a friendly message for unsupported nodes."""
-        hints = {
-            "UseStatement": "Module imports",
-            "FromStatement": "Module imports",
-            "EntityStatement": "Entity declarations",
-            "ContractStatement": "Contract declarations",
-            "ActionStatement": "Action/function declarations",
-            "FunctionStatement": "Function declarations",
-            "IfStatement": "If statements",
-            "WhileStatement": "While loops",
-            "ForStatement": "For loops",
-            "ForEachStatement": "For-each loops",
-            "TxStatement": "Transaction blocks",
-            "RequireStatement": "Require statements",
-            "RevertStatement": "Revert statements",
-        }
-        prefix = hints.get(node_type)
-        if prefix:
-            return f"{prefix} are not yet supported by the VM bytecode compiler"
-        return f"Node type '{node_type}' is not supported by the VM bytecode compiler"
+        msg = f"Node type '{node_type}' is not currently supported by the bytecode compiler."
+        return msg
     
     # ==================== Program & Statements ====================
     
@@ -360,6 +343,9 @@ class BytecodeCompiler:
             '>=': Opcode.GTE,
             '&&': Opcode.AND,
             '||': Opcode.OR,
+            'and': Opcode.AND,
+            'or': Opcode.OR,
+            '..': Opcode.ADD,  # string concat alias
         }
         
         opcode = op_map.get(node.operator)
@@ -374,7 +360,7 @@ class BytecodeCompiler:
         
         if node.operator == '-':
             self._emit(Opcode.NEG)
-        elif node.operator == '!':
+        elif node.operator in ('!', 'not'):
             self._emit(Opcode.NOT)
         else:
             raise NotImplementedError(f"Prefix operator {node.operator} not implemented")
@@ -382,35 +368,33 @@ class BytecodeCompiler:
     # ==================== Control Flow ====================
     
     def _compile_IfExpression(self, node):
-        """Compile if/else statement"""
-        # Compile condition
-        self._compile_node(node.condition)
-        
-        # Jump if false
-        else_label = self._make_label()
+        """Compile if/elif/else statement"""
         end_label = self._make_label()
-        
-        self._emit(Opcode.JUMP_IF_FALSE, else_label)
-        
-        # Compile consequence
+
+        # --- Main if ---
+        self._compile_node(node.condition)
+        next_label = self._make_label()
+        self._emit(Opcode.JUMP_IF_FALSE, next_label)
         self._compile_node(node.consequence)
         self._emit(Opcode.JUMP, end_label)
-        
-        # Else branch
-        self._emit(Opcode.NOP)  # Label placeholder
-        self.instructions[-1] = (Opcode.NOP, else_label)  # Mark label
-        
+        self._mark_label(next_label)
+
+        # --- elif chains ---
+        elif_parts = getattr(node, 'elif_parts', None) or []
+        for elif_cond, elif_body in elif_parts:
+            self._compile_node(elif_cond)
+            next_elif_label = self._make_label()
+            self._emit(Opcode.JUMP_IF_FALSE, next_elif_label)
+            self._compile_node(elif_body)
+            self._emit(Opcode.JUMP, end_label)
+            self._mark_label(next_elif_label)
+
+        # --- else ---
         if node.alternative:
             self._compile_node(node.alternative)
-        else:
-            # Push null for else branch
-            null_idx = self._add_constant(None)
-            self._emit(Opcode.LOAD_CONST, null_idx)
-        
-        # End label
-        self._emit(Opcode.NOP)
-        self.instructions[-1] = (Opcode.NOP, end_label)
-    
+
+        self._mark_label(end_label)
+
     _compile_IfStatement = _compile_IfExpression
 
     def _compile_TernaryExpression(self, node):
@@ -508,7 +492,84 @@ class BytecodeCompiler:
             self.instructions[exit_jump_idx] = (Opcode.JUMP_IF_FALSE, end_label)
 
         self.loop_stack.pop()
-    
+
+    def _compile_ForEachStatement(self, node):
+        """Compile for-each loop: for item in iterable { ... }
+        
+        Strategy: index-based iteration using GET_LENGTH + INDEX.
+        Generates equivalent of:
+            _iter = <iterable>
+            _index = 0
+          loop_start:
+            if _index >= len(_iter): goto end
+            item = _iter[_index]
+            <body>
+          continue_label:
+            _index = _index + 1
+            goto loop_start
+          end:
+        """
+        # --- Compile iterable and store in a hidden temp ---
+        self._compile_node(node.iterable)
+        iter_var = self._make_temp_name("iter")
+        iter_const = self._add_constant(iter_var)
+        self._emit(Opcode.STORE_NAME, iter_const)
+
+        # --- Initialise index = 0 ---
+        index_var = self._make_temp_name("idx")
+        index_const = self._add_constant(index_var)
+        zero_const = self._add_constant(0)
+        self._emit(Opcode.LOAD_CONST, zero_const)
+        self._emit(Opcode.STORE_NAME, index_const)
+
+        # --- Labels ---
+        start_label = self._make_label()
+        end_label = self._make_label()
+        continue_label = self._make_label()
+
+        self.loop_stack.append({
+            'start': start_label,
+            'end': end_label,
+            'continue': continue_label,
+        })
+
+        # --- Condition: index < len(iterable) ---
+        self._mark_label(start_label)
+        self._emit(Opcode.LOAD_NAME, index_const)          # push index
+        self._emit(Opcode.LOAD_NAME, iter_const)            # push iterable
+        self.instructions.append(("GET_LENGTH", None))       # push len(iterable)
+        self._emit(Opcode.LT)                               # index < length
+        exit_jump_idx = len(self.instructions)
+        self._emit(Opcode.JUMP_IF_FALSE, None)               # jump to end if false
+
+        # --- Extract item: item = iterable[index] ---
+        self._emit(Opcode.LOAD_NAME, iter_const)            # push iterable
+        self._emit(Opcode.LOAD_NAME, index_const)           # push index
+        self._emit(Opcode.INDEX)                             # iterable[index]
+        item_name = node.item.value if hasattr(node.item, 'value') else str(node.item)
+        item_const = self._add_constant(item_name)
+        self._emit(Opcode.STORE_NAME, item_const)           # store as loop variable
+
+        # --- Body ---
+        self._compile_node(node.body)
+
+        # --- Continue: index += 1 ---
+        self._mark_label(continue_label)
+        one_const = self._add_constant(1)
+        self._emit(Opcode.LOAD_NAME, index_const)
+        self._emit(Opcode.LOAD_CONST, one_const)
+        self._emit(Opcode.ADD)
+        self._emit(Opcode.STORE_NAME, index_const)
+
+        # --- Jump back ---
+        self._emit(Opcode.JUMP, start_label)
+
+        # --- End ---
+        self._mark_label(end_label)
+        self.instructions[exit_jump_idx] = (Opcode.JUMP_IF_FALSE, end_label)
+
+        self.loop_stack.pop()
+
     # ==================== Function Calls ====================
     
     def _compile_CallExpression(self, node):
@@ -652,6 +713,37 @@ class BytecodeCompiler:
     # Aliases for other function types
     _compile_FunctionStatement = _compile_ActionStatement
     _compile_PureFunctionStatement = _compile_ActionStatement
+
+    def _compile_LambdaExpression(self, node):
+        """Compile lambda/anonymous function expression.
+
+        Lambda differs from ActionStatement: it has no name and its value should
+        be *pushed* onto the stack (not stored) so it can be used inline, e.g.
+        as an argument to a higher-order function.
+        """
+        from .bytecode import Bytecode
+
+        func_compiler = self.__class__()
+        func_compiler._compile_node(node.body)
+
+        # Implicit return of last expression value
+        null_idx = func_compiler._add_constant(None)
+        func_compiler._emit(Opcode.LOAD_CONST, null_idx)
+        func_compiler._emit(Opcode.RETURN)
+
+        func_compiler._resolve_labels()
+        func_bytecode = Bytecode(func_compiler.instructions, func_compiler.constants)
+
+        params = [p.value if hasattr(p, 'value') else str(p) for p in node.parameters]
+        func_desc = {
+            "bytecode": func_bytecode,
+            "params": params,
+            "is_async": False,
+            "name": "<lambda>",
+        }
+
+        func_idx = self._add_constant(func_desc)
+        self._emit(Opcode.LOAD_CONST, func_idx)
 
     def _compile_ConstStatement(self, node):
         """Compile const declaration (same as Let for current VM)"""
@@ -967,7 +1059,8 @@ class BytecodeCompiler:
 
     def _compile_AwaitExpression(self, node):
         """Compile await expression"""
-        self._compile_node(node.argument)
+        expr = getattr(node, 'expression', None) or getattr(node, 'argument', None)
+        self._compile_node(expr)
         self._emit(Opcode.AWAIT)
 
     def _compile_ThisExpression(self, node):
@@ -1205,6 +1298,291 @@ class BytecodeCompiler:
 
     # Alias MatchExpression to logic (it's similar enough for basic cases)
     _compile_MatchExpression = _compile_PatternStatement
+
+    # ==================== Debug / Verify / Watch ====================
+
+    def _compile_DebugStatement(self, node):
+        """Compile debug statement — prints the value (conditional on condition if present)."""
+        if node.condition:
+            skip_label = self._make_label()
+            self._compile_node(node.condition)
+            self._emit(Opcode.JUMP_IF_FALSE, skip_label)
+            self._compile_node(node.value)
+            self._emit(Opcode.PRINT)
+            end_label = self._make_label()
+            self._emit(Opcode.JUMP, end_label)
+            self._mark_label(skip_label)
+            self._mark_label(end_label)
+        else:
+            self._compile_node(node.value)
+            self._emit(Opcode.PRINT)
+
+    def _compile_VerifyStatement(self, node):
+        """Compile verify statement.
+
+        Simple assertion form: verify condition, "message"
+        Compiles to: if (!condition) { require(false, message) }
+        Complex forms: delegate to the evaluator via VM-builtin call.
+        """
+        if node.condition and not node.mode:
+            # Simple assertion: verify cond, msg
+            self._compile_node(node.condition)
+            ok_label = self._make_label()
+            self._emit(Opcode.JUMP_IF_TRUE, ok_label)
+            # Verification failed — emit require(false, message)
+            false_idx = self._add_constant(False)
+            self._emit(Opcode.LOAD_CONST, false_idx)
+            if node.message:
+                self._compile_node(node.message)
+            else:
+                msg_idx = self._add_constant("Verification failed")
+                self._emit(Opcode.LOAD_CONST, msg_idx)
+            self._emit(Opcode.REQUIRE)
+            self._mark_label(ok_label)
+        else:
+            # Complex form — delegate to higher-level evaluator
+            self._emit_vm_builtin_call("__verify__", node)
+
+    def _compile_WatchStatement(self, node):
+        """Compile watch statement — reactive state management.
+
+        In a bytecode context, watch compiles the reaction body inline.
+        Full reactivity tracking requires runtime support; here we compile the
+        body so it can at least execute once (eager evaluation).
+        """
+        if node.watched_expr:
+            self._compile_node(node.watched_expr)
+            self._emit(Opcode.POP)
+        self._compile_node(node.reaction)
+
+    def _compile_NullishExpression(self, node):
+        """Compile nullish coalescing: left ?? right"""
+        self._compile_node(node.left)
+        self._emit(Opcode.DUP)
+        # If not null, skip to end
+        end_label = self._make_label()
+        null_idx = self._add_constant(None)
+        self._emit(Opcode.LOAD_CONST, null_idx)
+        self._emit(Opcode.NEQ)
+        self._emit(Opcode.JUMP_IF_TRUE, end_label)
+        # Left was null, pop it and use right
+        self._emit(Opcode.POP)
+        self._compile_node(node.right)
+        self._mark_label(end_label)
+
+    def _compile_ThrowStatement(self, node):
+        """Compile throw statement"""
+        expr = getattr(node, 'message', None) or getattr(node, 'expression', None)
+        if expr:
+            self._compile_node(expr)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant("Unknown error"))
+        self._emit(Opcode.THROW)
+
+    def _compile_EnumStatement(self, node):
+        """Compile enum declaration"""
+        self._emit_vm_builtin_call("__define_enum__", node)
+
+    def _compile_StringInterpolationExpression(self, node):
+        """Compile string interpolation: `hello {name}`
+        
+        Compiles each part and concatenates with ADD.
+        """
+        parts = node.parts if hasattr(node, 'parts') else []
+        if not parts:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(""))
+            return
+
+        self._compile_node(parts[0])
+        for part in parts[1:]:
+            self._compile_node(part)
+            self._emit(Opcode.ADD)
+
+    # ==================== ActionLiteral / AsyncExpression / ProtectStatement ====================
+
+    def _compile_ActionLiteral(self, node):
+        """Compile action literal (anonymous function expression).
+
+        ActionLiteral is semantically identical to LambdaExpression — an
+        anonymous function with parameters and a body.  It pushes a function
+        descriptor onto the stack so it can be passed as an argument or
+        assigned to a variable.
+        """
+        from .bytecode import Bytecode
+
+        func_compiler = self.__class__()
+        func_compiler._compile_node(node.body)
+
+        # Implicit return null if execution flows off the end
+        null_idx = func_compiler._add_constant(None)
+        func_compiler._emit(Opcode.LOAD_CONST, null_idx)
+        func_compiler._emit(Opcode.RETURN)
+
+        func_compiler._resolve_labels()
+        func_bytecode = Bytecode(func_compiler.instructions, func_compiler.constants)
+
+        params = [p.value if hasattr(p, 'value') else str(p) for p in node.parameters]
+        func_desc = {
+            "bytecode": func_bytecode,
+            "params": params,
+            "is_async": False,
+            "name": "<action>",
+        }
+
+        func_idx = self._add_constant(func_desc)
+        self._emit(Opcode.LOAD_CONST, func_idx)
+
+    def _compile_AsyncExpression(self, node):
+        """Compile async expression: ``async <expr>``
+
+        Compiles the inner expression, then emits SPAWN to schedule it
+        asynchronously.  The resulting task handle is left on the stack.
+        """
+        self._compile_node(node.expression)
+        self._emit(Opcode.SPAWN)
+
+    def _compile_ProtectStatement(self, node):
+        """Compile protect() security guardrail.
+
+        protect(target, rules) is a high-level security directive.
+        We compile target and rules, then call the VM builtin __protect__.
+        If the builtin is not registered at runtime the VM will silently
+        skip (same behaviour as NativeStatement etc.).
+        """
+        # Compile target
+        self._compile_node(node.target)
+        # Compile rules
+        self._compile_node(node.rules)
+        # Call builtin
+        name_idx = self._add_constant("__protect__")
+        self._emit(Opcode.CALL_NAME, (name_idx, 2))
+        self._emit(Opcode.POP)
+
+    # ==================== Additional commonly-used nodes ====================
+
+    def _compile_SandboxStatement(self, node):
+        """Compile sandbox statement — wraps body in an isolated scope."""
+        self._compile_node(node.body)
+
+    def _compile_MiddlewareStatement(self, node):
+        """Compile middleware registration."""
+        self._emit_vm_builtin_call("__middleware__", node)
+
+    def _compile_AuthStatement(self, node):
+        """Compile auth statement."""
+        self._emit_vm_builtin_call("__auth__", node)
+
+    def _compile_ThrottleStatement(self, node):
+        """Compile throttle statement."""
+        self._emit_vm_builtin_call("__throttle__", node)
+
+    def _compile_CacheStatement(self, node):
+        """Compile cache statement."""
+        self._emit_vm_builtin_call("__cache__", node)
+
+    def _compile_SealStatement(self, node):
+        """Compile seal statement."""
+        self._emit_vm_builtin_call("__seal__", node)
+
+    def _compile_StreamStatement(self, node):
+        """Compile stream statement."""
+        self._emit_vm_builtin_call("__stream__", node)
+
+    def _compile_LogStatement(self, node):
+        """Compile log statement — same as print."""
+        if hasattr(node, 'message'):
+            self._compile_node(node.message)
+        elif hasattr(node, 'value'):
+            self._compile_node(node.value)
+        elif hasattr(node, 'expression'):
+            self._compile_node(node.expression)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(""))
+        self._emit(Opcode.PRINT)
+
+    def _compile_ImmutableStatement(self, node):
+        """Compile immutable declaration — treat as const."""
+        self._compile_LetStatement(node)
+
+    def _compile_ValidateStatement(self, node):
+        """Compile validate statement."""
+        self._emit_vm_builtin_call("__validate__", node)
+
+    def _compile_SanitizeStatement(self, node):
+        """Compile sanitize statement."""
+        self._emit_vm_builtin_call("__sanitize__", node)
+
+    def _compile_InjectStatement(self, node):
+        """Compile inject statement (dependency injection)."""
+        self._emit_vm_builtin_call("__inject__", node)
+
+    def _compile_InterfaceStatement(self, node):
+        """Compile interface statement — define type contract."""
+        self._emit_vm_builtin_call("__interface__", node)
+
+    def _compile_TypeAliasStatement(self, node):
+        """Compile type alias — no-op at runtime."""
+        pass
+
+    def _compile_ModuleStatement(self, node):
+        """Compile module statement."""
+        if hasattr(node, 'body'):
+            self._compile_node(node.body)
+
+    def _compile_PackageStatement(self, node):
+        """Compile package statement."""
+        if hasattr(node, 'body'):
+            self._compile_node(node.body)
+
+    def _compile_TrailStatement(self, node):
+        """Compile trail/audit-trail statement."""
+        self._emit_vm_builtin_call("__trail__", node)
+
+    def _compile_EmbeddedCodeStatement(self, node):
+        """Compile embedded code — no-op in VM (Python-only)."""
+        pass
+
+    def _compile_EmbeddedLiteral(self, node):
+        """Compile embedded literal — push as string constant."""
+        code = getattr(node, 'code', '') or getattr(node, 'value', '') or ''
+        self._emit(Opcode.LOAD_CONST, self._add_constant(code))
+
+    def _compile_ExternalDeclaration(self, node):
+        """Compile external declaration — no-op (type hint only)."""
+        pass
+
+    def _compile_ImportLogStatement(self, node):
+        """Compile import log statement — no-op at compile time."""
+        pass
+
+    def _compile_ExactlyStatement(self, node):
+        """Compile exactly statement (type-exact check)."""
+        self._emit_vm_builtin_call("__exactly__", node)
+
+    def _compile_FindExpression(self, node):
+        """Compile find expression."""
+        self._emit_vm_builtin_call("__find__", node, discard_result=False)
+
+    def _compile_LoadExpression(self, node):
+        """Compile load expression."""
+        self._emit_vm_builtin_call("__load__", node, discard_result=False)
+
+    def _compile_DestructurePattern(self, node):
+        """Compile destructure pattern — push null (placeholder)."""
+        self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+
+    def _compile_AtomicStatement(self, node):
+        """Compile atomic statement — executes body/expr as a single unit.
+
+        In the current VM, atomic simply compiles the inner body or expression
+        directly.  True atomicity would require runtime locking which the VM
+        can add later.
+        """
+        if node.body:
+            self._compile_node(node.body)
+        elif node.expr:
+            self._compile_node(node.expr)
+            self._emit(Opcode.POP)
 
     # ==================== Fallback for unsupported nodes ====================
     

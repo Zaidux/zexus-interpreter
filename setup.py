@@ -83,7 +83,7 @@ if _BUILD_EXT:
 
 setup(
     name='zexus',
-    version='1.8.1',
+    version='1.8.2',
     author='Zaidux',
     author_email='devnull@example.com',
     description='A modern, security-first programming language with blockchain support',
@@ -152,7 +152,10 @@ setup(
             'zx=zexus.cli.main:cli',
             'zexus=zexus.cli.main:cli',
             'zpm=zexus.cli.zpm:cli',
-            'zx-pypy=zexus.cli.main:cli',
+            'zx-run=zexus.cli.main:cli',
+            'zx-dev=zexus.cli.main:cli',
+            'zx-deploy=zexus.cli.main:cli',
+            'zpics=zexus.cli.main:cli',
         ]
     },
     cmdclass={

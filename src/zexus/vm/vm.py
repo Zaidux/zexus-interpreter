@@ -31,6 +31,7 @@ from ..object import (
     Map as ZMap,
     Null as ZNull,
     EvaluationError as ZEvaluationError,
+    DateTime as ZDateTime,
 )
 
 # ==================== Backend / Optional Imports ====================
@@ -782,6 +783,9 @@ class VM:
         vm.enable_fast_loop = getattr(parent_vm, "enable_fast_loop", False)
         vm.fast_loop_threshold = getattr(parent_vm, "fast_loop_threshold", 512)
         vm._fast_loop_stats = {"used": False, "reason": ""}
+        # SECURITY (H9): Call-depth tracking for child VMs
+        vm._call_depth = 0
+        vm._MAX_CALL_DEPTH = getattr(parent_vm, "_MAX_CALL_DEPTH", 256)
         
         # Settings
         vm.worker_count = parent_vm.worker_count
@@ -2027,15 +2031,32 @@ class VM:
                 a = stack_pop() if stack else 0
                 if hasattr(a, 'value'): a = a.value
                 if hasattr(b, 'value'): b = b.value
-                stack_append(a + b)
+                # Type coercion: if either operand is a string, convert both to string
+                if isinstance(a, str) or isinstance(b, str):
+                    stack_append(str(a if a is not None else '') + str(b if b is not None else ''))
+                else:
+                    if a is None: a = 0
+                    if b is None: b = 0
+                    stack_append(a + b)
             elif op_name == "SUB":
-                b = stack_pop() if stack else 0
-                a = stack_pop() if stack else 0
-                if hasattr(a, 'value'): a = a.value
-                if hasattr(b, 'value'): b = b.value
-                if a is None: a = 0
-                if b is None: b = 0
-                stack_append(a - b)
+                b_raw = stack_pop() if stack else 0
+                a_raw = stack_pop() if stack else 0
+                # DateTime arithmetic
+                if isinstance(a_raw, ZDateTime) and isinstance(b_raw, ZDateTime):
+                    stack_append(a_raw.timestamp - b_raw.timestamp)
+                elif isinstance(a_raw, ZDateTime):
+                    b = b_raw.value if hasattr(b_raw, 'value') else b_raw
+                    if b is None: b = 0
+                    stack_append(ZDateTime(a_raw.timestamp - float(b)))
+                else:
+                    a = a_raw.value if hasattr(a_raw, 'value') else a_raw
+                    b = b_raw.value if hasattr(b_raw, 'value') else b_raw
+                    if a is None: a = 0
+                    if b is None: b = 0
+                    try:
+                        stack_append(a - b)
+                    except TypeError:
+                        stack_append(0)
             elif op_name == "MUL":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
@@ -2693,16 +2714,18 @@ class VM:
         if fn is None:
             return None
         # SECURITY (H9): Enforce call-depth limit
-        if self._call_depth >= self._MAX_CALL_DEPTH:
+        call_depth = getattr(self, '_call_depth', 0)
+        max_depth = getattr(self, '_MAX_CALL_DEPTH', 256)
+        if call_depth >= max_depth:
             raise RecursionError(
-                f"VM call depth exceeded maximum ({self._MAX_CALL_DEPTH}). "
+                f"VM call depth exceeded maximum ({max_depth}). "
                 "Possible infinite recursion."
             )
-        self._call_depth += 1
+        self._call_depth = call_depth + 1
         try:
             return self._invoke_callable_sync_inner(fn, args)
         finally:
-            self._call_depth -= 1
+            self._call_depth = getattr(self, '_call_depth', 1) - 1
 
     def _invoke_callable_sync_inner(self, fn, args):
         """Inner implementation of callable invocation."""
@@ -3074,22 +3097,57 @@ class VM:
 
         def _binary_op(func):
             def wrapper(_):
-                b = _unwrap(stack.pop() if stack else 0)
-                a = _unwrap(stack.pop() if stack else 0)
-                if a is None: a = 0
-                if b is None: b = 0
+                b_raw = stack.pop() if stack else 0
+                a_raw = stack.pop() if stack else 0
+                # Keep raw objects for DateTime-aware arithmetic
+                a = _unwrap(a_raw)
+                b = _unwrap(b_raw)
                 if isinstance(a, ZEvaluationError):
                     stack.append(a)
                     return
                 if isinstance(b, ZEvaluationError):
                     stack.append(b)
                     return
+                # DateTime arithmetic
+                if isinstance(a_raw, ZDateTime) or isinstance(b_raw, ZDateTime):
+                    a_dt = a_raw if isinstance(a_raw, ZDateTime) else None
+                    b_dt = b_raw if isinstance(b_raw, ZDateTime) else None
+                    if a_dt and b_dt:
+                        # DateTime - DateTime = seconds difference
+                        stack.append(a_dt.timestamp - b_dt.timestamp)
+                    elif a_dt:
+                        # DateTime +/- number
+                        val = float(b) if b is not None else 0.0
+                        try:
+                            result = func(a_dt.timestamp, val)
+                            stack.append(ZDateTime(result))
+                        except Exception:
+                            stack.append(0)
+                    else:
+                        val = float(a) if a is not None else 0.0
+                        try:
+                            result = func(val, b_dt.timestamp)
+                            stack.append(result)
+                        except Exception:
+                            stack.append(0)
+                    return
+                if a is None: a = 0
+                if b is None: b = 0
+                # Type coercion for string concatenation in ADD
+                if isinstance(a, str) or isinstance(b, str):
+                    try:
+                        stack.append(func(a, b))
+                    except TypeError:
+                        stack.append(str(a) + str(b))
+                    return
                 try:
                     stack.append(func(a, b))
-                except Exception as exc:
-                    if os.environ.get("ZEXUS_VM_PROFILE_OPS"):
-                        print(f"[VM DEBUG] binary op error func={func} a={a!r} b={b!r} exc={exc}")
-                    raise
+                except TypeError:
+                    # Graceful fallback — coerce to strings
+                    try:
+                        stack.append(str(a) + str(b))
+                    except Exception:
+                        stack.append(0)
             return wrapper
 
         def _binary_bool_op(func):
@@ -3394,19 +3452,41 @@ class VM:
             stack.append(-a)
 
         def _op_add(_):
-            b = _unwrap(stack_pop() if stack else 0)
-            a = _unwrap(stack_pop() if stack else 0)
-            if a is None:
-                a = 0
-            if b is None:
-                b = 0
+            b_raw = stack_pop() if stack else 0
+            a_raw = stack_pop() if stack else 0
+            # DateTime arithmetic
+            if isinstance(a_raw, ZDateTime) or isinstance(b_raw, ZDateTime):
+                a_dt = a_raw if isinstance(a_raw, ZDateTime) else None
+                b_dt = b_raw if isinstance(b_raw, ZDateTime) else None
+                if a_dt and b_dt:
+                    stack_append(a_dt.timestamp + b_dt.timestamp)
+                elif a_dt:
+                    b = _unwrap(b_raw)
+                    if b is None: b = 0
+                    stack_append(ZDateTime(a_dt.timestamp + float(b)))
+                else:
+                    a = _unwrap(a_raw)
+                    if a is None: a = 0
+                    stack_append(ZDateTime(b_raw.timestamp + float(a)))
+                return
+            b = _unwrap(b_raw)
+            a = _unwrap(a_raw)
             if isinstance(a, ZEvaluationError):
                 stack_append(a)
                 return
             if isinstance(b, ZEvaluationError):
                 stack_append(b)
                 return
-            stack_append(a + b)
+            # Type coercion: if either operand is a string, convert both to string
+            if isinstance(a, str) or isinstance(b, str):
+                stack_append(str(a if a is not None else '') + str(b if b is not None else ''))
+            else:
+                if a is None: a = 0
+                if b is None: b = 0
+                try:
+                    stack_append(a + b)
+                except TypeError:
+                    stack_append(str(a) + str(b))
 
         def _op_not(_):
             a = stack.pop() if stack else False
@@ -4135,12 +4215,31 @@ class VM:
                     # Auto-unwrap evaluator objects
                     if hasattr(a, 'value'): a = a.value
                     if hasattr(b, 'value'): b = b.value
-                    stack.append(a + b)
+                    # Type coercion: if either operand is a string, convert both to string
+                    if isinstance(a, str) or isinstance(b, str):
+                        stack.append(str(a if a is not None else '') + str(b if b is not None else ''))
+                    else:
+                        if a is None: a = 0
+                        if b is None: b = 0
+                        stack.append(a + b)
                 elif op_name == "SUB":
-                    b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
-                    if hasattr(a, 'value'): a = a.value
-                    if hasattr(b, 'value'): b = b.value
-                    stack.append(a - b)
+                    b_raw = stack.pop() if stack else 0; a_raw = stack.pop() if stack else 0
+                    # DateTime arithmetic
+                    if isinstance(a_raw, ZDateTime) and isinstance(b_raw, ZDateTime):
+                        stack.append(a_raw.timestamp - b_raw.timestamp)
+                    elif isinstance(a_raw, ZDateTime):
+                        b = b_raw.value if hasattr(b_raw, 'value') else b_raw
+                        if b is None: b = 0
+                        stack.append(ZDateTime(a_raw.timestamp - float(b)))
+                    else:
+                        a = a_raw.value if hasattr(a_raw, 'value') else a_raw
+                        b = b_raw.value if hasattr(b_raw, 'value') else b_raw
+                        if a is None: a = 0
+                        if b is None: b = 0
+                        try:
+                            stack.append(a - b)
+                        except TypeError:
+                            stack.append(0)
                 elif op_name == "MUL":
                     b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
                     if hasattr(a, 'value'): a = a.value

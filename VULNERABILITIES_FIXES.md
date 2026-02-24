@@ -85,7 +85,7 @@
 | M3 | Interp | `security.py` / `persistence.py` | `STORAGE_DIR`/`PERSISTENCE_DIR` created at import time | ✅ Done |
 | M4 | Interp | `evaluator/core.py` ~L500 | Duplicate isinstance fallback chain duplicating dispatch table | ✅ Done |
 | M5 | Interp | `object.py` / `security.py` | Duplicate `EntityDefinition`/`EntityInstance` definitions | ✅ Done |
-| M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ✅ Done |
+.| M6 | Interp | `evaluator/statements.py` ~L4195 | Duplicate `eval_channel/send/receive/atomic_statement` defs — first set is dead code | ✅ Done |
 | M7 | Interp | `evaluator/functions.py` ~L2696 | Triple definition of `_require` builtin — first two are dead code | ✅ Done |
 | M8 | Interp | `evaluator/core.py` ~L99 | `_ensure_recursion_headroom` silently raises Python recursion limit | ✅ Done |
 | M9 | Interp | `object.py` ~L732 | `lock_file` has no timeout — potential hang forever | ✅ Done |

@@ -1,0 +1,93 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Rust build artifacts
+rust_core/target/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Development files
+archive/
+docs/
+issues/
+tmp/
+*.md
+!README.md
+!LICENSE
+
+# Benchmarks and debug scripts
+bench_*.py
+check_*.py
+debug_*.zx
+fix_*.py
+patch_*.py
+profile_*.py
+stress_test_*.txt
+*_output.txt
+test_*.txt
+full_log.txt
+
+# Blockchain test/demo data
+blockchain_test/
+blockchain_demo/
+chain_data/
+
+# Temporary scripts
+*.tmp
+*.bak
+*.log
+
+# Keys and Secrets
+*.key
+*.pem
+
+# Samples / Examples (optional — keep if you want them in the package)
+# samples/
+# examples/
+
+# Dev scripts
+dev-notes/
+dev-scripts/
+proofs/
+reports/
+summaries/
+temp-files/
+
+# Linguist submission
+linguist-submission/
+
+# Test projects
+test_backend_project/
+test_import_issue/
+
+# Git
+.git/
+.gitignore
