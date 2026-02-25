@@ -925,6 +925,82 @@ class VM:
             self.builtins["__vm_use_module__"] = self._vm_use_module
         if "__vm_from_module__" not in self.builtins:
             self.builtins["__vm_from_module__"] = self._vm_from_module
+        # Channel builtins for VM concurrency support
+        if "__create_channel__" not in self.builtins:
+            self.builtins["__create_channel__"] = self._vm_create_channel
+        if "send" not in self.builtins:
+            self.builtins["send"] = self._vm_send
+        if "receive" not in self.builtins:
+            self.builtins["receive"] = self._vm_receive
+        if "close_channel" not in self.builtins:
+            self.builtins["close_channel"] = self._vm_close_channel
+
+    # --- Channel builtins for VM ---
+    def _vm_create_channel(self, name, element_type=None, capacity=0):
+        """Create a channel and store it in the VM environment."""
+        try:
+            from ..concurrency_system import Channel
+        except ImportError:
+            # Fallback: use a simple queue-based channel
+            import queue as _queue_mod
+
+            class _SimpleChannel:
+                def __init__(self, name, capacity=0):
+                    self.name = name
+                    self._queue = _queue_mod.Queue(maxsize=capacity if capacity else 0)
+                    self._closed = False
+
+                def send(self, value, timeout=5.0):
+                    if self._closed:
+                        raise RuntimeError(f"Channel '{self.name}' is closed")
+                    self._queue.put(value, timeout=timeout)
+
+                def receive(self, timeout=5.0):
+                    if self._closed and self._queue.empty():
+                        return None
+                    try:
+                        return self._queue.get(timeout=timeout)
+                    except _queue_mod.Empty:
+                        return None
+
+                def close(self):
+                    self._closed = True
+
+            Channel = _SimpleChannel
+
+        cap = int(capacity) if capacity else 0
+        ch = Channel(name=name, capacity=cap) if element_type is None else Channel(name=name, element_type=element_type, capacity=cap)
+        self.env[name] = ch
+        return ch
+
+    def _vm_send(self, channel, value):
+        """Send value to channel."""
+        if channel is None or not hasattr(channel, 'send'):
+            return None
+        try:
+            channel.send(value, timeout=5.0)
+        except Exception:
+            pass
+        return None
+
+    def _vm_receive(self, channel):
+        """Receive value from channel."""
+        if channel is None or not hasattr(channel, 'receive'):
+            return None
+        try:
+            return channel.receive(timeout=5.0)
+        except Exception:
+            return None
+
+    def _vm_close_channel(self, channel):
+        """Close a channel."""
+        if channel is None or not hasattr(channel, 'close'):
+            return None
+        try:
+            channel.close()
+        except Exception:
+            pass
+        return None
 
     def _vm_use_module(self, spec):
         if spec is None:
@@ -2598,6 +2674,48 @@ class VM:
                     allowed = [a.value if hasattr(a, 'value') else str(a) for a in rv]
                     if caller and caller not in allowed:
                         raise ZEvaluationError(f"Access denied: '{r_key}' restricted to allowed addresses")
+
+            elif op_name == "SPAWN":
+                # Sync SPAWN: schedule the function to run in a background thread
+                import threading
+                val = stack_pop() if stack else None
+                if callable(val):
+                    # val is a callable — run it in a daemon thread
+                    t = threading.Thread(target=val, daemon=True)
+                    t.start()
+                    stack_append(t)
+                elif isinstance(val, dict) and "bytecode" in val:
+                    # val is a function descriptor — execute its bytecode in a thread
+                    func_desc = val
+                    def _run_func_desc(fd=func_desc):
+                        try:
+                            child_vm = VM.create_child(parent_vm=self, env=dict(env))
+                            child_vm._run_stack_bytecode_sync(fd["bytecode"], debug=False)
+                            self._return_vm_to_pool(child_vm)
+                        except Exception:
+                            pass
+                    t = threading.Thread(target=_run_func_desc, daemon=True)
+                    t.start()
+                    stack_append(t)
+                else:
+                    # Already a result (not spawnable) — just push it back
+                    stack_append(val)
+
+            elif op_name == "AWAIT":
+                import threading
+                val = stack_pop() if stack else None
+                if isinstance(val, threading.Thread):
+                    val.join(timeout=30)
+                    stack_append(None)
+                elif isinstance(val, str) and val in self._tasks:
+                    # asyncio task — run in event loop
+                    try:
+                        result = self._run_coroutine_sync(self._tasks[val])
+                        stack_append(result)
+                    except Exception:
+                        stack_append(None)
+                else:
+                    stack_append(val)
 
             else:
                 # Truly unknown op — fallback to async path

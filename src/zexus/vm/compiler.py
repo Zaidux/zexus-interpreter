@@ -1584,6 +1584,49 @@ class BytecodeCompiler:
             self._compile_node(node.expr)
             self._emit(Opcode.POP)
 
+    # ==================== Channel / Concurrency statements ====================
+
+    def _compile_ChannelStatement(self, node):
+        """Compile channel declaration: channel<T>[capacity] name
+
+        Emits a call to the ``__create_channel__`` VM builtin which creates a
+        :class:`Channel` object and stores it in the environment.
+        """
+        # Push channel name
+        ch_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(ch_name))
+
+        # Push element type (string or None)
+        elem_type = None
+        if hasattr(node, 'element_type') and node.element_type is not None:
+            elem_type = node.element_type.value if hasattr(node.element_type, 'value') else str(node.element_type)
+        self._emit(Opcode.LOAD_CONST, self._add_constant(elem_type))
+
+        # Push capacity
+        if hasattr(node, 'capacity') and node.capacity is not None:
+            self._compile_node(node.capacity)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(0))
+
+        # Call __create_channel__(name, element_type, capacity)
+        fn_idx = self._add_constant("__create_channel__")
+        self._emit(Opcode.CALL_NAME, (fn_idx, 3))
+        self._emit(Opcode.POP)  # discard result (channel stored internally)
+
+    def _compile_SendStatement(self, node):
+        """Compile send statement: send(channel, value)"""
+        self._compile_node(node.channel_expr)
+        self._compile_node(node.value_expr)
+        fn_idx = self._add_constant("send")
+        self._emit(Opcode.CALL_NAME, (fn_idx, 2))
+        self._emit(Opcode.POP)
+
+    def _compile_ReceiveStatement(self, node):
+        """Compile receive statement: value = receive(channel)"""
+        self._compile_node(node.channel_expr)
+        fn_idx = self._add_constant("receive")
+        self._emit(Opcode.CALL_NAME, (fn_idx, 1))
+
     # ==================== Fallback for unsupported nodes ====================
     
     def __getattr__(self, name):

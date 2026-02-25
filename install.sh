@@ -77,8 +77,20 @@ if command -v cargo &> /dev/null; then
         else
             echo "🔨 Building Rust VM extension (zexus_core)..."
             python3 -m pip install --upgrade maturin
-            # Install into the current Python environment.
-            if python3 -m maturin develop -m rust_core/Cargo.toml --release; then
+            # Build a wheel and pip-install it so it works with or without a venv.
+            if python3 -m maturin build -m rust_core/Cargo.toml --release 2>/dev/null; then
+                WHEEL=$(ls -t rust_core/target/wheels/zexus_core-*.whl 2>/dev/null | head -1)
+                if [ -n "$WHEEL" ]; then
+                    python3 -m pip install "$WHEEL" 2>/dev/null \
+                        || python3 -m pip install --break-system-packages "$WHEEL" 2>/dev/null \
+                        || true
+                fi
+            fi
+            # Fallback: try maturin develop if the build+install approach failed.
+            if ! python3 -c "import zexus_core" 2>/dev/null; then
+                python3 -m maturin develop -m rust_core/Cargo.toml --release 2>/dev/null || true
+            fi
+            if python3 -c "import zexus_core" 2>/dev/null; then
                 echo "✓ Rust VM extension built and installed"
             else
                 echo "⚠️  Rust VM build failed; continuing with pure-Python VM."

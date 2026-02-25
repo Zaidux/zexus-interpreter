@@ -173,7 +173,7 @@ async action consumer() {
 try {
     async producer()
     async consumer()
-    sleep(8.0)  # Wait for completion (threads need time to finish all output)
+    sleep(1.0)  # Wait for completion (threads need time to finish all output)
     
     # Validate concurrent execution results
     print(true, "✅ Concurrent channels test completed")
@@ -202,7 +202,7 @@ let start_counter = shared_counter
 async incrementer()
 async incrementer()
 async incrementer()
-sleep(15)  # Increased to allow atomic operations to complete (3000 atomic ops take time)
+sleep(2)  # Allow atomic operations to complete
 
 print("Shared counter (should be 3000): " + string(shared_counter))
 print("Actual increase: " + string(shared_counter - start_counter))

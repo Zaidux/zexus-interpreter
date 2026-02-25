@@ -362,6 +362,15 @@ class UltimateParser:
                         if match_brace_depth == 0:
                             in_match_brace = False
                 elif t.type == LAMBDA and getattr(t, 'literal', None) == '=>':
+                    # Exclude watch => patterns — those are reactive watchers, not lambdas
+                    if idx > 0 and all_tokens[idx - 1].type == IDENT:
+                        # Check if this is a watch statement: watch <expr> =>
+                        # Walk back past identifiers and dots (e.g. watch order.status =>)
+                        watch_idx = idx - 2
+                        while watch_idx >= 0 and all_tokens[watch_idx].type in (IDENT, DOT):
+                            watch_idx -= 1
+                        if watch_idx >= 0 and getattr(all_tokens[watch_idx], 'type', None) == WATCH:
+                            continue  # Skip watch arrows
                     has_non_match_arrow = True
                     break
             if has_non_match_arrow:
@@ -4606,8 +4615,16 @@ class UltimateParser:
         
         return UsingStatement(resource_name=resource_name, resource_expr=resource_expr, body=body)
 
+    def parse_type_expression(self):
+        """Parse a simple type expression (identifier)."""
+        if self.cur_token_is(IDENT):
+            type_node = Identifier(self.cur_token.literal)
+            self.next_token()
+            return type_node
+        return None
+
     def parse_channel_statement(self):
-        """Parse channel declaration: channel<type> name; or channel<type> name = expr;"""
+        """Parse channel declaration: channel<type>[capacity] name"""
         token = self.cur_token
         self.next_token()  # consume CHANNEL
         
@@ -4625,25 +4642,33 @@ class UltimateParser:
         
         self.next_token()
         
+        # Optional capacity in brackets: [10]
+        capacity = None
+        if self.cur_token_is(LBRACKET):
+            self.next_token()
+            capacity = self.parse_expression(LOWEST)
+            if not self.cur_token_is(RBRACKET):
+                self.errors.append(f"Line {token.line}:{token.column} - Expected ']' after channel capacity")
+                return None
+            self.next_token()
+        
         # Parse channel name
         if not self.cur_token_is(IDENT):
             self.errors.append(f"Line {token.line}:{token.column} - Expected channel name")
             return None
         
-        name = self.cur_token.literal
+        name = Identifier(self.cur_token.literal)
         self.next_token()
         
-        # Optional capacity specification
-        capacity = None
-        if self.cur_token_is(ASSIGN):
+        # Optional capacity via assignment: = expr
+        if capacity is None and self.cur_token_is(ASSIGN):
             self.next_token()
             capacity = self.parse_expression(LOWEST)
         
-        if not self.cur_token_is(SEMICOLON):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after channel declaration")
-            return None
+        # Semicolons are optional in modern Zexus
+        if self.cur_token_is(SEMICOLON):
+            self.next_token()
         
-        self.next_token()
         return ChannelStatement(name=name, element_type=element_type, capacity=capacity)
 
     def parse_send_statement(self):

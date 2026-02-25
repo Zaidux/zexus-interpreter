@@ -16,7 +16,8 @@ STATEMENT_STARTERS = {
     SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, LOG, CAPABILITY, GRANT,
     REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
     PACKAGE, USING, MIDDLEWARE, AUTH, THROTTLE, CACHE, REQUIRE,
-    EMIT, PROTOCOL, SEAL
+    EMIT, PROTOCOL, SEAL,
+    CHANNEL, SEND, RECEIVE, ATOMIC, ASYNC,
 }
 
 _MEANINGFUL_TOKEN_TYPES = {
@@ -1267,7 +1268,8 @@ class ContextStackParser:
             EXPORT, USE, DEBUG, ENTITY, CONTRACT, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE,
             BUFFER, SIMD, DEFER, PATTERN, ENUM, STREAM, WATCH, CAPABILITY, GRANT,
             REVOKE, VALIDATE, SANITIZE, IMMUTABLE, INTERFACE, TYPE_ALIAS, MODULE,
-            PACKAGE, USING
+            PACKAGE, USING,
+            CHANNEL, SEND, RECEIVE, ATOMIC, ASYNC,
         }
         j = assign_idx + 1
         nesting_depth = 0
@@ -3983,6 +3985,35 @@ class ContextStackParser:
                 i = j
                 continue
 
+            elif token.type == CHANNEL:
+                # Parse CHANNEL declaration: channel<type>[capacity] name
+                j = i + 1
+                channel_tokens = [token]
+                # Collect until we hit a statement starter or semicolon at nesting 0
+                nesting = 0
+                while j < len(tokens):
+                    tj = tokens[j]
+                    if tj.type in (LBRACKET, LT):
+                        nesting += 1
+                    elif tj.type in (RBRACKET, GT):
+                        nesting -= 1
+                    elif nesting == 0 and tj.type == SEMICOLON:
+                        j += 1  # skip semicolon
+                        break
+                    elif nesting == 0 and tj.type in statement_starters and len(channel_tokens) > 1:
+                        break
+                    channel_tokens.append(tj)
+                    j += 1
+
+                # Use the context handler to parse the channel tokens
+                block_info = {'tokens': channel_tokens}
+                stmt = self._parse_channel_statement(block_info, tokens)
+                if stmt:
+                    statements.append(stmt)
+
+                i = j
+                continue
+
             elif token.type == ATOMIC:
                 # Parse ATOMIC statement: atomic { statements }
                 j = i + 1
@@ -4015,6 +4046,48 @@ class ContextStackParser:
                 continue
 
             elif token.type == ASYNC:
+                # Check if this is "async action" — treat as action with async modifier
+                if i + 1 < len(tokens) and tokens[i + 1].type == ACTION:
+                    # Collect entire async action declaration including brace body
+                    j = i + 1  # skip to ACTION token
+                    stmt_tokens = [tokens[j]]  # Start with ACTION token
+                    j += 1
+                    brace_nest = 0
+                    paren_nest = 0
+                    while j < len(tokens):
+                        tj = tokens[j]
+                        stmt_tokens.append(tj)
+                        if tj.type == LPAREN:
+                            paren_nest += 1
+                        elif tj.type == RPAREN:
+                            if paren_nest > 0:
+                                paren_nest -= 1
+                        elif tj.type == LBRACE:
+                            brace_nest += 1
+                        elif tj.type == RBRACE:
+                            brace_nest -= 1
+                            if brace_nest == 0:
+                                j += 1
+                                break
+                        j += 1
+
+                    # Parse as action statement and set is_async flag
+                    block_info = {'tokens': stmt_tokens}
+                    stmt = self._parse_action_statement(block_info, tokens)
+                    if stmt:
+                        stmt.is_async = True
+                        try:
+                            existing_modifiers = list(getattr(stmt, 'modifiers', []) or [])
+                            if 'async' not in existing_modifiers:
+                                existing_modifiers.append('async')
+                            stmt.modifiers = existing_modifiers
+                        except Exception:
+                            stmt.modifiers = ['async']
+                        statements.append(stmt)
+
+                    i = j
+                    continue
+
                 # Parse ASYNC expression: async <expression>
                 j = i + 1
                 
@@ -6157,6 +6230,22 @@ class ContextStackParser:
         # If this is "async function", let _parse_function_statement_context handle it
         if len(tokens) > 1 and tokens[1].type == FUNCTION:
             return self._parse_function_statement_context(block_info, all_tokens)
+
+        # If this is "async action", let _parse_action_statement handle it with async flag
+        if len(tokens) > 1 and tokens[1].type == ACTION:
+            action_tokens = tokens[1:]  # Strip ASYNC
+            action_block = {'tokens': action_tokens}
+            stmt = self._parse_action_statement(action_block, all_tokens)
+            if stmt:
+                stmt.is_async = True
+                try:
+                    existing_modifiers = list(getattr(stmt, 'modifiers', []) or [])
+                    if 'async' not in existing_modifiers:
+                        existing_modifiers.append('async')
+                    stmt.modifiers = existing_modifiers
+                except Exception:
+                    stmt.modifiers = ['async']
+            return stmt
         
         # The tokens are [ASYNC, ...expression tokens...]
         # We can just call parse_async_expression from the main parser!

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.2] - 2026-02-25
+
+### 🐛 Bug Fixes
+
+**Concurrency (Part 3 hang fix):**
+- **`watch =>` triggered arrow-lambda fallback** — The parser's arrow-lambda detection (`=>`) treated `watch x =>` as a lambda, forcing the entire file through the traditional parser and losing advanced strategy parsing (channels, async actions, SPAWN). Fixed by excluding `watch` patterns from the arrow-lambda check.
+- **Channel support in VM compiler** — Added `_compile_ChannelStatement`, `_compile_SendStatement`, and `_compile_ReceiveStatement` to `vm/compiler.py` for proper channel bytecode emission.
+- **Channel builtins in VM runtime** — Registered `__create_channel__`, `send`, `receive`, `close_channel` builtins in `vm/vm.py` that delegate to the `Channel` class from `concurrency_system.py`.
+- **SPAWN/AWAIT in sync path** — Added `SPAWN` and `AWAIT` opcode handlers to `_run_stack_bytecode_sync` using `threading.Thread(daemon=True)` for background execution.
+- **Strategy parser CHANNEL/ASYNC handlers** — Added `CHANNEL` and `ASYNC` to `STATEMENT_STARTERS`, implemented channel token collection in `_parse_block_statements`, and fixed the ASYNC handler to detect `async action` patterns.
+- **`parse_type_expression()` missing** — Added the missing method to `parser.py`, fixing a crash when parsing `channel<type>` syntax.
+- **`parse_channel_statement()` bracket syntax** — Fixed to handle `channel<type>[capacity] name` with bracket capacity before the channel name.
+
+**VM & CLI:**
+- Fixed VM fallback issues for 10+ missing node types (DateTime arithmetic, type coercion, SETUP_TRY label resolution, child VM `_call_depth`).
+- Zero VM fallbacks achieved on all test files.
+- Fixed CLI `pip`/`npm` commands and cleaned `__pycache__`.
+- Added auto-install for missing dependencies.
+
+### 🔧 Build
+- Bumped all versions to 1.8.2 across 9 files.
+- Confirmed Rust VM (`zexus_core`) builds and loads with `maturin develop --release`.
+
+
 ## [1.8.1] - 2026-02-23
 
 ### 🐛 Bug Fixes — Ziver Chain Phase 0 Audit
