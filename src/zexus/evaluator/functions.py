@@ -2512,6 +2512,46 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("filter(arr, fn)")
             return self._array_filter(a[0], a[1])
         
+        def _range(*a):
+            """range(end) or range(start, end) or range(start, end, step)"""
+            if len(a) == 1:
+                end_val = a[0].value if hasattr(a[0], 'value') else int(a[0])
+                return List([Integer(i) for i in range(end_val)])
+            elif len(a) >= 2:
+                start_val = a[0].value if hasattr(a[0], 'value') else int(a[0])
+                end_val = a[1].value if hasattr(a[1], 'value') else int(a[1])
+                step_val = 1
+                if len(a) >= 3:
+                    step_val = a[2].value if hasattr(a[2], 'value') else int(a[2])
+                return List([Integer(i) for i in range(start_val, end_val, step_val)])
+            return EvaluationError("range() requires 1-3 arguments: range(end) or range(start, end) or range(start, end, step)")
+        
+        def _typeof(*a):
+            """typeof(value) - returns the type name as a string"""
+            if len(a) != 1:
+                return EvaluationError("typeof() requires exactly 1 argument")
+            obj = a[0]
+            if isinstance(obj, Integer): return String("integer")
+            if isinstance(obj, Float): return String("float")
+            if isinstance(obj, String): return String("string")
+            if isinstance(obj, BooleanObj): return String("boolean")
+            if obj is NULL or obj is None: return String("null")
+            if isinstance(obj, List): return String("list")
+            if isinstance(obj, Map): return String("map")
+            if isinstance(obj, Action) or isinstance(obj, LambdaFunction): return String("function")
+            from ..security import SmartContract
+            if isinstance(obj, SmartContract): return String("contract")
+            return String(type(obj).__name__.lower())
+        
+        def _abs(*a):
+            """abs(number) - returns absolute value"""
+            if len(a) != 1:
+                return EvaluationError("abs() requires exactly 1 argument")
+            val = a[0]
+            if isinstance(val, Integer): return Integer(abs(val.value))
+            if isinstance(val, Float): return Float(abs(val.value))
+            return EvaluationError("abs() requires a number argument")
+        
         def _vfs_stats(*a):
             """Return VFS file cache statistics as a Map: vfs_stats()"""
             mgr = _get_vfs_manager()
@@ -2785,6 +2825,9 @@ class FunctionEvaluatorMixin:
             "values": Builtin(_values, "values"),
             "entries": Builtin(_entries, "entries"),
             "size": Builtin(_size, "size"),
+            "range": Builtin(_range, "range"),
+            "typeof": Builtin(_typeof, "typeof"),
+            "abs": Builtin(_abs, "abs"),
         })
         
         # Register access control builtins
