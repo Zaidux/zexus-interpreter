@@ -2339,7 +2339,7 @@ class StatementEvaluatorMixin:
                 
                 if isinstance(prop, dict):
                     # For dict format, default_value is in the dict
-                    if 'default_value' in prop:
+                    if 'default_value' in prop and prop['default_value'] is not None:
                         def_val = self.eval_node(prop['default_value'], env, stack_trace)
                         if is_error(def_val): 
                             return def_val

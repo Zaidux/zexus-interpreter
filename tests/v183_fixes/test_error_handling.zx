@@ -1,0 +1,43 @@
+// ========================================================================
+// Error handling and try/catch tests
+// ========================================================================
+
+print("=== Try/Catch ===")
+
+// Basic throw/catch
+try {
+    throw "custom error"
+} catch (e) {
+    print("caught error")
+}
+
+// Division by zero
+try {
+    let x = 1 / 0
+    print("should not reach here")
+} catch (e) {
+    print("caught division by zero")
+}
+
+// Nested try/catch
+try {
+    try {
+        throw "inner error"
+    } catch (e) {
+        print("inner catch")
+        throw "outer error"
+    }
+} catch (e) {
+    print("outer catch")
+}
+
+// No error path
+try {
+    let x = 42
+    print("no error: " + string(x))
+} catch (e) {
+    print("should not reach here")
+}
+
+print("")
+print("ERROR HANDLING DONE")

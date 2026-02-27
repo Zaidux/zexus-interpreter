@@ -1,0 +1,64 @@
+// ========================================================================
+// VM stability test - run same code with and without VM
+// ========================================================================
+
+// Basic arithmetic
+print(1 + 2)
+print(10 - 3)
+print(4 * 5)
+print(20 / 4)
+print(2 ** 3)
+print(10 % 3)
+
+// Variables
+let x = 42
+let y = 3.14
+print(x)
+print(y)
+print(x + y)
+
+// Strings
+let s = "Hello"
+print(s + " World")
+print(len(s))
+
+// Lists
+let list = [1, 2, 3]
+print(list)
+list.push(4)
+print(len(list))
+
+// Maps
+let m = {"a": 1, "b": 2}
+print(m.get("a"))
+m["c"] = 3
+print(m.has("c"))
+
+// Functions
+action add(a, b) {
+    return a + b
+}
+print(add(10, 20))
+
+// If/else
+if true {
+    print("true branch")
+} else {
+    print("false branch")
+}
+
+// While loop
+let count = 0
+while count < 3 {
+    count = count + 1
+}
+print(count)
+
+// For each
+let total = 0
+for each item in [10, 20, 30] {
+    total = total + item
+}
+print(total)
+
+print("VM STABILITY DONE")

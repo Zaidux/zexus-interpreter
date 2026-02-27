@@ -1522,14 +1522,46 @@ class ContextStackParser:
                     if i + 1 < brace_end and tokens[i + 1].type == COLON:
                         if i + 2 < brace_end:
                             prop_type = tokens[i + 2].literal
+                            default_value = None
+                            prop_end = i + 3
+                            
+                            # Check for default value: = expression
+                            if prop_end < brace_end and tokens[prop_end].type == ASSIGN:
+                                prop_end += 1  # Skip =
+                                # Collect default value tokens until comma, newline-IDENT, or end
+                                val_tokens = []
+                                nesting = 0
+                                while prop_end < brace_end:
+                                    vt = tokens[prop_end]
+                                    if vt.type in {LPAREN, LBRACE, LBRACKET}:
+                                        nesting += 1
+                                    elif vt.type in {RPAREN, RBRACE, RBRACKET}:
+                                        nesting -= 1
+                                    elif nesting == 0 and vt.type == COMMA:
+                                        prop_end += 1  # Skip comma
+                                        break
+                                    elif nesting == 0 and vt.type == IDENT and len(val_tokens) > 0:
+                                        # New property on next line
+                                        prev_vt = val_tokens[-1]
+                                        if vt.line > prev_vt.line:
+                                            break
+                                    val_tokens.append(vt)
+                                    prop_end += 1
+                                
+                                if val_tokens:
+                                    default_value = self._parse_expression(val_tokens)
+                            
                             # Use AstNodeShim so evaluator can use .name.value
                             properties.append(AstNodeShim(
                                 name=Identifier(prop_name),
                                 type=Identifier(prop_type),
-                                default_value=None
+                                default_value=default_value
                             ))
-                            parser_debug(f"  📝 Property: {prop_name}: {prop_type}")
-                            i += 3
+                            parser_debug(f"  📝 Property: {prop_name}: {prop_type}" + (f" = {default_value}" if default_value else ""))
+                            i = prop_end
+                            # Skip trailing comma
+                            if i < brace_end and tokens[i].type == COMMA:
+                                i += 1
                             continue
 
                 i += 1

@@ -3973,9 +3973,17 @@ class UltimateParser:
                 if self.cur_token_is(IDENT):
                     prop_type = self.cur_token.literal
 
+                    # Check for default value: = expression
+                    default_value = None
+                    if self.peek_token_is(ASSIGN):
+                        self.next_token()  # Move to =
+                        self.next_token()  # Move to expression
+                        default_value = self.parse_expression(LOWEST)
+
                     properties.append({
                         "name": prop_name,
-                        "type": prop_type
+                        "type": prop_type,
+                        "default_value": default_value
                     })
 
                     # Check for comma or new property

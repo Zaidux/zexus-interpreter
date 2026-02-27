@@ -1,0 +1,45 @@
+// ========================================================================
+// Entity tests - various entity patterns
+// ========================================================================
+
+print("=== Basic Entity ===")
+
+entity Point {
+    x: integer = 0
+    y: integer = 0
+}
+
+let p = Point{x: 10, y: 20}
+print(p.x)
+print(p.y)
+
+// Entity with string fields
+entity Person {
+    name: string = ""
+    age: integer = 0
+}
+
+let alice = Person{name: "Alice", age: 30}
+let bob = Person{name: "Bob", age: 25}
+print(alice.name + " is " + string(alice.age))
+print(bob.name + " is " + string(bob.age))
+
+// Entity with default values
+entity Config {
+    host: string = "localhost"
+    port: integer = 8080
+    debug: boolean = false
+}
+
+let cfg = Config{}
+print(cfg.host)
+print(cfg.port)
+print(cfg.debug)
+
+// Entity with overridden values
+let prod = Config{host: "example.com", port: 443, debug: false}
+print(prod.host)
+print(prod.port)
+
+print("")
+print("ENTITY DONE")
