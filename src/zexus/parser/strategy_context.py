@@ -2511,8 +2511,13 @@ class ContextStackParser:
                         j += 1  # Skip the semicolon
                         break
                     # Stop at statement keywords when not nested
+                    # But NOT if the previous token was DOT (property/method access)
                     elif nesting == 0 and t.type in statement_starters and j > i + 1:
-                        break
+                        prev_t = tokens[j - 1] if j > 0 else None
+                        if prev_t and prev_t.type == DOT:
+                            pass  # Don't break - it's a property name
+                        else:
+                            break
                     j += 1
 
                 print_tokens = tokens[i:j]
@@ -3723,7 +3728,10 @@ class ContextStackParser:
                         # Don't break on statement starters that are inside braces
                         # Only break if it's truly a new statement (e.g., not FUNCTION inside return expr)
                         # ALSO: Don't break on the FIRST token (the return value itself), even if it's a keyword
-                        if len(value_tokens) > 0 and t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN}:
+                        # ALSO: Don't break on tokens that follow a DOT (property/method access)
+                        prev_val_token = value_tokens[-1] if value_tokens else None
+                        is_after_dot = prev_val_token and prev_val_token.type == DOT
+                        if len(value_tokens) > 0 and t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN} and not is_after_dot:
                             break
                     
                     value_tokens.append(t)
