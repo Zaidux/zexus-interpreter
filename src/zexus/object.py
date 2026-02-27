@@ -183,6 +183,11 @@ class List(Object):
             self.elements.extend(other_list.elements)
         return self
 
+    def is_empty(self):
+        """Q-002 fix: Check if list is empty, returns Boolean"""
+        from .object import Boolean
+        return Boolean(len(self.elements) == 0)
+
 class Map(Object):
     def __init__(self, pairs):
         self.pairs = pairs
@@ -242,9 +247,17 @@ class Map(Object):
         return Array([Array([k, v]) for k, v in self.pairs.items()])
 
     def has(self, key):
-        """Check if key exists in map"""
+        """Check if key exists in map (with key normalization)"""
         from .object import Boolean
-        return Boolean(key in self.pairs)
+        # Q-001 fix: Try direct, then normalized key lookup (same as get())
+        if key in self.pairs:
+            return Boolean(True)
+        if isinstance(key, str):
+            str_key = String(key)
+            if str_key in self.pairs:
+                return Boolean(True)
+        norm_key = self._normalize_key(key)
+        return Boolean(norm_key in self.pairs)
 
     def size(self):
         """Return number of entries in map"""

@@ -3764,9 +3764,22 @@ class ContextStackParser:
                     
                     # Collect iterator variable name
                     item_name = None
+                    index_name = None
                     if j < len(tokens) and tokens[j].type == IDENT:
-                        item_name = tokens[j].literal
+                        first_ident = tokens[j].literal
                         j += 1
+                        
+                        # R-006/R-007 fix: Check for two-variable form: for each i, item in ...
+                        if j < len(tokens) and tokens[j].type == COMMA:
+                            j += 1  # skip comma
+                            if j < len(tokens) and tokens[j].type == IDENT:
+                                index_name = first_ident
+                                item_name = tokens[j].literal
+                                j += 1
+                            else:
+                                item_name = first_ident
+                        else:
+                            item_name = first_ident
                     
                     # Expect IN keyword
                     if j < len(tokens) and tokens[j].type == IN:
@@ -3807,7 +3820,8 @@ class ContextStackParser:
                         stmt = ForEachStatement(
                             item=Identifier(item_name if item_name else 'item'),
                             iterable=iterable,
-                            body=body_block
+                            body=body_block,
+                            index=Identifier(index_name) if index_name else None
                         )
                         if stmt:
                             statements.append(stmt)

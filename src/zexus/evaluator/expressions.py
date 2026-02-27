@@ -89,8 +89,9 @@ class ExpressionEvaluatorMixin:
         if zexus_config.fast_debug_enabled:
             debug_log("eval_identifier", f"Looking up: {name}")
         
-        # Special case: 'this' keyword should be treated like ThisExpression
-        if name == "this":
+        # Special case: 'this' and 'self' keywords should be treated like ThisExpression
+        # R-003 fix: 'self' is now recognized as an alias for 'this'
+        if name == "this" or name == "self":
             # Look for contract instance first
             contract_instance = env.get("__contract_instance__")
             if contract_instance is not None:
@@ -279,6 +280,11 @@ class ExpressionEvaluatorMixin:
                 return Float(left_val ** right_val)
             except (OverflowError, ValueError) as e:
                 return EvaluationError(f"Exponentiation error: {e}")
+        # R-017 fix: Add modulo support for floats
+        elif operator == "%":
+            if right_val == 0:
+                return EvaluationError("Modulo by zero")
+            return Float(left_val % right_val)
         
         return EvaluationError(f"Unknown float operator: {operator}")
     
@@ -388,6 +394,9 @@ class ExpressionEvaluatorMixin:
                         f"String repetition count {n} exceeds maximum ({_MAX_STRING_REPEAT})"
                     )
                 return String(right.value * n)
+            # R-016 fix: Handle mixed Integer/Float multiplication
+            elif isinstance(left, (Integer, Float)) and isinstance(right, (Integer, Float)):
+                return Float(float(left.value) * float(right.value))
         
         # Array Concatenation
         elif operator == "+" and isinstance(left, List) and isinstance(right, List):
