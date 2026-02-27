@@ -1,15 +1,15 @@
 # Zexus v1.8.0 — VM & Interpreter Issues
 
 > Discovered during Ziver Chain Phase 0 audit (Feb 23, 2026).
-> ~~Target fix version: **v1.8.1**~~
-> **All issues resolved in v1.8.1** (Feb 23, 2026)
+> ~~Target fix version: **v1.8.3**~~
+> **All issues resolved in v1.8.3** (Feb 23, 2026)
 > Tested with: `zexus 1.8.0` via `pip install zexus`, running on Ubuntu 24.04
 
 ---
 
 ## Bytecode VM Issues
 
-### VM-001: EntityStatement compilation crash ✅ Fixed in v1.8.1
+### VM-001: EntityStatement compilation crash ✅ Fixed in v1.8.3
 - **Severity:** High
 - **Trigger:** Any file containing an `entity` declaration
 - **Error:** `Bytecode compilation error: Failed to compile Program: Failed to compile EntityStatement: 'EntityStatement' object has no attribute 'body'`
@@ -24,7 +24,7 @@ entity Point {
 let p = Point{x: 3, y: 4}
 ```
 
-### VM-002: ExportStatement not supported in bytecode compiler ✅ Fixed in v1.8.1
+### VM-002: ExportStatement not supported in bytecode compiler ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** Any file with `export contract` or `export action`
 - **Error:** `VM fallback: Node type 'ExportStatement' is not currently supported by the bytecode compiler.`
@@ -38,7 +38,7 @@ export contract MyContract {
 }
 ```
 
-### VM-003: Imported functions resolve to Action objects instead of being called ✅ Fixed in v1.8.1
+### VM-003: Imported functions resolve to Action objects instead of being called ✅ Fixed in v1.8.3
 - **Severity:** High
 - **Trigger:** Calling a function imported from another `.zx` file in VM mode
 - **Error:** `add result: action(a, b) { ... }` — prints the function object instead of calling it
@@ -56,7 +56,7 @@ let result = add(10, 20)
 print("result: " + string(result))  # VM prints: "action(a, b) { ... }"
 ```
 
-### VM-004: Entity constructor argument count mismatch ✅ Fixed in v1.8.1
+### VM-004: Entity constructor argument count mismatch ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Entity with named-field construction `Entity{field: value}`
 - **Error:** `[TypeError] 'Point' expects 0 argument(s) but got 1`
@@ -71,7 +71,7 @@ entity Point {
 let p = Point{x: 3, y: 4}  # TypeError in validation
 ```
 
-### VM-005: `string()` + builtin module returns type name instead of value ✅ Fixed in v1.8.1
+### VM-005: `string()` + builtin module returns type name instead of value ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** `string(dt.now())` or `string(math.max(3,7))` in VM mode
 - **Error:** Prints `<built-in function: >` or `None` instead of the actual value
@@ -88,7 +88,7 @@ print("DateTime: " + string(now))  # VM: "<built-in function: >"
 
 ## Interpreter Issues
 
-### INT-001: `protocol` keyword not recognized ✅ Fixed in v1.8.1
+### INT-001: `protocol` keyword not recognized ✅ Fixed in v1.8.3
 - **Severity:** High
 - **Trigger:** Using `protocol` to define an interface
 - **Error:** `Identifier 'protocol' not found`
@@ -105,14 +105,14 @@ contract Greeter implements Greetable {
 }
 ```
 
-### INT-002: `implements` keyword not recognized ✅ Fixed in v1.8.1
+### INT-002: `implements` keyword not recognized ✅ Fixed in v1.8.3
 - **Severity:** High  
 - **Trigger:** Using `implements` on a contract (consequence of INT-001)
 - **Error:** Parse error when `protocol` is not recognized
 - **Note:** Tied to INT-001; fixing `protocol` should fix this too
 - **Fix:** Fixed `_parse_contract_statement_block` in `strategy_context.py` to detect the `implements` keyword between contract name and `{`, passing `implements=Identifier(name)` to the ContractStatement constructor.
 
-### INT-003: `emit` not recognized outside or inside contracts ✅ Fixed in v1.8.1
+### INT-003: `emit` not recognized outside or inside contracts ✅ Fixed in v1.8.3
 - **Severity:** Critical
 - **Trigger:** Using `emit EventName(args)` anywhere
 - **Error:** `Identifier 'emit' not found`
@@ -135,7 +135,7 @@ let t = Token()
 t.transfer("0xBOB", 100)
 ```
 
-### INT-004: `persistent storage` declarations not functional ✅ Fixed in v1.8.1
+### INT-004: `persistent storage` declarations not functional ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** Using `persistent storage varname: type` in a contract
 - **Behavior:** Parses without error but doesn't provide any persistence; behaves identically to `data`
@@ -151,42 +151,42 @@ contract Store {
 }
 ```
 
-### INT-005: `track_memory()` not recognized ✅ Fixed in v1.8.1
+### INT-005: `track_memory()` not recognized ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `track_memory()` at module top level
 - **Error:** `Identifier 'track_memory' not found`
 - **Impact:** Memory tracking feature not available
 - **Fix:** Registered `track_memory` as a builtin function in `_register_missing_directive_builtins()`.
 
-### INT-006: `cache()` not recognized ✅ Fixed in v1.8.1
+### INT-006: `cache()` not recognized ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `cache("name", {ttl: 300})` at module top level
 - **Error:** `Identifier 'cache' not found`
 - **Impact:** Cache directive feature not available
 - **Fix:** Registered `cache` as a builtin function with TTL option support.
 
-### INT-007: `throttle()` not recognized ✅ Fixed in v1.8.1
+### INT-007: `throttle()` not recognized ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `throttle("name", {requests_per_minute: 100})`
 - **Error:** `Identifier 'throttle' not found`
 - **Impact:** Rate-limiting directive feature not available
 - **Fix:** Registered `throttle` as a builtin function with `requests_per_minute` option support.
 
-### INT-008: `audit()` not recognized ✅ Fixed in v1.8.1
+### INT-008: `audit()` not recognized ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `audit("event", {data})` anywhere
 - **Error:** `Identifier 'audit' not found`
 - **Impact:** Audit trail feature not available
 - **Fix:** Registered `audit` as a builtin function that logs events to an `__audit_trail__` list in the environment.
 
-### INT-009: `verify()` not recognized as a standalone function ✅ Fixed in v1.8.1
+### INT-009: `verify()` not recognized as a standalone function ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `verify(condition, "message")` (not `require`)
 - **Error:** `Identifier 'verify' not found`
 - **Note:** `require(condition, "message")` works correctly; `verify` is the missing alias
 - **Fix:** Registered `verify` as a builtin function (alias for `require` semantics — throws on falsy condition).
 
-### INT-010: `watch` blocks not recognized ✅ Fixed in v1.8.1
+### INT-010: `watch` blocks not recognized ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Reactive `watch variable { ... }` blocks
 - **Error:** Parse error
@@ -202,14 +202,14 @@ contract Tracker {
 }
 ```
 
-### INT-011: `protect` action modifier not recognized — Clarified in v1.8.1
+### INT-011: `protect` action modifier not recognized — Clarified in v1.8.3
 - **Severity:** Low
 - **Trigger:** Using `action protect method_name()` syntax
 - **Error:** Parse error or ignored
 - **Impact:** Cannot mark actions as protected/internal
 - **Note:** The `protect` statement uses function-call syntax `protect(target, {rules})`, not an action modifier. Both parsers and the evaluator fully support `protect(target, {rate_limit: 100, auth_required: true})`. This is a documentation/expectation issue, not a code bug.
 
-### INT-012: `bc.create_genesis_block()` returns function object without call ✅ Fixed in v1.8.1
+### INT-012: `bc.create_genesis_block()` returns function object without call ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** Calling `bc.create_genesis_block()` and inspecting result in VM mode
 - **Behavior:** VM returns `<built-in function: >` instead of executing
@@ -217,7 +217,7 @@ contract Tracker {
 - **Workaround:** Use interpreter mode (automatic fallback)
 - **Fix:** Same root cause as VM-005 — CALL_METHOD handler now properly invokes `Builtin.fn` for module method results stored in dicts.
 
-### INT-013: `map.has()` method not available ✅ Fixed in v1.8.1
+### INT-013: `map.has()` method not available ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** Calling `.has("key")` on a map
 - **Error:** Method not found or no-op
@@ -229,12 +229,12 @@ let m = {"a": 1}
 print(m.has("a"))  # Now returns true
 ```
 
-### INT-014: `map.get(key, default)` method not available ✅ Fixed in v1.8.1
+### INT-014: `map.get(key, default)` method not available ✅ Fixed in v1.8.3
 - **Severity:** Medium
 - **Trigger:** Calling `.get("key", default_value)` on a map
 - **Fix:** Same key normalization fix as INT-013. `map.get("key", default)` now works correctly.
 
-### INT-015: `list.is_empty()` method not available ✅ Fixed in v1.8.1
+### INT-015: `list.is_empty()` method not available ✅ Fixed in v1.8.3
 - **Severity:** Low
 - **Trigger:** Calling `.is_empty()` on a list
 - **Workaround:** Use `len(list) == 0`
@@ -248,7 +248,7 @@ print(m.has("a"))  # Now returns true
 
 ---
 
-## Resolution Summary (v1.8.1)
+## Resolution Summary (v1.8.3)
 
 | Issue | Status | Priority | Fix Location |
 |---|---|---|---|
@@ -278,7 +278,7 @@ print(m.has("a"))  # Now returns true
 
 ---
 
-## What Works Correctly (v1.8.1)
+## What Works Correctly (v1.8.3)
 
 All features from v1.8.0 continue to work, plus the following now work correctly:
 

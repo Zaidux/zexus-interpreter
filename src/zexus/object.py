@@ -11,7 +11,7 @@ from threading import Lock
 
 
 # ===============================================
-# SECURITY: Path & Identifier Sanitization (v1.8.1)
+# SECURITY: Path & Identifier Sanitization (v1.8.3)
 # ===============================================
 
 def _safe_resolve_path(path: str, sandbox: str = None) -> str:

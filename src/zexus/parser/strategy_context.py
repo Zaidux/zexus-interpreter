@@ -1720,6 +1720,56 @@ class ContextStackParser:
                     # Move to identifier after "state"
                     i += 1
                     
+                    # R-013 fix: Support state { field: val, field2: val2 } block syntax
+                    if i < brace_end and tokens[i].type == LBRACE:
+                        # Multi-field state block
+                        i += 1  # skip opening brace
+                        state_brace_depth = 1
+                        while i < brace_end and state_brace_depth > 0:
+                            if tokens[i].type == RBRACE:
+                                state_brace_depth -= 1
+                                if state_brace_depth == 0:
+                                    i += 1
+                                    break
+                            elif tokens[i].type == LBRACE:
+                                state_brace_depth += 1
+                                i += 1
+                            elif tokens[i].type == IDENT or (hasattr(tokens[i], 'literal') and tokens[i].type not in (COMMA, SEMICOLON)):
+                                field_name = tokens[i].literal
+                                field_val = None
+                                ci = i + 1
+                                # Expect colon or =
+                                if ci < brace_end and tokens[ci].type in (COLON, ASSIGN):
+                                    ci += 1
+                                    if ci < brace_end:
+                                        vt = tokens[ci]
+                                        if vt.type == STRING:
+                                            field_val = StringLiteral(vt.literal)
+                                        elif vt.type == INT:
+                                            field_val = IntegerLiteral(int(vt.literal))
+                                        elif vt.type == FLOAT:
+                                            field_val = FloatLiteral(float(vt.literal))
+                                        elif vt.type == TRUE:
+                                            field_val = Boolean(True)
+                                        elif vt.type == FALSE:
+                                            field_val = Boolean(False)
+                                        elif vt.type == IDENT:
+                                            field_val = Identifier(vt.literal)
+                                        ci += 1
+                                # Skip optional comma
+                                if ci < brace_end and tokens[ci].type == COMMA:
+                                    ci += 1
+                                storage_vars.append(AstNodeShim(
+                                    name=Identifier(field_name),
+                                    type=Identifier("any"),
+                                    initial_value=field_val,
+                                    default_value=field_val
+                                ))
+                                i = ci
+                            else:
+                                i += 1
+                        continue
+                    
                     # State variable name can be an identifier OR a keyword being used as an identifier
                     # (e.g., "state data = {}" where "data" is a keyword but used as a variable name)
                     if i < brace_end and (tokens[i].type == IDENT or hasattr(tokens[i], 'literal')):
