@@ -2514,6 +2514,8 @@ class FunctionEvaluatorMixin:
         
         def _range(*a):
             """range(end) or range(start, end) or range(start, end, step)"""
+            if len(a) == 0:
+                return EvaluationError("range() requires 1-3 arguments, got 0")
             if len(a) == 1:
                 end_val = a[0].value if hasattr(a[0], 'value') else int(a[0])
                 return List([Integer(i) for i in range(end_val)])
@@ -2524,7 +2526,6 @@ class FunctionEvaluatorMixin:
                 if len(a) >= 3:
                     step_val = a[2].value if hasattr(a[2], 'value') else int(a[2])
                 return List([Integer(i) for i in range(start_val, end_val, step_val)])
-            return EvaluationError("range() requires 1-3 arguments: range(end) or range(start, end) or range(start, end, step)")
         
         def _typeof(*a):
             """typeof(value) - returns the type name as a string"""

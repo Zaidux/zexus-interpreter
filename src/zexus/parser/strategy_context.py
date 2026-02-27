@@ -3581,7 +3581,7 @@ class ContextStackParser:
                         j += 1
                         # Check for "else if" pattern (ELSE followed by IF = elif chain)
                         if j < len(tokens) and tokens[j].type == IF:
-                            # Treat "else if" as elif - rewind and let the elif handler pick it up
+                            # Handle "else if" inline as an elif chain entry
                             # Parse the else-if condition (same as elif)
                             j += 1  # Skip the IF token
                             elif_cond_tokens = []
