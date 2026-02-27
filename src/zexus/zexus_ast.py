@@ -196,10 +196,13 @@ class PrintStatement(Statement):
         return f"PrintStatement(values={self.values})"
 
 class ForEachStatement(Statement):
-    def __init__(self, item, iterable, body):
+    def __init__(self, item, iterable, body, index=None):
         self.item = item; self.iterable = iterable; self.body = body
+        self.index = index  # R-006/R-007: optional index/key variable for indexed iteration
 
     def __repr__(self):
+        if self.index:
+            return f"ForEachStatement(index={self.index}, item={self.item}, iterable={self.iterable})"
         return f"ForEachStatement(item={self.item}, iterable={self.iterable})"
 
 class EmbeddedCodeStatement(Statement):

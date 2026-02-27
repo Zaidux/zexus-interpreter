@@ -1,0 +1,143 @@
+// ========================================================================
+// Comprehensive integration test - all major features
+// ========================================================================
+
+print("=== 1. Variables and Types ===")
+let i = 42
+let f = 3.14
+let s = "hello"
+let b = true
+let n = null
+let list = [1, 2, 3]
+let map = {"key": "value"}
+print(i)
+print(f)
+print(s)
+print(b)
+print(n)
+print(list)
+print(map)
+
+print("")
+print("=== 2. Arithmetic ===")
+print(2 + 3)
+print(10 - 4)
+print(3 * 7)
+print(15 / 4)
+print(2 ** 8)
+print(10 % 3)
+print(5 * 2.5)
+print(10.5 % 3.0)
+
+print("")
+print("=== 3. String Operations ===")
+print("hello" + " " + "world")
+print("abc" * 3)
+print(len("test"))
+print(string(42))
+print(int("99"))
+
+print("")
+print("=== 4. List Operations ===")
+let nums = [5, 3, 1, 4, 2]
+print(len(nums))
+nums.push(6)
+print(len(nums))
+print(nums.contains(3))
+print(nums.is_empty())
+let doubled = nums.map((x) => x * 2)
+print(doubled)
+let sum = nums.reduce((acc, x) => acc + x, 0)
+print(sum)
+
+print("")
+print("=== 5. Map Operations ===")
+let m = {"a": 1, "b": 2, "c": 3}
+print(m.get("a"))
+print(m.has("b"))
+print(m.has("z"))
+print(m.size())
+print(m.keys())
+m["d"] = 4
+print(m.has("d"))
+
+print("")
+print("=== 6. Control Flow ===")
+if true { print("if") }
+if false { print("x") } else { print("else") }
+if false { print("x") } else if true { print("else if") } else { print("x") }
+
+let count = 0
+while count < 3 { count = count + 1 }
+print("while: " + string(count))
+
+for each item in ["a", "b", "c"] { print(item) }
+for each idx, val in [10, 20] { print(string(idx) + "=" + string(val)) }
+
+print("")
+print("=== 7. Functions ===")
+action add(a, b) { return a + b }
+print(add(3, 4))
+
+action factorial(n) {
+    if n <= 1 { return 1 }
+    return n * factorial(n - 1)
+}
+print(factorial(6))
+
+let sq = (x) => x * x
+print(sq(7))
+
+print("")
+print("=== 8. Entities ===")
+entity Point {
+    x: integer = 0
+    y: integer = 0
+}
+let p = Point{x: 5, y: 10}
+print(p.x)
+print(p.y)
+
+let p2 = Point{}
+print(p2.x)
+print(p2.y)
+
+print("")
+print("=== 9. Contracts ===")
+contract Counter {
+    state count = 0
+    action init() { this.count = 0 }
+    action inc() { this.count = this.count + 1 }
+    action get() { return this.count }
+}
+let c = Counter()
+c.inc()
+c.inc()
+c.inc()
+print(c.get())
+
+contract Wallet {
+    state {
+        balance: 100,
+        owner: "alice"
+    }
+    action init() {
+        self.balance = self.balance + 50
+    }
+    action getBalance() { return self.balance }
+    action getOwner() { return self.owner }
+}
+let w = Wallet()
+print(w.getBalance())
+print(w.getOwner())
+
+print("")
+print("=== 10. Error Handling ===")
+try {
+    throw "test"
+} catch (e) {
+    print("caught")
+}
+
+print("")
+print("ALL INTEGRATION TESTS PASSED")

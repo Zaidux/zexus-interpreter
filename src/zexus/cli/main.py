@@ -156,7 +156,7 @@ def show_all_commands():
     console.print("\n[bold green]💡 Tip:[/bold green] Use 'zx <command> --help' for detailed command options\n")
 
 @click.group(invoke_without_command=True)
-@click.version_option(version="1.8.2", prog_name="Zexus")
+@click.version_option(version="1.8.3", prog_name="Zexus")
 @click.option('--syntax-style', type=click.Choice(['universal', 'tolerable', 'auto']),
               default='auto', help='Syntax style to use (universal=strict, tolerable=flexible)')
 @click.option('--advanced-parsing', is_flag=True, default=True,

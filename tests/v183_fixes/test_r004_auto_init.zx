@@ -1,0 +1,28 @@
+// ========================================================================
+// TEST 4: R-004 — init() auto-called on Contract construction
+// ========================================================================
+print("=== R-004: Auto init() ===")
+
+contract AutoInit {
+    state initialized = false
+    state count = 0
+
+    action init() {
+        this.initialized = true
+        this.count = 10
+    }
+
+    action isInitialized() {
+        return this.initialized
+    }
+
+    action getCount() {
+        return this.count
+    }
+}
+
+let ai = AutoInit()
+print(ai.isInitialized())
+print(ai.getCount())
+
+print("R-004 DONE")

@@ -1,0 +1,15 @@
+// ========================================================================
+// TEST 8: R-009 — Nested assignment m["a"]["b"] = val
+// ========================================================================
+print("=== R-009: Nested assignment ===")
+
+let nested = {"a": {"b": 0}}
+nested["a"]["b"] = 99
+print(nested["a"]["b"])
+
+// Deep nesting
+let deep = {"x": {"y": {"z": 1}}}
+deep["x"]["y"]["z"] = 42
+print(deep["x"]["y"]["z"])
+
+print("R-009 DONE")

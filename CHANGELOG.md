@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.3] - 2026-02-26
+
+### 🔧 Build
+- Bumped all version references from v1.8.1/v1.8.2 to v1.8.3 across all config, source, and documentation files.
+
+
 ## [1.8.2] - 2026-02-25
 
 ### 🐛 Bug Fixes
@@ -729,6 +735,8 @@ See git history for changes in versions < 0.1.3
 - 📚 Documentation
 - 🧪 Testing
 
+[1.8.3]: https://github.com/Zaidux/zexus-interpreter/compare/v1.8.2...v1.8.3
+[1.8.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/Zaidux/zexus-interpreter/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/Zaidux/zexus-interpreter/compare/v1.7.1...v1.7.2

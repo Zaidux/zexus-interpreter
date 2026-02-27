@@ -1,0 +1,15 @@
+// ========================================================================
+// TEST 2: Q-002 — list.is_empty() returns true/false
+// ========================================================================
+print("=== Q-002: list.is_empty() ===")
+
+let empty_list = []
+print(empty_list.is_empty())
+
+let non_empty = [1, 2, 3]
+print(non_empty.is_empty())
+
+empty_list.push(42)
+print(empty_list.is_empty())
+
+print("Q-002 DONE")

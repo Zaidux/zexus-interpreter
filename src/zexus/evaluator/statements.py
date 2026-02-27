@@ -1228,11 +1228,45 @@ class StatementEvaluatorMixin:
         if is_error(iterable): 
             return iterable
         
+        # R-007 fix: Support Map iteration in for-each loops
+        if isinstance(iterable, Map):
+            result = NULL
+            for key, val in iterable.pairs.items():
+                try:
+                    self.resource_limiter.check_iterations()
+                except Exception as e:
+                    from ..evaluator.resource_limiter import ResourceError, TimeoutError
+                    if isinstance(e, (ResourceError, TimeoutError)):
+                        return EvaluationError(str(e))
+                    raise
+                
+                if node.index:
+                    # for each key, val in map
+                    key_obj = String(key) if isinstance(key, str) else key
+                    env.set(node.index.value, key_obj)
+                    env.set(node.item.value, val)
+                else:
+                    # for each key in map (single variable gets the key)
+                    key_obj = String(key) if isinstance(key, str) else key
+                    env.set(node.item.value, key_obj)
+                
+                result = self.eval_node(node.body, env, stack_trace)
+                if isinstance(result, ReturnValue):
+                    return result
+                if isinstance(result, BreakException):
+                    return NULL
+                if isinstance(result, ContinueException):
+                    result = NULL
+                    continue
+                if isinstance(result, EvaluationError):
+                    return result
+            return result
+        
         if not isinstance(iterable, List):
-            return EvaluationError("ForEach expects List")
+            return EvaluationError("ForEach expects List or Map")
         
         result = NULL
-        for item in iterable.elements:
+        for idx, item in enumerate(iterable.elements):
             # Resource limit check (Security Fix #7)
             try:
                 self.resource_limiter.check_iterations()
@@ -1243,6 +1277,9 @@ class StatementEvaluatorMixin:
                     return EvaluationError(str(e))
                 raise  # Re-raise if not a resource error
             
+            # R-006 fix: Support indexed for-each (for each i, item in list)
+            if node.index:
+                env.set(node.index.value, Integer(idx))
             env.set(node.item.value, item)
             result = self.eval_node(node.body, env, stack_trace)
             if isinstance(result, ReturnValue):
@@ -2302,7 +2339,7 @@ class StatementEvaluatorMixin:
                 
                 if isinstance(prop, dict):
                     # For dict format, default_value is in the dict
-                    if 'default_value' in prop:
+                    if 'default_value' in prop and prop['default_value'] is not None:
                         def_val = self.eval_node(prop['default_value'], env, stack_trace)
                         if is_error(def_val): 
                             return def_val

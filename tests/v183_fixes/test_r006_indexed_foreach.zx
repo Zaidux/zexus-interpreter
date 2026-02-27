@@ -1,0 +1,22 @@
+// ========================================================================
+// TEST 6: R-006 — indexed for-each (for each i, item in list)
+// ========================================================================
+print("=== R-006: Indexed for-each ===")
+
+let items = [10, 20, 30]
+for each i, item in items {
+    print(string(i) + ": " + string(item))
+}
+
+// Single variable form still works
+for each item in items {
+    print(item)
+}
+
+// Empty list
+let empty = []
+for each i, item in empty {
+    print("should not print")
+}
+
+print("R-006 DONE")

@@ -1,0 +1,88 @@
+// ========================================================================
+// Advanced Contract Tests
+// ========================================================================
+
+print("=== Contract with complex state ===")
+
+contract Bank {
+    state {
+        name: "ZexusBank",
+        totalDeposits: 0
+    }
+
+    action init() {
+        this.totalDeposits = 0
+    }
+
+    action deposit(amount) {
+        this.totalDeposits = this.totalDeposits + amount
+    }
+
+    action getTotalDeposits() {
+        return this.totalDeposits
+    }
+
+    action getName() {
+        return this.name
+    }
+}
+
+let bank = Bank()
+print(bank.getName())
+bank.deposit(100)
+bank.deposit(50)
+bank.deposit(25)
+print(bank.getTotalDeposits())
+
+// --- Contract method chaining ---
+print("")
+print("=== Method chain ===")
+
+contract Builder {
+    state parts = ""
+
+    action init() {
+        this.parts = ""
+    }
+
+    action addPart(p) {
+        if this.parts == "" {
+            this.parts = p
+        } else {
+            this.parts = this.parts + ", " + p
+        }
+    }
+
+    action build() {
+        return "Built: [" + this.parts + "]"
+    }
+}
+
+let b = Builder()
+b.addPart("engine")
+b.addPart("wheels")
+b.addPart("body")
+print(b.build())
+
+// --- Contract with init args ---
+print("")
+print("=== Contract with init args ===")
+
+contract Greeter {
+    state message = ""
+
+    action init(msg) {
+        this.message = msg
+    }
+
+    action greet(name) {
+        return this.message + " " + name + "!"
+    }
+}
+
+let g = Greeter("Hello")
+print(g.greet("World"))
+print(g.greet("Zexus"))
+
+print("")
+print("ADVANCED CONTRACTS DONE")

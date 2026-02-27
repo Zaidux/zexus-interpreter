@@ -1514,7 +1514,8 @@ class ContextStackParser:
                     continue
                 
                 # Parse regular properties
-                if tokens[i].type == IDENT:
+                # Accept IDENT and keywords (like DEBUG, DATA, etc.) as property names
+                if tokens[i].type == IDENT or (tokens[i].literal and i + 1 < brace_end and tokens[i + 1].type == COLON):
                     prop_name = tokens[i].literal
                     parser_debug(f"  📝 Found property name: {prop_name}")
 
@@ -1522,14 +1523,48 @@ class ContextStackParser:
                     if i + 1 < brace_end and tokens[i + 1].type == COLON:
                         if i + 2 < brace_end:
                             prop_type = tokens[i + 2].literal
+                            default_value = None
+                            prop_end = i + 3
+                            
+                            # Check for default value: = expression
+                            if prop_end < brace_end and tokens[prop_end].type == ASSIGN:
+                                prop_end += 1  # Skip =
+                                # Collect default value tokens until comma, newline-property, or end
+                                val_tokens = []
+                                nesting = 0
+                                while prop_end < brace_end:
+                                    vt = tokens[prop_end]
+                                    if vt.type in {LPAREN, LBRACE, LBRACKET}:
+                                        nesting += 1
+                                    elif vt.type in {RPAREN, RBRACE, RBRACKET}:
+                                        nesting -= 1
+                                    elif nesting == 0 and vt.type == COMMA:
+                                        prop_end += 1  # Skip comma
+                                        break
+                                    elif nesting == 0 and len(val_tokens) > 0:
+                                        # New property on next line (detect by newline + colon lookahead)
+                                        prev_vt = val_tokens[-1]
+                                        if vt.line > prev_vt.line:
+                                            # Check if this token is followed by COLON (indicating property name)
+                                            if prop_end + 1 < brace_end and tokens[prop_end + 1].type == COLON:
+                                                break
+                                    val_tokens.append(vt)
+                                    prop_end += 1
+                                
+                                if val_tokens:
+                                    default_value = self._parse_expression(val_tokens)
+                            
                             # Use AstNodeShim so evaluator can use .name.value
                             properties.append(AstNodeShim(
                                 name=Identifier(prop_name),
                                 type=Identifier(prop_type),
-                                default_value=None
+                                default_value=default_value
                             ))
-                            parser_debug(f"  📝 Property: {prop_name}: {prop_type}")
-                            i += 3
+                            parser_debug(f"  📝 Property: {prop_name}: {prop_type}" + (f" = {default_value}" if default_value else ""))
+                            i = prop_end
+                            # Skip trailing comma
+                            if i < brace_end and tokens[i].type == COMMA:
+                                i += 1
                             continue
 
                 i += 1
@@ -1719,6 +1754,56 @@ class ContextStackParser:
                 elif token.type == STATE:
                     # Move to identifier after "state"
                     i += 1
+                    
+                    # R-013 fix: Support state { field: val, field2: val2 } block syntax
+                    if i < brace_end and tokens[i].type == LBRACE:
+                        # Multi-field state block
+                        i += 1  # skip opening brace
+                        state_brace_depth = 1
+                        while i < brace_end and state_brace_depth > 0:
+                            if tokens[i].type == RBRACE:
+                                state_brace_depth -= 1
+                                if state_brace_depth == 0:
+                                    i += 1
+                                    break
+                            elif tokens[i].type == LBRACE:
+                                state_brace_depth += 1
+                                i += 1
+                            elif tokens[i].type == IDENT or (hasattr(tokens[i], 'literal') and tokens[i].type not in (COMMA, SEMICOLON)):
+                                field_name = tokens[i].literal
+                                field_val = None
+                                ci = i + 1
+                                # Expect colon or =
+                                if ci < brace_end and tokens[ci].type in (COLON, ASSIGN):
+                                    ci += 1
+                                    if ci < brace_end:
+                                        vt = tokens[ci]
+                                        if vt.type == STRING:
+                                            field_val = StringLiteral(vt.literal)
+                                        elif vt.type == INT:
+                                            field_val = IntegerLiteral(int(vt.literal))
+                                        elif vt.type == FLOAT:
+                                            field_val = FloatLiteral(float(vt.literal))
+                                        elif vt.type == TRUE:
+                                            field_val = Boolean(True)
+                                        elif vt.type == FALSE:
+                                            field_val = Boolean(False)
+                                        elif vt.type == IDENT:
+                                            field_val = Identifier(vt.literal)
+                                        ci += 1
+                                # Skip optional comma
+                                if ci < brace_end and tokens[ci].type == COMMA:
+                                    ci += 1
+                                storage_vars.append(AstNodeShim(
+                                    name=Identifier(field_name),
+                                    type=Identifier("any"),
+                                    initial_value=field_val,
+                                    default_value=field_val
+                                ))
+                                i = ci
+                            else:
+                                i += 1
+                        continue
                     
                     # State variable name can be an identifier OR a keyword being used as an identifier
                     # (e.g., "state data = {}" where "data" is a keyword but used as a variable name)
@@ -2461,8 +2546,13 @@ class ContextStackParser:
                         j += 1  # Skip the semicolon
                         break
                     # Stop at statement keywords when not nested
+                    # But NOT if the previous token was DOT (property/method access)
                     elif nesting == 0 and t.type in statement_starters and j > i + 1:
-                        break
+                        prev_t = tokens[j - 1] if j > 0 else None
+                        if prev_t and prev_t.type == DOT:
+                            pass  # Don't break - it's a property name
+                        else:
+                            break
                     j += 1
 
                 print_tokens = tokens[i:j]
@@ -3489,8 +3579,70 @@ class ContextStackParser:
                     
                     elif tokens[j].type == ELSE:
                         j += 1
+                        # Check for "else if" pattern (ELSE followed by IF = elif chain)
+                        if j < len(tokens) and tokens[j].type == IF:
+                            # Handle "else if" inline as an elif chain entry
+                            # Parse the else-if condition (same as elif)
+                            j += 1  # Skip the IF token
+                            elif_cond_tokens = []
+                            elif_paren_depth = 0
+                            elif_skipped_outer = False
+                            while j < len(tokens) and tokens[j].type not in [LBRACE, COLON]:
+                                if tokens[j].type == LPAREN:
+                                    if len(elif_cond_tokens) == 0 and elif_paren_depth == 0:
+                                        j += 1
+                                        elif_paren_depth += 1
+                                        elif_skipped_outer = True
+                                        continue
+                                    else:
+                                        elif_paren_depth += 1
+                                elif tokens[j].type == RPAREN:
+                                    elif_paren_depth -= 1
+                                    if elif_paren_depth == 0 and elif_skipped_outer and len(elif_cond_tokens) > 0:
+                                        j += 1
+                                        if j < len(tokens) and tokens[j].type in [LBRACE, COLON]:
+                                            break
+                                        elif_skipped_outer = False
+                                        continue
+                                elif_cond_tokens.append(tokens[j])
+                                j += 1
+                            
+                            elif_cond = self._parse_expression(elif_cond_tokens) if elif_cond_tokens else Identifier("true")
+                            
+                            # Collect else-if block
+                            if j < len(tokens) and tokens[j].type == LBRACE:
+                                j += 1
+                                elif_inner = []
+                                depth = 1
+                                while j < len(tokens) and depth > 0:
+                                    if tokens[j].type == LBRACE:
+                                        depth += 1
+                                    elif tokens[j].type == RBRACE:
+                                        depth -= 1
+                                        if depth == 0:
+                                            break
+                                    elif_inner.append(tokens[j])
+                                    j += 1
+                                elif_block = BlockStatement()
+                                elif_block.statements = self._parse_block_statements(elif_inner)
+                                j += 1
+                            elif j < len(tokens) and tokens[j].type == COLON:
+                                j += 1
+                                elif_inner = []
+                                while j < len(tokens):
+                                    if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, CONTINUE, USE, EXPORT]:
+                                        break
+                                    elif_inner.append(tokens[j])
+                                    j += 1
+                                elif_block = BlockStatement()
+                                elif_block.statements = self._parse_block_statements(elif_inner)
+                            else:
+                                elif_block = BlockStatement()
+                            
+                            elif_parts.append((elif_cond, elif_block))
+                            continue  # Continue the while loop to check for more elif/else
                         # Collect else block
-                        if j < len(tokens) and tokens[j].type == LBRACE:
+                        elif j < len(tokens) and tokens[j].type == LBRACE:
                             # Brace-style
                             j += 1
                             else_inner = []
@@ -3611,7 +3763,10 @@ class ContextStackParser:
                         # Don't break on statement starters that are inside braces
                         # Only break if it's truly a new statement (e.g., not FUNCTION inside return expr)
                         # ALSO: Don't break on the FIRST token (the return value itself), even if it's a keyword
-                        if len(value_tokens) > 0 and t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN}:
+                        # ALSO: Don't break on tokens that follow a DOT (property/method access)
+                        prev_val_token = value_tokens[-1] if value_tokens else None
+                        is_after_dot = prev_val_token and prev_val_token.type == DOT
+                        if len(value_tokens) > 0 and t.type in statement_starters and t.type not in {FUNCTION, ACTION, RETURN} and not is_after_dot:
                             break
                     
                     value_tokens.append(t)
@@ -3764,9 +3919,22 @@ class ContextStackParser:
                     
                     # Collect iterator variable name
                     item_name = None
+                    index_name = None
                     if j < len(tokens) and tokens[j].type == IDENT:
-                        item_name = tokens[j].literal
+                        first_ident = tokens[j].literal
                         j += 1
+                        
+                        # R-006/R-007 fix: Check for two-variable form: for each i, item in ...
+                        if j < len(tokens) and tokens[j].type == COMMA:
+                            j += 1  # skip comma
+                            if j < len(tokens) and tokens[j].type == IDENT:
+                                index_name = first_ident
+                                item_name = tokens[j].literal
+                                j += 1
+                            else:
+                                item_name = first_ident
+                        else:
+                            item_name = first_ident
                     
                     # Expect IN keyword
                     if j < len(tokens) and tokens[j].type == IN:
@@ -3807,7 +3975,8 @@ class ContextStackParser:
                         stmt = ForEachStatement(
                             item=Identifier(item_name if item_name else 'item'),
                             iterable=iterable,
-                            body=body_block
+                            body=body_block,
+                            index=Identifier(index_name) if index_name else None
                         )
                         if stmt:
                             statements.append(stmt)
@@ -4165,7 +4334,7 @@ class ContextStackParser:
                     # Only check when we've completed a previous statement (e.g., after function call)
                     # Don't check if the last token was DOT (we're in the middle of property access)
                     # Don't check if the last token was ASSIGN (we're in the RHS of an assignment)
-                    if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT:
+                    if nesting == 0 and len(run_tokens) > 0 and t.type in (IDENT, THIS):
                         # Only detect new assignment if previous token suggests end of previous statement
                         # E.g., after RPAREN (end of function call) or after a complete value
                         prev_token = run_tokens[-1] if run_tokens else None

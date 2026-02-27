@@ -1,0 +1,64 @@
+// ========================================================================
+// Scope and closures test
+// ========================================================================
+
+print("=== Scope ===")
+
+// Basic scope
+let outer = 10
+if true {
+    let inner = 20
+    print(outer + inner)
+}
+
+// Nested scopes
+let a = 1
+if true {
+    let b = 2
+    if true {
+        let c = 3
+        print(a + b + c)
+    }
+}
+
+// Function scope
+action makeAdder(x) {
+    return (y) => x + y
+}
+
+let add5 = makeAdder(5)
+print(add5(3))
+print(add5(10))
+
+// Higher-order functions
+action applyTwice(f, x) {
+    return f(f(x))
+}
+
+let double = (x) => x * 2
+print(applyTwice(double, 3))
+
+// Lambda with captures
+let multiplier = 10
+let times = (x) => x * multiplier
+print(times(5))
+
+print("")
+print("=== Advanced map/filter ===")
+
+let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Filter even numbers
+let evens = nums.filter((x) => x % 2 == 0)
+print(evens)
+
+// Map to squares
+let squares = nums.map((x) => x * x)
+print(squares)
+
+// Reduce to sum
+let sum = nums.reduce((acc, x) => acc + x, 0)
+print(sum)
+
+print("")
+print("SCOPE AND CLOSURES DONE")

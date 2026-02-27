@@ -1,0 +1,114 @@
+// ========================================================================
+// Real-world scenario: Token management system
+// Tests contracts, entities, functions, control flow, collections
+// ========================================================================
+
+print("=== Token Management System ===")
+print("")
+
+// --- Entity definitions ---
+entity Token {
+    name: string = ""
+    symbol: string = ""
+    decimals: integer = 18
+}
+
+entity Transfer {
+    from: string = ""
+    to: string = ""
+    amount: integer = 0
+}
+
+// --- Token contract ---
+contract TokenLedger {
+    state {
+        tokenName: "ZexCoin",
+        tokenSymbol: "ZXC",
+        totalSupply: 0
+    }
+
+    action init() {
+        this.totalSupply = 1000000
+    }
+
+    action getTotalSupply() {
+        return this.totalSupply
+    }
+
+    action getTokenName() {
+        return this.tokenName
+    }
+
+    action getSymbol() {
+        return this.tokenSymbol
+    }
+
+    action mint(amount) {
+        this.totalSupply = this.totalSupply + amount
+    }
+
+    action burn(amount) {
+        if this.totalSupply >= amount {
+            this.totalSupply = this.totalSupply - amount
+            return true
+        }
+        return false
+    }
+}
+
+// --- Create and test ---
+let tkLedger = TokenLedger()
+print("Token: " + tkLedger.getTokenName())
+print("Symbol: " + tkLedger.getSymbol())
+print("Supply: " + string(tkLedger.getTotalSupply()))
+
+// Mint tokens
+tkLedger.mint(500000)
+print("After mint: " + string(tkLedger.getTotalSupply()))
+
+// Burn tokens
+let burned = tkLedger.burn(200000)
+print("Burn success: " + string(burned))
+print("After burn: " + string(tkLedger.getTotalSupply()))
+
+// --- Utility functions ---
+action formatAmount(amount, decimals) {
+    if decimals == 0 {
+        return string(amount)
+    }
+    return string(amount) + " (with " + string(decimals) + " decimals)"
+}
+
+print("")
+print("Formatted: " + formatAmount(tkLedger.getTotalSupply(), 18))
+
+// --- List operations ---
+let transfers = []
+for each i in range(0, 5) {
+    let t = Transfer{from: "alice", to: "bob", amount: (i + 1) * 100}
+    transfers.push(t)
+}
+print("")
+print("Transfers: " + string(len(transfers)))
+
+for each idx, t in transfers {
+    print("  #" + string(idx) + ": " + t.from + " -> " + t.to + " : " + string(t.amount))
+}
+
+// --- Map for tracking balances ---
+let balances = {"alice": 10000, "bob": 5000, "charlie": 3000}
+
+for each name, bal in balances {
+    print(name + ": " + string(bal))
+}
+
+// --- Summary ---
+print("")
+let totalBal = 0
+for each name, bal in balances {
+    totalBal = totalBal + bal
+}
+print("Total balances: " + string(totalBal))
+
+print("")
+print("TOKEN SYSTEM DONE")

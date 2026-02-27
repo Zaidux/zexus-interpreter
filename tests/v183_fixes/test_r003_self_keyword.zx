@@ -1,0 +1,32 @@
+// ========================================================================
+// TEST 3: R-003 — self keyword recognized as alias for this
+// ========================================================================
+print("=== R-003: self keyword ===")
+
+contract SelfTest {
+    state value = 0
+
+    action init() {
+        self.value = 42
+    }
+
+    action getValue() {
+        return self.value
+    }
+
+    action setValue(v) {
+        self.value = v
+    }
+
+    action getWithThis() {
+        return this.value
+    }
+}
+
+let st = SelfTest()
+print(st.getValue())
+st.setValue(100)
+print(st.getValue())
+print(st.getWithThis())
+
+print("R-003 DONE")

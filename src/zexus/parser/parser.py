@@ -2919,7 +2919,19 @@ class UltimateParser:
             self.errors.append("Expected identifier after 'each' in for-each loop")
             return None
 
-        stmt.item = Identifier(value=self.cur_token.literal)
+        first_ident = Identifier(value=self.cur_token.literal)
+
+        # R-006/R-007 fix: Support two-variable form: for each i, item in list
+        # or: for each key, val in map
+        if self.peek_token_is(COMMA):
+            self.next_token()  # consume comma
+            if not self.expect_peek(IDENT):
+                self.errors.append("Expected second identifier after ',' in for-each loop")
+                return None
+            stmt.index = first_ident
+            stmt.item = Identifier(value=self.cur_token.literal)
+        else:
+            stmt.item = first_ident
 
         if not self.expect_peek(IN):
             self.errors.append("Expected 'in' after item identifier in for-each loop")
@@ -3417,8 +3429,9 @@ class UltimateParser:
                         self.cur_token = saved_cur
                         self.peek_token = saved_peek
                         
-                        # If next token after IDENT is LBRACKET or ASSIGN, it's likely a new statement
-                        if next_next.type in (LBRACKET, ASSIGN, LPAREN):
+                        # If next token after IDENT is LBRACKET, ASSIGN, LPAREN, or DOT,
+                        # it's likely a new statement (e.g., this.x = 1\nthis.y = 2)
+                        if next_next.type in (LBRACKET, ASSIGN, LPAREN, DOT):
                             break
                     else:
                         break
@@ -3944,7 +3957,7 @@ class UltimateParser:
                     methods.append(method)
                 continue
             
-            if self.cur_token_is(IDENT):
+            if self.cur_token_is(IDENT) or (self.cur_token.literal and self.peek_token_is(COLON)):
                 prop_name = self.cur_token.literal
 
                 # Expect colon after property name
@@ -3960,9 +3973,17 @@ class UltimateParser:
                 if self.cur_token_is(IDENT):
                     prop_type = self.cur_token.literal
 
+                    # Check for default value: = expression
+                    default_value = None
+                    if self.peek_token_is(ASSIGN):
+                        self.next_token()  # Move to =
+                        self.next_token()  # Move to expression
+                        default_value = self.parse_expression(LOWEST)
+
                     properties.append({
                         "name": prop_name,
-                        "type": prop_type
+                        "type": prop_type,
+                        "default_value": default_value
                     })
 
                     # Check for comma or new property
@@ -4070,12 +4091,33 @@ class UltimateParser:
 
             # Check for state variable declaration
             if self.cur_token_is(STATE):
-                state_stmt = self.parse_state_statement()
-                if state_stmt:
-                    # Attach parsed modifiers
-                    state_stmt.modifiers = modifiers
-                    storage_vars.append(state_stmt)
-                    print(f"DEBUG: Parsed state {state_stmt.name.value} modifiers={modifiers}")
+                # R-013 fix: Support state { field: val, field2: val2 } block syntax
+                if self.peek_token_is(LBRACE):
+                    self.next_token()  # consume '{'
+                    self.next_token()  # move to first field or '}'
+                    while not self.cur_token_is(RBRACE) and not self.cur_token_is(EOF):
+                        if self.cur_token_is(IDENT):
+                            field_name = self.cur_token.literal
+                            # Expect colon or '=' after field name
+                            if self.peek_token_is(COLON) or self.peek_token_is(ASSIGN):
+                                self.next_token()  # consume ':' or '='
+                                self.next_token()  # move to value
+                                field_value = self.parse_expression(LOWEST)
+                                from ..zexus_ast import StateStatement as _SS
+                                state_stmt = _SS(Identifier(field_name), field_value, modifiers=modifiers)
+                                storage_vars.append(state_stmt)
+                            # Consume optional comma or semicolon
+                            if self.peek_token_is(COMMA):
+                                self.next_token()
+                            if self.peek_token_is(SEMICOLON):
+                                self.next_token()
+                        self.next_token()
+                else:
+                    state_stmt = self.parse_state_statement()
+                    if state_stmt:
+                        # Attach parsed modifiers
+                        state_stmt.modifiers = modifiers
+                        storage_vars.append(state_stmt)
 
             # Check for data member declaration
             elif self.cur_token_is(DATA):

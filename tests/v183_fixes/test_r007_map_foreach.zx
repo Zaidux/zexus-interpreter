@@ -1,0 +1,18 @@
+// ========================================================================
+// TEST 7: R-007 — for-each over maps
+// ========================================================================
+print("=== R-007: Map for-each ===")
+
+let m = {"x": 10, "y": 20, "z": 30}
+
+// Two-variable form: key, value
+for each key, val in m {
+    print(string(key) + " = " + string(val))
+}
+
+// Single variable gets key
+for each key in m {
+    print(key)
+}
+
+print("R-007 DONE")

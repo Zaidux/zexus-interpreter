@@ -1466,6 +1466,11 @@ class SmartContract:
         instance.deploy(evaluated_storage_values=initial_storage)
         instance.parent_contract = self
         
+        # R-004 fix: Auto-call init() if it exists in the contract actions
+        if 'init' in instance.actions:
+            init_args = args if args else []
+            instance.call_method('init', init_args)
+        
         return instance
 
     def __call__(self, *args):

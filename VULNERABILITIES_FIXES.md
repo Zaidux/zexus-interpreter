@@ -1,4 +1,4 @@
-# Zexus v1.8.1 — Vulnerability Fixes Roadmap
+# Zexus v1.8.3 — Vulnerability Fixes Roadmap
 
 **Created:** 2026-02-23  
 **Audit scope:** Interpreter (evaluator layer, 7 files) + VM runtime & compilers (5 files)  
