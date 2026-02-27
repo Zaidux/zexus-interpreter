@@ -1514,7 +1514,8 @@ class ContextStackParser:
                     continue
                 
                 # Parse regular properties
-                if tokens[i].type == IDENT:
+                # Accept IDENT and keywords (like DEBUG, DATA, etc.) as property names
+                if tokens[i].type == IDENT or (tokens[i].literal and i + 1 < brace_end and tokens[i + 1].type == COLON):
                     prop_name = tokens[i].literal
                     parser_debug(f"  📝 Found property name: {prop_name}")
 
@@ -1528,7 +1529,7 @@ class ContextStackParser:
                             # Check for default value: = expression
                             if prop_end < brace_end and tokens[prop_end].type == ASSIGN:
                                 prop_end += 1  # Skip =
-                                # Collect default value tokens until comma, newline-IDENT, or end
+                                # Collect default value tokens until comma, newline-property, or end
                                 val_tokens = []
                                 nesting = 0
                                 while prop_end < brace_end:
@@ -1540,11 +1541,13 @@ class ContextStackParser:
                                     elif nesting == 0 and vt.type == COMMA:
                                         prop_end += 1  # Skip comma
                                         break
-                                    elif nesting == 0 and vt.type == IDENT and len(val_tokens) > 0:
-                                        # New property on next line
+                                    elif nesting == 0 and len(val_tokens) > 0:
+                                        # New property on next line (detect by newline + colon lookahead)
                                         prev_vt = val_tokens[-1]
                                         if vt.line > prev_vt.line:
-                                            break
+                                            # Check if this token is followed by COLON (indicating property name)
+                                            if prop_end + 1 < brace_end and tokens[prop_end + 1].type == COLON:
+                                                break
                                     val_tokens.append(vt)
                                     prop_end += 1
                                 

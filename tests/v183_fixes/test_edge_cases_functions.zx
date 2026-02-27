@@ -54,22 +54,21 @@ print(fibonacci(10))
 print("")
 print("=== Closures ===")
 
-action makeCounter() {
-    let count = 0
-    return {
-        "increment": () => {
-            count = count + 1
-            return count
-        },
-        "get": () => count
-    }
+action makeAdder(x) {
+    return (y) => x + y
 }
 
-let counter = makeCounter()
-print(counter["increment"]())
-print(counter["increment"]())
-print(counter["increment"]())
-print(counter["get"]())
+let addFive = makeAdder(5)
+print(addFive(3))
+print(addFive(10))
+
+// Higher-order functions
+action applyTwice(f, val) {
+    return f(f(val))
+}
+
+let triple = (x) => x * 3
+print(applyTwice(triple, 2))
 
 // --- Lambda/Arrow Functions ---
 print("")

@@ -3957,7 +3957,7 @@ class UltimateParser:
                     methods.append(method)
                 continue
             
-            if self.cur_token_is(IDENT):
+            if self.cur_token_is(IDENT) or (self.cur_token.literal and self.peek_token_is(COLON)):
                 prop_name = self.cur_token.literal
 
                 # Expect colon after property name

@@ -25,8 +25,8 @@ try {
         throw "inner error"
     } catch (e) {
         print("inner catch")
-        throw "outer error"
     }
+    print("after inner try")
 } catch (e) {
     print("outer catch")
 }
