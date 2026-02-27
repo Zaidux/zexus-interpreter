@@ -1,0 +1,26 @@
+// ========================================================================
+// TEST 9: R-016 — INTEGER * FLOAT mixed arithmetic
+// ========================================================================
+print("=== R-016: Mixed arithmetic ===")
+
+// Integer * Float
+let a = 5 * 2.5
+print(a)
+
+// Float * Integer
+let b = 2.5 * 5
+print(b)
+
+// Integer + Float (already worked)
+let c = 5 + 2.5
+print(c)
+
+// Integer - Float
+let d = 10 - 2.5
+print(d)
+
+// Integer / Float
+let e = 10 / 2.5
+print(e)
+
+print("R-016 DONE")

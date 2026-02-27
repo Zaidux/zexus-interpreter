@@ -1,0 +1,93 @@
+// ========================================================================
+// EDGE CASE TESTS: Comprehensive interpreter testing
+// ========================================================================
+
+// --- String Operations ---
+print("=== String Operations ===")
+let s = "hello world"
+print(s)
+print(len(s))
+
+// String concatenation
+let greeting = "Hello" + " " + "World"
+print(greeting)
+
+// String repetition
+let stars = "*" * 5
+print(stars)
+
+// String indexing
+print(s[0])
+print(s[4])
+
+// --- Arithmetic Edge Cases ---
+print("")
+print("=== Arithmetic ===")
+
+// Negative numbers
+let neg = -5
+print(neg)
+print(neg + 10)
+print(neg * -1)
+
+// Large numbers
+let big = 999999999
+print(big)
+
+// Float precision
+let f = 0.1 + 0.2
+print(f)
+
+// Division
+print(10 / 3)
+print(10.0 / 3.0)
+
+// Power
+print(2 ** 10)
+
+// Mixed arithmetic chains
+let chain = 2 + 3 * 4
+print(chain)
+
+let chain2 = (2 + 3) * 4
+print(chain2)
+
+// --- Boolean Operations ---
+print("")
+print("=== Booleans ===")
+
+print(true and true)
+print(true and false)
+print(true or false)
+print(false or false)
+print(!true)
+print(!false)
+
+// --- Comparison Operations ---
+print("")
+print("=== Comparisons ===")
+
+print(5 > 3)
+print(5 < 3)
+print(5 >= 5)
+print(5 <= 4)
+print(5 == 5)
+print(5 != 3)
+
+// --- Null/Undefined ---
+print("")
+print("=== Null ===")
+let n = null
+print(n)
+print(n == null)
+
+// --- Ternary Operator ---
+print("")
+print("=== Ternary ===")
+let val = true ? "yes" : "no"
+print(val)
+let val2 = false ? "yes" : "no"
+print(val2)
+
+print("")
+print("ALL EDGE CASES DONE")

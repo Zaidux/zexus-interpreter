@@ -3429,8 +3429,9 @@ class UltimateParser:
                         self.cur_token = saved_cur
                         self.peek_token = saved_peek
                         
-                        # If next token after IDENT is LBRACKET or ASSIGN, it's likely a new statement
-                        if next_next.type in (LBRACKET, ASSIGN, LPAREN):
+                        # If next token after IDENT is LBRACKET, ASSIGN, LPAREN, or DOT,
+                        # it's likely a new statement (e.g., this.x = 1\nthis.y = 2)
+                        if next_next.type in (LBRACKET, ASSIGN, LPAREN, DOT):
                             break
                     else:
                         break

@@ -1,0 +1,139 @@
+// ========================================================================
+// EDGE CASE TESTS: Contracts and Entities
+// ========================================================================
+
+// --- Basic Contract ---
+print("=== Basic Contract ===")
+
+contract Counter {
+    state count = 0
+
+    action init() {
+        this.count = 0
+    }
+
+    action increment() {
+        this.count = this.count + 1
+    }
+
+    action decrement() {
+        this.count = this.count - 1
+    }
+
+    action getCount() {
+        return this.count
+    }
+
+    action reset() {
+        this.count = 0
+    }
+}
+
+let c = Counter()
+c.increment()
+c.increment()
+c.increment()
+print(c.getCount())
+
+c.decrement()
+print(c.getCount())
+
+c.reset()
+print(c.getCount())
+
+// --- Contract with self keyword ---
+print("")
+print("=== Self keyword in Contract ===")
+
+contract Wallet {
+    state balance = 0
+    state owner = ""
+
+    action init() {
+        self.balance = 100
+        self.owner = "alice"
+    }
+
+    action deposit(amount) {
+        self.balance = self.balance + amount
+    }
+
+    action withdraw(amount) {
+        if self.balance >= amount {
+            self.balance = self.balance - amount
+            return true
+        }
+        return false
+    }
+
+    action getBalance() {
+        return self.balance
+    }
+
+    action getOwner() {
+        return self.owner
+    }
+}
+
+let w = Wallet()
+print(w.getBalance())
+print(w.getOwner())
+
+w.deposit(50)
+print(w.getBalance())
+
+w.withdraw(30)
+print(w.getBalance())
+
+// --- Contract with Multi-field State ---
+print("")
+print("=== Multi-field State Contract ===")
+
+contract Config {
+    state {
+        name: "app",
+        version: 1,
+        debug: false
+    }
+
+    action getName() { return this.name }
+    action getVersion() { return this.version }
+    action isDebug() { return this.debug }
+}
+
+let cfg = Config()
+print(cfg.getName())
+print(cfg.getVersion())
+print(cfg.isDebug())
+
+// --- Multiple Contract Instances ---
+print("")
+print("=== Multiple Instances ===")
+
+let c1 = Counter()
+let c2 = Counter()
+
+c1.increment()
+c1.increment()
+c2.increment()
+
+print(c1.getCount())
+print(c2.getCount())
+
+// --- Entity ---
+print("")
+print("=== Entity ===")
+
+entity User {
+    name: string = "Anonymous"
+    age: integer = 0
+    email: string = ""
+}
+
+let u = User{name: "Bob", age: 25, email: "bob@example.com"}
+print(u.name)
+print(u.age)
+print(u.email)
+
+print("")
+print("CONTRACTS DONE")

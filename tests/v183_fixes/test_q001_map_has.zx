@@ -1,0 +1,17 @@
+// ========================================================================
+// TEST 1: Q-001 — map.has() returns true/false properly
+// ========================================================================
+print("=== Q-001: map.has() ===")
+
+let m = {"hello": 1, "world": 2}
+print(m.has("hello"))
+print(m.has("world"))
+print(m.has("missing"))
+
+m["new_key"] = 42
+print(m.has("new_key"))
+
+let empty = {}
+print(empty.has("anything"))
+
+print("Q-001 DONE")

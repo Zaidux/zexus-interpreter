@@ -1,0 +1,90 @@
+// ========================================================================
+// EDGE CASE TESTS: Functions and Closures
+// ========================================================================
+
+// --- Basic Actions ---
+print("=== Basic Actions ===")
+
+action add(a, b) {
+    return a + b
+}
+
+print(add(3, 4))
+
+action greet(name) {
+    return "Hello, " + name + "!"
+}
+
+print(greet("World"))
+
+// --- Default-like patterns ---
+action multiply(a, b) {
+    if b == null {
+        return a * 2
+    }
+    return a * b
+}
+
+print(multiply(5, 3))
+
+// --- Recursion ---
+print("")
+print("=== Recursion ===")
+
+action factorial(n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+print(factorial(5))
+print(factorial(10))
+
+action fibonacci(n) {
+    if n <= 1 {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+print(fibonacci(10))
+
+// --- Closures ---
+print("")
+print("=== Closures ===")
+
+action makeCounter() {
+    let count = 0
+    return {
+        "increment": () => {
+            count = count + 1
+            return count
+        },
+        "get": () => count
+    }
+}
+
+let counter = makeCounter()
+print(counter["increment"]())
+print(counter["increment"]())
+print(counter["increment"]())
+print(counter["get"]())
+
+// --- Lambda/Arrow Functions ---
+print("")
+print("=== Lambdas ===")
+
+let square = (x) => x * x
+print(square(5))
+
+let add2 = (a, b) => a + b
+print(add2(10, 20))
+
+// Lambda as callback
+let nums = [3, 1, 4, 1, 5]
+let doubled = nums.map((x) => x * 2)
+print(doubled)
+
+print("")
+print("FUNCTIONS DONE")

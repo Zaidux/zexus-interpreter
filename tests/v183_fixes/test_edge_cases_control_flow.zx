@@ -1,0 +1,89 @@
+// ========================================================================
+// EDGE CASE TESTS: Control Flow
+// ========================================================================
+
+// --- If/Else ---
+print("=== If/Else ===")
+
+if true {
+    print("if works")
+}
+
+if false {
+    print("should not print")
+} else {
+    print("else works")
+}
+
+if false {
+    print("a")
+} else if true {
+    print("else if works")
+} else {
+    print("c")
+}
+
+// --- While Loop ---
+print("")
+print("=== While ===")
+
+let i = 0
+while i < 5 {
+    print(i)
+    i = i + 1
+}
+
+// --- For Each ---
+print("")
+print("=== For Each ===")
+
+let items = ["a", "b", "c"]
+for each item in items {
+    print(item)
+}
+
+// Indexed for-each
+for each idx, item in items {
+    print(string(idx) + ":" + item)
+}
+
+// --- Break and Continue ---
+print("")
+print("=== Break/Continue ===")
+
+let j = 0
+while j < 10 {
+    if j == 5 {
+        break
+    }
+    print(j)
+    j = j + 1
+}
+
+let k = 0
+while k < 5 {
+    k = k + 1
+    if k == 3 {
+        continue
+    }
+    print(k)
+}
+
+// --- Try/Catch ---
+print("")
+print("=== Try/Catch ===")
+
+try {
+    throw "test error"
+} catch (e) {
+    print("caught: " + e)
+}
+
+try {
+    let x = 1 / 0
+} catch (e) {
+    print("caught division error")
+}
+
+print("")
+print("CONTROL FLOW DONE")

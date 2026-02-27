@@ -1,0 +1,80 @@
+// ========================================================================
+// EDGE CASE TESTS: Collections and Data Structures
+// ========================================================================
+
+// --- List Operations ---
+print("=== List Operations ===")
+
+let list = [1, 2, 3, 4, 5]
+print(list)
+print(len(list))
+
+// Access
+print(list[0])
+print(list[4])
+
+// Push
+list.push(6)
+print(len(list))
+
+// Map/Filter/Reduce
+let doubled = list.map((x) => x * 2)
+print(doubled)
+
+let evens = list.filter((x) => x % 2 == 0)
+print(evens)
+
+let sum = list.reduce((acc, x) => acc + x, 0)
+print(sum)
+
+// Contains
+print(list.contains(3))
+print(list.contains(99))
+
+// Count
+print(list.count())
+
+// --- Map Operations ---
+print("")
+print("=== Map Operations ===")
+
+let map = {"name": "Alice", "age": 30, "city": "NYC"}
+print(map)
+
+// Get
+print(map.get("name"))
+print(map.get("missing", "default"))
+
+// Has
+print(map.has("name"))
+print(map.has("missing"))
+
+// Keys, Values, Entries
+print(map.keys())
+print(map.values())
+
+// Size
+print(map.size())
+
+// Dynamic insert
+map["country"] = "US"
+print(map.has("country"))
+
+// --- Nested Data Structures ---
+print("")
+print("=== Nested Structures ===")
+
+let nested = {
+    "users": [
+        {"name": "Alice", "age": 30},
+        {"name": "Bob", "age": 25}
+    ],
+    "count": 2
+}
+
+print(nested["count"])
+print(nested["users"][0]["name"])
+print(nested["users"][1]["age"])
+
+print("")
+print("COLLECTIONS DONE")

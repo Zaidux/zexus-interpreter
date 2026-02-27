@@ -1,0 +1,16 @@
+// ========================================================================
+// TEST 10: R-017 — Float modulo operator %
+// ========================================================================
+print("=== R-017: Float modulo ===")
+
+let a = 10.5 % 3.0
+print(a)
+
+let b = 7.0 % 2.5
+print(b)
+
+// Integer modulo (should still work)
+let c = 10 % 3
+print(c)
+
+print("R-017 DONE")

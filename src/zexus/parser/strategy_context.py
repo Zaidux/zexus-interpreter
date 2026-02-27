@@ -3539,8 +3539,70 @@ class ContextStackParser:
                     
                     elif tokens[j].type == ELSE:
                         j += 1
+                        # Check for "else if" pattern (ELSE followed by IF = elif chain)
+                        if j < len(tokens) and tokens[j].type == IF:
+                            # Treat "else if" as elif - rewind and let the elif handler pick it up
+                            # Parse the else-if condition (same as elif)
+                            j += 1  # Skip the IF token
+                            elif_cond_tokens = []
+                            elif_paren_depth = 0
+                            elif_skipped_outer = False
+                            while j < len(tokens) and tokens[j].type not in [LBRACE, COLON]:
+                                if tokens[j].type == LPAREN:
+                                    if len(elif_cond_tokens) == 0 and elif_paren_depth == 0:
+                                        j += 1
+                                        elif_paren_depth += 1
+                                        elif_skipped_outer = True
+                                        continue
+                                    else:
+                                        elif_paren_depth += 1
+                                elif tokens[j].type == RPAREN:
+                                    elif_paren_depth -= 1
+                                    if elif_paren_depth == 0 and elif_skipped_outer and len(elif_cond_tokens) > 0:
+                                        j += 1
+                                        if j < len(tokens) and tokens[j].type in [LBRACE, COLON]:
+                                            break
+                                        elif_skipped_outer = False
+                                        continue
+                                elif_cond_tokens.append(tokens[j])
+                                j += 1
+                            
+                            elif_cond = self._parse_expression(elif_cond_tokens) if elif_cond_tokens else Identifier("true")
+                            
+                            # Collect else-if block
+                            if j < len(tokens) and tokens[j].type == LBRACE:
+                                j += 1
+                                elif_inner = []
+                                depth = 1
+                                while j < len(tokens) and depth > 0:
+                                    if tokens[j].type == LBRACE:
+                                        depth += 1
+                                    elif tokens[j].type == RBRACE:
+                                        depth -= 1
+                                        if depth == 0:
+                                            break
+                                    elif_inner.append(tokens[j])
+                                    j += 1
+                                elif_block = BlockStatement()
+                                elif_block.statements = self._parse_block_statements(elif_inner)
+                                j += 1
+                            elif j < len(tokens) and tokens[j].type == COLON:
+                                j += 1
+                                elif_inner = []
+                                while j < len(tokens):
+                                    if tokens[j].type in [IF, ELIF, ELSE, WHILE, FOR, ACTION, FUNCTION, LET, CONST, RETURN, CONTINUE, USE, EXPORT]:
+                                        break
+                                    elif_inner.append(tokens[j])
+                                    j += 1
+                                elif_block = BlockStatement()
+                                elif_block.statements = self._parse_block_statements(elif_inner)
+                            else:
+                                elif_block = BlockStatement()
+                            
+                            elif_parts.append((elif_cond, elif_block))
+                            continue  # Continue the while loop to check for more elif/else
                         # Collect else block
-                        if j < len(tokens) and tokens[j].type == LBRACE:
+                        elif j < len(tokens) and tokens[j].type == LBRACE:
                             # Brace-style
                             j += 1
                             else_inner = []
@@ -4229,7 +4291,7 @@ class ContextStackParser:
                     # Only check when we've completed a previous statement (e.g., after function call)
                     # Don't check if the last token was DOT (we're in the middle of property access)
                     # Don't check if the last token was ASSIGN (we're in the RHS of an assignment)
-                    if nesting == 0 and len(run_tokens) > 0 and t.type == IDENT:
+                    if nesting == 0 and len(run_tokens) > 0 and t.type in (IDENT, THIS):
                         # Only detect new assignment if previous token suggests end of previous statement
                         # E.g., after RPAREN (end of function call) or after a complete value
                         prev_token = run_tokens[-1] if run_tokens else None

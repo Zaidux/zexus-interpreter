@@ -1,0 +1,82 @@
+// ========================================================================
+// EDGE CASE TESTS: Contract cross-method calls
+// ========================================================================
+
+print("=== Cross-method calls ===")
+
+contract Calculator {
+    state result = 0
+    state history = []
+
+    action init() {
+        this.result = 0
+    }
+
+    action add(n) {
+        this.result = this.result + n
+    }
+
+    action subtract(n) {
+        this.result = this.result - n
+    }
+
+    action multiply(n) {
+        this.result = this.result * n
+    }
+
+    action getResult() {
+        return this.result
+    }
+
+    action clear() {
+        this.result = 0
+    }
+}
+
+let calc = Calculator()
+calc.add(10)
+calc.add(5)
+print(calc.getResult())
+
+calc.subtract(3)
+print(calc.getResult())
+
+calc.multiply(2)
+print(calc.getResult())
+
+calc.clear()
+print(calc.getResult())
+
+// --- Contract calling this.method() ---
+print("")
+print("=== Internal method calls ===")
+
+contract StringUtils {
+    state value = ""
+
+    action init() {
+        this.value = ""
+    }
+
+    action set(v) {
+        this.value = v
+    }
+
+    action get() {
+        return this.value
+    }
+
+    action appendExclaim() {
+        this.value = this.value + "!"
+    }
+}
+
+let su = StringUtils()
+su.set("hello")
+print(su.get())
+
+su.appendExclaim()
+print(su.get())
+
+print("")
+print("CROSS-METHOD DONE")

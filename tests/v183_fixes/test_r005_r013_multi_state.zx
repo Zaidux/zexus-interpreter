@@ -1,0 +1,31 @@
+// ========================================================================
+// TEST 5: R-005/R-013 — state { } multi-field initialization
+// ========================================================================
+print("=== R-005/R-013: Multi-field state ===")
+
+contract MultiState {
+    state {
+        balance: 500,
+        name: "alice",
+        active: true
+    }
+
+    action getBalance() {
+        return this.balance
+    }
+
+    action getName() {
+        return this.name
+    }
+
+    action isActive() {
+        return this.active
+    }
+}
+
+let ms = MultiState()
+print(ms.getBalance())
+print(ms.getName())
+print(ms.isActive())
+
+print("R-005/R-013 DONE")
