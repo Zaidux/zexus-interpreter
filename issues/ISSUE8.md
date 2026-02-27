@@ -263,4 +263,23 @@ print(remainder)  // 1.5
 | src/main.zx | ~263 | ❌ Not started | Entry point |
 
 ---
+
+## additional fixes made:
+
+Created and ran 24 test files covering all fixes and edge cases. Found and fixed 8 additional bugs during testing:
+
+Parser fixes (commits 1635369 through 985f081):
+
+Consecutive this.property = val assignments failed in strategy parser (THIS token not recognized as statement starter)
+else if chains didn't work (ELSE + IF token sequence not handled)
+Keywords after DOT (e.g., this.debug, return this.data) broke statement boundary detection
+Entity default values (name: string = "localhost") weren't parsed in either parser
+Entity properties with keyword names (e.g., debug: boolean) weren't recognized
+Entity default value boundary detection failed when next property used a keyword name
+Evaluator fixes:
+
+Added missing range(start, end, step), typeof(val), and abs(num) built-in functions
+Test results: 24 .zx test files all passing, 300 unit tests passing, 0 CodeQL alerts.
+
+---
 *Last updated: 2026-02-27 — v1.8.3 fixes applied*
