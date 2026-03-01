@@ -69,9 +69,18 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ## 🎉 What's New in v1.8.3
 
-### v1.8.3 — Phase 0 Audit Fixes & Closure Scoping Overhaul (2026-03-01)
+### v1.8.3 — Phase 0 Audit Fixes, Closure Scoping Overhaul & VM Hardening (2026-03-01)
 
-16 issues from the [Ziver-Chain Phase 0 rewrite audit](issues/ISSUE8.md) resolved. Key changes:
+19 issues from the [Ziver-Chain Phase 0 rewrite audit](issues/ISSUE8.md) resolved — including 3 VM-specific critical fixes. Key changes:
+
+**VM Fixes & Hardening:**
+- **R-001:** Entity field access on VM now works — proper `EntityDefinition`/`EntityInstance` construction from bytecode
+- **R-002:** Contract `state` declarations now compile correctly (`_compile_StateStatement`)
+- **R-010:** Complex programs no longer silently fail — added `_vm_warn()` diagnostics, replaced 15 silent error handlers
+- Native fast-path (`_vm_native_call`) for `push`/`append`/`length`/`str`/`range` operations on VM-native types
+- `VMRuntimeError(Exception)` replaces non-raisable `ZEvaluationError(Object)` in 15 raise sites
+- Stack overflow protection, execution timeout (30s), opcode limit (100M), configurable VM pool sizing
+- **Rust VM status indicator** — CLI/runner show "Rust VM: active", "available but disabled", or "not compiled"
 
 **Closure & Scoping Fixes:**
 - Entity/`let` declarations before a contract no longer break contract visibility — declaration order is now flexible
@@ -86,9 +95,9 @@ Zexus is a next-generation, general-purpose programming language designed for se
 - `state { field1: val, field2: val }` multi-field blocks work correctly
 - `for each i, item in list` (indexed) and `for each key, val in map` now supported
 - `INTEGER * FLOAT` implicit coercion and `%` modulo on floats now work
-- Added `range()`, `typeof()`, `abs()` builtins; 8 parser edge-case fixes
+- Added `range()`, `typeof()`, `abs()`, `str()`, `length()` builtins; 8 parser edge-case fixes
 
-**Stats:** 1852 tests pass, 0 regressions. See [CHANGELOG](CHANGELOG.md) for full details.
+**Stats:** 1852 tests pass, 0 regressions. 5 new extreme test suites (83 tests across speed, stability, security, features, VM). See [CHANGELOG](CHANGELOG.md) for full details.
 
 ### v1.8.2 — Concurrency & Channel Support (2026-02-25)
 

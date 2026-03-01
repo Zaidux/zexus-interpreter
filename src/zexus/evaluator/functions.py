@@ -2829,6 +2829,7 @@ class FunctionEvaluatorMixin:
             "debug_log": Builtin(_debug_log, "debug_log"),
             "debug_trace": Builtin(_debug_trace, "debug_trace"),
             "string": Builtin(_string, "string"),
+            "str": Builtin(_string, "str"),           # alias for string()
             "int": Builtin(_int, "int"),
             "float": Builtin(_float, "float"),
             "uppercase": Builtin(_uppercase, "uppercase"),
@@ -2837,6 +2838,7 @@ class FunctionEvaluatorMixin:
             "persist_set": Builtin(_persist_set, "persist_set"),
             "persist_get": Builtin(_persist_get, "persist_get"),
             "len": Builtin(_len, "len"),
+            "length": Builtin(_len, "length"),        # alias for len()
             "type": Builtin(_type, "type"),
             "first": Builtin(_first, "first"),
             "rest": Builtin(_rest, "rest"),

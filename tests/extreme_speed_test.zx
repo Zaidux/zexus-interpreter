@@ -1,0 +1,165 @@
+// ============================================================
+// EXTREME SPEED TEST — Zexus Interpreter & VM Performance
+// ============================================================
+// Tests: tight loops, deep recursion, heavy computation,
+//        string manipulation, list/map operations at scale.
+// ============================================================
+
+// --- Test 1: Tight loop — 100,000 iterations ---
+let sum = 0;
+let i = 0;
+while (i < 100000) {
+    sum = sum + i;
+    i = i + 1;
+}
+verify sum == 4999950000, "Tight loop sum mismatch";
+print("✅ Speed Test 1: Tight loop 100K iterations — sum = " + str(sum));
+
+// --- Test 2: Nested loops — 500 x 500 = 250K iterations ---
+let grid_sum = 0;
+let row = 0;
+while (row < 500) {
+    let col = 0;
+    while (col < 500) {
+        grid_sum = grid_sum + 1;
+        col = col + 1;
+    }
+    row = row + 1;
+}
+verify grid_sum == 250000, "Nested loop count mismatch";
+print("✅ Speed Test 2: Nested loops 500x500 — count = " + str(grid_sum));
+
+// --- Test 3: Fibonacci iterative (large) ---
+action fib_iterative(n) {
+    let a = 0;
+    let b = 1;
+    let idx = 0;
+    while (idx < n) {
+        let temp = b;
+        b = a + b;
+        a = temp;
+        idx = idx + 1;
+    }
+    return a;
+}
+let fib_result = fib_iterative(50);
+print("✅ Speed Test 3: Fibonacci(50) iterative = " + str(fib_result));
+
+// --- Test 4: String concatenation (1000 appends) ---
+let s = "";
+let si = 0;
+while (si < 1000) {
+    s = s + "x";
+    si = si + 1;
+}
+verify length(s) == 1000, "String length mismatch";
+print("✅ Speed Test 4: String concat 1000 chars — length = " + str(length(s)));
+
+// --- Test 5: List build + sum (10,000 elements) ---
+let nums = [];
+let li = 0;
+while (li < 10000) {
+    append(nums, li);
+    li = li + 1;
+}
+let list_sum = 0;
+let lj = 0;
+while (lj < length(nums)) {
+    list_sum = list_sum + nums[lj];
+    lj = lj + 1;
+}
+verify list_sum == 49995000, "List sum mismatch";
+print("✅ Speed Test 5: List build+sum 10K elements — sum = " + str(list_sum));
+
+// --- Test 6: Map operations (5000 key-value pairs) ---
+let data = {};
+let mi = 0;
+while (mi < 5000) {
+    let key = "key_" + str(mi);
+    data[key] = mi * 2;
+    mi = mi + 1;
+}
+verify data["key_0"] == 0, "Map value at key_0 mismatch";
+verify data["key_4999"] == 9998, "Map value at key_4999 mismatch";
+print("✅ Speed Test 6: Map build 5000 entries — done");
+
+// --- Test 7: Recursive factorial (small depth, many calls) ---
+action factorial(n) {
+    if (n <= 1) { return 1; }
+    return n * factorial(n - 1);
+}
+let fact_result = factorial(20);
+verify fact_result == 2432902008176640000, "Factorial(20) mismatch";
+print("✅ Speed Test 7: Factorial(20) recursive = " + str(fact_result));
+
+// --- Test 8: Repeated function calls (10,000 calls) ---
+action add_one(x) {
+    return x + 1;
+}
+let call_result = 0;
+let ci = 0;
+while (ci < 10000) {
+    call_result = add_one(call_result);
+    ci = ci + 1;
+}
+verify call_result == 10000, "Function call count mismatch";
+print("✅ Speed Test 8: 10K function calls — result = " + str(call_result));
+
+// --- Test 9: Sorting simulation (bubble sort 500 elements) ---
+let arr = [];
+let bi = 500;
+while (bi > 0) {
+    append(arr, bi);
+    bi = bi - 1;
+}
+// Simple bubble sort
+let sorted = false;
+while (!sorted) {
+    sorted = true;
+    let bj = 0;
+    while (bj < length(arr) - 1) {
+        if (arr[bj] > arr[bj + 1]) {
+            let temp = arr[bj];
+            arr[bj] = arr[bj + 1];
+            arr[bj + 1] = temp;
+            sorted = false;
+        }
+        bj = bj + 1;
+    }
+}
+verify arr[0] == 1, "Sort first element mismatch";
+verify arr[499] == 500, "Sort last element mismatch";
+print("✅ Speed Test 9: Bubble sort 500 elements — done");
+
+// --- Test 10: Mathematical computation (prime sieve to 1000) ---
+let sieve = [];
+let pi = 0;
+while (pi <= 1000) {
+    append(sieve, true);
+    pi = pi + 1;
+}
+sieve[0] = false;
+sieve[1] = false;
+let p = 2;
+while (p * p <= 1000) {
+    if (sieve[p]) {
+        let multiple = p * p;
+        while (multiple <= 1000) {
+            sieve[multiple] = false;
+            multiple = multiple + p;
+        }
+    }
+    p = p + 1;
+}
+let prime_count = 0;
+let pk = 0;
+while (pk <= 1000) {
+    if (sieve[pk]) {
+        prime_count = prime_count + 1;
+    }
+    pk = pk + 1;
+}
+verify prime_count == 168, "Prime count to 1000 should be 168";
+print("✅ Speed Test 10: Sieve of Eratosthenes to 1000 — " + str(prime_count) + " primes");
+
+print("\n🏁 ALL SPEED TESTS PASSED");

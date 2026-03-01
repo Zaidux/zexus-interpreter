@@ -556,6 +556,14 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
             vm.env["__PACKAGE__"] = package_name.value if hasattr(package_name, "value") else package_name
             console.print(" [green]done[/green]")
 
+            # --- Rust VM status indicator ---
+            if getattr(vm, '_rust_vm_available', False) and getattr(vm, '_rust_vm_enabled', False):
+                console.print("[bold cyan]⚡ Rust VM:[/bold cyan] [green]active[/green] — native acceleration enabled")
+            elif getattr(vm, '_rust_vm_available', False):
+                console.print("[bold cyan]⚡ Rust VM:[/bold cyan] [yellow]available but disabled[/yellow]")
+            else:
+                console.print("[bold yellow]⚠️  Rust VM:[/bold yellow] [dim]not compiled — using Python VM (install zexus_core for native speed)[/dim]")
+
             console.print("[dim]Executing on VM...[/dim]")
             try:
                 result = vm.execute(bytecode, debug=ctx.obj.get('DEBUG', False))

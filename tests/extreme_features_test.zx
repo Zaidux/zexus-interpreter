@@ -1,0 +1,212 @@
+// ============================================================
+// EXTREME FEATURES TEST — Zexus Language Feature Coverage
+// ============================================================
+// Tests: entities, contracts, closures, modules, maps, lists,
+//        inheritance, methods, for-loops, string ops, math.
+// ============================================================
+
+// --- Test 1: Entity definition and construction ---
+entity Person {
+    name: string,
+    age: number,
+    role: string = "member"
+}
+
+let alice = Person("Alice", 30);
+verify alice.name == "Alice", "Entity field 'name' should be Alice";
+verify alice.age == 30, "Entity field 'age' should be 30";
+verify alice.role == "member", "Entity default 'role' should be member";
+print("✅ Feature Test 1: Entity definition + construction — OK");
+
+// --- Test 2: Entity with Map construction ---
+let bob = Person("Bob", 25, "admin");
+verify bob.name == "Bob", "Bob's name";
+verify bob.role == "admin", "Bob's role should be admin";
+print("✅ Feature Test 2: Entity positional args — OK");
+
+// --- Test 3: Contract definition with state ---
+contract Counter {
+    state count = 0;
+
+    action increment() {
+        count = count + 1;
+    }
+
+    action get_count() {
+        return count;
+    }
+}
+
+print("✅ Feature Test 3: Contract definition — OK");
+
+// --- Test 4: Lambda / anonymous function ---
+let double = action(x) { return x * 2; };
+let triple = action(x) { return x * 3; };
+verify double(5) == 10, "double(5) should be 10";
+verify triple(5) == 15, "triple(5) should be 15";
+print("✅ Feature Test 4: Lambda functions — OK");
+
+// --- Test 5: Higher-order functions ---
+action apply(fn, val) {
+    return fn(val);
+}
+verify apply(double, 7) == 14, "apply(double, 7) should be 14";
+verify apply(triple, 7) == 21, "apply(triple, 7) should be 21";
+print("✅ Feature Test 5: Higher-order functions — OK");
+
+// --- Test 6: Closure capturing ---
+action make_counter() {
+    let count = 0;
+    return {
+        "inc": action() { count = count + 1; return count; },
+        "get": action() { return count; }
+    };
+}
+let ctr = make_counter();
+ctr["inc"]();
+ctr["inc"]();
+ctr["inc"]();
+let ctr_val = ctr["get"]();
+verify ctr_val == 3, "Counter should be 3 after 3 increments";
+print("✅ Feature Test 6: Closure capturing — count = " + str(ctr_val));
+
+// --- Test 7: List operations ---
+let items = [10, 20, 30, 40, 50];
+verify items[0] == 10, "First element";
+verify items[4] == 50, "Last element";
+verify length(items) == 5, "List length";
+append(items, 60);
+verify length(items) == 6, "After push length";
+verify items[5] == 60, "Pushed element";
+print("✅ Feature Test 7: List operations — OK");
+
+// --- Test 8: Map operations ---
+let config = {
+    "host": "localhost",
+    "port": 8080,
+    "debug": true
+};
+verify config["host"] == "localhost", "Map host";
+verify config["port"] == 8080, "Map port";
+verify config["debug"] == true, "Map debug";
+config["port"] = 3000;
+verify config["port"] == 3000, "Updated port";
+print("✅ Feature Test 8: Map operations — OK");
+
+// --- Test 9: String operations ---
+let greeting = "Hello, Zexus!";
+verify length(greeting) == 13, "String length";
+print("✅ Feature Test 9: String operations — OK");
+
+// --- Test 10: Math operations ---
+verify 2 + 3 == 5, "Addition";
+verify 10 - 4 == 6, "Subtraction";
+verify 3 * 7 == 21, "Multiplication";
+verify 15 / 3 == 5, "Division";
+verify 17 % 5 == 2, "Modulo";
+verify 2 ** 10 == 1024, "Power";
+print("✅ Feature Test 10: Math operations — OK");
+
+// --- Test 11: Comparison operators ---
+verify 5 > 3, "Greater than";
+verify 3 < 5, "Less than";
+verify 5 >= 5, "Greater or equal";
+verify 5 <= 5, "Less or equal";
+verify 5 == 5, "Equality";
+verify 5 != 4, "Inequality";
+print("✅ Feature Test 11: Comparison operators — OK");
+
+// --- Test 12: Logical operators ---
+verify true && true, "AND true";
+verify !(true && false), "AND false";
+verify true || false, "OR true";
+verify !(false || false), "OR false";
+verify !false, "NOT false";
+print("✅ Feature Test 12: Logical operators — OK");
+
+// --- Test 13: While loop with complex body ---
+let powers = [];
+let pw = 1;
+let pi = 0;
+while (pi < 10) {
+    append(powers, pw);
+    pw = pw * 2;
+    pi = pi + 1;
+}
+verify powers[0] == 1, "2^0 = 1";
+verify powers[9] == 512, "2^9 = 512";
+print("✅ Feature Test 13: While loop powers of 2 — OK");
+
+// --- Test 14: For-in loop ---
+let fruits = ["apple", "banana", "cherry"];
+let fruit_str = "";
+for (fruit in fruits) {
+    fruit_str = fruit_str + fruit + " ";
+}
+print("✅ Feature Test 14: For-in loop — " + fruit_str);
+
+// --- Test 15: Nested functions ---
+action outer_fn(x) {
+    action inner_fn(y) {
+        return x + y;
+    }
+    return inner_fn(x * 2);
+}
+let nested_result = outer_fn(5);
+verify nested_result == 15, "outer(5) = 5 + 5*2 = 15";
+print("✅ Feature Test 15: Nested functions — result = " + str(nested_result));
+
+// --- Test 16: Multiple return paths ---
+action classify(n) {
+    if (n < 0) { return "negative"; }
+    if (n == 0) { return "zero"; }
+    if (n < 10) { return "small"; }
+    if (n < 100) { return "medium"; }
+    return "large";
+}
+verify classify(-5) == "negative", "Classify -5";
+verify classify(0) == "zero", "Classify 0";
+verify classify(7) == "small", "Classify 7";
+verify classify(50) == "medium", "Classify 50";
+verify classify(500) == "large", "Classify 500";
+print("✅ Feature Test 16: Multiple return paths — OK");
+
+// --- Test 17: Action with many parameters ---
+action sum_args(a, b, c, d, e) {
+    return a + b + c + d + e;
+}
+verify sum_args(1, 2, 3, 4, 5) == 15, "Sum of 5 args";
+print("✅ Feature Test 17: Multi-parameter functions — OK");
+
+// --- Test 18: Recursive data structures ---
+let tree = {
+    "value": 1,
+    "left": {
+        "value": 2,
+        "left": {"value": 4, "left": null, "right": null},
+        "right": {"value": 5, "left": null, "right": null}
+    },
+    "right": {
+        "value": 3,
+        "left": {"value": 6, "left": null, "right": null},
+        "right": {"value": 7, "left": null, "right": null}
+    }
+};
+verify tree["value"] == 1, "Root value";
+verify tree["left"]["value"] == 2, "Left child";
+verify tree["right"]["right"]["value"] == 7, "Right-right grandchild";
+print("✅ Feature Test 18: Recursive data structures — OK");
+
+// --- Test 19: Let vs mutation ---
+let mut_val = 10;
+mut_val = mut_val + 5;
+mut_val = mut_val * 2;
+verify mut_val == 30, "Mutation: (10+5)*2 = 30";
+print("✅ Feature Test 19: Variable mutation — OK");
+
+// --- Test 20: Complex expression evaluation ---
+let expr_result = (2 + 3) * (4 - 1) + 10 / 2;
+verify expr_result == 20, "(2+3)*(4-1)+10/2 = 5*3+5 = 20";
+print("✅ Feature Test 20: Complex expressions — result = " + str(expr_result));
+
+print("\n🏁 ALL FEATURE TESTS PASSED");

@@ -494,7 +494,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
                 enable_gas_metering=True,
                 gas_limit=1_000_000  # Default 1M gas limit
             )
-            debug_log("Evaluator", "VM integration initialized successfully (cache + JIT + gas metering)")
+            # Report Rust VM status
+            rust_active = getattr(self.vm_instance, '_rust_vm_available', False) and getattr(self.vm_instance, '_rust_vm_enabled', False)
+            rust_label = "Rust VM active" if rust_active else "Python VM"
+            debug_log("Evaluator", f"VM integration initialized successfully (cache + JIT + gas metering, {rust_label})")
         except Exception as e:
             debug_log("Evaluator", f"Failed to initialize VM: {e}")
             self.use_vm = False

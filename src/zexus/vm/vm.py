@@ -19,6 +19,7 @@ import threading
 import importlib
 import hashlib
 import types
+import warnings
 from typing import List, Any, Dict, Tuple, Optional, Union, Callable
 from enum import Enum
 
@@ -33,6 +34,36 @@ from ..object import (
     EvaluationError as ZEvaluationError,
     DateTime as ZDateTime,
 )
+
+# ==================== VM Warning / Diagnostics ====================
+
+# Controlled by ZEXUS_VM_WARNINGS env var: "all", "errors", "none" (default: "errors")
+_VM_WARN_LEVEL = os.environ.get("ZEXUS_VM_WARNINGS", "errors").lower()
+
+def _vm_warn(category: str, message: str, exc: Exception = None):
+    """Emit a VM diagnostic warning instead of silently swallowing errors.
+    
+    When ZEXUS_VM_WARNINGS=all  → print all warnings to stderr
+    When ZEXUS_VM_WARNINGS=errors → only print on error (default)
+    When ZEXUS_VM_WARNINGS=none  → fully silent (legacy behaviour)
+    """
+    if _VM_WARN_LEVEL == "none":
+        return
+    if _VM_WARN_LEVEL == "all" or (exc is not None and _VM_WARN_LEVEL == "errors"):
+        detail = f": {exc}" if exc else ""
+        print(f"[VM WARN] {category}{detail} — {message}", file=sys.stderr)
+
+
+class VMRuntimeError(Exception):
+    """Proper Python exception for VM runtime errors (require/verify failures, etc.).
+    
+    ZEvaluationError from object.py inherits from Object, not Exception,
+    so it cannot be used with Python's raise statement.
+    """
+    def __init__(self, message):
+        super().__init__(message)
+        self.zexus_message = message
+
 
 # ==================== Backend / Optional Imports ====================
 
@@ -147,6 +178,9 @@ except Exception:
 
 # Sentinel returned when Rust VM signals needs_fallback
 _RUST_VM_FALLBACK_SENTINEL = object()
+
+# Sentinel for _vm_native_call: returned when no native handler exists
+_VM_NATIVE_MISS = object()
 
 # Async Optimizer (Phase 8)
 try:
@@ -329,9 +363,11 @@ def _fallback_type(args):
 
 _FALLBACK_BUILTINS = {
     "string": _fallback_string,
+    "str": _fallback_string,       # alias — users expect str()
     "int": _fallback_int,
     "float": _fallback_float,
     "len": _fallback_len,
+    "length": _fallback_len,       # alias — users expect length()
     "type": _fallback_type,
 }
 
@@ -440,6 +476,17 @@ class VM:
         # SECURITY (H9): Call-depth tracking to prevent unbounded recursion
         self._call_depth = 0
         self._MAX_CALL_DEPTH = 256
+
+        # --- High-traffic hardening ---
+        # Stack overflow protection: limit operand stack depth
+        self._MAX_STACK_DEPTH = int(os.environ.get("ZEXUS_VM_MAX_STACK", "50000"))
+        # Execution timeout (seconds, 0 = unlimited)
+        self._exec_timeout = float(os.environ.get("ZEXUS_VM_TIMEOUT", "0"))
+        self._exec_start_time = 0.0
+        # VM pool ceiling (prevents unbounded memory growth under load)
+        self._VM_POOL_MAX = int(os.environ.get("ZEXUS_VM_POOL_MAX", "500"))
+        # Opcode execution hard-cap (prevents runaway programs; 0 = gas limit only)
+        self._MAX_OPCODES = int(os.environ.get("ZEXUS_VM_MAX_OPCODES", "0"))
 
         # --- Rust VM Adaptive Routing (Phase 3 + Phase 6) ---
         self._rust_vm_available = _RUST_VM_AVAILABLE
@@ -670,7 +717,8 @@ class VM:
     def _return_vm_to_pool(self, vm) -> None:
         """Return a child VM to the pool for reuse."""
         if hasattr(self, "_vm_pool") and self._vm_pool is not None:
-             if len(self._vm_pool) < 1000:
+             pool_max = getattr(self, '_VM_POOL_MAX', 500)
+             if len(self._vm_pool) < pool_max:
                  # MEDIUM (M14): Scrub references that could leak state across pooled VMs.
                  try:
                      vm.env = None
@@ -2067,6 +2115,14 @@ class VM:
         _gas_light_cost = self.gas_light_cost if _gas_light else 0
         _gas_consume_light = _gas.consume_light if _gas else None
 
+        # --- High-traffic hardening caches ---
+        _exec_timeout = self._exec_timeout
+        _max_stack = self._MAX_STACK_DEPTH
+        _max_opcodes = self._MAX_OPCODES
+        _total_ops = 0
+        if _exec_timeout > 0:
+            self._exec_start_time = time.monotonic()
+
         while ip < instr_count:
             op_name, operand = instrs[ip]
             ip += 1
@@ -2081,6 +2137,25 @@ class VM:
                     if not _gas_consume(op_name):
                         from .gas_metering import OutOfGasError
                         raise OutOfGasError(_gas.gas_used, _gas.gas_limit, op_name)
+
+            # --- Hardening checks (every 4096 ops to amortize cost) ---
+            _total_ops += 1
+            if (_total_ops & 0xFFF) == 0:
+                if _max_stack and len(stack) > _max_stack:
+                    raise VMRuntimeError(
+                        f"Stack overflow: depth {len(stack)} exceeds limit {_max_stack}. "
+                        "Possible infinite recursion or deeply nested expression."
+                    )
+                if _exec_timeout > 0 and (time.monotonic() - self._exec_start_time) > _exec_timeout:
+                    raise VMRuntimeError(
+                        f"Execution timeout: exceeded {_exec_timeout}s limit. "
+                        "Set ZEXUS_VM_TIMEOUT=0 to disable."
+                    )
+                if _max_opcodes > 0 and _total_ops > _max_opcodes:
+                    raise VMRuntimeError(
+                        f"Opcode limit exceeded: {_total_ops} > {_max_opcodes}. "
+                        "Set ZEXUS_VM_MAX_OPCODES=0 to disable."
+                    )
 
             if trace_interval > 0:
                 trace_counter += 1
@@ -2321,6 +2396,11 @@ class VM:
                 name_idx, arg_count = operand
                 func_name = const(name_idx)
                 args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
+                # --- Fast-path: native VM builtins for common list/type ops ---
+                res = self._vm_native_call(func_name, args)
+                if res is not _VM_NATIVE_MISS:
+                    stack_append(res)
+                    continue
                 fn = resolve(func_name) or builtins.get(func_name)
                 if fn is None:
                     res = self._call_fallback_builtin(func_name, args)
@@ -2369,7 +2449,7 @@ class VM:
                                 norm_key = str(key)
                             existing = target.pairs.get(norm_key)
                             if existing is not None and existing.__class__.__name__ == 'SealedObject':
-                                raise ZEvaluationError(f"Cannot modify sealed map key: {key}")
+                                raise VMRuntimeError(f"Cannot modify sealed map key: {key}")
                             target.pairs[norm_key] = args[1]
                             result = args[1]
                         elif isinstance(target, ZList) and len(args) >= 2:
@@ -2417,7 +2497,8 @@ class VM:
                                 result = candidate
                         else:
                             result = attr
-                except Exception:
+                except Exception as _e:
+                    _vm_warn("CALL_METHOD", f"Method '{method_name}' call failed on {type(target).__name__}", _e)
                     result = None
                 stack_append(self._unwrap_after_builtin(result))
             elif op_name == "PRINT":
@@ -2438,16 +2519,24 @@ class VM:
                             stack_append(obj.get(key))
                         elif isinstance(obj, dict):
                             stack_append(obj.get(attr_name))
+                        elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                            # EntityInstance — access fields via .data dict
+                            stack_append(obj.data.get(attr_name, getattr(obj, attr_name, None)))
                         elif hasattr(obj, 'get') and hasattr(obj, 'set') and callable(getattr(obj, 'get', None)):
                             # Contract-like objects (e.g., SmartContract) expose state via get/set.
                             stack_append(obj.get(attr_name))
                         else:
                             stack_append(getattr(obj, attr_name, None))
-                    except Exception:
+                    except Exception as _e:
+                        _vm_warn("GET_ATTR", f"Attribute '{attr_name}' access failed on {type(obj).__name__}", _e)
                         stack_append(None)
             elif op_name == "DEFINE_CONTRACT":
                 contract_obj = self._build_smart_contract(operand, stack, stack_pop, const, env)
                 stack_append(contract_obj)
+
+            elif op_name == "DEFINE_ENTITY":
+                entity_obj = self._build_entity_definition(operand, stack, stack_pop, const)
+                stack_append(entity_obj)
 
             # --- Blockchain / TX opcodes (sync-safe) ---
 
@@ -2585,7 +2674,7 @@ class VM:
                             if env.get("_in_transaction", False):
                                 env["_blockchain_state"] = dict(env.get("_tx_snapshot", {}))
                                 env["_in_transaction"] = False
-                            raise ZEvaluationError(
+                            raise VMRuntimeError(
                                 f"Out of gas: required {amount}, remaining {current}")
                         env["_gas_remaining"] = new_gas
 
@@ -2600,7 +2689,7 @@ class VM:
                         env["_in_transaction"] = False
                         env["_tx_pending_state"] = {}
                         env.pop("_tx_snapshot", None)
-                    raise ZEvaluationError(f"Requirement failed: {message}")
+                    raise VMRuntimeError(f"Requirement failed: {message}")
 
             elif op_name == "LEDGER_APPEND":
                 entry = stack_pop()
@@ -2628,7 +2717,7 @@ class VM:
                     ip = handler_ip
                 else:
                     msg = exc.value if hasattr(exc, 'value') else exc
-                    raise ZEvaluationError(str(msg))
+                    raise VMRuntimeError(str(msg))
 
             elif op_name == "ENABLE_ERROR_MODE":
                 env["_continue_on_error"] = True
@@ -2669,11 +2758,11 @@ class VM:
                     if owner is not None:
                         ov = owner.value if hasattr(owner, 'value') else str(owner)
                         if caller and caller != ov:
-                            raise ZEvaluationError(f"Access denied: '{r_key}' restricted to owner only")
+                            raise VMRuntimeError(f"Access denied: '{r_key}' restricted to owner only")
                 elif isinstance(rv, (list, tuple)):
                     allowed = [a.value if hasattr(a, 'value') else str(a) for a in rv]
                     if caller and caller not in allowed:
-                        raise ZEvaluationError(f"Access denied: '{r_key}' restricted to allowed addresses")
+                        raise VMRuntimeError(f"Access denied: '{r_key}' restricted to allowed addresses")
 
             elif op_name == "SPAWN":
                 # Sync SPAWN: schedule the function to run in a background thread
@@ -2827,6 +2916,90 @@ class VM:
 
         return contract
 
+    def _build_entity_definition(self, operand, stack, stack_pop, const):
+        """Create a real EntityDefinition from DEFINE_ENTITY bytecode.
+
+        This mirrors the interpreter's eval_entity_statement logic so that
+        entity construction (``User("Alice", 30)``) works correctly on the VM.
+
+        Stack layout at DEFINE_ENTITY execution (top → bottom):
+            prop_name_N, prop_default_N   ← from compiler's property loop
+            ...
+            prop_name_1, prop_default_1
+            entity_name
+        """
+        from ..object import EntityDefinition, Null as ObjNull
+
+        member_count = operand or 0
+
+        # Pop properties (name, default_value pairs) — pushed in order, so
+        # we pop in reverse and then reverse again to restore ordering.
+        raw_members = []
+        for _ in range(member_count):
+            key_obj = stack_pop()  # property name string constant
+            val_obj = stack_pop()  # default value (or None / method)
+            key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj) if key_obj is not None else ""
+            raw_members.append((key_str, val_obj))
+        raw_members.reverse()  # restore push order
+
+        # Pop entity name
+        name_obj = stack_pop()
+        entity_name = name_obj.value if hasattr(name_obj, 'value') else str(name_obj) if name_obj is not None else "UnknownEntity"
+
+        # Build properties dict in the format EntityDefinition expects:
+        # { prop_name: { "type": "any", "default_value": <wrapped_value> } }
+        properties = {}
+        methods = {}
+        ZAction_cls, ZLambda_cls = _get_action_types()
+
+        for key, val in raw_members:
+            # If the value is an Action/Lambda, it's a method
+            if ZAction_cls is not None and isinstance(val, (ZAction_cls, ZLambda_cls)):
+                methods[key] = val
+            elif isinstance(val, dict) and val.get("type") == "function":
+                # Function descriptors compiled by the VM
+                methods[key] = val
+            else:
+                wrapped = self._wrap_for_builtin(val) if val is not None else ObjNull()
+                properties[key] = {"type": "any", "default_value": wrapped}
+
+        entity_def = EntityDefinition(entity_name, properties, methods)
+        return entity_def
+
+    def _construct_entity(self, entity_def, args):
+        """Construct an EntityInstance from an EntityDefinition + call args.
+
+        Mirrors the interpreter's apply_function logic for entity construction:
+        - Single Map arg → use as field values
+        - Positional args → map to property names in order
+        """
+        from ..object import EntityDefinition, Map as ObjMap, String as ObjString
+
+        values = {}
+
+        # If single arg is a Map (handles Entity{field: value} syntax)
+        if len(args) == 1 and isinstance(args[0], (ZMap, ObjMap)):
+            map_arg = args[0]
+            pairs = map_arg.pairs if hasattr(map_arg, 'pairs') else (map_arg if isinstance(map_arg, dict) else {})
+            for key, value in pairs.items():
+                key_str = key.value if hasattr(key, 'value') else str(key)
+                values[key_str] = self._wrap_for_builtin(value)
+        else:
+            # Positional args → map to property names
+            if hasattr(entity_def, 'get_all_properties'):
+                all_props = entity_def.get_all_properties()
+                prop_names = list(all_props.keys())
+            elif isinstance(entity_def.properties, dict):
+                prop_names = list(entity_def.properties.keys())
+            else:
+                prop_names = [p.get('name', '') if isinstance(p, dict) else str(p) for p in (entity_def.properties or [])]
+
+            for i, arg in enumerate(args):
+                if i < len(prop_names):
+                    values[prop_names[i]] = self._wrap_for_builtin(arg)
+
+        return entity_def.create_instance(values)
+
     def _invoke_callable_sync(self, fn, args):
         """Synchronous callable invocation for fast dispatch."""
         if fn is None:
@@ -2847,6 +3020,11 @@ class VM:
 
     def _invoke_callable_sync_inner(self, fn, args):
         """Inner implementation of callable invocation."""
+        # --- Entity construction ---
+        from ..object import EntityDefinition as _EntityDef, EntityInstance as _EntityInst
+        if isinstance(fn, _EntityDef):
+            return self._construct_entity(fn, args)
+
         real_fn = fn.fn if hasattr(fn, "fn") else fn
         ZAction, ZLambda = _get_action_types()
         if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
@@ -2861,7 +3039,8 @@ class VM:
                     action_bytecode = compiler.compile(real_fn.body, optimize=True)
                     if action_bytecode and not compiler.errors:
                         real_fn._cached_bytecode = action_bytecode
-            except Exception:
+            except Exception as _e:
+                _vm_warn("COMPILE_ACTION", "Bytecode compilation failed for Action/Lambda — using interpreter fallback", _e)
                 action_bytecode = None
             
             if action_bytecode:
@@ -2884,7 +3063,8 @@ class VM:
                     call_args = [self._wrap_for_builtin(arg) for arg in args]
                     result = self._action_evaluator.apply_function(real_fn, call_args)
                     return self._unwrap_after_builtin(result)
-                except Exception:
+                except Exception as _e:
+                    _vm_warn("CALL_ACTION_FALLBACK", "Action/Lambda interpreter fallback failed", _e)
                     return None
         if callable(real_fn) and not _iscoroutinefunction(real_fn):
             try:
@@ -2892,7 +3072,8 @@ class VM:
                 call_args = [self._wrap_for_builtin(arg) for arg in args] if wrap_args else list(args)
                 result = real_fn(*call_args)
                 return self._unwrap_after_builtin(result) if wrap_args else result
-            except Exception:
+            except Exception as _e:
+                _vm_warn("CALL_CALLABLE", f"Callable invocation failed: {getattr(real_fn, '__name__', repr(real_fn))}", _e)
                 return None
         if isinstance(fn, dict):
             # Function descriptor - execute bytecode
@@ -3292,6 +3473,11 @@ class VM:
                 args.reverse()
             else:
                 args = []
+            # ── fast-path for native builtins (push/append/length/str/range) ──
+            native_res = self._vm_native_call(func_name, args)
+            if native_res is not _VM_NATIVE_MISS:
+                stack_append(native_res)
+                return
             fn = None
             try:
                 fn = builtins_get(func_name)
@@ -3442,7 +3628,7 @@ class VM:
                                 norm_key = str(key)
                             existing = target.pairs.get(norm_key)
                             if existing is not None and existing.__class__.__name__ == 'SealedObject':
-                                raise ZEvaluationError(f"Cannot modify sealed map key: {key}")
+                                raise VMRuntimeError(f"Cannot modify sealed map key: {key}")
                             target.pairs[norm_key] = args[1]
                             result = args[1]
                         else:
@@ -4290,12 +4476,17 @@ class VM:
                     name_idx, arg_count = operand
                     func_name = const(name_idx)
                     args = [stack.pop() if stack else None for _ in range(arg_count)][::-1] if arg_count else []
-                    fn = _resolve(func_name) or self.builtins.get(func_name)
-                    if fn is None:
-                        res = self._call_fallback_builtin(func_name, args)
+                    # ── fast-path for native builtins ──
+                    native_res = self._vm_native_call(func_name, args)
+                    if native_res is not _VM_NATIVE_MISS:
+                        stack.append(native_res)
                     else:
-                        res = await self._invoke_callable_or_funcdesc(fn, args)
-                    stack.append(res)
+                        fn = _resolve(func_name) or self.builtins.get(func_name)
+                        if fn is None:
+                            res = self._call_fallback_builtin(func_name, args)
+                        else:
+                            res = await self._invoke_callable_or_funcdesc(fn, args)
+                        stack.append(res)
 
                 elif op_name == "CALL_BUILTIN":
                     name_idx, arg_count = operand if isinstance(operand, (list, tuple)) else (operand, 0)
@@ -4848,7 +5039,7 @@ class VM:
                         ip = handler
                     else:
                         msg = exc.value if hasattr(exc, "value") else exc
-                        raise ZEvaluationError(str(msg))
+                        raise VMRuntimeError(str(msg))
     
                 elif op_name == "TX_COMMIT":
                     if self.env.get("_in_transaction", False):
@@ -4909,7 +5100,7 @@ class VM:
                                 if self.env.get("_in_transaction", False):
                                     self.env["_blockchain_state"] = dict(self.env.get("_tx_snapshot", {}))
                                     self.env["_in_transaction"] = False
-                                raise ZEvaluationError(
+                                raise VMRuntimeError(
                                     f"Out of gas: required {amount}, remaining {current}")
                             self.env["_gas_remaining"] = new_gas
     
@@ -4930,7 +5121,7 @@ class VM:
                             tx_stack = self.env.get("_tx_stack", [])
                             if tx_stack: tx_stack.pop()
                             self.env["_in_transaction"] = bool(tx_stack)
-                        raise ZEvaluationError(f"Requirement failed: {message}")
+                        raise VMRuntimeError(f"Requirement failed: {message}")
     
                 elif op_name == "DEFINE_CONTRACT":
                     contract_obj = self._build_smart_contract(
@@ -4941,19 +5132,11 @@ class VM:
                     stack.append(contract_obj)
     
                 elif op_name == "DEFINE_ENTITY":
-                    member_count = operand
-                    members = {}
-                    for _ in range(member_count):
-                        key_obj = stack.pop() if stack else None
-                        val_obj = stack.pop() if stack else None
-                        key_str = key_obj.value if hasattr(key_obj, 'value') else str(key_obj)
-                        members[key_str] = val_obj
-                    
-                    name_obj = stack.pop() if stack else None
-                    # Create Entity (using Map for now, can be specialized Entity class later)
-                    members['_type'] = 'entity'
-                    members['_name'] = name_obj.value if hasattr(name_obj, 'value') else str(name_obj)
-                    stack.append(ZMap(members))
+                    entity_obj = self._build_entity_definition(
+                        operand, stack, lambda: stack.pop() if stack else None,
+                        lambda idx: consts[idx] if isinstance(idx, int) and 0 <= idx < len(consts) else idx,
+                    )
+                    stack.append(entity_obj)
     
                 elif op_name == "DEFINE_CAPABILITY":
                     name = stack.pop() if stack else None
@@ -5034,13 +5217,13 @@ class VM:
                         if owner is not None:
                             owner_val = owner.value if hasattr(owner, 'value') else str(owner)
                             if caller and caller != owner_val:
-                                raise ZEvaluationError(
+                                raise VMRuntimeError(
                                     f"Access denied: '{r_key}' restricted to owner only"
                                 )
                     elif isinstance(restriction_val, (list, tuple)):
                         allowed = [a.value if hasattr(a, 'value') else str(a) for a in restriction_val]
                         if caller and caller not in allowed:
-                            raise ZEvaluationError(
+                            raise VMRuntimeError(
                                 f"Access denied: '{r_key}' restricted to allowed addresses"
                             )
     
@@ -5099,6 +5282,11 @@ class VM:
     # ==================== Helpers ====================
 
     async def _invoke_callable_or_funcdesc(self, fn, args, is_constant=False):
+        # 0. Entity construction
+        from ..object import EntityDefinition as _EntityDef
+        if isinstance(fn, _EntityDef):
+            return self._construct_entity(fn, args)
+
         # 1. Function Descriptor (VM Bytecode Closure)
         if isinstance(fn, dict) and "bytecode" in fn:
             func_bc = fn["bytecode"]
@@ -5240,6 +5428,76 @@ class VM:
             if self.debug:
                 print(f"[VM] fallback builtin '{name}' failed: {exc}")
             return ZEvaluationError(f"Builtin '{name}' failed: {exc}")
+
+    def _vm_native_call(self, name: str, args: list):
+        """Fast-path native handling of common builtins that operate on VM-native
+        types (plain Python list/dict/str/int) WITHOUT wrapping to ZList/ZMap.
+        
+        Returns _VM_NATIVE_MISS if no native handler exists, letting the caller
+        fall through to the evaluator builtin path.
+        """
+        if name == "push":
+            # push(list, item) → return new list with item appended (non-mutating)
+            if len(args) == 2:
+                target = args[0]
+                item = args[1]
+                if isinstance(target, list):
+                    return target + [item]
+                if isinstance(target, ZList):
+                    return ZList(target.elements + [item])
+            return _VM_NATIVE_MISS
+        if name == "append":
+            # append(list, item) → mutate list in-place, return list
+            if len(args) == 2:
+                target = args[0]
+                item = args[1]
+                if isinstance(target, list):
+                    target.append(item)
+                    return target
+                if isinstance(target, ZList):
+                    target.elements.append(item)
+                    return target
+            return _VM_NATIVE_MISS
+        if name == "length" or name == "len":
+            if len(args) == 1:
+                obj = args[0]
+                if isinstance(obj, list):
+                    return len(obj)
+                if isinstance(obj, ZList):
+                    return len(obj.elements)
+                if isinstance(obj, (str, ZString)):
+                    val = obj.value if isinstance(obj, ZString) else obj
+                    return len(val)
+                if isinstance(obj, (dict, ZMap)):
+                    if isinstance(obj, ZMap):
+                        return len(obj.pairs)
+                    return len(obj)
+                if hasattr(obj, '__len__'):
+                    return len(obj)
+                return 0
+            return _VM_NATIVE_MISS
+        if name == "str" or name == "string":
+            if len(args) == 1:
+                return self._format_print_value(args[0])
+            return _VM_NATIVE_MISS
+        if name == "range":
+            # range(n) → [0..n-1] or range(start, end) → [start..end-1]
+            if len(args) == 1:
+                n = args[0]
+                if isinstance(n, ZInteger): n = n.value
+                if hasattr(n, 'value'): n = n.value
+                if isinstance(n, (int, float)):
+                    return list(range(int(n)))
+            elif len(args) == 2:
+                a, b = args
+                if isinstance(a, ZInteger): a = a.value
+                if isinstance(b, ZInteger): b = b.value
+                if hasattr(a, 'value'): a = a.value
+                if hasattr(b, 'value'): b = b.value
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    return list(range(int(a), int(b)))
+            return _VM_NATIVE_MISS
+        return _VM_NATIVE_MISS
 
     def profile_execution(self, bytecode, iterations: int = 1000) -> Dict[str, Any]:
         """Profile execution performance across available modes"""

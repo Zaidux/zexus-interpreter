@@ -10,7 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🐛 Bug Fixes — Ziver Chain Phase 0 Audit (continued)
 
-Resolves 16 issues from the [Phase 0 rewrite audit](issues/ISSUE8.md) — including 9 interpreter-level fixes, 8 parser fixes, and 3 new builtins discovered during 24-file testing.
+Resolves 19 issues from the [Phase 0 rewrite audit](issues/ISSUE8.md) — including 9 interpreter-level fixes, 8 parser fixes, 3 new builtins, and **3 VM-specific fixes** with hardening.
+
+**VM-Specific Fixes (new):**
+- **Entity field access returns `None` on VM** (R-001) — Added `_build_entity_definition()` creating proper `EntityDefinition` from bytecode, `_construct_entity()` for entity construction, `EntityInstance` support in `GET_ATTR`, and entity dispatch in both sync/async callable invocation.
+- **Contract state not initialized on VM** (R-002) — Added `_compile_StateStatement` to the VM compiler, emitting `STATE_WRITE` + `STORE_NAME` for standalone `state x = value` declarations.
+- **Complex programs produce no output on VM** (R-010) — Added `_vm_warn()` diagnostic system with configurable verbosity (`ZEXUS_VM_WARNINGS` env var). Replaced 15 silent `except Exception: return None` handlers with logged warnings.
+- **`raise ZEvaluationError` crashed** — Created `VMRuntimeError(Exception)` class to replace non-raisable `ZEvaluationError(Object)` in all 15 raise sites.
+- **`str()` / `length()` not found as builtins** — Added `str` and `length` as aliases in both VM `_FALLBACK_BUILTINS` and evaluator `_register_core_builtins`.
+- **`append()` / `push()` didn't work on VM-native lists** — Added `_vm_native_call()` fast-path handling `push`, `append`, `length`, `len`, `str`, `string`, `range` directly on native Python types, bypassing ZList/ZMap wrapping issues.
+
+**VM Hardening:**
+- Stack overflow protection (`_MAX_STACK_DEPTH` configurable, default 50,000)
+- Execution timeout (`_exec_timeout`, default 30s)
+- Opcode limit (`_MAX_OPCODES`, default 100M, checked every 4096 ops)
+- Configurable VM pool sizing (`_VM_POOL_MAX`)
+- Rust VM status indicator in CLI, `zx-run`, and evaluator (shows active/available/not compiled)
 
 **Critical / High (interpreter):**
 - **`self` keyword not recognized** (R-003) — Added `"self"` as an alias for `"this"` in `eval_identifier()`. Both resolve to `__contract_instance__`.
@@ -46,18 +61,29 @@ Resolves 16 issues from the [Phase 0 rewrite audit](issues/ISSUE8.md) — includ
 ### 📁 Files Changed
 - `src/zexus/object.py` — `clone_for_closure()` now sets `outer=self` for live env delegation
 - `src/zexus/evaluator/statements.py` — `eval_export_statement` uses `is None` check
-- `src/zexus/evaluator/functions.py` — Policy enforcement in `apply_function()` for module-level `protect`
+- `src/zexus/evaluator/functions.py` — Policy enforcement in `apply_function()` for module-level `protect`; `str`/`length` builtin aliases
 - `src/zexus/evaluator/expressions.py` — `self` keyword alias, mixed numeric ops, float modulo
+- `src/zexus/evaluator/core.py` — Rust VM status indicator in `_initialize_vm()`
 - `src/zexus/security.py` — Storage sync-back improvements in `call_method()`, `init()` auto-call
 - `src/zexus/zexus_ast.py` — `ForEachStatement` index field
 - `src/zexus/parser/parser.py` — Multi-field `state {}`, indexed for-each, entity defaults, keyword-name props
 - `src/zexus/parser/strategy_context.py` — Same parser fixes (strategy parser)
 - `src/zexus/evaluator/statements.py` — `eval_foreach_statement` map iteration, state init at deploy
+- `src/zexus/vm/vm.py` — `VMRuntimeError`, `_vm_warn()`, `_vm_native_call()`, `_build_entity_definition()`, `_construct_entity()`, EntityInstance GET_ATTR, hardening (stack/timeout/opcode/pool), Rust VM status, `str`/`length` fallback aliases
+- `src/zexus/vm/compiler.py` — `_compile_StateStatement` for standalone state declarations
+- `src/zexus/cli/main.py` — Rust VM status indicator after VM init
+- `zx-run` — Rust VM status indicator
 
 ### 🧪 Testing
 - **1852 tests pass**, 0 regressions
 - 24 `.zx` integration test files covering all R-xxx fixes and parser edge cases
 - 2 new test files: `tests/test_issue8_fixes.zx`, `tests/test_issue8_advanced.zx`
+- 5 new extreme test files:
+  - `tests/extreme_speed_test.zx` — 10 speed tests (100K loops, 250K nested, Fibonacci, string concat, list build+sum, maps, factorial, function calls, bubble sort, prime sieve)
+  - `tests/extreme_stability_test.zx` — 15 stability tests (deep nesting, error recovery, null handling, recursion, closures, allocation stress)
+  - `tests/extreme_security_test.zx` — 20 security tests (large integers, injection, type coercion, bounds, OOM, contract isolation)
+  - `tests/extreme_features_test.zx` — 20 feature tests (entities, contracts, lambdas, closures, lists, maps, strings, math, loops, recursion)
+  - `tests/extreme_vm_test.zx` — 18 VM-specific tests (R-001 entity, R-002 state, R-010 output, hardening stress)
 
 
 ## [1.8.2] - 2026-02-25

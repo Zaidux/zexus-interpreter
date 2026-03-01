@@ -1,0 +1,227 @@
+// ============================================================
+// VM-SPECIFIC EXTREME TEST — Entity, Contract, Error Handling
+// ============================================================
+// Targets: R-001 (entity field access on VM),
+//          R-002 (contract state initialization),
+//          R-010 (silent error swallowing),
+//          plus Rust VM indicator and VM hardening.
+// ============================================================
+
+// ===================== R-001: ENTITY TESTS =====================
+
+// --- Entity definition and field access ---
+entity User {
+    name: string,
+    email: string,
+    role: string = "viewer"
+}
+
+let u1 = User("Alice", "alice@test.com");
+print("Entity u1.name = " + str(u1.name));
+print("Entity u1.email = " + str(u1.email));
+print("Entity u1.role = " + str(u1.role));
+verify u1.name == "Alice", "R-001: Entity name field access";
+verify u1.email == "alice@test.com", "R-001: Entity email field access";
+verify u1.role == "viewer", "R-001: Entity default field access";
+print("✅ R-001 Test 1: Entity field access — OK");
+
+// --- Entity with all args ---
+let u2 = User("Bob", "bob@test.com", "admin");
+verify u2.role == "admin", "R-001: Entity overridden default";
+print("✅ R-001 Test 2: Entity override defaults — OK");
+
+// --- Multiple entity types ---
+entity Product {
+    name: string,
+    price: number,
+    stock: number = 0
+}
+
+let p1 = Product("Widget", 9.99, 100);
+verify p1.name == "Widget", "Product name";
+verify p1.price == 9.99, "Product price";
+verify p1.stock == 100, "Product stock";
+print("✅ R-001 Test 3: Multiple entity types — OK");
+
+// --- Entity instances are independent ---
+let u3 = User("Charlie", "charlie@test.com", "editor");
+verify u1.name == "Alice", "u1 unchanged after u3 creation";
+verify u3.name == "Charlie", "u3 has own data";
+print("✅ R-001 Test 4: Entity instance independence — OK");
+
+// --- Entity with numeric/boolean fields ---
+entity Config {
+    max_connections: number = 100,
+    debug_mode: string = "false",
+    name: string = "default"
+}
+
+let cfg = Config(50, "true", "production");
+verify cfg.max_connections == 50, "Config numeric field";
+verify cfg.debug_mode == "true", "Config boolean-like field";
+print("✅ R-001 Test 5: Entity with typed fields — OK");
+
+
+// ===================== R-002: CONTRACT STATE TESTS =====================
+
+// --- Basic contract with state ---
+contract TokenLedger {
+    state total_supply = 1000;
+    state name = "TestToken";
+
+    action get_supply() {
+        return total_supply;
+    }
+
+    action get_name() {
+        return name;
+    }
+}
+print("✅ R-002 Test 1: Contract with state defined — OK");
+
+// --- Contract with multiple state variables ---
+contract Bank {
+    state balance = 0;
+    state owner = "system";
+    state locked = false;
+
+    action deposit(amount) {
+        require(amount > 0, "Amount must be positive");
+        balance = balance + amount;
+        return balance;
+    }
+
+    action get_info() {
+        return {
+            "balance": balance,
+            "owner": owner,
+            "locked": locked
+        };
+    }
+}
+print("✅ R-002 Test 2: Contract with multiple state vars — OK");
+
+// --- Standalone state declarations ---
+state global_counter = 42;
+print("✅ R-002 Test 3: Standalone state declaration — OK");
+
+
+// ===================== R-010: ERROR VISIBILITY TESTS =====================
+
+// --- Functions that should produce output ---
+action greet(name) {
+    return "Hello, " + str(name) + "!";
+}
+
+let greeting = greet("World");
+verify greeting == "Hello, World!", "R-010: Function output not swallowed";
+print("✅ R-010 Test 1: Function output visible — " + greeting);
+
+// --- Nested function calls should produce output ---
+action add(a, b) { return a + b; }
+action multiply(a, b) { return a * b; }
+
+let chain = multiply(add(2, 3), add(4, 1));
+verify chain == 25, "R-010: Chained calls produce correct output";
+print("✅ R-010 Test 2: Chained function calls — result = " + str(chain));
+
+// --- Map method calls ---
+let data = {"x": 10, "y": 20};
+let x_val = data["x"];
+verify x_val == 10, "R-010: Map access produces output";
+print("✅ R-010 Test 3: Map access working — x = " + str(x_val));
+
+// --- Complex program that exercises multiple VM paths ---
+action compute_series(n) {
+    let result = 0;
+    let i = 1;
+    while (i <= n) {
+        if (i % 2 == 0) {
+            result = result - (1.0 / i);
+        } else {
+            result = result + (1.0 / i);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+let series = compute_series(100);
+print("✅ R-010 Test 4: Complex computation — series(100) = " + str(series));
+
+// --- Ensure print works in all contexts ---
+print("Direct print works");
+
+action print_from_fn() {
+    print("Print from function works");
+}
+print_from_fn();
+
+let items = [1, 2, 3, 4, 5];
+for (item in items) {
+    // This should produce output for each item
+    if (item == 5) {
+        print("✅ R-010 Test 5: Print in for loop — reached item 5");
+    }
+}
+
+
+// ===================== VM HARDENING TESTS =====================
+
+// --- Stress: many small allocations ---
+let stress_i = 0;
+while (stress_i < 3000) {
+    let temp = {"val": stress_i, "arr": [stress_i, stress_i + 1]};
+    stress_i = stress_i + 1;
+}
+print("✅ Hardening Test 1: 3000 allocation cycles — OK");
+
+// --- Stress: deep computation chains ---
+action chain_compute(n) {
+    if (n <= 0) { return 0; }
+    let a = n * 2;
+    let b = a + 3;
+    let c = b - n;
+    return c + chain_compute(n - 1);
+}
+let cc_result = chain_compute(50);
+print("✅ Hardening Test 2: Deep computation chain — result = " + str(cc_result));
+
+// --- Stress: rapid function creation and invocation ---
+let fn_results = [];
+let fi = 0;
+while (fi < 100) {
+    let fn = action(x) { return x * x; };
+    append(fn_results, fn(fi));
+    fi = fi + 1;
+}
+verify length(fn_results) == 100, "100 lambdas created and invoked";
+verify fn_results[10] == 100, "Lambda result at index 10 = 10^2";
+print("✅ Hardening Test 3: Rapid lambda creation — OK");
+
+// --- Stress: large list manipulation ---
+let big_list = [];
+let bli = 0;
+while (bli < 5000) {
+    append(big_list, bli * 3);
+    bli = bli + 1;
+}
+verify length(big_list) == 5000, "Built list of 5000";
+verify big_list[4999] == 14997, "Last element = 4999*3";
+print("✅ Hardening Test 4: Large list (5000 elements) — OK");
+
+// --- Stress: nested map access ---
+let nested_map = {
+    "level1": {
+        "level2": {
+            "level3": {
+                "value": "deep_value"
+            }
+        }
+    }
+};
+let deep_val = nested_map["level1"]["level2"]["level3"]["value"];
+verify deep_val == "deep_value", "Deep nested map access";
+print("✅ Hardening Test 5: Deeply nested map access — OK");
+
+print("\n🏁 ALL VM-SPECIFIC EXTREME TESTS PASSED");

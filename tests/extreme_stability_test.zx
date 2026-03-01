@@ -1,0 +1,183 @@
+// ============================================================
+// EXTREME STABILITY TEST — Zexus Interpreter & VM Resilience
+// ============================================================
+// Tests: deep nesting, error recovery, edge cases, resource
+//        limits, try/catch resilience, type coercion extremes.
+// ============================================================
+
+// --- Test 1: Deep if-else nesting (20 levels) ---
+let depth_val = 42;
+if (depth_val > 0) {
+    if (depth_val > 5) {
+        if (depth_val > 10) {
+            if (depth_val > 15) {
+                if (depth_val > 20) {
+                    if (depth_val > 25) {
+                        if (depth_val > 30) {
+                            if (depth_val > 35) {
+                                if (depth_val > 40) {
+                                    if (depth_val > 41) {
+                                        if (depth_val == 42) {
+                                            print("✅ Stability Test 1: Deep nesting 11 levels — reached bottom");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Test 2: Try/catch stress — nested error recovery ---
+let error_count = 0;
+let recovery_count = 0;
+let ti = 0;
+while (ti < 100) {
+    try {
+        if (ti % 3 == 0) {
+            // Intentionally cause an error
+            let bad_result = 1 / 0;
+            error_count = error_count + 1;
+        } else {
+            recovery_count = recovery_count + 1;
+        }
+    } catch (e) {
+        error_count = error_count + 1;
+    }
+    ti = ti + 1;
+}
+print("✅ Stability Test 2: Try/catch 100 iterations — errors: " + str(error_count) + ", recovered: " + str(recovery_count));
+
+// --- Test 3: Null/undefined handling ---
+let null_var = null;
+let undef_result = null_var;
+if (null_var == null) {
+    print("✅ Stability Test 3: Null handling correct");
+}
+
+// --- Test 4: Empty collections ---
+let empty_list = [];
+let empty_map = {};
+verify length(empty_list) == 0, "Empty list length should be 0";
+print("✅ Stability Test 4: Empty collections handled");
+
+// --- Test 5: Large string operations ---
+let big_str = "";
+let bsi = 0;
+while (bsi < 500) {
+    big_str = big_str + "abcdefghij";
+    bsi = bsi + 1;
+}
+verify length(big_str) == 5000, "Big string should be 5000 chars";
+print("✅ Stability Test 5: Large string 5000 chars — OK");
+
+// --- Test 6: Deeply nested function calls ---
+action nest_calls(n) {
+    if (n <= 0) { return 0; }
+    return 1 + nest_calls(n - 1);
+}
+let nest_result = nest_calls(100);
+verify nest_result == 100, "Nested call depth 100 should return 100";
+print("✅ Stability Test 6: Deep recursive calls (100 depth) — result = " + str(nest_result));
+
+// --- Test 7: Mixed type arithmetic ---
+let mixed_1 = 10 + 5;
+let mixed_2 = "hello" + " " + "world";
+let mixed_3 = 3.14 * 2;
+verify mixed_1 == 15, "Integer arithmetic";
+verify mixed_2 == "hello world", "String concatenation";
+print("✅ Stability Test 7: Mixed type arithmetic — OK");
+
+// --- Test 8: Boolean edge cases ---
+verify true == true, "true == true";
+verify false == false, "false == false";
+verify !(true == false), "true != false";
+verify !false == true, "!false == true";
+print("✅ Stability Test 8: Boolean edge cases — OK");
+
+// --- Test 9: Loop with break and continue ---
+let break_sum = 0;
+let bk = 0;
+while (bk < 100) {
+    bk = bk + 1;
+    if (bk % 2 == 0) {
+        continue;
+    }
+    if (bk > 50) {
+        break;
+    }
+    break_sum = break_sum + bk;
+}
+print("✅ Stability Test 9: Break/continue — sum of odds to 50 = " + str(break_sum));
+
+// --- Test 10: Nested try/catch with different error types ---
+let caught_types = [];
+try {
+    try {
+        let x = 1 / 0;
+    } catch (inner_e) {
+        append(caught_types, "division");
+        // Try something else in catch
+        try {
+            let arr = [];
+            let bad = arr[999];
+        } catch (arr_e) {
+            append(caught_types, "index");
+        }
+    }
+} catch (outer_e) {
+    append(caught_types, "outer");
+}
+print("✅ Stability Test 10: Nested try/catch — caught: " + str(length(caught_types)) + " errors");
+
+// --- Test 11: Variable shadowing in blocks ---
+let shadow_v = "outer";
+if (true) {
+    let shadow_v = "inner";
+    verify shadow_v == "inner", "Inner shadow should be 'inner'";
+}
+print("✅ Stability Test 11: Variable shadowing — OK");
+
+// --- Test 12: Action as first-class value ---
+action make_adder(x) {
+    return action(y) { return x + y; };
+}
+let add5 = make_adder(5);
+let add_result = add5(10);
+verify add_result == 15, "Closure adder should return 15";
+print("✅ Stability Test 12: First-class functions (closures) — result = " + str(add_result));
+
+// --- Test 13: Repeated allocation/deallocation stress ---
+let alloc_i = 0;
+while (alloc_i < 1000) {
+    let temp_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let temp_map = {"a": 1, "b": 2, "c": 3};
+    alloc_i = alloc_i + 1;
+}
+print("✅ Stability Test 13: 1000 allocation cycles — no memory issues");
+
+// --- Test 14: Edge case numbers ---
+let big_num = 999999999999;
+let small_num = -999999999999;
+let zero = 0;
+verify big_num + small_num == 0, "Big + Small should be 0";
+verify big_num * 0 == 0, "Anything * 0 = 0";
+verify zero + 1 == 1, "0 + 1 = 1";
+print("✅ Stability Test 14: Edge case numbers — OK");
+
+// --- Test 15: Rapid environment creation ---
+let env_i = 0;
+while (env_i < 500) {
+    action temp_fn() {
+        let local = env_i;
+        return local;
+    }
+    temp_fn();
+    env_i = env_i + 1;
+}
+print("✅ Stability Test 15: 500 rapid environment creations — OK");
+
+print("\n🏁 ALL STABILITY TESTS PASSED");

@@ -109,6 +109,15 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
                         debug=(debug_level == 'full')
                     )
                     apply_vm_config(vm, vm_config)
+
+                    # Rust VM status indicator
+                    if getattr(vm, '_rust_vm_available', False) and getattr(vm, '_rust_vm_enabled', False):
+                        print("   ⚡ Rust VM: active — native acceleration enabled", file=sys.stderr)
+                    elif getattr(vm, '_rust_vm_available', False):
+                        print("   ⚡ Rust VM: available but disabled", file=sys.stderr)
+                    else:
+                        print("   ⚠️  Rust VM: not compiled — using Python VM", file=sys.stderr)
+
                     result = vm.execute(bytecode, debug=(debug_level == 'full'))
                     
                     if debug_level != 'none':

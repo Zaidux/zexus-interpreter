@@ -1104,6 +1104,34 @@ class BytecodeCompiler:
         self._emit(Opcode.DEFINE_ENTITY, member_count)
         self._emit(Opcode.STORE_NAME, name_idx)
 
+    def _compile_StateStatement(self, node):
+        """Compile a standalone state declaration.
+
+        Inside a contract, state vars are handled by _compile_ContractStatement
+        which pushes (name, value) pairs for DEFINE_CONTRACT.  When a
+        StateStatement appears at the top level or outside contracts, we
+        compile it as a STATE_WRITE + STORE_NAME so the variable is available
+        in the local environment AND in the blockchain state dict.
+        """
+        var_name = node.name.value if hasattr(node.name, 'value') else str(node.name)
+        name_idx = self._add_constant(var_name)
+
+        # Compile the initial value expression (or None)
+        if getattr(node, 'initial_value', None):
+            self._compile_node(node.initial_value)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+
+        # Write to blockchain state dict
+        self._emit(Opcode.STATE_WRITE, name_idx)
+
+        # Also store in local environment so it's accessible as a normal variable
+        if getattr(node, 'initial_value', None):
+            self._compile_node(node.initial_value)
+        else:
+            self._emit(Opcode.LOAD_CONST, self._add_constant(None))
+        self._emit(Opcode.STORE_NAME, name_idx)
+
     def _compile_ExportStatement(self, node):
         """Compile export statement - marks names for module export.
         

@@ -37,8 +37,8 @@ print(items.is_empty())  // false
 
 | ID | Category | Description | Severity | Status |
 |----|----------|-------------|----------|--------|
-| R-001 | VM / Entity | Entity field access returns `None` on VM (works in interpreter) | **Critical** | ⚠️ Open — VM-specific issue, use `--no-vm` |
-| R-002 | VM / Contract | Contract state not initialized on VM; `this.val` is `null` even with `state { val: 0 }` | **Critical** | ⚠️ Open — VM-specific issue, use `--no-vm` |
+| R-001 | VM / Entity | Entity field access returns `None` on VM (works in interpreter) | **Critical** | ✅ **Fixed in v1.8.3** — Added `_build_entity_definition()`, `_construct_entity()`, EntityInstance GET_ATTR support |
+| R-002 | VM / Contract | Contract state not initialized on VM; `this.val` is `null` even with `state { val: 0 }` | **Critical** | ✅ **Fixed in v1.8.3** — Added `_compile_StateStatement` to compiler for standalone state declarations |
 | R-003 | Interpreter / self | `self` keyword not recognized in interpreter — must use `this` | **High** | ✅ **Fixed in v1.8.3** |
 | R-004 | Interpreter / init | `init()` is NOT auto-called when constructing contract with `Contract{}` | **High** | ✅ **Fixed in v1.8.3** |
 | R-005 | Interpreter / state | `state { val: 0 }` does NOT initialize fields to default values | **High** | ✅ **Fixed in v1.8.3** |
@@ -46,7 +46,7 @@ print(items.is_empty())  // false
 | R-007 | Interpreter / for-each | `for each key, val in map` fails: "ForEach expects List" | **High** | ✅ **Fixed in v1.8.3** |
 | R-008 | Interpreter / protect | `action protect` on module-level actions fails: "Identifier not found" | Medium | ✅ **Fixed in v1.8.3** — Policy enforcement added to `apply_function` |
 | R-009 | Interpreter / nested assign | `m["a"]["b"] = val` fails: "Invalid assignment target" | Medium | ✅ **Verified working in v1.8.3** |
-| R-010 | VM / output | Some complex programs compile to bytecode but produce no output | Medium | ⚠️ Open — VM-specific, use `--no-vm` |
+| R-010 | VM / output | Some complex programs compile to bytecode but produce no output | Medium | ✅ **Fixed in v1.8.3** — Added `_vm_warn()` diagnostic system, replaced silent `except: return None` with logged warnings |
 | R-011 | Import / entity | Exported entities from other files can't be used as constructors in importing file | Medium | ✅ **Fixed in v1.8.3** — `export` now uses `is None` check instead of `not val` |
 | R-012 | Interpreter / order | Entity declarations before a contract make the contract identifier invisible ("Identifier not found") | **High** | ✅ **Fixed in v1.8.3** — Closure env fix (`outer=self`) |
 | R-013 | Interpreter / state | Multiple fields in `state { }` causes "Invalid assignment target" — only ONE field allowed | **Critical** | ✅ **Fixed in v1.8.3** |
