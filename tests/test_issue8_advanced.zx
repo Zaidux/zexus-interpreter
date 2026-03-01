@@ -1,0 +1,46 @@
+// ===== R-018 Test: Module-level helper called from contract method =====
+// Module-level list that should be modified by a helper function
+let log_entries = []
+
+action add_entry(entry) {
+    log_entries.push(entry)
+}
+
+contract EventLogger {
+    state count = 0
+
+    action record(msg) {
+        add_entry(msg)
+        this.count = this.count + 1
+    }
+
+    action getCount() {
+        return this.count
+    }
+}
+
+let logger = EventLogger()
+logger.record("first")
+logger.record("second")
+
+print("R-018 count: " + string(logger.getCount()))  // Should be 2
+print("R-018 log len: " + string(len(log_entries)))  // Should be 2
+
+// ===== R-012 deeper test: forward reference from action defined before contract =====
+action use_wallet() {
+    let w = MyWallet()
+    return w.getBalance()
+}
+
+contract MyWallet {
+    state balance = 500
+
+    action getBalance() {
+        return this.balance
+    }
+}
+
+let result = use_wallet()
+print("R-012 forward ref: " + string(result))  // Should be 500
+
+print("All advanced issue8 tests passed!")

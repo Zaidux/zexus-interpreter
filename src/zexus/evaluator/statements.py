@@ -1918,7 +1918,10 @@ class StatementEvaluatorMixin:
         
         for nm in names:
             val = env.get(nm)
-            if not val: 
+            # R-011 fix: Use ``is None`` instead of ``not val`` so that valid
+            # objects which might be falsy (empty lists, NULL placeholders from
+            # pre-registration, etc.) are not incorrectly rejected.
+            if val is None: 
                 return EvaluationError(f"Cannot export undefined: {nm}")
             
             # If inside a module, add to module's exports list

@@ -6,10 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [1.8.3] - 2026-02-26
+## [1.8.3] - 2026-03-01
+
+### 🐛 Bug Fixes — Ziver Chain Phase 0 Audit (continued)
+
+Resolves 16 issues from the [Phase 0 rewrite audit](issues/ISSUE8.md) — including 9 interpreter-level fixes, 8 parser fixes, and 3 new builtins discovered during 24-file testing.
+
+**Critical / High (interpreter):**
+- **`self` keyword not recognized** (R-003) — Added `"self"` as an alias for `"this"` in `eval_identifier()`. Both resolve to `__contract_instance__`.
+- **`init()` not auto-called on construction** (R-004) — `SmartContract.instantiate()` now auto-calls `init()` after deployment when it exists.
+- **`state { field: val }` didn't initialize defaults** (R-005) — Both parsers now correctly parse multi-field `state { }` blocks; evaluator initializes all state fields at deploy time.
+- **Indexed `for each i, item in list` failed** (R-006) — Added `index` field to `ForEachStatement` AST node; updated both parsers and evaluator to bind index as `Integer`.
+- **`for each key, val in map` failed** (R-007) — `eval_foreach_statement` now handles `Map` with key/value destructuring.
+- **Multiple fields in `state { }` crashed** (R-013) — Both parsers detect `LBRACE` after `STATE` and parse comma-separated `name: value` pairs.
+- **`INTEGER * FLOAT` type mismatch** (R-016) — Added mixed-numeric fallthrough in `eval_infix_expression` multiplication branch.
+- **`%` with floats crashed** (R-017) — Added modulo operator to `eval_float_infix` with zero-division check.
+
+**Closure / scope fixes (new in this release):**
+- **Entity/let before contract broke visibility** (R-012, R-014) — Root cause: `clone_for_closure()` created an isolated snapshot with `outer=self.outer`, so identifiers registered after cloning were invisible. Fix: changed `outer=self.outer` → `outer=self` in `Environment.clone_for_closure()` so the cloned env delegates lookups to the live module environment. Contracts, entities, and let bindings are now visible regardless of declaration order.
+- **Module-level helper side-effects dropped** (R-018, R-019) — Same root cause as R-012. Module-level actions captured a disconnected env clone; mutations (e.g., `list.push()`, `map[k]=v`) inside those helpers wrote to the clone's store, never propagating back. The `outer=self` fix ensures `assign()` walks up to the live module env, so side effects from helpers called inside contract methods now propagate correctly.
+- **`action protect` failed at module level** (R-008) — Policy enforcement now runs in `apply_function` before executing any action. The evaluator checks for `__policy_<name>__` in the environment and calls `PolicyRegistry.check_policy()`.
+- **`list.push()` silently ignored after `map[key]=val` in contract methods** (R-015) — Improved storage sync-back in `SmartContract.call_method()`: directly-updated vars now refresh `action_env` from storage after execution, and non-directly-updated vars prefer the storage reference when it differs from `action_env` (handles in-place mutations via `this.X` access).
+- **Exported entities unusable as constructors** (R-011) — `eval_export_statement` now uses `val is None` instead of `not val`, preventing valid objects (empty lists, entity definitions, NULL placeholders) from being rejected.
+
+**Parser fixes (found during 24-file testing):**
+- Consecutive `this.property = val` assignments failed (THIS token not recognized as statement starter).
+- `else if` chains didn't work (ELSE + IF token sequence not handled).
+- Keywords after DOT (e.g., `this.debug`, `return this.data`) broke statement boundary detection.
+- Entity default values (`name: string = "localhost"`) weren't parsed in either parser.
+- Entity properties with keyword names (e.g., `debug: boolean`) weren't recognized.
+- Entity default value boundary detection failed when next property used a keyword name.
+
+**Evaluator fixes (found during 24-file testing):**
+- Added missing `range(start, end, step)`, `typeof(val)`, and `abs(num)` built-in functions.
 
 ### 🔧 Build
 - Bumped all version references from v1.8.1/v1.8.2 to v1.8.3 across all config, source, and documentation files.
+
+### 📁 Files Changed
+- `src/zexus/object.py` — `clone_for_closure()` now sets `outer=self` for live env delegation
+- `src/zexus/evaluator/statements.py` — `eval_export_statement` uses `is None` check
+- `src/zexus/evaluator/functions.py` — Policy enforcement in `apply_function()` for module-level `protect`
+- `src/zexus/evaluator/expressions.py` — `self` keyword alias, mixed numeric ops, float modulo
+- `src/zexus/security.py` — Storage sync-back improvements in `call_method()`, `init()` auto-call
+- `src/zexus/zexus_ast.py` — `ForEachStatement` index field
+- `src/zexus/parser/parser.py` — Multi-field `state {}`, indexed for-each, entity defaults, keyword-name props
+- `src/zexus/parser/strategy_context.py` — Same parser fixes (strategy parser)
+- `src/zexus/evaluator/statements.py` — `eval_foreach_statement` map iteration, state init at deploy
+
+### 🧪 Testing
+- **1852 tests pass**, 0 regressions
+- 24 `.zx` integration test files covering all R-xxx fixes and parser edge cases
+- 2 new test files: `tests/test_issue8_fixes.zx`, `tests/test_issue8_advanced.zx`
 
 
 ## [1.8.2] - 2026-02-25

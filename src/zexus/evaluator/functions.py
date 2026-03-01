@@ -348,6 +348,32 @@ class FunctionEvaluatorMixin:
                 # Synchronous function execution
                 new_env = Environment(outer=fn.env)
                 
+                # R-008 fix: Enforce protection policies for module-level actions.
+                # When ``action protect`` is used at module level, the policy is
+                # stored in the environment as ``__policy_<name>__``.  Check and
+                # enforce it before the action body runs.
+                _fn_name = getattr(fn, 'name', func_name)
+                if _fn_name and env is not None:
+                    _policy_key = f"__policy_{_fn_name}__"
+                    _policy = None
+                    try:
+                        _policy = env.get(_policy_key) if hasattr(env, 'get') else None
+                    except Exception:
+                        pass
+                    if _policy is not None and _policy is not NULL:
+                        try:
+                            from ..policy_engine import get_policy_registry
+                            registry = get_policy_registry()
+                            violation = registry.check_policy(_fn_name, {
+                                "args": args,
+                                "env": env,
+                                "caller": env.get("TX.caller") if hasattr(env, 'get') else None,
+                            })
+                            if violation:
+                                return EvaluationError(f"Policy violation on '{_fn_name}': {violation}")
+                        except (ImportError, AttributeError):
+                            pass
+                
                 param_names = []
                 for i, param in enumerate(fn.parameters):
                     if i < len(args):

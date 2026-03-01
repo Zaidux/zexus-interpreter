@@ -1699,7 +1699,10 @@ class SmartContract:
                 result = evaluator.eval_node(action.body, action_env, stack_trace=[])
             
             # Save any modified state variables back to storage
-            # SKIP variables that were set via this.property (direct storage updates)
+            # For variables updated via this.property (direct storage updates),
+            # also refresh action_env so that subsequent in-place mutations on
+            # OTHER state vars are not overwritten with stale references.
+            # This fixes R-015: push after map[key]=val being silently ignored.
             for var_node in self.storage_vars:
                 # Extract variable name from node (same logic as above)
                 var_name = None
@@ -1711,11 +1714,27 @@ class SmartContract:
                     var_name = var_node
                 
                 if var_name:
-                    # Skip if this was updated via this.property = value
                     if var_name in self._direct_storage_updates:
+                        # Variable was set directly via this.prop = val.
+                        # Storage already has the authoritative value.
+                        # Refresh action_env to keep references consistent.
+                        latest = self.storage.get(var_name)
+                        if latest is not None:
+                            action_env.set(var_name, latest)
                         continue
                     
+                    # For vars NOT directly updated, sync action_env → storage.
+                    # Also check if the storage version was mutated in-place
+                    # (e.g. via this.list.push()) and prefer the latest reference.
                     current_value = action_env.get(var_name)
+                    storage_value = self.storage.get(var_name)
+                    
+                    # Use the storage reference if it's a mutable collection
+                    # that may have been mutated in-place via this.X access
+                    if storage_value is not None and storage_value is not current_value:
+                        # Storage was mutated independently — prefer storage version
+                        current_value = storage_value
+                    
                     if var_name == 'chain' and zexus_config.should_log('debug'):
                         size = None
                         try:

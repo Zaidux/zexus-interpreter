@@ -44,18 +44,18 @@ print(items.is_empty())  // false
 | R-005 | Interpreter / state | `state { val: 0 }` does NOT initialize fields to default values | **High** | ✅ **Fixed in v1.8.3** |
 | R-006 | Interpreter / for-each | `for each i, item in list` (indexed) fails: "Identifier 'i' not found" | **High** | ✅ **Fixed in v1.8.3** |
 | R-007 | Interpreter / for-each | `for each key, val in map` fails: "ForEach expects List" | **High** | ✅ **Fixed in v1.8.3** |
-| R-008 | Interpreter / protect | `action protect` on module-level actions fails: "Identifier not found" | Medium | ⚠️ Open — Use `protect` only inside contracts |
+| R-008 | Interpreter / protect | `action protect` on module-level actions fails: "Identifier not found" | Medium | ✅ **Fixed in v1.8.3** — Policy enforcement added to `apply_function` |
 | R-009 | Interpreter / nested assign | `m["a"]["b"] = val` fails: "Invalid assignment target" | Medium | ✅ **Verified working in v1.8.3** |
 | R-010 | VM / output | Some complex programs compile to bytecode but produce no output | Medium | ⚠️ Open — VM-specific, use `--no-vm` |
-| R-011 | Import / entity | Exported entities from other files can't be used as constructors in importing file | Medium | ⚠️ Open — Use factory functions that return map objects |
-| R-012 | Interpreter / order | Entity declarations before a contract make the contract identifier invisible ("Identifier not found") | **High** | ⚠️ Open — Declare all entities AFTER contracts |
+| R-011 | Import / entity | Exported entities from other files can't be used as constructors in importing file | Medium | ✅ **Fixed in v1.8.3** — `export` now uses `is None` check instead of `not val` |
+| R-012 | Interpreter / order | Entity declarations before a contract make the contract identifier invisible ("Identifier not found") | **High** | ✅ **Fixed in v1.8.3** — Closure env fix (`outer=self`) |
 | R-013 | Interpreter / state | Multiple fields in `state { }` causes "Invalid assignment target" — only ONE field allowed | **Critical** | ✅ **Fixed in v1.8.3** |
-| R-014 | Interpreter / order | `let` variable declarations before a contract also break contract visibility | **High** | ⚠️ Open — Declare module-level `let` vars AFTER contract |
-| R-015 | Interpreter / push+map | After `map[key] = val` in a contract method, subsequent `list.push()` is silently ignored | **High** | ⚠️ Open — Always do `list.push()` BEFORE `map[key] = val` |
+| R-014 | Interpreter / order | `let` variable declarations before a contract also break contract visibility | **High** | ✅ **Fixed in v1.8.3** — Same closure env fix as R-012 |
+| R-015 | Interpreter / push+map | After `map[key] = val` in a contract method, subsequent `list.push()` is silently ignored | **High** | ✅ **Fixed in v1.8.3** — Improved storage sync-back in `call_method` |
 | R-016 | Interpreter / types | `INTEGER * FLOAT` causes "Type mismatch" — no implicit coercion | **High** | ✅ **Fixed in v1.8.3** |
 | R-017 | Interpreter / modulo | `%` operator doesn't work with floats ("Unknown float operator: %") | Medium | ✅ **Fixed in v1.8.3** |
-| R-018 | Interpreter / contract-call | Module-level helper functions that modify module-level state (`push`, `map[k]=v`) have their side-effects silently ignored when called FROM a contract method | **High** | ⚠️ Open — Call state-modifying helpers at module level |
-| R-019 | Interpreter / push-in-func | `push()` / `map[k]=v` inside a module-level `action` called from init or action-chain sometimes silently fails | **High** | ⚠️ Open — Use list/map literals for initialization |
+| R-018 | Interpreter / contract-call | Module-level helper functions that modify module-level state (`push`, `map[k]=v`) have their side-effects silently ignored when called FROM a contract method | **High** | ✅ **Fixed in v1.8.3** — `clone_for_closure` now references live env |
+| R-019 | Interpreter / push-in-func | `push()` / `map[k]=v` inside a module-level `action` called from init or action-chain sometimes silently fails | **High** | ✅ **Fixed in v1.8.3** — Same closure env fix as R-018 |
 
 ### R-003 Fix Details
 **File:** `src/zexus/evaluator/expressions.py` (eval_identifier, ~line 92)  
@@ -227,17 +227,17 @@ print(remainder)  // 1.5
 7. Remove phantom imports: `../database/postgres`, `../ai/zaie_engine`, `../middleware/security_middleware`
 8. Remove `inject`, `middleware()`, `register_dependency()` (untested/unavailable)
 9. Replace DB calls with in-memory maps
-10. Use factory functions for cross-file entity usage
+10. ~~Use factory functions for cross-file entity usage~~ → **Fixed v1.8.3**: Export check uses `is None` instead of `not val`
 11. Prefer `--no-vm` execution until VM stabilizes
-12. Declare all entities AFTER contracts (entity before contract breaks contract visibility — R-012)
+12. ~~Declare all entities AFTER contracts (entity before contract breaks contract visibility — R-012)~~ → **Fixed v1.8.3**: Closure env now references live module env
 13. ~~Only ONE field in `state { }` — use module-level `let` vars for additional state (R-013)~~ → **Fixed v1.8.3**: Multiple fields in `state { }` now work
-14. Declare module-level `let` vars AFTER contract — contract can forward-reference them (R-014)
-15. In contract methods: always `list.push()` BEFORE `map[key] = val` (R-015)
+14. ~~Declare module-level `let` vars AFTER contract — contract can forward-reference them (R-014)~~ → **Fixed v1.8.3**: Same closure env fix as R-012
+15. ~~In contract methods: always `list.push()` BEFORE `map[key] = val` (R-015)~~ → **Fixed v1.8.3**: Improved storage sync-back
 16. ~~Convert integers to float before multiplying with floats: `(int_val + 0.0) * float_val` (R-016)~~ → **Fixed v1.8.3**: Implicit Integer/Float coercion now works for `*`
 17. ~~Avoid `%` with floats; simulate modulo or convert first (R-017)~~ → **Fixed v1.8.3**: `%` now works with floats
-18. State-modifying helpers called from contract methods have side-effects silently dropped — call them at module level instead (R-018)
-19. Use list/map **literals** for bulk initialization instead of loops of `push()`/`map[k]=v` (R-019)
-20. Preferred file layout order: `imports → constants → protocol → helper actions → contract (single state field) → module-level let vars → module-level helpers → entities → test → exports`
+18. ~~State-modifying helpers called from contract methods have side-effects silently dropped — call them at module level instead (R-018)~~ → **Fixed v1.8.3**: `clone_for_closure` now references live env
+19. ~~Use list/map **literals** for bulk initialization instead of loops of `push()`/`map[k]=v` (R-019)~~ → **Fixed v1.8.3**: Same closure env fix as R-018
+20. Preferred file layout order: `imports → constants → protocol → helper actions → contract → module-level let vars → module-level helpers → entities → test → exports`
 
 ## Phase 0 Rewrite Progress
 

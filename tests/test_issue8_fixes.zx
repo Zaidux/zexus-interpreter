@@ -1,0 +1,67 @@
+// ===== R-012 / R-014 Test: Entity and let before contract =====
+// Entity declared BEFORE contract — should NOT break contract visibility
+
+entity Token {
+    name: string = "ZToken"
+    balance: integer = 0
+}
+
+let global_counter = 0
+
+contract Wallet {
+    state {
+        owner: "alice",
+        value: 100
+    }
+
+    action getOwner() {
+        return this.owner
+    }
+
+    action getValue() {
+        return this.value
+    }
+}
+
+// If R-012/R-014 are fixed, Wallet should be accessible here
+let w = Wallet()
+print("R-012 test: " + w.getOwner())   // Should print "alice"
+print("R-014 test: " + string(w.getValue()))  // Should print "100"
+
+// ===== R-006/R-007 Test: Indexed for-each and map iteration =====
+let items = [10, 20, 30]
+for each i, item in items {
+    print("index " + string(i) + ": " + string(item))
+}
+
+let m = {"a": 1, "b": 2}
+for each key, val in m {
+    print(key + " = " + string(val))
+}
+
+// ===== R-016 / R-017 Test: Mixed type math =====
+let mixed = 5 * 2.5
+print("R-016 mixed mul: " + string(mixed))  // 12.5
+
+let mod_result = 10.5 % 3.0
+print("R-017 float mod: " + string(mod_result))  // 1.5
+
+// ===== R-003 Test: self keyword =====
+contract Counter {
+    state count = 0
+    
+    action increment() {
+        self.count = self.count + 1
+    }
+    
+    action getCount() {
+        return self.count
+    }
+}
+
+let c = Counter()
+c.increment()
+c.increment()
+print("R-003 self: " + string(c.getCount()))  // Should print 2
+
+print("All issue8 tests passed!")

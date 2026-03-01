@@ -9,7 +9,7 @@
 
 **A modern, security-first programming language with built-in blockchain support, VM-accelerated execution, advanced memory management, and policy-as-code**
 
-[What's New](#-whats-new-in-v171) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
+[What's New](#-whats-new-in-v183) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
 
 </div>
 
@@ -18,7 +18,7 @@
 ## 📋 Table of Contents
 
 - [What is Zexus?](#-what-is-zexus)
-- [What's New](#-whats-new-in-v171)
+- [What's New](#-whats-new-in-v183)
 - [Key Features](#-key-features)
   - [VM-Accelerated Performance](#-vm-accelerated-performance-new)
   - [Security & Policy-as-Code](#-security--policy-as-code--verify-enhanced)
@@ -69,69 +69,85 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ## 🎉 What's New in v1.8.3
 
-### Latest Features (v1.8.3)
+### v1.8.3 — Phase 0 Audit Fixes & Closure Scoping Overhaul (2026-03-01)
 
-✅ **FIND Keyword** - Declarative project search that resolves exact module paths with scope filtering and smart suggestions  
-✅ **LOAD Keyword & Manager** - Provider-aware configuration loader with built-in ENV, JSON, and YAML support plus caching  
-✅ **VM + Bytecode Support** - FIND/LOAD now compile to bytecode with helper bridges so scripts run identically in the VM and interpreter  
-✅ **Targeted Test Coverage** - Added regression tests that exercise both interpreter and VM paths for FIND/LOAD workflows  
+16 issues from the [Ziver-Chain Phase 0 rewrite audit](issues/ISSUE8.md) resolved. Key changes:
 
-### Previous Features (v1.6.3)
+**Closure & Scoping Fixes:**
+- Entity/`let` declarations before a contract no longer break contract visibility — declaration order is now flexible
+- Module-level helper functions called from contract methods now correctly propagate side-effects (`list.push()`, `map[k]=v`)
+- `action protect` now works at module level (policy enforcement added to function call path)
+- Storage sync-back in contract methods improved — `list.push()` after `map[key]=val` no longer silently ignored
+- Exported entities can now be used as constructors in importing files
 
-✅ **Complete Database Ecosystem** - Production-ready database drivers  
-✅ **4 Database Drivers** - SQLite, PostgreSQL, MySQL, MongoDB fully tested  
-✅ **HTTP Server** - Build web servers with routing (GET, POST, PUT, DELETE)  
-✅ **Socket/TCP Primitives** - Low-level network programming  
-✅ **Testing Framework** - Write and run tests with assertions  
-✅ **ZPM Package Manager** - Fully functional package management system  
-✅ **Comprehensive Documentation** - 900+ lines of ecosystem guides  
+**Contract & Language Fixes:**
+- `self` keyword works as alias for `this` inside contracts
+- `init()` auto-called on `Contract()` construction
+- `state { field1: val, field2: val }` multi-field blocks work correctly
+- `for each i, item in list` (indexed) and `for each key, val in map` now supported
+- `INTEGER * FLOAT` implicit coercion and `%` modulo on floats now work
+- Added `range()`, `typeof()`, `abs()` builtins; 8 parser edge-case fixes
 
-### Previous Features (v1.5.0)
+**Stats:** 1852 tests pass, 0 regressions. See [CHANGELOG](CHANGELOG.md) for full details.
 
-✅ **World-Class Error Reporting** - Production-grade error messages rivaling Rust  
-✅ **Advanced DATA System** - Generic types, pattern matching, operator overloading  
-✅ **Stack Trace Formatter** - Beautiful, readable stack traces with source context  
-✅ **Smart Error Suggestions** - Actionable hints for fixing common errors  
-✅ **Pattern Matching** - Complete pattern matching with exhaustiveness checking  
-✅ **CONTINUE Keyword** - Error recovery mode for graceful degradation and batch processing  
+### v1.8.2 — Concurrency & Channel Support (2026-02-25)
 
-### Recent Enhancements (v0.1.3)
+- `watch =>` arrow-lambda fallback no longer hijacks the strategy parser
+- Channel support in VM compiler (`_compile_ChannelStatement`, `_compile_SendStatement`, `_compile_ReceiveStatement`)
+- SPAWN/AWAIT opcodes in sync path using `threading.Thread(daemon=True)`
+- Strategy parser channel/async handlers added
+- Fixed 10+ missing VM node types; zero VM fallbacks achieved
+- All versions bumped to 1.8.2; Rust VM builds with `maturin develop --release`
 
-✅ **130+ Keywords Fully Operational** - All core language features tested and verified  
-✅ **Dual-Mode DEBUG** - Function mode (`debug(x)`) and statement mode (`debug x;`)  
-✅ **Conditional Print** - `print(condition, message)` for dynamic output control  
-✅ **Multiple Syntax Styles** - `let x = 5`, `let x : 5`, `let x : int = 5` all supported  
-✅ **Enterprise Keywords** - MIDDLEWARE, AUTH, THROTTLE, CACHE, INJECT fully functional  
-✅ **Async/Await Runtime** - Complete Promise-based async system with context propagation  
-✅ **Main Entry Point** - 15+ builtins for program lifecycle management  
-✅ **UI Renderer** - SCREEN, COMPONENT, THEME keywords with 120+ tests  
-✅ **Enhanced VERIFY** - Email, URL, phone validation, pattern matching, database checks  
-✅ **Blockchain Keywords** - implements, pure, view, payable, modifier, this, emit  
-✅ **Loop Control** - BREAK keyword for early loop exit  
-✅ **Error Handling** - THROW keyword for explicit error raising, THIS for instance reference  
-✅ **100+ Built-in Functions** - Comprehensive standard library  
-✅ **LOG Keyword Enhancements** - `read_file()` and `eval_file()` for dynamic code generation  
-✅ **REQUIRE Tolerance Blocks** - Conditional bypasses for VIP/admin/emergency scenarios  
-✅ **Function-Level Scoping** - LET/CONST documented with scope behavior and shadowing rules  
-✅ **Advanced Error Patterns** - Retry, circuit breaker, error aggregation patterns
+### v1.8.1 — ISSUE7 Audit & Security Remediation (2026-02-23)
 
-### Bug Fixes & Improvements
+All 21 issues from the Phase 0 audit resolved:
+- `emit`, `protocol`, `implements` keywords fully operational in all parsers
+- Entity compilation crash in VM fixed; imported functions no longer return raw Action objects
+- `map.has()` / `map.get()` key normalization fixed
+- ExportStatement supported in VM; entity constructor arity validation relaxed
+- `persistent storage` now wires to SQLite backend with `set_persistent`/`get_persistent`
+- 5 new builtins: `track_memory()`, `cache()`, `throttle()`, `audit()`, `verify()`
+- Complete security remediation Phases 0–5 (sandboxing, ReDoS, import sandboxing, compiler parity, dead-code removal, bounded logs)
+- 1852 tests pass
 
-✅ Fixed array literal parsing (no more duplicate elements)  
-✅ Fixed ENUM value accessibility  
-✅ Fixed WHILE condition parsing without parentheses  
-✅ Fixed loop execution and variable reassignment  
-✅ Fixed DEFER cleanup execution  
-✅ Fixed SANDBOX return values  
-✅ Fixed dependency injection container creation  
-✅ Added tolerance blocks for REQUIRE  
-✅ Improved error messages and debugging output
+### v1.8.0 — Rust VM Pipeline & Major Features (2026-02-23)
+
+**Language Features:** Compound assignment (`+=`, `-=`, etc.), string interpolation (`"Hello ${name}"`), block comments (`/* */`), multiline strings, single-quoted strings, exponentiation (`**`), `finally` clause, destructuring assignment.
+
+**Developer Tooling:** Circular import detection, LSP go-to-definition, remote ZPM registry, static type checker.
+
+**Major Capabilities:** Debug Adapter Protocol (DAP) server, GUI backend (Tk + Web), true concurrent EventLoop, WASM compilation target.
+
+**Rust-First Execution (Phases 0–6):** Complete migration achieving **102,000+ TPS** with zero Python fallbacks. Includes binary `.zxc` format, Rust bytecode interpreter (22 MIPS, 20.7x speedup), adaptive VM routing, `RustContractVM` orchestration, GIL-free batch execution (221,593 TPS peak), and 40+ Rust builtins.
+
+### v1.7.x — FIND/LOAD Keywords & Performance (2026-01)
+
+- **v1.7.2:** Major interpreter speed improvements, smart storage for lists, optimized stack traces, blockchain perf fix
+- **v1.7.1:** FIND keyword (declarative module search), LOAD keyword (provider-aware config loader), VM bytecode support for both, regression tests
+
+### v1.6.x — Database Ecosystem & Security (2025-12 – 2026-01)
+
+- **v1.6.8:** Parser fix for indexed assignments on new lines; contract DATA member declarations
+- **v1.6.7:** Semicolon handling fix, context-aware keyword recognition, standalone block statements
+- **v1.6.6:** Repeated contract action calls, multiple indexed assignments
+- **v1.6.5:** Entity property access, keyword restrictions (`from`/`to` as params), multiple map assignments
+- **v1.6.3:** Comprehensive security remediation (10 OWASP categories), RBAC, bcrypt, input sanitization, resource limits, path traversal prevention
+- **v1.6.2:** 4 database drivers (SQLite, PostgreSQL, MySQL, MongoDB), HTTP server, socket/TCP, testing framework, ZPM
+
+### v1.5.0 — Error Reporting & Type System (2025-12)
+
+World-class error messages (rivaling Rust), generic types, pattern matching, operator overloading, stack trace formatter, smart suggestions, CONTINUE keyword.
+
+### v0.1.3 — Foundation (2025-11)
+
+130+ keywords, dual-mode DEBUG, conditional print, multiple syntax styles, enterprise keywords, async/await, UI renderer, enhanced VERIFY, blockchain keywords, 100+ builtins.
 
 ---
 
-## 🔒 Latest Security Patches & Features (v1.6.3)
+## 🔒 Security Features
 
-Zexus v1.6.3 introduces **comprehensive security enhancements** and developer-friendly safety features. These improvements make Zexus one of the most secure interpreted languages available, with enterprise-grade protection built into the language itself.
+Zexus includes **comprehensive security enhancements** and developer-friendly safety features, making it one of the most secure interpreted languages available with enterprise-grade protection built into the language itself.
 
 ### 🛡️ Security Features Added
 

@@ -1206,8 +1206,18 @@ class Environment:
         return val
 
     def clone_for_closure(self):
-        """Create a shallow copy of the environment for closure capture."""
-        cloned = Environment(outer=self.outer, persistence_scope=self.persistence_scope)
+        """Create a shallow copy of the environment for closure capture.
+        
+        The clone uses the original environment as its outer scope so that
+        identifiers registered after cloning (e.g. contracts/entities defined
+        later in sequential evaluation) remain reachable through the scope
+        chain.  Mutations via ``assign()`` also propagate back to the
+        original environment, fixing R-018/R-019 (side-effects from
+        module-level helpers called inside contract methods silently dropped).
+        """
+        # Use *self* (the live env) as outer instead of self.outer so that
+        # names added to the original env after cloning are still visible.
+        cloned = Environment(outer=self, persistence_scope=self.persistence_scope)
         cloned.store = dict(self.store)
         cloned.const_vars = set(self.const_vars)
         cloned.exports = dict(self.exports)
