@@ -542,13 +542,27 @@ class BytecodeCompiler:
         exit_jump_idx = len(self.instructions)
         self._emit(Opcode.JUMP_IF_FALSE, None)               # jump to end if false
 
-        # --- Extract item: item = iterable[index] ---
-        self._emit(Opcode.LOAD_NAME, iter_const)            # push iterable
-        self._emit(Opcode.LOAD_NAME, index_const)           # push index
-        self._emit(Opcode.INDEX)                             # iterable[index]
+        # --- Extract item (and optional index/key) ---
         item_name = node.item.value if hasattr(node.item, 'value') else str(node.item)
         item_const = self._add_constant(item_name)
-        self._emit(Opcode.STORE_NAME, item_const)           # store as loop variable
+
+        if node.index:
+            # Two-variable for-each: for key, value in map OR for i, item in list
+            # Use FOR_ITER 2: pushes (index_or_key, item_or_value) onto stack
+            user_index_name = node.index.value if hasattr(node.index, 'value') else str(node.index)
+            user_index_const = self._add_constant(user_index_name)
+            self._emit(Opcode.LOAD_NAME, iter_const)        # push iterable
+            self._emit(Opcode.LOAD_NAME, index_const)       # push counter
+            self._emit(Opcode.FOR_ITER, 2)                   # push key/index, then value/item
+            self._emit(Opcode.STORE_NAME, item_const)        # store item/value (top)
+            self._emit(Opcode.STORE_NAME, user_index_const)  # store index/key (below)
+        else:
+            # Single variable: for item in list OR for key in map
+            # Use FOR_ITER 1: pushes single value (element for list, key for dict)
+            self._emit(Opcode.LOAD_NAME, iter_const)        # push iterable
+            self._emit(Opcode.LOAD_NAME, index_const)       # push counter
+            self._emit(Opcode.FOR_ITER, 1)                   # push item or key
+            self._emit(Opcode.STORE_NAME, item_const)        # store as loop variable
 
         # --- Body ---
         self._compile_node(node.body)

@@ -121,28 +121,65 @@ def create_builtin_modules(evaluator):
         def _crypto_aes_encrypt(*args):
             if len(args) != 2:
                 return EvaluationError("aes_encrypt() expects 2 arguments: data, key")
-            # Simplified AES - would need proper implementation
             data = args[0].value if hasattr(args[0], 'value') else str(args[0])
             key = args[1].value if hasattr(args[1], 'value') else str(args[1])
-            # For now, return a mock encrypted value (TODO: implement proper AES)
-            import base64
-            encoded = base64.b64encode(data.encode()).decode()
-            return String(f"aes_encrypted:{encoded}")
+            try:
+                import hashlib, base64, os
+                # Derive 256-bit key from user key via SHA-256
+                aes_key = hashlib.sha256(key.encode('utf-8')).digest()
+                # Use AES-256-GCM for authenticated encryption
+                from Crypto.Cipher import AES as _AES
+                nonce = os.urandom(12)
+                cipher = _AES.new(aes_key, _AES.MODE_GCM, nonce=nonce)
+                ciphertext, tag = cipher.encrypt_and_digest(data.encode('utf-8'))
+                # Pack: nonce (12) + tag (16) + ciphertext, base64-encoded
+                packed = base64.b64encode(nonce + tag + ciphertext).decode('ascii')
+                return String(packed)
+            except ImportError:
+                # Fallback: if pycryptodome not available, use Fernet from cryptography
+                try:
+                    import hashlib, base64
+                    from cryptography.fernet import Fernet as _Fernet
+                    fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key.encode('utf-8')).digest())
+                    f = _Fernet(fernet_key)
+                    encrypted = f.encrypt(data.encode('utf-8'))
+                    return String(encrypted.decode('ascii'))
+                except ImportError:
+                    return EvaluationError("aes_encrypt() requires pycryptodome or cryptography package")
+            except Exception as e:
+                return EvaluationError(f"aes_encrypt() failed: {str(e)}")
         
         # aes_decrypt(encrypted_data, key)
         def _crypto_aes_decrypt(*args):
             if len(args) != 2:
                 return EvaluationError("aes_decrypt() expects 2 arguments: encrypted_data, key")
-            # Simplified AES - would need proper implementation
             encrypted = args[0].value if hasattr(args[0], 'value') else str(args[0])
             key = args[1].value if hasattr(args[1], 'value') else str(args[1])
-            # For now, decode the mock encryption (TODO: implement proper AES)
-            import base64
-            if encrypted.startswith("aes_encrypted:"):
-                encoded = encrypted.split(":", 1)[1]
-                decoded = base64.b64decode(encoded).decode()
-                return String(decoded)
-            return String(encrypted)
+            try:
+                import hashlib, base64
+                aes_key = hashlib.sha256(key.encode('utf-8')).digest()
+                raw = base64.b64decode(encrypted)
+                if len(raw) < 28:  # 12 nonce + 16 tag minimum
+                    return EvaluationError("aes_decrypt() invalid ciphertext (too short)")
+                nonce = raw[:12]
+                tag = raw[12:28]
+                ciphertext = raw[28:]
+                from Crypto.Cipher import AES as _AES
+                cipher = _AES.new(aes_key, _AES.MODE_GCM, nonce=nonce)
+                plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+                return String(plaintext.decode('utf-8'))
+            except ImportError:
+                try:
+                    import hashlib, base64
+                    from cryptography.fernet import Fernet as _Fernet
+                    fernet_key = base64.urlsafe_b64encode(hashlib.sha256(key.encode('utf-8')).digest())
+                    f = _Fernet(fernet_key)
+                    decrypted = f.decrypt(encrypted.encode('ascii'))
+                    return String(decrypted.decode('utf-8'))
+                except ImportError:
+                    return EvaluationError("aes_decrypt() requires pycryptodome or cryptography package")
+            except Exception as e:
+                return EvaluationError(f"aes_decrypt() failed: {str(e)}")
         
         # Register all crypto functions
         crypto_env.set("keccak256", Builtin(_crypto_keccak256, "keccak256"))

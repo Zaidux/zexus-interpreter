@@ -915,6 +915,13 @@ class Lexer:
                 return token
             return IDENT
 
+        # 'storage' is only a keyword after 'persistent' (for 'persistent storage ...')
+        # In all other contexts, treat as a regular identifier.
+        if ident == "storage":
+            if self.last_token_type == PERSISTENT:
+                return token  # STORAGE keyword
+            return IDENT
+
         if ident in _STRICT_KEYWORDS:
             return token
 

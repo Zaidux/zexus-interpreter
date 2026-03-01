@@ -1,8 +1,16 @@
 """Math module for Zexus standard library."""
 
 import math
-import random
+import random as _random_module
 from typing import List
+
+# Save builtin references before module-level exports shadow them
+_builtin_min = min
+_builtin_max = max
+_builtin_sum = sum
+_builtin_abs = abs
+_builtin_round = round
+_builtin_pow = pow
 
 
 class MathModule:
@@ -121,7 +129,7 @@ class MathModule:
     @staticmethod
     def cbrt(x: float) -> float:
         """Cube root."""
-        return math.copysign(1, x) * abs(x) ** (1/3)
+        return math.copysign(1, x) * _builtin_abs(x) ** (1/3)
 
     # Rounding and absolute functions
     @staticmethod
@@ -142,12 +150,12 @@ class MathModule:
     @staticmethod
     def round(x: float, ndigits: int = 0) -> float:
         """Round to n digits."""
-        return round(x, ndigits)
+        return _builtin_round(x, ndigits)
 
     @staticmethod
     def abs(x: float) -> float:
         """Absolute value."""
-        return abs(x)
+        return _builtin_abs(x)
 
     # Other functions
     @staticmethod
@@ -163,7 +171,7 @@ class MathModule:
     @staticmethod
     def lcm(a: int, b: int) -> int:
         """Least common multiple."""
-        return abs(a * b) // math.gcd(a, b) if a and b else 0
+        return _builtin_abs(a * b) // math.gcd(a, b) if a and b else 0
 
     @staticmethod
     def degrees(x: float) -> float:
@@ -209,12 +217,12 @@ class MathModule:
     @staticmethod
     def sum(numbers: List[float]) -> float:
         """Sum of numbers."""
-        return sum(numbers)
+        return _builtin_sum(numbers)
 
     @staticmethod
     def mean(numbers: List[float]) -> float:
         """Arithmetic mean."""
-        return sum(numbers) / len(numbers) if numbers else 0
+        return _builtin_sum(numbers) / len(numbers) if numbers else 0
 
     @staticmethod
     def median(numbers: List[float]) -> float:
@@ -242,7 +250,7 @@ class MathModule:
         if not numbers:
             return 0
         m = MathModule.mean(numbers)
-        return sum((x - m) ** 2 for x in numbers) / len(numbers)
+        return _builtin_sum((x - m) ** 2 for x in numbers) / len(numbers)
 
     @staticmethod
     def stdev(numbers: List[float]) -> float:
@@ -252,17 +260,17 @@ class MathModule:
     @staticmethod
     def min(numbers: List[float]) -> float:
         """Minimum value."""
-        return min(numbers) if numbers else 0
+        return _builtin_min(numbers) if numbers else 0
 
     @staticmethod
     def max(numbers: List[float]) -> float:
         """Maximum value."""
-        return max(numbers) if numbers else 0
+        return _builtin_max(numbers) if numbers else 0
 
     @staticmethod
     def clamp(x: float, min_val: float, max_val: float) -> float:
         """Clamp x between min and max."""
-        return max(min_val, min(max_val, x))
+        return _builtin_max(min_val, _builtin_min(max_val, x))
 
     @staticmethod
     def lerp(a: float, b: float, t: float) -> float:
@@ -273,30 +281,30 @@ class MathModule:
     @staticmethod
     def random() -> float:
         """Random float in [0, 1)."""
-        return random.random()
+        return _random_module.random()
 
     @staticmethod
     def randint(a: int, b: int) -> int:
         """Random integer in [a, b]."""
-        return random.randint(a, b)
+        return _random_module.randint(a, b)
 
     @staticmethod
     def randrange(start: int, stop: int = None, step: int = 1) -> int:
         """Random integer from range."""
         if stop is None:
-            return random.randrange(start)
-        return random.randrange(start, stop, step)
+            return _random_module.randrange(start)
+        return _random_module.randrange(start, stop, step)
 
     @staticmethod
     def choice(seq: List) -> any:
         """Random element from sequence."""
-        return random.choice(seq) if seq else None
+        return _random_module.choice(seq) if seq else None
 
     @staticmethod
     def shuffle(seq: List) -> List:
         """Shuffle sequence (returns new list)."""
         result = seq.copy()
-        random.shuffle(result)
+        _random_module.shuffle(result)
         return result
 
 

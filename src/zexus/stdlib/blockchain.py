@@ -319,6 +319,90 @@ class BlockchainModule:
         
         return True
 
+    @staticmethod
+    def create_chain(name: str = "default", config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new blockchain initialized with a genesis block.
+
+        Args:
+            name: Name/identifier for this chain (default: "default")
+            config: Optional configuration dict. Supported keys:
+                - difficulty (int): Mining difficulty (default: 4)
+                - mining_reward (float): Block reward (default: 50.0)
+                - max_supply (float): Maximum token supply (default: 21_000_000.0)
+
+        Returns:
+            A chain dict with keys: name, config, blocks (list starting with
+            genesis), pending_transactions, height, and created_at.
+        """
+        cfg = {
+            "difficulty": 4,
+            "mining_reward": 50.0,
+            "max_supply": 21_000_000.0,
+        }
+        if config:
+            cfg.update(config)
+
+        genesis = BlockchainModule.create_genesis_block()
+
+        return {
+            "name": name,
+            "config": cfg,
+            "blocks": [genesis],
+            "pending_transactions": [],
+            "height": 1,
+            "created_at": genesis["timestamp"],
+        }
+
+    @staticmethod
+    def add_block(chain: Dict[str, Any], data: Any) -> Dict[str, Any]:
+        """Add a new block to an existing chain.
+
+        Args:
+            chain: Chain dict returned by create_chain()
+            data: Data/transactions to include in the block
+
+        Returns:
+            The newly created block (also appended to chain["blocks"]).
+        """
+        blocks = chain.get("blocks", [])
+        last_block = blocks[-1] if blocks else None
+        prev_hash = last_block["hash"] if last_block else "0" * 64
+        index = len(blocks)
+
+        new_block = BlockchainModule.create_block(
+            index=index,
+            timestamp=time.time(),
+            data=data,
+            previous_hash=prev_hash,
+            nonce=0,
+        )
+        blocks.append(new_block)
+        chain["blocks"] = blocks
+        chain["height"] = len(blocks)
+        return new_block
+
+    @staticmethod
+    def get_chain_info(chain: Dict[str, Any]) -> Dict[str, Any]:
+        """Return summary information about a chain.
+
+        Args:
+            chain: Chain dict returned by create_chain()
+
+        Returns:
+            Dict with name, height, difficulty, mining_reward, created_at,
+            latest_hash.
+        """
+        blocks = chain.get("blocks", [])
+        cfg = chain.get("config", {})
+        return {
+            "name": chain.get("name", "unknown"),
+            "height": chain.get("height", len(blocks)),
+            "difficulty": cfg.get("difficulty", 4),
+            "mining_reward": cfg.get("mining_reward", 50.0),
+            "created_at": chain.get("created_at", 0),
+            "latest_hash": blocks[-1]["hash"] if blocks else "",
+        }
+
 
 # Export functions for easy access
 create_address = BlockchainModule.create_address

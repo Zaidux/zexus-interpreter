@@ -813,12 +813,21 @@ class EvaluatorBytecodeCompiler:
     
     def _compile_MapLiteral(self, node: zexus_ast.MapLiteral):
         """Compile map/dictionary literal"""
+        # node.pairs may be a dict (older parser) or a list of (key, value) tuples
+        pairs = node.pairs or []
+        if isinstance(pairs, dict):
+            iterable = pairs.items()
+            count = len(pairs)
+        else:
+            iterable = pairs
+            count = len(pairs)
+
         # Push key-value pairs
-        for key_expr, value_expr in node.pairs:
+        for key_expr, value_expr in iterable:
             self._compile_node(key_expr)
             self._compile_node(value_expr)
         # Build map from stack
-        self.builder.emit("BUILD_MAP", len(node.pairs))
+        self.builder.emit("BUILD_MAP", count)
 
     # LI12: _compile_PropertyAccessExpression is defined later in this file.
     # The earlier duplicate implementation was dead code (overridden).

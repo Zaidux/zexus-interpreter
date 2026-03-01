@@ -81,6 +81,15 @@ from ..error_reporter import get_error_reporter, ZexusError, print_error
 from ..vm.vm import VM, VMMode
 from ..vm.compiler import compile_ast_to_bytecode, UnsupportedNodeError
 
+# Kernel extension layer (opt-in, non-breaking)
+try:
+    from ..kernel import get_kernel as _get_kernel
+    _kernel = _get_kernel().boot()
+    KERNEL_AVAILABLE = True
+except Exception:
+    _kernel = None
+    KERNEL_AVAILABLE = False
+
 console = Console()
 
 def show_all_commands():
@@ -1112,6 +1121,34 @@ def profile(ctx, file, memory, top, json_output):
             import traceback
             traceback.print_exc()
         sys.exit(1)
+
+
+@cli.command(name="kernel")
+@click.pass_context
+def kernel_status(ctx):
+    """Show Zexus kernel status and registered domains"""
+    if not KERNEL_AVAILABLE or _kernel is None:
+        console.print("[yellow]Kernel not available[/yellow]")
+        sys.exit(1)
+
+    status = _kernel.status()
+    console.print("\n[bold cyan]⚙️  Zexus Kernel Status[/bold cyan]\n")
+    console.print(f"  Booted:    [green]{status['booted']}[/green]")
+    console.print(f"  Domains:   [green]{status['domain_count']}[/green]")
+    console.print(f"  Opcodes:   [green]{status['opcode_handlers']}[/green] handlers")
+    console.print(f"  Middleware: [green]{status['middleware']}[/green]\n")
+
+    if status['domains']:
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Domain", style="cyan")
+        table.add_column("Version", style="white")
+        table.add_column("Status", style="green")
+        for name, version in status['domains'].items():
+            domain = _kernel.registry.get_domain(name)
+            n_ops = len(domain.opcodes) if domain else 0
+            table.add_row(name, version, f"{n_ops} opcodes")
+        console.print(table)
+
 
 if __name__ == "__main__":
     cli()

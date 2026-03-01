@@ -148,7 +148,12 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
                 a = a.value
             if hasattr(b, "value"):
                 b = b.value
-            stack.append(a / b if b != 0 else 0)
+            if b == 0:
+                stack.append(0)
+            elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
+                stack.append(a // b if a % b == 0 else a / b)
+            else:
+                stack.append(a / b)
         elif op_name == "MOD":
             b = stack.pop() if stack else 1
             a = stack.pop() if stack else 0
@@ -214,10 +219,63 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
                     stack.append(obj.get(idx))
                 elif isinstance(obj, ZMap):
                     stack.append(obj.get(idx))
+                elif isinstance(obj, dict) and isinstance(idx, int):
+                    keys = list(obj.keys())
+                    if 0 <= idx < len(keys):
+                        stack.append(obj[keys[idx]])
+                    else:
+                        stack.append(None)
                 else:
                     stack.append(obj[idx] if obj is not None else None)
             except Exception:
                 stack.append(None)
+        elif op_name == "FOR_ITER":
+            var_count = operand if operand else 1
+            idx = stack.pop() if stack else 0
+            obj = stack.pop() if stack else None
+            try:
+                if isinstance(obj, dict):
+                    keys = list(obj.keys())
+                    if isinstance(idx, int) and 0 <= idx < len(keys):
+                        key = keys[idx]
+                        if var_count == 2:
+                            stack.append(key)
+                            stack.append(obj[key])
+                        else:
+                            stack.append(key)
+                    else:
+                        for _ in range(var_count):
+                            stack.append(None)
+                elif isinstance(obj, ZMap):
+                    keys = list(obj.pairs.keys())
+                    if isinstance(idx, int) and 0 <= idx < len(keys):
+                        key = keys[idx]
+                        if var_count == 2:
+                            stack.append(key)
+                            stack.append(obj.pairs[key])
+                        else:
+                            stack.append(key)
+                    else:
+                        for _ in range(var_count):
+                            stack.append(None)
+                elif isinstance(obj, (list, ZList)):
+                    elems = obj.elements if isinstance(obj, ZList) else obj
+                    if isinstance(idx, int) and 0 <= idx < len(elems):
+                        if var_count == 2:
+                            stack.append(idx)
+                            stack.append(elems[idx])
+                        else:
+                            stack.append(elems[idx])
+                    else:
+                        for _ in range(var_count):
+                            stack.append(None)
+                else:
+                    raise NotImplementedError("FOR_ITER target type not supported")
+            except NotImplementedError:
+                raise
+            except Exception:
+                for _ in range(var_count):
+                    stack.append(None)
         elif op_name == "SLICE":
             end = stack.pop() if stack else None
             start = stack.pop() if stack else None

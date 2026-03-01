@@ -201,7 +201,7 @@ class HTTPServer:
         finally:
             try:
                 client_socket.close()
-            except:
+            except OSError:
                 pass
     
     def listen(self):
@@ -244,5 +244,5 @@ class HTTPServer:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except OSError:
                 pass

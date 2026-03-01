@@ -250,7 +250,7 @@ class ResourceLimiter:
                 stats['memory_mb'] = memory_mb
                 stats['max_memory_mb'] = self.max_memory_mb
                 stats['memory_percent'] = (memory_mb / self.max_memory_mb) * 100
-            except:
+            except (OSError, AttributeError, ZeroDivisionError):
                 pass
         
         return stats

@@ -179,6 +179,254 @@ except Exception:
 # Sentinel returned when Rust VM signals needs_fallback
 _RUST_VM_FALLBACK_SENTINEL = object()
 
+# ==================== Zexus Method Dispatch Tables ====================
+# These provide Zexus-specific methods on plain Python dicts/lists/strings
+# that the VM creates via BUILD_MAP/BUILD_LIST/LOAD_CONST.
+
+def _dict_has(target, args):
+    if not args:
+        return False
+    key = args[0]
+    return key in target
+
+def _dict_keys(target, args):
+    return list(target.keys())
+
+def _dict_values(target, args):
+    return list(target.values())
+
+def _dict_entries(target, args):
+    return [[k, v] for k, v in target.items()]
+
+def _dict_size(target, args):
+    return len(target)
+
+def _dict_delete(target, args):
+    if args and args[0] in target:
+        del target[args[0]]
+        return True
+    return False
+
+def _dict_contains(target, args):
+    if not args:
+        return False
+    return args[0] in target
+
+_DICT_METHODS = {
+    "has": _dict_has,
+    "keys": _dict_keys,
+    "values": _dict_values,
+    "entries": _dict_entries,
+    "size": _dict_size,
+    "length": _dict_size,
+    "count": _dict_size,
+    "delete": _dict_delete,
+    "remove": _dict_delete,
+    "contains": _dict_contains,
+}
+
+
+def _list_push(target, args, vm=None):
+    if args:
+        target.append(args[0])
+    return target
+
+def _list_pop(target, args, vm=None):
+    if target:
+        return target.pop()
+    return None
+
+def _list_count(target, args, vm=None):
+    if args:
+        return target.count(args[0])
+    return len(target)
+
+def _list_length(target, args, vm=None):
+    return len(target)
+
+def _list_contains(target, args, vm=None):
+    if not args:
+        return False
+    val = args[0]
+    # Try direct comparison, then unwrap
+    if val in target:
+        return True
+    if hasattr(val, 'value'):
+        return val.value in target
+    return False
+
+def _list_is_empty(target, args, vm=None):
+    return len(target) == 0
+
+def _list_first(target, args, vm=None):
+    return target[0] if target else None
+
+def _list_last(target, args, vm=None):
+    return target[-1] if target else None
+
+def _list_reverse(target, args, vm=None):
+    return list(reversed(target))
+
+def _list_sort(target, args, vm=None):
+    try:
+        return sorted(target)
+    except TypeError:
+        return target
+
+def _list_join(target, args, vm=None):
+    sep = args[0] if args else ""
+    return sep.join(str(x) for x in target)
+
+def _list_indexOf(target, args, vm=None):
+    if not args:
+        return -1
+    try:
+        return target.index(args[0])
+    except ValueError:
+        return -1
+
+def _list_includes(target, args, vm=None):
+    return _list_contains(target, args, vm)
+
+def _list_slice(target, args, vm=None):
+    start = args[0] if len(args) > 0 else 0
+    end = args[1] if len(args) > 1 else len(target)
+    return target[start:end]
+
+def _list_flatten(target, args, vm=None):
+    result = []
+    for item in target:
+        if isinstance(item, list):
+            result.extend(item)
+        else:
+            result.append(item)
+    return result
+
+def _list_map(target, args, vm=None):
+    if not args or not vm:
+        return target
+    fn = args[0]
+    return [vm._invoke_callable_sync(fn, [item]) for item in target]
+
+def _list_filter(target, args, vm=None):
+    if not args or not vm:
+        return target
+    fn = args[0]
+    return [item for item in target if vm._invoke_callable_sync(fn, [item])]
+
+def _list_reduce(target, args, vm=None):
+    if not args or not vm:
+        return None
+    fn = args[0]
+    acc = args[1] if len(args) > 1 else (target[0] if target else None)
+    items = target if len(args) > 1 else target[1:]
+    for item in items:
+        acc = vm._invoke_callable_sync(fn, [acc, item])
+    return acc
+
+_LIST_METHODS = {
+    "push": _list_push,
+    "append": _list_push,
+    "pop": _list_pop,
+    "count": _list_count,
+    "length": _list_length,
+    "size": _list_length,
+    "contains": _list_contains,
+    "includes": _list_includes,
+    "is_empty": _list_is_empty,
+    "isEmpty": _list_is_empty,
+    "first": _list_first,
+    "last": _list_last,
+    "reverse": _list_reverse,
+    "sort": _list_sort,
+    "join": _list_join,
+    "indexOf": _list_indexOf,
+    "index_of": _list_indexOf,
+    "slice": _list_slice,
+    "flatten": _list_flatten,
+    "map": _list_map,
+    "filter": _list_filter,
+    "reduce": _list_reduce,
+}
+
+
+def _str_contains(target, args):
+    return args[0] in target if args else False
+
+def _str_startsWith(target, args):
+    return target.startswith(args[0]) if args else False
+
+def _str_endsWith(target, args):
+    return target.endswith(args[0]) if args else False
+
+def _str_toUpperCase(target, args):
+    return target.upper()
+
+def _str_toLowerCase(target, args):
+    return target.lower()
+
+def _str_trim(target, args):
+    return target.strip()
+
+def _str_split(target, args):
+    sep = args[0] if args else " "
+    return target.split(sep)
+
+def _str_indexOf(target, args):
+    if not args:
+        return -1
+    return target.find(args[0])
+
+def _str_length(target, args):
+    return len(target)
+
+def _str_replace(target, args):
+    if len(args) >= 2:
+        return target.replace(args[0], args[1])
+    return target
+
+def _str_substring(target, args):
+    start = args[0] if len(args) > 0 else 0
+    end = args[1] if len(args) > 1 else len(target)
+    return target[start:end]
+
+def _str_charAt(target, args):
+    if args and 0 <= args[0] < len(target):
+        return target[args[0]]
+    return ""
+
+def _str_repeat(target, args):
+    n = args[0] if args else 1
+    return target * int(n)
+
+_STR_METHODS = {
+    "contains": _str_contains,
+    "includes": _str_contains,
+    "startsWith": _str_startsWith,
+    "starts_with": _str_startsWith,
+    "endsWith": _str_endsWith,
+    "ends_with": _str_endsWith,
+    "toUpperCase": _str_toUpperCase,
+    "to_upper": _str_toUpperCase,
+    "upper": _str_toUpperCase,
+    "toLowerCase": _str_toLowerCase,
+    "to_lower": _str_toLowerCase,
+    "lower": _str_toLowerCase,
+    "trim": _str_trim,
+    "strip": _str_trim,
+    "split": _str_split,
+    "indexOf": _str_indexOf,
+    "index_of": _str_indexOf,
+    "length": _str_length,
+    "size": _str_length,
+    "replace": _str_replace,
+    "substring": _str_substring,
+    "slice": _str_substring,
+    "charAt": _str_charAt,
+    "char_at": _str_charAt,
+    "repeat": _str_repeat,
+}
+
 # Sentinel for _vm_native_call: returned when no native handler exists
 _VM_NATIVE_MISS = object()
 
@@ -401,8 +649,8 @@ class VM:
         enable_memory_pool: bool = True,
         pool_max_size: int = 1000,
         enable_peephole_optimizer: bool = True,
-        enable_bytecode_optimizer: bool = False,
-        optimizer_level: int = 2,
+        enable_bytecode_optimizer: bool = True,
+        optimizer_level: int = 1,
         optimization_level: str = "MODERATE",
         enable_async_optimizer: bool = True,
         async_optimization_level: str = "MODERATE",
@@ -1531,14 +1779,14 @@ class VM:
                         op_name = op.name if hasattr(op, "name") else op
                         normalized_for_opt.append((str(op_name), operand))
                 instrs = self.bytecode_optimizer.optimize(normalized_for_opt, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "Bytecode optimizer pass failed (compile path)", _e)
 
         if self.enable_peephole_optimizer and self.peephole_optimizer:
             try:
                 instrs, consts = self.peephole_optimizer.optimize_bytecode(instrs, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "Peephole optimizer pass failed (compile path)", _e)
 
         normalized: List[Tuple[Any, Any]] = []
         for instr in instrs:
@@ -1557,8 +1805,8 @@ class VM:
                 ssa_program = self.ssa_converter.convert_to_ssa(instrs)
                 ssa_instrs = destruct_ssa(ssa_program)
                 instrs, consts = self._normalize_ssa_instructions(ssa_instrs, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "SSA conversion pass failed (compile path)", _e)
 
         mapped: List[Tuple[Any, Any]] = []
         for op, operand in instrs:
@@ -2043,8 +2291,8 @@ class VM:
                 return _fastops.execute(instrs, consts, self.env, self.builtins, self._closure_cells)
             except NotImplementedError:
                 pass
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("FASTOPS", "Cython fast-path execution failed, falling back to interpreter", _e)
         
         # Rust VM adaptive routing (Phase 3) — delegate to Rust when
         # the program is large enough to amortise serialisation overhead.
@@ -2219,7 +2467,14 @@ class VM:
                 a = stack_pop() if stack else 0
                 if hasattr(a, 'value'): a = a.value
                 if hasattr(b, 'value'): b = b.value
-                stack_append(a / b if b != 0 else 0)
+                if b != 0:
+                    if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
+                        result_val = a // b if a % b == 0 else a / b
+                    else:
+                        result_val = a / b
+                    stack_append(result_val)
+                else:
+                    stack_append(0)
             elif op_name == "MOD":
                 b = stack_pop() if stack else 1
                 a = stack_pop() if stack else 0
@@ -2306,8 +2561,8 @@ class VM:
                         mod_name = const(operand)
                         alias, names, is_named = "", [], False
                     self._execute_import(mod_name, alias=alias or "", names=names, is_named=bool(is_named))
-                except Exception:
-                    pass
+                except Exception as _e:
+                    _vm_warn("IMPORT", f"Import of '{mod_name}' failed silently", _e)
             elif op_name == "EXPORT":
                 # vm/compiler.py emits: LOAD_NAME <name_idx>; EXPORT <name_idx>
                 try:
@@ -2327,13 +2582,13 @@ class VM:
                     if callable(export_fn):
                         try:
                             export_fn(name, value)
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            _vm_warn("EXPORT", f"export_fn('{name}') call failed", _e)
                     else:
                         self.env[name] = value
                     self._bump_env_version(name, value)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    _vm_warn("EXPORT", f"Export of '{name}' failed silently", _e)
             elif op_name == "RETURN":
                 return stack_pop() if stack else None
             elif op_name == "BUILD_LIST":
@@ -2356,10 +2611,73 @@ class VM:
                         stack_append(obj.get(idx))
                     elif isinstance(obj, ZMap):
                         stack_append(obj.get(idx))
+                    elif isinstance(obj, dict) and isinstance(idx, int) and not isinstance(idx, bool):
+                        keys = list(obj.keys())
+                        if 0 <= idx < len(keys):
+                            stack_append(obj[keys[idx]])
+                        else:
+                            stack_append(None)
                     else:
                         stack_append(obj[idx] if obj is not None else None)
                 except (IndexError, KeyError, TypeError):
                     stack_append(None)
+            elif op_name == "FOR_ITER":
+                # FOR_ITER var_count: pop counter, pop iterable, push values
+                # var_count=1: single variable (element for list, key for dict)
+                # var_count=2: two variables (index/key + element/value)
+                var_count = operand if operand else 1
+                idx = stack_pop() if stack else 0
+                obj = stack_pop() if stack else None
+                try:
+                    if isinstance(obj, dict):
+                        keys = list(obj.keys())
+                        if isinstance(idx, int) and 0 <= idx < len(keys):
+                            key = keys[idx]
+                            if var_count == 2:
+                                stack_append(key)           # key (below)
+                                stack_append(obj[key])      # value (top)
+                            else:
+                                stack_append(key)           # single var = key
+                        else:
+                            for _ in range(var_count):
+                                stack_append(None)
+                    elif isinstance(obj, ZMap):
+                        keys = list(obj.pairs.keys())
+                        if isinstance(idx, int) and 0 <= idx < len(keys):
+                            key = keys[idx]
+                            if var_count == 2:
+                                stack_append(key)
+                                stack_append(obj.pairs[key])
+                            else:
+                                stack_append(key)
+                        else:
+                            for _ in range(var_count):
+                                stack_append(None)
+                    elif isinstance(obj, (list, ZList)):
+                        elems = obj.elements if isinstance(obj, ZList) else obj
+                        if isinstance(idx, int) and 0 <= idx < len(elems):
+                            if var_count == 2:
+                                stack_append(idx)           # index (below)
+                                stack_append(elems[idx])    # element (top)
+                            else:
+                                stack_append(elems[idx])    # single var = element
+                        else:
+                            for _ in range(var_count):
+                                stack_append(None)
+                    else:
+                        # Fallback: treat as indexable
+                        try:
+                            if var_count == 2:
+                                stack_append(idx)
+                                stack_append(obj[idx] if obj is not None else None)
+                            else:
+                                stack_append(obj[idx] if obj is not None else None)
+                        except Exception:
+                            for _ in range(var_count):
+                                stack_append(None)
+                except Exception:
+                    for _ in range(var_count):
+                        stack_append(None)
             elif op_name == "SLICE":
                 end = stack_pop() if stack else None
                 start = stack_pop() if stack else None
@@ -2463,12 +2781,22 @@ class VM:
                             result = target.get(args[0])
                         elif isinstance(target, dict) and args:
                             result = target.get(args[0])
+                    # ── Zexus dict/map methods ──
+                    elif isinstance(target, dict) and method_name in _DICT_METHODS:
+                        result = _DICT_METHODS[method_name](target, args)
+                    # ── Zexus list methods ──
+                    elif isinstance(target, list) and method_name in _LIST_METHODS:
+                        result = _LIST_METHODS[method_name](target, args, self)
+                    # ── Zexus string methods ──
+                    elif isinstance(target, str) and method_name in _STR_METHODS:
+                        result = _STR_METHODS[method_name](target, args)
                     elif hasattr(target, "call_method"):
                         wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                         try:
                             from .. import security as _security
                             _security._set_vm_action_context(True)
-                        except Exception:
+                        except Exception as _e:
+                            _vm_warn("SECURITY", "Failed to set VM action context (pre-call)", _e)
                             _security = None
                         try:
                             result = target.call_method(method_name, wrapped_args)
@@ -2476,8 +2804,8 @@ class VM:
                             if _security is not None:
                                 try:
                                     _security._set_vm_action_context(False)
-                                except Exception:
-                                    pass
+                                except Exception as _e:
+                                    _vm_warn("SECURITY", "Failed to clear VM action context (post-call)", _e)
                     else:
                         attr = self._get_cached_method(target, method_name)
                         if callable(attr):
@@ -3079,7 +3407,7 @@ class VM:
             # Function descriptor - execute bytecode
             bytecode = fn.get("bytecode")
             if bytecode:
-                params = fn.get("parameters", [])
+                params = fn.get("params") or fn.get("parameters") or []
                 local_env = {}
                 for i, p in enumerate(params):
                     pname = p.get("name") if isinstance(p, dict) else str(p)
@@ -3120,15 +3448,15 @@ class VM:
                         op_name = op.name if hasattr(op, "name") else op
                         normalized_for_opt.append((str(op_name), operand))
                 instrs = self.bytecode_optimizer.optimize(normalized_for_opt, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "Bytecode optimizer pass failed (execute path)", _e)
 
         # Peephole optimization with constant pool awareness
         if not fast_single_shot and self.enable_peephole_optimizer and self.peephole_optimizer:
             try:
                 instrs, consts = self.peephole_optimizer.optimize_bytecode(instrs, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "Peephole optimizer pass failed (execute path)", _e)
 
         # Normalize opcodes to names for SSA pipeline and stack dispatch
         normalized_instrs: List[Tuple[Any, Any]] = []
@@ -3151,8 +3479,8 @@ class VM:
                 ssa_program = self.ssa_converter.convert_to_ssa(instrs)
                 ssa_instrs = destruct_ssa(ssa_program)
                 instrs, consts = self._normalize_ssa_instructions(ssa_instrs, consts)
-            except Exception:
-                pass
+            except Exception as _e:
+                _vm_warn("OPTIMIZER", "SSA conversion pass failed (execute path)", _e)
 
         # 1. JIT Check (with thread safety)
         if self.use_jit and self.jit_compiler:
@@ -3650,21 +3978,27 @@ class VM:
                         result = target.get(args[0])
                     elif isinstance(target, dict) and args:
                         result = target.get(args[0])
+                elif isinstance(target, dict) and method_name in _DICT_METHODS:
+                    result = _DICT_METHODS[method_name](target, args)
+                elif isinstance(target, list) and method_name in _LIST_METHODS:
+                    result = _LIST_METHODS[method_name](target, args)
+                elif isinstance(target, str) and method_name in _STR_METHODS:
+                    result = _STR_METHODS[method_name](target, args)
                 elif hasattr(target, "call_method"):
                     wrapped_args = [self._wrap_for_builtin(arg) for arg in args]
                     if _cached_security is not None:
                         try:
                             _cached_security._set_vm_action_context(True)
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            _vm_warn("SECURITY", "Failed to set VM action context (async pre-call)", _e)
                     try:
                         result = target.call_method(method_name, wrapped_args)
                     finally:
                         if _cached_security is not None:
                             try:
                                 _cached_security._set_vm_action_context(False)
-                            except Exception:
-                                pass
+                            except Exception as _e:
+                                _vm_warn("SECURITY", "Failed to clear VM action context (async post-call)", _e)
                 else:
                     attr = self._get_cached_method(target, method_name)
                     if callable(attr):
@@ -3704,7 +4038,7 @@ class VM:
 
         def _op_load_const(idx):
             value = const(idx)
-            if self.integer_pool and isinstance(value, int):
+            if self.integer_pool and isinstance(value, int) and not isinstance(value, bool):
                 value = self.integer_pool.get(value)
             elif self.string_pool and isinstance(value, str):
                 value = self.string_pool.get(value)
@@ -3912,8 +4246,8 @@ class VM:
                         env_dir = env_get("__DIR__", None)
                         if env_dir:
                             sandbox = _os.path.realpath(str(env_dir))
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        _vm_warn("SANDBOX", "Failed to resolve sandbox __DIR__ for READ", _e)
 
                     if isinstance(path, str) and '\x00' not in path:
                         candidate = path
@@ -3953,7 +4287,7 @@ class VM:
             "ADD": _op_add,
             "SUB": _binary_op(lambda a, b: a - b),
             "MUL": _binary_op(lambda a, b: a * b),
-            "DIV": _binary_op(lambda a, b: a / b if b != 0 else 0),
+            "DIV": _binary_op(lambda a, b: (a // b if a % b == 0 else a / b) if (isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool) and b != 0) else (a / b if b != 0 else 0)),
             "MOD": _binary_op(lambda a, b: a % b if b != 0 else 0),
             "POW": _binary_op(lambda a, b: _safe_pow(a, b)),
             "NEG": _op_neg,
@@ -4459,18 +4793,58 @@ class VM:
                     stack.append(ok)
 
                 elif op_name == "FOR_ITER":
-                    target = int(operand) if operand is not None else ip
-                    it = stack.pop() if stack else None
-                    if it is None:
-                        ip = target
-                    else:
-                        try:
-                            iterator = iter(it)
-                            value = next(iterator)
-                            stack.append(iterator)
-                            stack.append(value)
-                        except StopIteration:
-                            ip = target
+                    var_count = operand if operand else 1
+                    idx = stack.pop() if stack else 0
+                    obj = stack.pop() if stack else None
+                    try:
+                        if isinstance(obj, dict):
+                            keys = list(obj.keys())
+                            if isinstance(idx, int) and 0 <= idx < len(keys):
+                                key = keys[idx]
+                                if var_count == 2:
+                                    stack.append(key)
+                                    stack.append(obj[key])
+                                else:
+                                    stack.append(key)
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        elif isinstance(obj, ZMap):
+                            keys = list(obj.pairs.keys())
+                            if isinstance(idx, int) and 0 <= idx < len(keys):
+                                key = keys[idx]
+                                if var_count == 2:
+                                    stack.append(key)
+                                    stack.append(obj.pairs[key])
+                                else:
+                                    stack.append(key)
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        elif isinstance(obj, (list, ZList)):
+                            elems = obj.elements if isinstance(obj, ZList) else obj
+                            if isinstance(idx, int) and 0 <= idx < len(elems):
+                                if var_count == 2:
+                                    stack.append(idx)
+                                    stack.append(elems[idx])
+                                else:
+                                    stack.append(elems[idx])
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        else:
+                            try:
+                                if var_count == 2:
+                                    stack.append(idx)
+                                    stack.append(obj[idx] if obj is not None else None)
+                                else:
+                                    stack.append(obj[idx] if obj is not None else None)
+                            except Exception:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                    except Exception:
+                        for _ in range(var_count):
+                            stack.append(None)
 
                 elif op_name == "CALL_NAME":
                     name_idx, arg_count = operand
@@ -4643,6 +5017,12 @@ class VM:
                             stack.append(obj.get(idx))
                         elif isinstance(obj, ZMap):
                             stack.append(obj.get(idx))
+                        elif isinstance(obj, dict) and isinstance(idx, int) and not isinstance(idx, bool):
+                            keys = list(obj.keys())
+                            if 0 <= idx < len(keys):
+                                stack.append(obj[keys[idx]])
+                            else:
+                                stack.append(None)
                         elif isinstance(obj, ZString):
                             stack.append(obj[idx])
                         else:
@@ -4650,6 +5030,59 @@ class VM:
                             stack.append(val)
                     except (IndexError, KeyError, TypeError):
                         stack.append(None)
+                elif op_name == "FOR_ITER":
+                    var_count = operand if operand else 1
+                    idx = stack.pop() if stack else 0
+                    obj = stack.pop() if stack else None
+                    try:
+                        if isinstance(obj, dict):
+                            keys = list(obj.keys())
+                            if isinstance(idx, int) and 0 <= idx < len(keys):
+                                key = keys[idx]
+                                if var_count == 2:
+                                    stack.append(key)
+                                    stack.append(obj[key])
+                                else:
+                                    stack.append(key)
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        elif isinstance(obj, ZMap):
+                            keys = list(obj.pairs.keys())
+                            if isinstance(idx, int) and 0 <= idx < len(keys):
+                                key = keys[idx]
+                                if var_count == 2:
+                                    stack.append(key)
+                                    stack.append(obj.pairs[key])
+                                else:
+                                    stack.append(key)
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        elif isinstance(obj, (list, ZList)):
+                            elems = obj.elements if isinstance(obj, ZList) else obj
+                            if isinstance(idx, int) and 0 <= idx < len(elems):
+                                if var_count == 2:
+                                    stack.append(idx)
+                                    stack.append(elems[idx])
+                                else:
+                                    stack.append(elems[idx])
+                            else:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                        else:
+                            try:
+                                if var_count == 2:
+                                    stack.append(idx)
+                                    stack.append(obj[idx] if obj is not None else None)
+                                else:
+                                    stack.append(obj[idx] if obj is not None else None)
+                            except Exception:
+                                for _ in range(var_count):
+                                    stack.append(None)
+                    except Exception:
+                        for _ in range(var_count):
+                            stack.append(None)
                 elif op_name == "SLICE":
                     end = _unwrap(stack.pop() if stack else None)
                     start = _unwrap(stack.pop() if stack else None)
@@ -4828,8 +5261,8 @@ class VM:
                     if callable(export_fn):
                         try:
                             export_fn(name, value)
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            _vm_warn("EXPORT", f"export_fn('{name}') call failed (async path)", _e)
                     else:
                         self.env[name] = value
                     self._bump_env_version(name, value)
@@ -4846,8 +5279,8 @@ class VM:
                                 env_dir = self.env.get("__DIR__", None)
                                 if env_dir:
                                     sandbox = _os_w.path.realpath(str(env_dir))
-                            except Exception:
-                                pass
+                            except Exception as _e:
+                                _vm_warn("SANDBOX", "Failed to resolve sandbox __DIR__ for WRITE", _e)
 
                             path_str = str(path)
                             if "\x00" in path_str:
@@ -5265,9 +5698,9 @@ class VM:
                             if tx_stack:
                                 tx_stack.pop()
                             self.env["_in_transaction"] = bool(tx_stack)
-                        except Exception:
-                            # Best-effort revert; never swallow the original exception.
-                            pass
+                        except Exception as _e:
+                            # Best-effort revert; log but never swallow the original exception.
+                            _vm_warn("TX", "Transaction revert cleanup failed (best-effort)", _e)
                     raise
 
         if profile_ops and opcode_counts is not None:
@@ -5290,7 +5723,7 @@ class VM:
         # 1. Function Descriptor (VM Bytecode Closure)
         if isinstance(fn, dict) and "bytecode" in fn:
             func_bc = fn["bytecode"]
-            params = fn.get("params", [])
+            params = fn.get("params") or fn.get("parameters") or []
             is_async = fn.get("is_async", False)
             # Use captured parent_vm (closure), fallback to self
             parent_env = fn.get("parent_vm", self)

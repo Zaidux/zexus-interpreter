@@ -431,18 +431,23 @@ class StaticTypeChecker:
                 )
 
         # Per-argument type check
-        for i, (pname, pts) in enumerate(params):
-            if i >= len(args):
-                break
-            if pts is None:
-                continue
-            actual = _infer_expr_type(args[i], self._scope)
-            if actual and not _is_compatible(pts, actual):
-                self._error(
-                    f"Argument '{pname}' of '{fn_name}' expects "
-                    f"{pts.base_type.value} but got {actual.base_type.value}",
-                    call,
-                )
+        # Skip for entity constructors using {field: value} syntax —
+        # the single MapLiteral arg doesn't match positional param types.
+        if is_entity and len(args) == 1 and isinstance(args[0], ast.MapLiteral):
+            pass
+        else:
+            for i, (pname, pts) in enumerate(params):
+                if i >= len(args):
+                    break
+                if pts is None:
+                    continue
+                actual = _infer_expr_type(args[i], self._scope)
+                if actual and not _is_compatible(pts, actual):
+                    self._error(
+                        f"Argument '{pname}' of '{fn_name}' expects "
+                        f"{pts.base_type.value} but got {actual.base_type.value}",
+                        call,
+                    )
 
     def _check_infix_types(self, expr: ast.InfixExpression):
         """Warn on obviously wrong infix operations."""

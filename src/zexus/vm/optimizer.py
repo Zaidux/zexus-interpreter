@@ -569,40 +569,58 @@ class BytecodeOptimizer:
     
     def _strength_reduction(self, instructions: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
         """
-        Replace expensive operations with cheaper equivalents
-        
-        Examples:
-            x * 2 → x + x (addition cheaper than multiplication)
-            x ** 2 → x * x
-            x / 2 → x * 0.5 (if floating point)
+        Replace expensive operations with cheaper equivalents.
+
+        Patterns recognised (where *val* comes from ``LOAD_CONST``):
+            ``val * 2``  → ``val + val``  (addition cheaper than multiplication)
+            ``val ** 2`` → ``val * val``  (avoid exponentiation)
+
+        Only fires when the constant is a literal ``2`` so that the
+        semantics are bit-identical for integers.
         """
         result = []
         i = 0
-        
+
         while i < len(instructions):
-            # Pattern: multiply by power of 2
+            # We need a 3-instruction window: LOAD_x  LOAD_CONST  OP
             if i + 2 < len(instructions):
                 op1, operand1 = instructions[i]
                 op2, operand2 = instructions[i + 1]
-                op3, operand3 = instructions[i + 2]
-                
-                # x * 2 → x + x (cheaper)
-                if op1 == "LOAD_NAME" and op2 == "LOAD_CONST" and op3 == "MUL":
-                    # This is simplified - would need constant value check
-                    pass
-            
+                op3, _        = instructions[i + 2]
+
+                if op2 == "LOAD_CONST" and operand2 == 2:
+                    # x * 2 → x + x  (DUP + ADD)
+                    if op3 == "MUL":
+                        result.append(instructions[i])        # LOAD_x
+                        result.append(("DUP", None))
+                        result.append(("ADD", None))
+                        self.stats.strength_reductions += 1
+                        i += 3
+                        continue
+
+                    # x ** 2 → x * x  (DUP + MUL)
+                    if op3 == "POW":
+                        result.append(instructions[i])        # LOAD_x
+                        result.append(("DUP", None))
+                        result.append(("MUL", None))
+                        self.stats.strength_reductions += 1
+                        i += 3
+                        continue
+
             result.append(instructions[i])
             i += 1
-        
+
         return result
     
     def _loop_invariant_code_motion(self, instructions: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
         """
-        Move loop-invariant computations outside loops
-        
-        This is experimental and requires loop detection
+        Move loop-invariant computations outside loops.
+
+        This is experimental and requires loop detection (back-edge
+        analysis).  Currently a **no-op** — the instruction list is
+        returned unchanged.  Gated behind ``level >= 3`` so it never
+        fires unless explicitly requested.
         """
-        # Placeholder for future implementation
         return instructions
     
     def get_stats(self) -> Dict[str, Any]:

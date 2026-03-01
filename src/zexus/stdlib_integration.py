@@ -3,7 +3,7 @@ Standard Library Integration for Zexus
 Provides integration between Python stdlib modules and Zexus evaluator.
 """
 
-from .object import Environment, Builtin, String, Integer, Float, Boolean, Map, List as ListObj, EvaluationError
+from .object import Environment, Builtin, String, Integer, Float, Boolean, Null, Map, List as ListObj, EvaluationError
 
 
 def create_stdlib_module(module_name, evaluator=None):
@@ -595,6 +595,54 @@ def create_stdlib_module(module_name, evaluator=None):
             except Exception as e:
                 return EvaluationError(f"validate_chain error: {str(e)}")
 
+        def _blockchain_create_chain(*args):
+            name = "default"
+            config = None
+            if len(args) >= 1 and hasattr(args[0], 'value'):
+                name = str(args[0].value)
+            if len(args) >= 2 and isinstance(args[1], Map):
+                config = {}
+                for k, v in args[1].pairs.items():
+                    key = k.value if hasattr(k, 'value') else str(k)
+                    val = v.value if hasattr(v, 'value') else v
+                    config[key] = val
+            try:
+                result = BlockchainModule.create_chain(name, config)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"create_chain error: {str(e)}")
+
+        def _blockchain_add_block(*args):
+            if len(args) < 2:
+                return EvaluationError("add_block() requires 2 args: chain, data")
+            chain_obj = args[0]
+            if not isinstance(chain_obj, Map):
+                return EvaluationError("add_block() first argument must be a chain map")
+            chain = _zexus_to_python(chain_obj)
+            data = args[1].value if hasattr(args[1], 'value') else str(args[1])
+            try:
+                new_block = BlockchainModule.add_block(chain, data)
+                # Update the original map in-place so the caller sees changes
+                updated = _python_to_zexus(chain)
+                if isinstance(updated, Map):
+                    chain_obj.pairs = updated.pairs
+                return _python_to_zexus(new_block)
+            except Exception as e:
+                return EvaluationError(f"add_block error: {str(e)}")
+
+        def _blockchain_get_chain_info(*args):
+            if len(args) < 1:
+                return EvaluationError("get_chain_info() requires 1 argument: chain")
+            chain_obj = args[0]
+            if not isinstance(chain_obj, Map):
+                return EvaluationError("get_chain_info() expects a chain map")
+            chain = _zexus_to_python(chain_obj)
+            try:
+                result = BlockchainModule.get_chain_info(chain)
+                return _python_to_zexus(result)
+            except Exception as e:
+                return EvaluationError(f"get_chain_info error: {str(e)}")
+
         env.set("create_address", Builtin(_blockchain_create_address))
         env.set("validate_address", Builtin(_blockchain_validate_address))
         env.set("calculate_merkle_root", Builtin(_blockchain_calculate_merkle_root))
@@ -606,6 +654,24 @@ def create_stdlib_module(module_name, evaluator=None):
         env.set("create_transaction", Builtin(_blockchain_create_transaction))
         env.set("hash_transaction", Builtin(_blockchain_hash_transaction))
         env.set("validate_chain", Builtin(_blockchain_validate_chain))
+        env.set("create_chain", Builtin(_blockchain_create_chain))
+        env.set("add_block", Builtin(_blockchain_add_block))
+        env.set("get_chain_info", Builtin(_blockchain_get_chain_info))
+        # camelCase aliases for blockchain functions
+        env.set("createChain", Builtin(_blockchain_create_chain))
+        env.set("addBlock", Builtin(_blockchain_add_block))
+        env.set("getChainInfo", Builtin(_blockchain_get_chain_info))
+        env.set("createAddress", Builtin(_blockchain_create_address))
+        env.set("validateAddress", Builtin(_blockchain_validate_address))
+        env.set("calculateMerkleRoot", Builtin(_blockchain_calculate_merkle_root))
+        env.set("createGenesisBlock", Builtin(_blockchain_create_genesis_block))
+        env.set("createBlock", Builtin(_blockchain_create_block))
+        env.set("hashBlock", Builtin(_blockchain_hash_block))
+        env.set("validateBlock", Builtin(_blockchain_validate_block))
+        env.set("proofOfWork", Builtin(_blockchain_proof_of_work))
+        env.set("createTransaction", Builtin(_blockchain_create_transaction))
+        env.set("hashTransaction", Builtin(_blockchain_hash_transaction))
+        env.set("validateChain", Builtin(_blockchain_validate_chain))
 
     elif module_name == "websocket" or module_name == "stdlib/websocket":
         try:
@@ -655,6 +721,57 @@ def create_stdlib_module(module_name, evaluator=None):
         env.set("create_server", Builtin(_ws_create_server))
         env.set("connect", Builtin(_ws_connect))
 
+    elif module_name == "kernel" or module_name == "stdlib/kernel":
+        # Expose the kernel extension layer to Zexus scripts
+        try:
+            from .kernel import get_kernel
+
+            kernel = get_kernel()
+            if not kernel.is_booted:
+                kernel.boot()
+
+            def _kernel_status(*args):
+                return _python_to_zexus(kernel.status())
+
+            def _kernel_domains(*args):
+                domains = kernel.registry.list_domains()
+                return _python_to_zexus([
+                    {"name": d.name, "version": d.version, "opcodes": len(d.opcodes)}
+                    for d in domains
+                ])
+
+            def _kernel_get_domain(*args):
+                if len(args) < 1:
+                    return EvaluationError("get_domain() requires 1 argument: name")
+                name = args[0].value if hasattr(args[0], 'value') else str(args[0])
+                d = kernel.registry.get_domain(name)
+                if d is None:
+                    return Null()
+                return _python_to_zexus({
+                    "name": d.name,
+                    "version": d.version,
+                    "description": d.description,
+                    "opcodes": d.opcodes,
+                })
+
+            def _kernel_resolve_opcode(*args):
+                if len(args) < 1:
+                    return EvaluationError("resolve_opcode() requires 1 argument: opcode (int)")
+                op = int(args[0].value) if hasattr(args[0], 'value') else int(args[0])
+                owner = kernel.resolve_opcode_domain(op)
+                return String(owner) if owner else Null()
+
+            def _kernel_is_booted(*args):
+                return Boolean(kernel.is_booted)
+
+            env.set("status", Builtin(_kernel_status))
+            env.set("domains", Builtin(_kernel_domains))
+            env.set("get_domain", Builtin(_kernel_get_domain))
+            env.set("resolve_opcode", Builtin(_kernel_resolve_opcode))
+            env.set("is_booted", Builtin(_kernel_is_booted))
+        except Exception:
+            pass  # Kernel not available — module is empty but doesn't crash
+
     return env
 
 
@@ -690,7 +807,7 @@ def _zexus_to_python(obj):
 
 def is_stdlib_module(module_name):
     """Check if a module name refers to a stdlib module."""
-    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain', 'perf', 'websocket']
+    stdlib_modules = ['fs', 'http', 'json', 'datetime', 'crypto', 'blockchain', 'perf', 'websocket', 'kernel']
     
     # Handle both "fs" and "stdlib/fs" formats
     if module_name in stdlib_modules:
