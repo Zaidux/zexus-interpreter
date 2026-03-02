@@ -6,7 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [1.8.3] - 2026-03-01
+## [1.8.3] - 2026-03-02
+
+### 🐛 Bug Fixes — VM Parity (Session 6)
+
+Ran all 24 `.zx` test files in `tests/v183_fixes/` through both interpreter and VM. All differences diagnosed and fixed — interpreter and VM now produce identical output on every test file.
+
+**VM Execution Fixes:**
+- **Boolean 0/1 printing** — `_op_load_const` integer pool lookup matched `True`/`False` as integers (`isinstance(True, int)` is True in Python). Added `not isinstance(value, bool)` guard.
+- **Closure/lambda parameters null** — Compiler stored function params under `"params"` key but VM callable invocation read `"parameters"`. Fixed 3 lookup sites to check both keys.
+- **Method calls on dict/list/str** — Added module-level `_DICT_METHODS`, `_LIST_METHODS`, `_STR_METHODS` dispatch tables (~30 helper functions) wired into both sync and async `CALL_METHOD` handlers. Covers: `has`, `keys`, `values`, `entries`, `size`, `delete`, `contains`, `push`, `pop`, `count`, `length`, `is_empty`, `first`, `last`, `reverse`, `sort`, `join`, `indexOf`, `slice`, `flatten`, `map`, `filter`, `reduce`, `startsWith`, `endsWith`, `toUpperCase`, `toLowerCase`, `trim`, `split`, `replace`, `substring`, `charAt`, `repeat`.
+- **Integer division returns float** — `10 / 2` returned `5.0`. All 4 DIV handlers (sync, async dispatch, async fallback, fastops) now use `a // b if a % b == 0 else a / b` for int operands.
+- **ForEach index + map iteration** — New `FOR_ITER` opcode with var_count parameter (1 for single var, 2 for index+item or key+value). Compiler emits `FOR_ITER` instead of generic iteration. Handlers added to all 3 VM paths + fastops. Supports list, dict, ZList, ZMap.
+- **Try/catch doesn't catch runtime errors** — Division by zero silently returned `0` instead of raising. All DIV handlers now `raise VMRuntimeError("Division by zero")` which routes through the VM's `try_stack`.
+- **Entity construction from plain dict** — `_construct_entity` only handled `ZMap`/`ObjMap` from `BUILD_MAP`. Added `isinstance(args_val, dict)` branch.
+- **Map literal keys compiled as variable lookups** — `_compile_MapLiteral` called `_compile_node(key)` for Identifier keys, emitting `LOAD_NAME` (variable resolution → None) instead of `LOAD_CONST` (string literal). `{x: 10}` now correctly pushes string `"x"` as the key.
+- **Entity field access returns null** — `_op_index` dispatch table in async path + fastops had no `EntityInstance` handling. Falls through to `obj[idx]` which fails. Added `hasattr(obj, 'data') and hasattr(obj, 'entity_def')` branch with `.get()` + `.value` unwrapping.
+
+**Test Update:**
+- Updated `test_018_division_by_zero_safety` to expect `VMRuntimeError` (was expecting silent `0`).
+
+### 📁 Files Changed (Session 6)
+- `src/zexus/vm/vm.py` — Boolean pool guard, params key fix, method dispatch tables, DIV fixes, FOR_ITER handlers, entity INDEX, entity construction
+- `src/zexus/vm/compiler.py` — MapLiteral key emission fix, FOR_ITER opcode emission in ForEach
+- `src/zexus/vm/fastops.pyx` — DIV raise, INDEX entity support, FOR_ITER handler
+- `src/zexus/type_checker.py` — Skip per-argument type checks for entity brace-construction
+- `tests/vm/test_comprehensive_vm_verification.py` — Division by zero test updated
+
+### 🧪 Testing (Session 6)
+- **24/24 v183_fixes `.zx` files: interpreter ↔ VM output identical**
+- **2396 pytest tests pass, 0 failures**
+
+---
 
 ### 🐛 Bug Fixes — Ziver Chain Phase 0 Audit (continued)
 

@@ -94,3 +94,28 @@
 - **ISSUE6-BC-6**: Fixed `list.items()` crash in `bytecode_compiler.py` — `_compile_MapLiteral` now handles dict pairs.
 - **ISSUE4-KW-1**: Fixed `storage` keyword blocking variable names — now context-sensitive (only keyword after `persistent`).
 - **Total tests: 2396** (was 2337; +59 kernel tests).
+
+---
+
+## VM Parity Fixes (Session 6)
+
+Ran all 24 `.zx` test files in `tests/v183_fixes/` through both interpreter (`--no-vm`) and VM. Interpreter handled all 24 correctly; VM had widespread output differences. Systematically diagnosed and fixed 9 categories of VM bugs until all 24 files produce identical output on both execution paths.
+
+### Fixes Applied
+
+| # | Bug | Root Cause | Files |
+|---|-----|-----------|-------|
+| 1 | **Boolean prints as 0/1** | `integer_pool.get(True)` returned `1` because `isinstance(True, int)` is True in Python | `vm.py` — `_op_load_const` |
+| 2 | **Closures/lambdas return null** | Compiler stores `"params"` but VM read `"parameters"` | `vm.py` — 3 callable invocation sites |
+| 3 | **Method calls on dict/list/str fail** | No CALL_METHOD dispatch for built-in types | `vm.py` — added `_DICT_METHODS`, `_LIST_METHODS`, `_STR_METHODS` dispatch tables (~30 helpers, ~250 lines) |
+| 4 | **Integer division returns float** | `10 / 2` → `5.0` instead of `5` | `vm.py` + `fastops.pyx` — all 4 DIV handlers now use `a // b if a % b == 0 else a / b` |
+| 5 | **ForEach index + map iteration broken** | No `FOR_ITER` opcode existed | `compiler.py` — new `FOR_ITER` emission; `vm.py` + `fastops.pyx` — handlers in all 3 paths |
+| 6 | **Try/catch didn't catch runtime errors** | Division by zero silently returned 0 | `vm.py` + `fastops.pyx` — DIV now raises `VMRuntimeError("Division by zero")` |
+| 7 | **Entity construction from dict fails** | `_construct_entity` only handled `ZMap`/`ObjMap` | `vm.py` — added plain `dict` support |
+| 8 | **Map literal keys compiled as variable lookups** | `_compile_MapLiteral` used `_compile_node(key)` for Identifier keys → `LOAD_NAME` (variable lookup) instead of `LOAD_CONST` (string literal) | `compiler.py` — Identifier/str keys now emit `LOAD_CONST` |
+| 9 | **Entity field access returns null** | `_op_index` dispatch table had no `EntityInstance` handling | `vm.py` + `fastops.pyx` — added entity-aware INDEX with `.get()` + value unwrapping |
+
+### Test Updates
+- Updated `test_018_division_by_zero_safety` to expect `VMRuntimeError` instead of silent `0` return.
+- **All 24 v183_fixes `.zx` files: interpreter ↔ VM output identical.**
+- **Pytest: 2396 passed, 0 failed.**
