@@ -2372,6 +2372,7 @@ class VM:
             self._exec_start_time = time.monotonic()
 
         while ip < instr_count:
+          try:
             op_name, operand = instrs[ip]
             ip += 1
 
@@ -2467,14 +2468,13 @@ class VM:
                 a = stack_pop() if stack else 0
                 if hasattr(a, 'value'): a = a.value
                 if hasattr(b, 'value'): b = b.value
-                if b != 0:
-                    if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
-                        result_val = a // b if a % b == 0 else a / b
-                    else:
-                        result_val = a / b
-                    stack_append(result_val)
+                if b == 0:
+                    raise VMRuntimeError("Division by zero")
+                if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
+                    result_val = a // b if a % b == 0 else a / b
                 else:
-                    stack_append(0)
+                    result_val = a / b
+                stack_append(result_val)
             elif op_name == "MOD":
                 b = stack_pop() if stack else 1
                 a = stack_pop() if stack else 0
@@ -2597,11 +2597,15 @@ class VM:
                 stack_append(elements)
             elif op_name == "BUILD_MAP":
                 count = operand if operand is not None else 0
-                result = {}
+                pairs = []
                 for _ in range(count):
                     val = stack_pop()
                     key = stack_pop()
-                    result[key] = val
+                    pairs.append((key, val))
+                pairs.reverse()
+                result = {}
+                for k, v in pairs:
+                    result[k] = v
                 stack_append(result)
             elif op_name == "INDEX":
                 idx = stack_pop()
@@ -2611,6 +2615,11 @@ class VM:
                         stack_append(obj.get(idx))
                     elif isinstance(obj, ZMap):
                         stack_append(obj.get(idx))
+                    elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                        # EntityInstance — access fields via .get() or .data dict
+                        idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+                        val = obj.get(idx_str) if idx_str else None
+                        stack_append(self._unwrap_after_builtin(val) if val is not None else None)
                     elif isinstance(obj, dict) and isinstance(idx, int) and not isinstance(idx, bool):
                         keys = list(obj.keys())
                         if 0 <= idx < len(keys):
@@ -3137,6 +3146,19 @@ class VM:
             else:
                 # Truly unknown op — fallback to async path
                 return self._run_coroutine_sync(self._run_stack_bytecode(bytecode, debug))
+          except Exception as _sync_exc:
+            # Route Python exceptions through the Zexus try/catch stack
+            _ts = env.get("_try_stack_sync", [])
+            if _ts:
+                _handler_ip = _ts.pop()
+                _exc_msg = _sync_exc.args[0] if _sync_exc.args else str(_sync_exc)
+                stack_append(str(_exc_msg))
+                ip = _handler_ip
+                continue
+            elif env.get("_continue_on_error", False):
+                env.setdefault("_errors", []).append(str(_sync_exc))
+            else:
+                raise
         
         return stack_pop() if stack else None
 
@@ -3305,10 +3327,13 @@ class VM:
 
         values = {}
 
-        # If single arg is a Map (handles Entity{field: value} syntax)
-        if len(args) == 1 and isinstance(args[0], (ZMap, ObjMap)):
+        # If single arg is a Map or dict (handles Entity{field: value} syntax)
+        if len(args) == 1 and isinstance(args[0], (ZMap, ObjMap, dict)):
             map_arg = args[0]
-            pairs = map_arg.pairs if hasattr(map_arg, 'pairs') else (map_arg if isinstance(map_arg, dict) else {})
+            if isinstance(map_arg, dict):
+                pairs = map_arg
+            else:
+                pairs = map_arg.pairs if hasattr(map_arg, 'pairs') else {}
             for key, value in pairs.items():
                 key_str = key.value if hasattr(key, 'value') else str(key)
                 values[key_str] = self._wrap_for_builtin(value)
@@ -4162,11 +4187,15 @@ class VM:
 
         def _op_build_map(count):
             total = count if count is not None else 0
-            result = {}
+            pairs = []
             for _ in range(total):
                 val = stack_pop() if stack else None
                 key = stack_pop() if stack else None
-                result[key] = val
+                pairs.append((key, val))
+            pairs.reverse()
+            result = {}
+            for k, v in pairs:
+                result[k] = v
             stack_append(result)
 
         def _op_index(_):
@@ -4182,6 +4211,30 @@ class VM:
                     stack.append(obj.get(key))
                 elif isinstance(obj, ZString):
                     stack.append(obj[idx])
+                elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                    # EntityInstance field access
+                    idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+                    if idx_str:
+                        val = obj.get(idx_str)
+                        # Unwrap Zexus objects to Python primitives for consistency
+                        if hasattr(val, 'value'):
+                            stack.append(val.value)
+                        else:
+                            stack.append(val)
+                    else:
+                        stack.append(None)
+                elif isinstance(obj, dict):
+                    raw_idx = idx.value if hasattr(idx, 'value') else idx
+                    if raw_idx in obj:
+                        stack.append(obj[raw_idx])
+                    elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+                        keys = list(obj.keys())
+                        if 0 <= raw_idx < len(keys):
+                            stack.append(obj[keys[raw_idx]])
+                        else:
+                            stack.append(None)
+                    else:
+                        stack.append(None)
                 else:
                     # Fallback
                     if obj is None:
@@ -4287,7 +4340,7 @@ class VM:
             "ADD": _op_add,
             "SUB": _binary_op(lambda a, b: a - b),
             "MUL": _binary_op(lambda a, b: a * b),
-            "DIV": _binary_op(lambda a, b: (a // b if a % b == 0 else a / b) if (isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool) and b != 0) else (a / b if b != 0 else 0)),
+            "DIV": _binary_op(_vm_div),
             "MOD": _binary_op(lambda a, b: a % b if b != 0 else 0),
             "POW": _binary_op(lambda a, b: _safe_pow(a, b)),
             "NEG": _op_neg,
@@ -4932,7 +4985,12 @@ class VM:
                     b = stack.pop() if stack else 1; a = stack.pop() if stack else 0
                     if hasattr(a, 'value'): a = a.value
                     if hasattr(b, 'value'): b = b.value
-                    stack.append(a / b if b != 0 else 0)
+                    if b == 0:
+                        raise VMRuntimeError("Division by zero")
+                    if isinstance(a, int) and isinstance(b, int) and not isinstance(a, bool) and not isinstance(b, bool):
+                        stack.append(a // b if a % b == 0 else a / b)
+                    else:
+                        stack.append(a / b)
                 elif op_name == "MOD":
                     b = _unwrap(stack.pop() if stack else 1)
                     a = _unwrap(stack.pop() if stack else 0)
@@ -4999,11 +5057,15 @@ class VM:
                     stack.append(elements)
                 elif op_name == "BUILD_MAP":
                     count = operand if operand is not None else 0
-                    result = {}
+                    pairs = []
                     for _ in range(count):
                         val = stack.pop() if stack else None
                         key = stack.pop() if stack else None
-                        result[key] = val
+                        pairs.append((key, val))
+                    pairs.reverse()
+                    result = {}
+                    for k, v in pairs:
+                        result[k] = v
                     stack.append(result)
                 elif op_name == "BUILD_SET":
                     count = operand if operand is not None else 0
@@ -5017,6 +5079,10 @@ class VM:
                             stack.append(obj.get(idx))
                         elif isinstance(obj, ZMap):
                             stack.append(obj.get(idx))
+                        elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                            idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+                            val = obj.get(idx_str) if idx_str else None
+                            stack.append(self._unwrap_after_builtin(val) if val is not None else None)
                         elif isinstance(obj, dict) and isinstance(idx, int) and not isinstance(idx, bool):
                             keys = list(obj.keys())
                             if 0 <= idx < len(keys):
@@ -5680,6 +5746,13 @@ class VM:
                     elapsed = time.perf_counter() - instr_start_time
                     self.profiler.measure_instruction(current_ip, elapsed)
             except Exception as e:
+                # Route Python exceptions through the try_stack (Zexus try/catch)
+                if try_stack:
+                    handler_ip = try_stack.pop()
+                    exc_msg = e.args[0] if e.args else str(e)
+                    stack.append(str(exc_msg))
+                    ip = handler_ip
+                    continue
                 if self.env.get("_continue_on_error", False):
                     # Error Recovery Mode
                     if debug: print(f"[VM ERROR RECOVERY] {e}")
@@ -6153,6 +6226,15 @@ class VM:
 
 def create_vm(mode: str = "auto", use_jit: bool = True, **kwargs) -> VM:
     return VM(mode=VMMode(mode.lower()), use_jit=use_jit, **kwargs)
+
+
+def _vm_div(a, b):
+    """Division with proper integer handling and zero-division errors."""
+    if b == 0:
+        raise VMRuntimeError("Division by zero")
+    if isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
+        return a // b if a % b == 0 else a / b
+    return a / b
 
 
 def _safe_pow(a, b, *, max_exp: int = 10000, max_bits: int = 8192):

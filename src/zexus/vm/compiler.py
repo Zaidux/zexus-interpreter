@@ -647,7 +647,16 @@ class BytecodeCompiler:
             count = len(pairs)
 
         for key, value in iterable:
-            self._compile_node(key)
+            # Map literal keys that are Identifiers should be treated as
+            # string constants (field names), NOT as variable lookups.
+            if hasattr(key, '__class__') and key.__class__.__name__ == 'Identifier':
+                const_idx = self._add_constant(key.value)
+                self._emit(Opcode.LOAD_CONST, const_idx)
+            elif isinstance(key, str):
+                const_idx = self._add_constant(key)
+                self._emit(Opcode.LOAD_CONST, const_idx)
+            else:
+                self._compile_node(key)
             self._compile_node(value)
         
         # Build map

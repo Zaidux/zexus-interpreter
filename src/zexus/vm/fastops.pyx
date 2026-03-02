@@ -149,7 +149,7 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
             if hasattr(b, "value"):
                 b = b.value
             if b == 0:
-                stack.append(0)
+                raise ZeroDivisionError("Division by zero")
             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
                 stack.append(a // b if a % b == 0 else a / b)
             else:
@@ -202,10 +202,14 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
             stack.append(elements)
         elif op_name == "BUILD_MAP":
             count = operand if operand is not None else 0
-            result = {}
+            pairs = []
             for _ in range(count):
                 val = stack.pop(); key = stack.pop()
-                result[key] = val
+                pairs.append((key, val))
+            pairs.reverse()
+            result = {}
+            for k, v in pairs:
+                result[k] = v
             stack.append(result)
         elif op_name == "BUILD_SET":
             count = operand if operand is not None else 0
@@ -219,10 +223,26 @@ def execute(list instrs, list consts, dict env, dict builtins, dict closure_cell
                     stack.append(obj.get(idx))
                 elif isinstance(obj, ZMap):
                     stack.append(obj.get(idx))
-                elif isinstance(obj, dict) and isinstance(idx, int):
-                    keys = list(obj.keys())
-                    if 0 <= idx < len(keys):
-                        stack.append(obj[keys[idx]])
+                elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                    idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+                    if idx_str:
+                        val = obj.get(idx_str)
+                        if hasattr(val, 'value'):
+                            stack.append(val.value)
+                        else:
+                            stack.append(val)
+                    else:
+                        stack.append(None)
+                elif isinstance(obj, dict):
+                    raw_idx = idx.value if hasattr(idx, 'value') else idx
+                    if raw_idx in obj:
+                        stack.append(obj[raw_idx])
+                    elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+                        keys = list(obj.keys())
+                        if 0 <= raw_idx < len(keys):
+                            stack.append(obj[keys[raw_idx]])
+                        else:
+                            stack.append(None)
                     else:
                         stack.append(None)
                 else:

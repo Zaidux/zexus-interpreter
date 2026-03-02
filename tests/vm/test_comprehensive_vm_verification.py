@@ -227,14 +227,15 @@ class TestArithmeticOperations(unittest.TestCase):
         self.assertEqual(result, -42)
     
     def test_018_division_by_zero_safety(self):
-        """Test DIV handles division by zero"""
+        """Test DIV handles division by zero by raising error"""
         builder = BytecodeBuilder()
         builder.emit_load_const(10)
         builder.emit_load_const(0)
         builder.emit_div()
         builder.emit_return()
-        result = self.vm.execute(builder.build())
-        self.assertEqual(result, 0)
+        from src.zexus.vm.vm import VMRuntimeError
+        with self.assertRaises(VMRuntimeError):
+            self.vm.execute(builder.build())
     
     def test_019_complex_expression(self):
         """Test complex arithmetic: (5 + 3) * 2"""

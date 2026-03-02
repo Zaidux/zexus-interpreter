@@ -81,6 +81,9 @@ class BytecodeOptimizer:
             "JUMP_BACKWARD",
             "LABEL",
             "JUMP_TARGET",
+            "SETUP_TRY",
+            "POP_TRY",
+            "THROW",
         }
 
     def _has_control_flow(self, instructions: List[Tuple[str, Any]]) -> bool:
@@ -94,9 +97,14 @@ class BytecodeOptimizer:
         """Validate that jump targets are sane and within bounds."""
         max_index = len(instructions) - 1
         for idx, (op, operand) in enumerate(instructions):
-            if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD"):
+            if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD", "SETUP_TRY"):
                 if not isinstance(operand, int):
-                    return False
+                    # SETUP_TRY and others require an int target
+                    if op == "SETUP_TRY":
+                        return False
+                    if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE"):
+                        return False
+                    continue
                 if operand < 0 or operand > max_index:
                     return False
                 if op == "JUMP" and operand == idx:
@@ -404,8 +412,9 @@ class BytecodeOptimizer:
     
     def _dead_code_elimination(self, instructions: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
         """
-        Remove unreachable code after RETURN, unconditional JUMP, etc.
+        Remove unreachable code after RETURN, unconditional JUMP, THROW, etc.
         Jump targets are remapped after dead code removal to keep control flow valid.
+        SETUP_TRY handler targets are treated as jump targets (catch blocks are reachable).
         """
         result = []
         in_dead_code = False
@@ -413,14 +422,24 @@ class BytecodeOptimizer:
         removed_indices: Set[int] = set()
 
         for idx, (op, operand) in enumerate(instructions):
+            # Standard jumps
             if op in ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD"):
+                if isinstance(operand, int):
+                    jump_targets.add(operand)
+            # SETUP_TRY handler addresses are also jump targets (catch blocks)
+            elif op == "SETUP_TRY":
                 if isinstance(operand, int):
                     jump_targets.add(operand)
         
         for idx, (op, operand) in enumerate(instructions):
             if in_dead_code:
-                # Skip until we hit a jump target or label
-                if op in ("LABEL", "JUMP_TARGET") or idx in jump_targets:
+                # Stop skipping at jump targets, labels, or NOP labels
+                is_label = (
+                    op in ("LABEL", "JUMP_TARGET")
+                    or idx in jump_targets
+                    or (op == "NOP" and isinstance(operand, str) and operand.startswith("L"))
+                )
+                if is_label:
                     in_dead_code = False
                     result.append((op, operand))
                 else:
@@ -429,7 +448,7 @@ class BytecodeOptimizer:
             else:
                 result.append((op, operand))
                 # Mark dead code after unconditional control flow
-                if op in ("RETURN", "JUMP"):
+                if op in ("RETURN", "JUMP", "THROW"):
                     in_dead_code = True
         
         # Remap jump targets after dead code removal
@@ -441,7 +460,8 @@ class BytecodeOptimizer:
                     index_map[old_idx] = new_idx
                     new_idx += 1
             
-            jump_ops = ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD")
+            # Include SETUP_TRY in jump remapping — its operand is a handler address
+            jump_ops = ("JUMP", "JUMP_IF_FALSE", "JUMP_IF_TRUE", "JUMP_FORWARD", "JUMP_BACKWARD", "SETUP_TRY")
             remapped = []
             for op, operand in result:
                 if op in jump_ops and isinstance(operand, int) and operand in index_map:

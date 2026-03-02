@@ -2070,6 +2070,9 @@ static CYTHON_INLINE PyObject* __Pyx_PyList_Pop(PyObject* L);
 /* PyLongCompare.proto */
 static CYTHON_INLINE int __Pyx_PyLong_BoolEqObjC(PyObject *op1, PyObject *op2, long intval, long inplace);
 
+/* PyZeroDivisionError_Check.proto */
+#define __Pyx_PyExc_ZeroDivisionError_Check(obj)  __Pyx_TypeCheck(obj, PyExc_ZeroDivisionError)
+
 /* PyLongCompare.proto */
 static CYTHON_INLINE int __Pyx_PyLong_BoolNeObjC(PyObject *op1, PyObject *op2, long intval, long inplace);
 
@@ -2098,6 +2101,10 @@ static CYTHON_INLINE int __Pyx_ListComp_Append(PyObject* list, PyObject* x) {
 #else
 #define __Pyx_ListComp_Append(L,x) PyList_Append(L,x)
 #endif
+
+/* PyObject_Unicode.proto */
+#define __Pyx_PyObject_Unicode(obj)\
+    (likely(PyUnicode_CheckExact(obj)) ? __Pyx_NewRef(obj) : PyObject_Str(obj))
 
 /* GetException.proto */
 #if CYTHON_FAST_THREAD_STATE
@@ -2513,7 +2520,7 @@ typedef struct {
   PyObject *__pyx_slice[1];
   PyObject *__pyx_tuple[1];
   PyObject *__pyx_codeobj_tab[5];
-  PyObject *__pyx_string_tab[120];
+  PyObject *__pyx_string_tab[127];
   PyObject *__pyx_number_tab[4];
 /* #### Code section: module_state_contents ### */
 /* CommonTypesMetaclass.module_state_decls */
@@ -2557,124 +2564,131 @@ static __pyx_mstatetype * const __pyx_mstate_global = &__pyx_mstate_global_stati
 /* #### Code section: constant_name_defines ### */
 #define __pyx_kp_u_ __pyx_string_tab[0]
 #define __pyx_kp_u_CALL_TOP_requires_VM_execution __pyx_string_tab[1]
-#define __pyx_kp_u_FOR_ITER_target_type_not_support __pyx_string_tab[2]
-#define __pyx_kp_u_Note_that_Cython_is_deliberately __pyx_string_tab[3]
-#define __pyx_kp_u__2 __pyx_string_tab[4]
-#define __pyx_kp_u_add_note __pyx_string_tab[5]
-#define __pyx_kp_u_fastops_pyx __pyx_string_tab[6]
-#define __pyx_kp_u_opcode_not_supported __pyx_string_tab[7]
-#define __pyx_n_u_ADD __pyx_string_tab[8]
-#define __pyx_n_u_BUILD_LIST __pyx_string_tab[9]
-#define __pyx_n_u_BUILD_MAP __pyx_string_tab[10]
-#define __pyx_n_u_BUILD_SET __pyx_string_tab[11]
-#define __pyx_n_u_CALL_BUILTIN __pyx_string_tab[12]
-#define __pyx_n_u_CALL_METHOD __pyx_string_tab[13]
-#define __pyx_n_u_CALL_NAME __pyx_string_tab[14]
-#define __pyx_n_u_CALL_TOP __pyx_string_tab[15]
-#define __pyx_n_u_DIV __pyx_string_tab[16]
-#define __pyx_n_u_DUP __pyx_string_tab[17]
-#define __pyx_n_u_EQ __pyx_string_tab[18]
-#define __pyx_n_u_FOR_ITER __pyx_string_tab[19]
-#define __pyx_n_u_GET_LENGTH __pyx_string_tab[20]
-#define __pyx_n_u_GT __pyx_string_tab[21]
-#define __pyx_n_u_GTE __pyx_string_tab[22]
-#define __pyx_n_u_INDEX __pyx_string_tab[23]
-#define __pyx_n_u_JUMP __pyx_string_tab[24]
-#define __pyx_n_u_JUMP_IF_FALSE __pyx_string_tab[25]
-#define __pyx_n_u_LOAD_CONST __pyx_string_tab[26]
-#define __pyx_n_u_LOAD_NAME __pyx_string_tab[27]
-#define __pyx_n_u_LT __pyx_string_tab[28]
-#define __pyx_n_u_LTE __pyx_string_tab[29]
-#define __pyx_n_u_List __pyx_string_tab[30]
-#define __pyx_n_u_MOD __pyx_string_tab[31]
-#define __pyx_n_u_MUL __pyx_string_tab[32]
-#define __pyx_n_u_Map __pyx_string_tab[33]
-#define __pyx_n_u_NEG __pyx_string_tab[34]
-#define __pyx_n_u_NEQ __pyx_string_tab[35]
-#define __pyx_n_u_NOT __pyx_string_tab[36]
-#define __pyx_n_u_POP __pyx_string_tab[37]
-#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[38]
-#define __pyx_n_u_RETURN __pyx_string_tab[39]
-#define __pyx_n_u_SLICE __pyx_string_tab[40]
-#define __pyx_n_u_STORE_NAME __pyx_string_tab[41]
-#define __pyx_n_u_SUB __pyx_string_tab[42]
-#define __pyx_n_u_String __pyx_string_tab[43]
-#define __pyx_n_u_ZList __pyx_string_tab[44]
-#define __pyx_n_u_ZMap __pyx_string_tab[45]
-#define __pyx_n_u_ZString __pyx_string_tab[46]
-#define __pyx_n_u__3 __pyx_string_tab[47]
-#define __pyx_n_u_a __pyx_string_tab[48]
-#define __pyx_n_u_arg_count __pyx_string_tab[49]
-#define __pyx_n_u_args __pyx_string_tab[50]
-#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[51]
-#define __pyx_n_u_attr __pyx_string_tab[52]
-#define __pyx_n_u_b __pyx_string_tab[53]
-#define __pyx_n_u_builtins __pyx_string_tab[54]
-#define __pyx_n_u_bytecode __pyx_string_tab[55]
-#define __pyx_n_u_call_method __pyx_string_tab[56]
-#define __pyx_n_u_call_method_2 __pyx_string_tab[57]
-#define __pyx_n_u_call_top __pyx_string_tab[58]
-#define __pyx_n_u_candidate __pyx_string_tab[59]
-#define __pyx_n_u_cell __pyx_string_tab[60]
-#define __pyx_n_u_class_getitem __pyx_string_tab[61]
-#define __pyx_n_u_cline_in_traceback __pyx_string_tab[62]
-#define __pyx_n_u_closure_cells __pyx_string_tab[63]
-#define __pyx_n_u_cond __pyx_string_tab[64]
-#define __pyx_n_u_consts __pyx_string_tab[65]
-#define __pyx_n_u_count __pyx_string_tab[66]
-#define __pyx_n_u_current __pyx_string_tab[67]
-#define __pyx_n_u_elements __pyx_string_tab[68]
-#define __pyx_n_u_elems __pyx_string_tab[69]
-#define __pyx_n_u_end __pyx_string_tab[70]
-#define __pyx_n_u_env __pyx_string_tab[71]
-#define __pyx_n_u_execute __pyx_string_tab[72]
-#define __pyx_n_u_fn __pyx_string_tab[73]
-#define __pyx_n_u_fn_obj __pyx_string_tab[74]
-#define __pyx_n_u_func __pyx_string_tab[75]
-#define __pyx_n_u_func_name __pyx_string_tab[76]
-#define __pyx_n_u_get __pyx_string_tab[77]
-#define __pyx_n_u_idx __pyx_string_tab[78]
-#define __pyx_n_u_instr_count __pyx_string_tab[79]
-#define __pyx_n_u_instrs __pyx_string_tab[80]
-#define __pyx_n_u_ip __pyx_string_tab[81]
-#define __pyx_n_u_is_coroutine __pyx_string_tab[82]
-#define __pyx_n_u_items __pyx_string_tab[83]
-#define __pyx_n_u_key __pyx_string_tab[84]
-#define __pyx_n_u_keys __pyx_string_tab[85]
-#define __pyx_n_u_main __pyx_string_tab[86]
-#define __pyx_n_u_method_idx __pyx_string_tab[87]
-#define __pyx_n_u_method_name __pyx_string_tab[88]
-#define __pyx_n_u_module __pyx_string_tab[89]
-#define __pyx_n_u_name __pyx_string_tab[90]
-#define __pyx_n_u_name_2 __pyx_string_tab[91]
-#define __pyx_n_u_name_idx __pyx_string_tab[92]
-#define __pyx_n_u_obj __pyx_string_tab[93]
-#define __pyx_n_u_op_name __pyx_string_tab[94]
-#define __pyx_n_u_operand __pyx_string_tab[95]
-#define __pyx_n_u_pairs __pyx_string_tab[96]
-#define __pyx_n_u_pop __pyx_string_tab[97]
-#define __pyx_n_u_qualname __pyx_string_tab[98]
-#define __pyx_n_u_resolve __pyx_string_tab[99]
-#define __pyx_n_u_result __pyx_string_tab[100]
-#define __pyx_n_u_set __pyx_string_tab[101]
-#define __pyx_n_u_set_name __pyx_string_tab[102]
-#define __pyx_n_u_setdefault __pyx_string_tab[103]
-#define __pyx_n_u_src_zexus_vm_fastops __pyx_string_tab[104]
-#define __pyx_n_u_stack __pyx_string_tab[105]
-#define __pyx_n_u_start __pyx_string_tab[106]
-#define __pyx_n_u_store __pyx_string_tab[107]
-#define __pyx_n_u_target __pyx_string_tab[108]
-#define __pyx_n_u_test __pyx_string_tab[109]
-#define __pyx_n_u_val __pyx_string_tab[110]
-#define __pyx_n_u_value __pyx_string_tab[111]
-#define __pyx_n_u_values __pyx_string_tab[112]
-#define __pyx_n_u_var_count __pyx_string_tab[113]
-#define __pyx_n_u_zexus_object __pyx_string_tab[114]
-#define __pyx_kp_b_iso88591_q_Qa_a_Rq_6_a_83a_z_5_Bc_3aq_WA __pyx_string_tab[115]
-#define __pyx_kp_b_iso88591_uCq_Qa_7_9A_9A_1HA_WE_U_Q_AQ_7 __pyx_string_tab[116]
-#define __pyx_kp_b_iso88591_uCq_c_7_5_3a_q_WE_U_Q_AQ_7_6_4q __pyx_string_tab[117]
-#define __pyx_kp_b_iso88591_wc_q_s_z_Cq_c_d_1_Qe1_vT_t1A_z __pyx_string_tab[118]
-#define __pyx_kp_b_iso88591_wc_q_z_Ks_81A_6_1_q_q __pyx_string_tab[119]
+#define __pyx_kp_u_Division_by_zero __pyx_string_tab[2]
+#define __pyx_kp_u_FOR_ITER_target_type_not_support __pyx_string_tab[3]
+#define __pyx_kp_u_Note_that_Cython_is_deliberately __pyx_string_tab[4]
+#define __pyx_kp_u__2 __pyx_string_tab[5]
+#define __pyx_kp_u_add_note __pyx_string_tab[6]
+#define __pyx_kp_u_fastops_pyx __pyx_string_tab[7]
+#define __pyx_kp_u_opcode_not_supported __pyx_string_tab[8]
+#define __pyx_n_u_ADD __pyx_string_tab[9]
+#define __pyx_n_u_BUILD_LIST __pyx_string_tab[10]
+#define __pyx_n_u_BUILD_MAP __pyx_string_tab[11]
+#define __pyx_n_u_BUILD_SET __pyx_string_tab[12]
+#define __pyx_n_u_CALL_BUILTIN __pyx_string_tab[13]
+#define __pyx_n_u_CALL_METHOD __pyx_string_tab[14]
+#define __pyx_n_u_CALL_NAME __pyx_string_tab[15]
+#define __pyx_n_u_CALL_TOP __pyx_string_tab[16]
+#define __pyx_n_u_DIV __pyx_string_tab[17]
+#define __pyx_n_u_DUP __pyx_string_tab[18]
+#define __pyx_n_u_EQ __pyx_string_tab[19]
+#define __pyx_n_u_FOR_ITER __pyx_string_tab[20]
+#define __pyx_n_u_GET_LENGTH __pyx_string_tab[21]
+#define __pyx_n_u_GT __pyx_string_tab[22]
+#define __pyx_n_u_GTE __pyx_string_tab[23]
+#define __pyx_n_u_INDEX __pyx_string_tab[24]
+#define __pyx_n_u_JUMP __pyx_string_tab[25]
+#define __pyx_n_u_JUMP_IF_FALSE __pyx_string_tab[26]
+#define __pyx_n_u_LOAD_CONST __pyx_string_tab[27]
+#define __pyx_n_u_LOAD_NAME __pyx_string_tab[28]
+#define __pyx_n_u_LT __pyx_string_tab[29]
+#define __pyx_n_u_LTE __pyx_string_tab[30]
+#define __pyx_n_u_List __pyx_string_tab[31]
+#define __pyx_n_u_MOD __pyx_string_tab[32]
+#define __pyx_n_u_MUL __pyx_string_tab[33]
+#define __pyx_n_u_Map __pyx_string_tab[34]
+#define __pyx_n_u_NEG __pyx_string_tab[35]
+#define __pyx_n_u_NEQ __pyx_string_tab[36]
+#define __pyx_n_u_NOT __pyx_string_tab[37]
+#define __pyx_n_u_POP __pyx_string_tab[38]
+#define __pyx_n_u_Pyx_PyDict_NextRef __pyx_string_tab[39]
+#define __pyx_n_u_RETURN __pyx_string_tab[40]
+#define __pyx_n_u_SLICE __pyx_string_tab[41]
+#define __pyx_n_u_STORE_NAME __pyx_string_tab[42]
+#define __pyx_n_u_SUB __pyx_string_tab[43]
+#define __pyx_n_u_String __pyx_string_tab[44]
+#define __pyx_n_u_ZList __pyx_string_tab[45]
+#define __pyx_n_u_ZMap __pyx_string_tab[46]
+#define __pyx_n_u_ZString __pyx_string_tab[47]
+#define __pyx_n_u__3 __pyx_string_tab[48]
+#define __pyx_n_u_a __pyx_string_tab[49]
+#define __pyx_n_u_arg_count __pyx_string_tab[50]
+#define __pyx_n_u_args __pyx_string_tab[51]
+#define __pyx_n_u_asyncio_coroutines __pyx_string_tab[52]
+#define __pyx_n_u_attr __pyx_string_tab[53]
+#define __pyx_n_u_b __pyx_string_tab[54]
+#define __pyx_n_u_builtins __pyx_string_tab[55]
+#define __pyx_n_u_bytecode __pyx_string_tab[56]
+#define __pyx_n_u_call_method __pyx_string_tab[57]
+#define __pyx_n_u_call_method_2 __pyx_string_tab[58]
+#define __pyx_n_u_call_top __pyx_string_tab[59]
+#define __pyx_n_u_candidate __pyx_string_tab[60]
+#define __pyx_n_u_cell __pyx_string_tab[61]
+#define __pyx_n_u_class_getitem __pyx_string_tab[62]
+#define __pyx_n_u_cline_in_traceback __pyx_string_tab[63]
+#define __pyx_n_u_closure_cells __pyx_string_tab[64]
+#define __pyx_n_u_cond __pyx_string_tab[65]
+#define __pyx_n_u_consts __pyx_string_tab[66]
+#define __pyx_n_u_count __pyx_string_tab[67]
+#define __pyx_n_u_current __pyx_string_tab[68]
+#define __pyx_n_u_data __pyx_string_tab[69]
+#define __pyx_n_u_elements __pyx_string_tab[70]
+#define __pyx_n_u_elems __pyx_string_tab[71]
+#define __pyx_n_u_end __pyx_string_tab[72]
+#define __pyx_n_u_entity_def __pyx_string_tab[73]
+#define __pyx_n_u_env __pyx_string_tab[74]
+#define __pyx_n_u_execute __pyx_string_tab[75]
+#define __pyx_n_u_fn __pyx_string_tab[76]
+#define __pyx_n_u_fn_obj __pyx_string_tab[77]
+#define __pyx_n_u_func __pyx_string_tab[78]
+#define __pyx_n_u_func_name __pyx_string_tab[79]
+#define __pyx_n_u_get __pyx_string_tab[80]
+#define __pyx_n_u_idx __pyx_string_tab[81]
+#define __pyx_n_u_idx_str __pyx_string_tab[82]
+#define __pyx_n_u_instr_count __pyx_string_tab[83]
+#define __pyx_n_u_instrs __pyx_string_tab[84]
+#define __pyx_n_u_ip __pyx_string_tab[85]
+#define __pyx_n_u_is_coroutine __pyx_string_tab[86]
+#define __pyx_n_u_items __pyx_string_tab[87]
+#define __pyx_n_u_k __pyx_string_tab[88]
+#define __pyx_n_u_key __pyx_string_tab[89]
+#define __pyx_n_u_keys __pyx_string_tab[90]
+#define __pyx_n_u_main __pyx_string_tab[91]
+#define __pyx_n_u_method_idx __pyx_string_tab[92]
+#define __pyx_n_u_method_name __pyx_string_tab[93]
+#define __pyx_n_u_module __pyx_string_tab[94]
+#define __pyx_n_u_name __pyx_string_tab[95]
+#define __pyx_n_u_name_2 __pyx_string_tab[96]
+#define __pyx_n_u_name_idx __pyx_string_tab[97]
+#define __pyx_n_u_obj __pyx_string_tab[98]
+#define __pyx_n_u_op_name __pyx_string_tab[99]
+#define __pyx_n_u_operand __pyx_string_tab[100]
+#define __pyx_n_u_pairs __pyx_string_tab[101]
+#define __pyx_n_u_pop __pyx_string_tab[102]
+#define __pyx_n_u_qualname __pyx_string_tab[103]
+#define __pyx_n_u_raw_idx __pyx_string_tab[104]
+#define __pyx_n_u_resolve __pyx_string_tab[105]
+#define __pyx_n_u_result __pyx_string_tab[106]
+#define __pyx_n_u_set __pyx_string_tab[107]
+#define __pyx_n_u_set_name __pyx_string_tab[108]
+#define __pyx_n_u_setdefault __pyx_string_tab[109]
+#define __pyx_n_u_src_zexus_vm_fastops __pyx_string_tab[110]
+#define __pyx_n_u_stack __pyx_string_tab[111]
+#define __pyx_n_u_start __pyx_string_tab[112]
+#define __pyx_n_u_store __pyx_string_tab[113]
+#define __pyx_n_u_target __pyx_string_tab[114]
+#define __pyx_n_u_test __pyx_string_tab[115]
+#define __pyx_n_u_v __pyx_string_tab[116]
+#define __pyx_n_u_val __pyx_string_tab[117]
+#define __pyx_n_u_value __pyx_string_tab[118]
+#define __pyx_n_u_values __pyx_string_tab[119]
+#define __pyx_n_u_var_count __pyx_string_tab[120]
+#define __pyx_n_u_zexus_object __pyx_string_tab[121]
+#define __pyx_kp_b_iso88591_q_Qa_a_Rq_6_a_83a_z_5_Bc_3aq_WA __pyx_string_tab[122]
+#define __pyx_kp_b_iso88591_uCq_Qa_7_9A_9A_1HA_WE_U_Q_AQ_7 __pyx_string_tab[123]
+#define __pyx_kp_b_iso88591_uCq_c_7_5_3a_q_WE_U_Q_AQ_7_6_4q __pyx_string_tab[124]
+#define __pyx_kp_b_iso88591_wc_q_s_z_Cq_c_d_1_Qe1_vT_t1A_z __pyx_string_tab[125]
+#define __pyx_kp_b_iso88591_wc_q_z_Ks_81A_6_1_q_q __pyx_string_tab[126]
 #define __pyx_int_0 __pyx_number_tab[0]
 #define __pyx_int_neg_1 __pyx_number_tab[1]
 #define __pyx_int_1 __pyx_number_tab[2]
@@ -2696,7 +2710,7 @@ static CYTHON_SMALL_CODE int __pyx_m_clear(PyObject *m) {
   for (int i=0; i<1; ++i) { Py_CLEAR(clear_module_state->__pyx_slice[i]); }
   for (int i=0; i<1; ++i) { Py_CLEAR(clear_module_state->__pyx_tuple[i]); }
   for (int i=0; i<5; ++i) { Py_CLEAR(clear_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<120; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<127; ++i) { Py_CLEAR(clear_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<4; ++i) { Py_CLEAR(clear_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_clear_contents ### */
 /* CommonTypesMetaclass.module_state_clear */
@@ -2723,7 +2737,7 @@ static CYTHON_SMALL_CODE int __pyx_m_traverse(PyObject *m, visitproc visit, void
   for (int i=0; i<1; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_slice[i]); }
   for (int i=0; i<1; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_tuple[i]); }
   for (int i=0; i<5; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_codeobj_tab[i]); }
-  for (int i=0; i<120; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
+  for (int i=0; i<127; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_string_tab[i]); }
   for (int i=0; i<4; ++i) { __Pyx_VISIT_CONST(traverse_module_state->__pyx_number_tab[i]); }
 /* #### Code section: module_state_traverse_contents ### */
 /* CommonTypesMetaclass.module_state_traverse */
@@ -4665,11 +4679,16 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
   PyObject *__pyx_v_cond = NULL;
   PyObject *__pyx_v_count = NULL;
   PyObject *__pyx_v_elements = NULL;
-  PyObject *__pyx_v_result = NULL;
+  PyObject *__pyx_v_pairs = NULL;
   CYTHON_UNUSED PyObject *__pyx_v__ = NULL;
   PyObject *__pyx_v_key = NULL;
+  PyObject *__pyx_v_result = NULL;
+  PyObject *__pyx_v_k = NULL;
+  PyObject *__pyx_v_v = NULL;
   PyObject *__pyx_v_idx = NULL;
   PyObject *__pyx_v_obj = NULL;
+  PyObject *__pyx_v_idx_str = NULL;
+  PyObject *__pyx_v_raw_idx = NULL;
   PyObject *__pyx_v_keys = NULL;
   PyObject *__pyx_v_var_count = NULL;
   PyObject *__pyx_v_elems = NULL;
@@ -4707,8 +4726,8 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
   PyObject *__pyx_t_13 = NULL;
   PyObject *__pyx_t_14 = NULL;
   PyObject *__pyx_t_15 = NULL;
-  int __pyx_t_16;
-  PyObject *__pyx_t_17 = NULL;
+  PyObject *__pyx_t_16 = NULL;
+  int __pyx_t_17;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -5798,7 +5817,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             if hasattr(b, "value"):
  *                 b = b.value             # <<<<<<<<<<<<<<
  *             if b == 0:
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
 */
         __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_b, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 150, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
@@ -5818,34 +5837,44 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             if hasattr(b, "value"):
  *                 b = b.value
  *             if b == 0:             # <<<<<<<<<<<<<<
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
 */
       __pyx_t_3 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_b, __pyx_mstate_global->__pyx_int_0, 0, 0)); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 151, __pyx_L1_error)
-      if (__pyx_t_3) {
+      if (unlikely(__pyx_t_3)) {
 
         /* "src/zexus/vm/fastops.pyx":152
  *                 b = b.value
  *             if b == 0:
- *                 stack.append(0)             # <<<<<<<<<<<<<<
+ *                 raise ZeroDivisionError("Division by zero")             # <<<<<<<<<<<<<<
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
  *                 stack.append(a // b if a % b == 0 else a / b)
 */
-        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_mstate_global->__pyx_int_0); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 152, __pyx_L1_error)
+        __pyx_t_5 = NULL;
+        __pyx_t_10 = 1;
+        {
+          PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_Division_by_zero};
+          __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_ZeroDivisionError)), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 152, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_2);
+        }
+        __Pyx_Raise(__pyx_t_2, 0, 0, 0);
+        __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+        __PYX_ERR(0, 152, __pyx_L1_error)
 
         /* "src/zexus/vm/fastops.pyx":151
  *             if hasattr(b, "value"):
  *                 b = b.value
  *             if b == 0:             # <<<<<<<<<<<<<<
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
 */
-        goto __pyx_L25;
       }
 
       /* "src/zexus/vm/fastops.pyx":153
  *             if b == 0:
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):             # <<<<<<<<<<<<<<
  *                 stack.append(a // b if a % b == 0 else a / b)
  *             else:
@@ -5876,7 +5905,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       if (__pyx_t_3) {
 
         /* "src/zexus/vm/fastops.pyx":154
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):
  *                 stack.append(a // b if a % b == 0 else a / b)             # <<<<<<<<<<<<<<
  *             else:
@@ -5902,7 +5931,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 
         /* "src/zexus/vm/fastops.pyx":153
  *             if b == 0:
- *                 stack.append(0)
+ *                 raise ZeroDivisionError("Division by zero")
  *             elif isinstance(a, int) and not isinstance(a, bool) and isinstance(b, int) and not isinstance(b, bool):             # <<<<<<<<<<<<<<
  *                 stack.append(a // b if a % b == 0 else a / b)
  *             else:
@@ -6886,7 +6915,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             stack.append(elements)
  *         elif op_name == "BUILD_MAP":             # <<<<<<<<<<<<<<
  *             count = operand if operand is not None else 0
- *             result = {}
+ *             pairs = []
 */
     __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_BUILD_MAP, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 203, __pyx_L1_error)
     if (__pyx_t_8) {
@@ -6895,7 +6924,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             stack.append(elements)
  *         elif op_name == "BUILD_MAP":
  *             count = operand if operand is not None else 0             # <<<<<<<<<<<<<<
- *             result = {}
+ *             pairs = []
  *             for _ in range(count):
 */
       __pyx_t_8 = (__pyx_v_operand != Py_None);
@@ -6912,21 +6941,21 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       /* "src/zexus/vm/fastops.pyx":205
  *         elif op_name == "BUILD_MAP":
  *             count = operand if operand is not None else 0
- *             result = {}             # <<<<<<<<<<<<<<
+ *             pairs = []             # <<<<<<<<<<<<<<
  *             for _ in range(count):
  *                 val = stack.pop(); key = stack.pop()
 */
-      __pyx_t_4 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 205, __pyx_L1_error)
+      __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 205, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_4);
-      __Pyx_XDECREF_SET(__pyx_v_result, ((PyObject*)__pyx_t_4));
+      __Pyx_XDECREF_SET(__pyx_v_pairs, ((PyObject*)__pyx_t_4));
       __pyx_t_4 = 0;
 
       /* "src/zexus/vm/fastops.pyx":206
  *             count = operand if operand is not None else 0
- *             result = {}
+ *             pairs = []
  *             for _ in range(count):             # <<<<<<<<<<<<<<
  *                 val = stack.pop(); key = stack.pop()
- *                 result[key] = val
+ *                 pairs.append((key, val))
 */
       __pyx_t_2 = NULL;
       __pyx_t_10 = 1;
@@ -6958,11 +6987,11 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         __pyx_t_4 = 0;
 
         /* "src/zexus/vm/fastops.pyx":207
- *             result = {}
+ *             pairs = []
  *             for _ in range(count):
  *                 val = stack.pop(); key = stack.pop()             # <<<<<<<<<<<<<<
- *                 result[key] = val
- *             stack.append(result)
+ *                 pairs.append((key, val))
+ *             pairs.reverse()
 */
         __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 207, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
@@ -6976,52 +7005,177 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         /* "src/zexus/vm/fastops.pyx":208
  *             for _ in range(count):
  *                 val = stack.pop(); key = stack.pop()
- *                 result[key] = val             # <<<<<<<<<<<<<<
- *             stack.append(result)
- *         elif op_name == "BUILD_SET":
+ *                 pairs.append((key, val))             # <<<<<<<<<<<<<<
+ *             pairs.reverse()
+ *             result = {}
 */
-        if (unlikely((PyDict_SetItem(__pyx_v_result, __pyx_v_key, __pyx_v_val) < 0))) __PYX_ERR(0, 208, __pyx_L1_error)
+        __pyx_t_4 = PyTuple_New(2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 208, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+        __Pyx_INCREF(__pyx_v_key);
+        __Pyx_GIVEREF(__pyx_v_key);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 0, __pyx_v_key) != (0)) __PYX_ERR(0, 208, __pyx_L1_error);
+        __Pyx_INCREF(__pyx_v_val);
+        __Pyx_GIVEREF(__pyx_v_val);
+        if (__Pyx_PyTuple_SET_ITEM(__pyx_t_4, 1, __pyx_v_val) != (0)) __PYX_ERR(0, 208, __pyx_L1_error);
+        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_pairs, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 208, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
         /* "src/zexus/vm/fastops.pyx":206
  *             count = operand if operand is not None else 0
- *             result = {}
+ *             pairs = []
  *             for _ in range(count):             # <<<<<<<<<<<<<<
  *                 val = stack.pop(); key = stack.pop()
- *                 result[key] = val
+ *                 pairs.append((key, val))
 */
       }
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
       /* "src/zexus/vm/fastops.pyx":209
  *                 val = stack.pop(); key = stack.pop()
- *                 result[key] = val
+ *                 pairs.append((key, val))
+ *             pairs.reverse()             # <<<<<<<<<<<<<<
+ *             result = {}
+ *             for k, v in pairs:
+*/
+      __pyx_t_9 = PyList_Reverse(__pyx_v_pairs); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 209, __pyx_L1_error)
+
+      /* "src/zexus/vm/fastops.pyx":210
+ *                 pairs.append((key, val))
+ *             pairs.reverse()
+ *             result = {}             # <<<<<<<<<<<<<<
+ *             for k, v in pairs:
+ *                 result[k] = v
+*/
+      __pyx_t_2 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 210, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_2);
+      __Pyx_XDECREF_SET(__pyx_v_result, ((PyObject*)__pyx_t_2));
+      __pyx_t_2 = 0;
+
+      /* "src/zexus/vm/fastops.pyx":211
+ *             pairs.reverse()
+ *             result = {}
+ *             for k, v in pairs:             # <<<<<<<<<<<<<<
+ *                 result[k] = v
+ *             stack.append(result)
+*/
+      __pyx_t_2 = __pyx_v_pairs; __Pyx_INCREF(__pyx_t_2);
+      __pyx_t_1 = 0;
+      for (;;) {
+        {
+          Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_t_2);
+          #if !CYTHON_ASSUME_SAFE_SIZE
+          if (unlikely((__pyx_temp < 0))) __PYX_ERR(0, 211, __pyx_L1_error)
+          #endif
+          if (__pyx_t_1 >= __pyx_temp) break;
+        }
+        __pyx_t_4 = __Pyx_PyList_GetItemRefFast(__pyx_t_2, __pyx_t_1, __Pyx_ReferenceSharing_OwnStrongReference);
+        ++__pyx_t_1;
+        if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 211, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_4);
+        if ((likely(PyTuple_CheckExact(__pyx_t_4))) || (PyList_CheckExact(__pyx_t_4))) {
+          PyObject* sequence = __pyx_t_4;
+          Py_ssize_t size = __Pyx_PySequence_SIZE(sequence);
+          if (unlikely(size != 2)) {
+            if (size > 2) __Pyx_RaiseTooManyValuesError(2);
+            else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
+            __PYX_ERR(0, 211, __pyx_L1_error)
+          }
+          #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
+          if (likely(PyTuple_CheckExact(sequence))) {
+            __pyx_t_5 = PyTuple_GET_ITEM(sequence, 0);
+            __Pyx_INCREF(__pyx_t_5);
+            __pyx_t_6 = PyTuple_GET_ITEM(sequence, 1);
+            __Pyx_INCREF(__pyx_t_6);
+          } else {
+            __pyx_t_5 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
+            if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 211, __pyx_L1_error)
+            __Pyx_XGOTREF(__pyx_t_5);
+            __pyx_t_6 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
+            if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 211, __pyx_L1_error)
+            __Pyx_XGOTREF(__pyx_t_6);
+          }
+          #else
+          __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 211, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_5);
+          __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 211, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_6);
+          #endif
+          __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+        } else {
+          Py_ssize_t index = -1;
+          __pyx_t_13 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 211, __pyx_L1_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+          __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_13);
+          index = 0; __pyx_t_5 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_5)) goto __pyx_L43_unpacking_failed;
+          __Pyx_GOTREF(__pyx_t_5);
+          index = 1; __pyx_t_6 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_6)) goto __pyx_L43_unpacking_failed;
+          __Pyx_GOTREF(__pyx_t_6);
+          if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_13), 2) < (0)) __PYX_ERR(0, 211, __pyx_L1_error)
+          __pyx_t_7 = NULL;
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+          goto __pyx_L44_unpacking_done;
+          __pyx_L43_unpacking_failed:;
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+          __pyx_t_7 = NULL;
+          if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
+          __PYX_ERR(0, 211, __pyx_L1_error)
+          __pyx_L44_unpacking_done:;
+        }
+        __Pyx_XDECREF_SET(__pyx_v_k, __pyx_t_5);
+        __pyx_t_5 = 0;
+        __Pyx_XDECREF_SET(__pyx_v_v, __pyx_t_6);
+        __pyx_t_6 = 0;
+
+        /* "src/zexus/vm/fastops.pyx":212
+ *             result = {}
+ *             for k, v in pairs:
+ *                 result[k] = v             # <<<<<<<<<<<<<<
+ *             stack.append(result)
+ *         elif op_name == "BUILD_SET":
+*/
+        if (unlikely((PyDict_SetItem(__pyx_v_result, __pyx_v_k, __pyx_v_v) < 0))) __PYX_ERR(0, 212, __pyx_L1_error)
+
+        /* "src/zexus/vm/fastops.pyx":211
+ *             pairs.reverse()
+ *             result = {}
+ *             for k, v in pairs:             # <<<<<<<<<<<<<<
+ *                 result[k] = v
+ *             stack.append(result)
+*/
+      }
+      __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+
+      /* "src/zexus/vm/fastops.pyx":213
+ *             for k, v in pairs:
+ *                 result[k] = v
  *             stack.append(result)             # <<<<<<<<<<<<<<
  *         elif op_name == "BUILD_SET":
  *             count = operand if operand is not None else 0
 */
-      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_result); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 209, __pyx_L1_error)
+      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_result); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 213, __pyx_L1_error)
 
       /* "src/zexus/vm/fastops.pyx":203
  *             elements = [stack.pop() for _ in range(count)][::-1]
  *             stack.append(elements)
  *         elif op_name == "BUILD_MAP":             # <<<<<<<<<<<<<<
  *             count = operand if operand is not None else 0
- *             result = {}
+ *             pairs = []
 */
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":210
- *                 result[key] = val
+    /* "src/zexus/vm/fastops.pyx":214
+ *                 result[k] = v
  *             stack.append(result)
  *         elif op_name == "BUILD_SET":             # <<<<<<<<<<<<<<
  *             count = operand if operand is not None else 0
  *             elements = [stack.pop() for _ in range(count)][::-1]
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_BUILD_SET, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 210, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_BUILD_SET, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 214, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":211
+      /* "src/zexus/vm/fastops.pyx":215
  *             stack.append(result)
  *         elif op_name == "BUILD_SET":
  *             count = operand if operand is not None else 0             # <<<<<<<<<<<<<<
@@ -7039,7 +7193,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_count, __pyx_t_2);
       __pyx_t_2 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":212
+      /* "src/zexus/vm/fastops.pyx":216
  *         elif op_name == "BUILD_SET":
  *             count = operand if operand is not None else 0
  *             elements = [stack.pop() for _ in range(count)][::-1]             # <<<<<<<<<<<<<<
@@ -7047,28 +7201,28 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *         elif op_name == "INDEX":
 */
       { /* enter inner scope */
-        __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 212, __pyx_L43_error)
+        __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 216, __pyx_L48_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_5 = NULL;
+        __pyx_t_6 = NULL;
         __pyx_t_10 = 1;
         {
-          PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_v_count};
+          PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_v_count};
           __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 212, __pyx_L43_error)
+          __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+          if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 216, __pyx_L48_error)
           __Pyx_GOTREF(__pyx_t_4);
         }
-        __pyx_t_5 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 212, __pyx_L43_error)
-        __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_5); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 212, __pyx_L43_error)
+        __pyx_t_6 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 216, __pyx_L48_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_6); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 216, __pyx_L48_error)
         __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
         for (;;) {
           {
-            __pyx_t_4 = __pyx_t_12(__pyx_t_5);
+            __pyx_t_4 = __pyx_t_12(__pyx_t_6);
             if (unlikely(!__pyx_t_4)) {
               PyObject* exc_type = PyErr_Occurred();
               if (exc_type) {
-                if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 212, __pyx_L43_error)
+                if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 216, __pyx_L48_error)
                 PyErr_Clear();
               }
               break;
@@ -7077,39 +7231,39 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
           __Pyx_GOTREF(__pyx_t_4);
           __Pyx_XDECREF_SET(__pyx_8genexpr1__pyx_v__, __pyx_t_4);
           __pyx_t_4 = 0;
-          __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 212, __pyx_L43_error)
+          __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 216, __pyx_L48_error)
           __Pyx_GOTREF(__pyx_t_4);
-          if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_4))) __PYX_ERR(0, 212, __pyx_L43_error)
+          if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_4))) __PYX_ERR(0, 216, __pyx_L48_error)
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
         }
-        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
         __Pyx_XDECREF(__pyx_8genexpr1__pyx_v__); __pyx_8genexpr1__pyx_v__ = 0;
-        goto __pyx_L47_exit_scope;
-        __pyx_L43_error:;
+        goto __pyx_L52_exit_scope;
+        __pyx_L48_error:;
         __Pyx_XDECREF(__pyx_8genexpr1__pyx_v__); __pyx_8genexpr1__pyx_v__ = 0;
         goto __pyx_L1_error;
-        __pyx_L47_exit_scope:;
+        __pyx_L52_exit_scope:;
       } /* exit inner scope */
-      __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 212, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_5);
+      __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 216, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-      __Pyx_XDECREF_SET(__pyx_v_elements, ((PyObject*)__pyx_t_5));
-      __pyx_t_5 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_elements, ((PyObject*)__pyx_t_6));
+      __pyx_t_6 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":213
+      /* "src/zexus/vm/fastops.pyx":217
  *             count = operand if operand is not None else 0
  *             elements = [stack.pop() for _ in range(count)][::-1]
  *             stack.append(set(elements))             # <<<<<<<<<<<<<<
  *         elif op_name == "INDEX":
  *             idx = stack.pop()
 */
-      __pyx_t_5 = PySet_New(__pyx_v_elements); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 213, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_5);
-      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 213, __pyx_L1_error)
-      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __pyx_t_6 = PySet_New(__pyx_v_elements); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 217, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
+      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 217, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":210
- *                 result[key] = val
+      /* "src/zexus/vm/fastops.pyx":214
+ *                 result[k] = v
  *             stack.append(result)
  *         elif op_name == "BUILD_SET":             # <<<<<<<<<<<<<<
  *             count = operand if operand is not None else 0
@@ -7118,41 +7272,41 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":214
+    /* "src/zexus/vm/fastops.pyx":218
  *             elements = [stack.pop() for _ in range(count)][::-1]
  *             stack.append(set(elements))
  *         elif op_name == "INDEX":             # <<<<<<<<<<<<<<
  *             idx = stack.pop()
  *             obj = stack.pop()
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_INDEX, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 214, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_INDEX, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 218, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":215
+      /* "src/zexus/vm/fastops.pyx":219
  *             stack.append(set(elements))
  *         elif op_name == "INDEX":
  *             idx = stack.pop()             # <<<<<<<<<<<<<<
  *             obj = stack.pop()
  *             try:
 */
-      __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 215, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_5);
-      __Pyx_XDECREF_SET(__pyx_v_idx, __pyx_t_5);
-      __pyx_t_5 = 0;
+      __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 219, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
+      __Pyx_XDECREF_SET(__pyx_v_idx, __pyx_t_6);
+      __pyx_t_6 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":216
+      /* "src/zexus/vm/fastops.pyx":220
  *         elif op_name == "INDEX":
  *             idx = stack.pop()
  *             obj = stack.pop()             # <<<<<<<<<<<<<<
  *             try:
  *                 if isinstance(obj, ZList):
 */
-      __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 216, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_5);
-      __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_5);
-      __pyx_t_5 = 0;
+      __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 220, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
+      __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_6);
+      __pyx_t_6 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":217
+      /* "src/zexus/vm/fastops.pyx":221
  *             idx = stack.pop()
  *             obj = stack.pop()
  *             try:             # <<<<<<<<<<<<<<
@@ -7162,207 +7316,446 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       {
         __Pyx_PyThreadState_declare
         __Pyx_PyThreadState_assign
-        __Pyx_ExceptionSave(&__pyx_t_13, &__pyx_t_14, &__pyx_t_15);
-        __Pyx_XGOTREF(__pyx_t_13);
+        __Pyx_ExceptionSave(&__pyx_t_14, &__pyx_t_15, &__pyx_t_16);
         __Pyx_XGOTREF(__pyx_t_14);
         __Pyx_XGOTREF(__pyx_t_15);
+        __Pyx_XGOTREF(__pyx_t_16);
         /*try:*/ {
 
-          /* "src/zexus/vm/fastops.pyx":218
- *             obj = stack.pop()
- *             try:
- *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, ZMap):
-*/
-          __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 218, __pyx_L48_error)
-          __Pyx_GOTREF(__pyx_t_5);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_5); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 218, __pyx_L48_error)
-          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (__pyx_t_8) {
-
-            /* "src/zexus/vm/fastops.pyx":219
- *             try:
- *                 if isinstance(obj, ZList):
- *                     stack.append(obj.get(idx))             # <<<<<<<<<<<<<<
- *                 elif isinstance(obj, ZMap):
- *                     stack.append(obj.get(idx))
-*/
-            __pyx_t_2 = __pyx_v_obj;
-            __Pyx_INCREF(__pyx_t_2);
-            __pyx_t_10 = 0;
-            {
-              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_idx};
-              __pyx_t_5 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_get, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-              __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 219, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_5);
-            }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 219, __pyx_L48_error)
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-
-            /* "src/zexus/vm/fastops.pyx":218
- *             obj = stack.pop()
- *             try:
- *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, ZMap):
-*/
-            goto __pyx_L56;
-          }
-
-          /* "src/zexus/vm/fastops.pyx":220
- *                 if isinstance(obj, ZList):
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
-*/
-          __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 220, __pyx_L48_error)
-          __Pyx_GOTREF(__pyx_t_5);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_5); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 220, __pyx_L48_error)
-          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-          if (__pyx_t_8) {
-
-            /* "src/zexus/vm/fastops.pyx":221
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, ZMap):
- *                     stack.append(obj.get(idx))             # <<<<<<<<<<<<<<
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
- *                     keys = list(obj.keys())
-*/
-            __pyx_t_2 = __pyx_v_obj;
-            __Pyx_INCREF(__pyx_t_2);
-            __pyx_t_10 = 0;
-            {
-              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_idx};
-              __pyx_t_5 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_get, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-              __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 221, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_5);
-            }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 221, __pyx_L48_error)
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-
-            /* "src/zexus/vm/fastops.pyx":220
- *                 if isinstance(obj, ZList):
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
-*/
-            goto __pyx_L56;
-          }
-
           /* "src/zexus/vm/fastops.pyx":222
- *                 elif isinstance(obj, ZMap):
+ *             obj = stack.pop()
+ *             try:
+ *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
  *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, dict) and isinstance(idx, int):             # <<<<<<<<<<<<<<
- *                     keys = list(obj.keys())
- *                     if 0 <= idx < len(keys):
+ *                 elif isinstance(obj, ZMap):
 */
-          __pyx_t_3 = PyDict_Check(__pyx_v_obj); 
-          if (__pyx_t_3) {
-          } else {
-            __pyx_t_8 = __pyx_t_3;
-            goto __pyx_L57_bool_binop_done;
-          }
-          __pyx_t_3 = PyLong_Check(__pyx_v_idx); 
-          __pyx_t_8 = __pyx_t_3;
-          __pyx_L57_bool_binop_done:;
+          __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 222, __pyx_L53_error)
+          __Pyx_GOTREF(__pyx_t_6);
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_6); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 222, __pyx_L53_error)
+          __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
           if (__pyx_t_8) {
 
             /* "src/zexus/vm/fastops.pyx":223
+ *             try:
+ *                 if isinstance(obj, ZList):
+ *                     stack.append(obj.get(idx))             # <<<<<<<<<<<<<<
+ *                 elif isinstance(obj, ZMap):
  *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
- *                     keys = list(obj.keys())             # <<<<<<<<<<<<<<
- *                     if 0 <= idx < len(keys):
- *                         stack.append(obj[keys[idx]])
 */
             __pyx_t_2 = __pyx_v_obj;
             __Pyx_INCREF(__pyx_t_2);
             __pyx_t_10 = 0;
             {
-              PyObject *__pyx_callargs[2] = {__pyx_t_2, NULL};
-              __pyx_t_5 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_keys, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_idx};
+              __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_get, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
               __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 223, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_5);
+              if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 223, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_6);
             }
-            __pyx_t_2 = __Pyx_PySequence_ListKeepNew(__pyx_t_5); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 223, __pyx_L48_error)
-            __Pyx_GOTREF(__pyx_t_2);
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-            __Pyx_XDECREF_SET(__pyx_v_keys, ((PyObject*)__pyx_t_2));
-            __pyx_t_2 = 0;
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 223, __pyx_L53_error)
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+
+            /* "src/zexus/vm/fastops.pyx":222
+ *             obj = stack.pop()
+ *             try:
+ *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
+ *                     stack.append(obj.get(idx))
+ *                 elif isinstance(obj, ZMap):
+*/
+            goto __pyx_L61;
+          }
+
+          /* "src/zexus/vm/fastops.pyx":224
+ *                 if isinstance(obj, ZList):
+ *                     stack.append(obj.get(idx))
+ *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
+ *                     stack.append(obj.get(idx))
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+*/
+          __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 224, __pyx_L53_error)
+          __Pyx_GOTREF(__pyx_t_6);
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_6); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 224, __pyx_L53_error)
+          __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+          if (__pyx_t_8) {
+
+            /* "src/zexus/vm/fastops.pyx":225
+ *                     stack.append(obj.get(idx))
+ *                 elif isinstance(obj, ZMap):
+ *                     stack.append(obj.get(idx))             # <<<<<<<<<<<<<<
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+*/
+            __pyx_t_2 = __pyx_v_obj;
+            __Pyx_INCREF(__pyx_t_2);
+            __pyx_t_10 = 0;
+            {
+              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_idx};
+              __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_get, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+              __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
+              if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 225, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_6);
+            }
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 225, __pyx_L53_error)
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
             /* "src/zexus/vm/fastops.pyx":224
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
- *                     keys = list(obj.keys())
- *                     if 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
- *                         stack.append(obj[keys[idx]])
- *                     else:
+ *                 if isinstance(obj, ZList):
+ *                     stack.append(obj.get(idx))
+ *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
+ *                     stack.append(obj.get(idx))
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
 */
-            __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 224, __pyx_L48_error)
-            if (__Pyx_PyObject_IsTrue(__pyx_t_2)) {
-              __Pyx_DECREF(__pyx_t_2);
-              __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 224, __pyx_L48_error)
-              __pyx_t_5 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 224, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_5);
-              __pyx_t_2 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_5, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 224, __pyx_L48_error)
-              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+            goto __pyx_L61;
+          }
+
+          /* "src/zexus/vm/fastops.pyx":226
+ *                 elif isinstance(obj, ZMap):
+ *                     stack.append(obj.get(idx))
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):             # <<<<<<<<<<<<<<
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+ *                     if idx_str:
+*/
+          __pyx_t_3 = __Pyx_HasAttr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_data); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 226, __pyx_L53_error)
+          if (__pyx_t_3) {
+          } else {
+            __pyx_t_8 = __pyx_t_3;
+            goto __pyx_L62_bool_binop_done;
+          }
+          __pyx_t_3 = __Pyx_HasAttr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_entity_def); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 226, __pyx_L53_error)
+          __pyx_t_8 = __pyx_t_3;
+          __pyx_L62_bool_binop_done:;
+          if (__pyx_t_8) {
+
+            /* "src/zexus/vm/fastops.pyx":227
+ *                     stack.append(obj.get(idx))
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None             # <<<<<<<<<<<<<<
+ *                     if idx_str:
+ *                         val = obj.get(idx_str)
+*/
+            __pyx_t_8 = __Pyx_HasAttr(__pyx_v_idx, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 227, __pyx_L53_error)
+            if (__pyx_t_8) {
+              __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_idx, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 227, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_2);
+              __pyx_t_6 = __pyx_t_2;
+              __pyx_t_2 = 0;
+            } else {
+              __pyx_t_3 = (__pyx_v_idx != Py_None);
+              if (__pyx_t_3) {
+                __pyx_t_4 = __Pyx_PyObject_Unicode(__pyx_v_idx); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 227, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_4);
+                __pyx_t_2 = __pyx_t_4;
+                __pyx_t_4 = 0;
+              } else {
+                __Pyx_INCREF(Py_None);
+                __pyx_t_2 = Py_None;
+              }
+              __pyx_t_6 = __pyx_t_2;
+              __pyx_t_2 = 0;
             }
-            __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 224, __pyx_L48_error)
-            __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+            __Pyx_XDECREF_SET(__pyx_v_idx_str, __pyx_t_6);
+            __pyx_t_6 = 0;
+
+            /* "src/zexus/vm/fastops.pyx":228
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+ *                     if idx_str:             # <<<<<<<<<<<<<<
+ *                         val = obj.get(idx_str)
+ *                         if hasattr(val, 'value'):
+*/
+            __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_idx_str); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 228, __pyx_L53_error)
             if (__pyx_t_8) {
 
-              /* "src/zexus/vm/fastops.pyx":225
- *                     keys = list(obj.keys())
- *                     if 0 <= idx < len(keys):
- *                         stack.append(obj[keys[idx]])             # <<<<<<<<<<<<<<
+              /* "src/zexus/vm/fastops.pyx":229
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+ *                     if idx_str:
+ *                         val = obj.get(idx_str)             # <<<<<<<<<<<<<<
+ *                         if hasattr(val, 'value'):
+ *                             stack.append(val.value)
+*/
+              __pyx_t_2 = __pyx_v_obj;
+              __Pyx_INCREF(__pyx_t_2);
+              __pyx_t_10 = 0;
+              {
+                PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_idx_str};
+                __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_get, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+                __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
+                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 229, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_6);
+              }
+              __Pyx_XDECREF_SET(__pyx_v_val, __pyx_t_6);
+              __pyx_t_6 = 0;
+
+              /* "src/zexus/vm/fastops.pyx":230
+ *                     if idx_str:
+ *                         val = obj.get(idx_str)
+ *                         if hasattr(val, 'value'):             # <<<<<<<<<<<<<<
+ *                             stack.append(val.value)
+ *                         else:
+*/
+              __pyx_t_8 = __Pyx_HasAttr(__pyx_v_val, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 230, __pyx_L53_error)
+              if (__pyx_t_8) {
+
+                /* "src/zexus/vm/fastops.pyx":231
+ *                         val = obj.get(idx_str)
+ *                         if hasattr(val, 'value'):
+ *                             stack.append(val.value)             # <<<<<<<<<<<<<<
+ *                         else:
+ *                             stack.append(val)
+*/
+                __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_val, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 231, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 231, __pyx_L53_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+
+                /* "src/zexus/vm/fastops.pyx":230
+ *                     if idx_str:
+ *                         val = obj.get(idx_str)
+ *                         if hasattr(val, 'value'):             # <<<<<<<<<<<<<<
+ *                             stack.append(val.value)
+ *                         else:
+*/
+                goto __pyx_L65;
+              }
+
+              /* "src/zexus/vm/fastops.pyx":233
+ *                             stack.append(val.value)
+ *                         else:
+ *                             stack.append(val)             # <<<<<<<<<<<<<<
  *                     else:
  *                         stack.append(None)
 */
-              __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 225, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_2);
-              __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_t_2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 225, __pyx_L48_error)
-              __Pyx_GOTREF(__pyx_t_5);
-              __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-              __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 225, __pyx_L48_error)
-              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+              /*else*/ {
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_val); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 233, __pyx_L53_error)
+              }
+              __pyx_L65:;
 
-              /* "src/zexus/vm/fastops.pyx":224
- *                 elif isinstance(obj, dict) and isinstance(idx, int):
- *                     keys = list(obj.keys())
- *                     if 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
- *                         stack.append(obj[keys[idx]])
- *                     else:
+              /* "src/zexus/vm/fastops.pyx":228
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+ *                     if idx_str:             # <<<<<<<<<<<<<<
+ *                         val = obj.get(idx_str)
+ *                         if hasattr(val, 'value'):
 */
-              goto __pyx_L59;
+              goto __pyx_L64;
             }
 
-            /* "src/zexus/vm/fastops.pyx":227
- *                         stack.append(obj[keys[idx]])
+            /* "src/zexus/vm/fastops.pyx":235
+ *                             stack.append(val)
+ *                     else:
+ *                         stack.append(None)             # <<<<<<<<<<<<<<
+ *                 elif isinstance(obj, dict):
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+*/
+            /*else*/ {
+              __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 235, __pyx_L53_error)
+            }
+            __pyx_L64:;
+
+            /* "src/zexus/vm/fastops.pyx":226
+ *                 elif isinstance(obj, ZMap):
+ *                     stack.append(obj.get(idx))
+ *                 elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):             # <<<<<<<<<<<<<<
+ *                     idx_str = idx.value if hasattr(idx, 'value') else str(idx) if idx is not None else None
+ *                     if idx_str:
+*/
+            goto __pyx_L61;
+          }
+
+          /* "src/zexus/vm/fastops.pyx":236
+ *                     else:
+ *                         stack.append(None)
+ *                 elif isinstance(obj, dict):             # <<<<<<<<<<<<<<
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+ *                     if raw_idx in obj:
+*/
+          __pyx_t_8 = PyDict_Check(__pyx_v_obj); 
+          if (__pyx_t_8) {
+
+            /* "src/zexus/vm/fastops.pyx":237
+ *                         stack.append(None)
+ *                 elif isinstance(obj, dict):
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx             # <<<<<<<<<<<<<<
+ *                     if raw_idx in obj:
+ *                         stack.append(obj[raw_idx])
+*/
+            __pyx_t_8 = __Pyx_HasAttr(__pyx_v_idx, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 237, __pyx_L53_error)
+            if (__pyx_t_8) {
+              __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_idx, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 237, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_2);
+              __pyx_t_6 = __pyx_t_2;
+              __pyx_t_2 = 0;
+            } else {
+              __Pyx_INCREF(__pyx_v_idx);
+              __pyx_t_6 = __pyx_v_idx;
+            }
+            __Pyx_XDECREF_SET(__pyx_v_raw_idx, __pyx_t_6);
+            __pyx_t_6 = 0;
+
+            /* "src/zexus/vm/fastops.pyx":238
+ *                 elif isinstance(obj, dict):
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+ *                     if raw_idx in obj:             # <<<<<<<<<<<<<<
+ *                         stack.append(obj[raw_idx])
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+*/
+            __pyx_t_8 = (__Pyx_PySequence_ContainsTF(__pyx_v_raw_idx, __pyx_v_obj, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 238, __pyx_L53_error)
+            if (__pyx_t_8) {
+
+              /* "src/zexus/vm/fastops.pyx":239
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+ *                     if raw_idx in obj:
+ *                         stack.append(obj[raw_idx])             # <<<<<<<<<<<<<<
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+ *                         keys = list(obj.keys())
+*/
+              __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_v_raw_idx); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 239, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_6);
+              __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 239, __pyx_L53_error)
+              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+
+              /* "src/zexus/vm/fastops.pyx":238
+ *                 elif isinstance(obj, dict):
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+ *                     if raw_idx in obj:             # <<<<<<<<<<<<<<
+ *                         stack.append(obj[raw_idx])
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+*/
+              goto __pyx_L66;
+            }
+
+            /* "src/zexus/vm/fastops.pyx":240
+ *                     if raw_idx in obj:
+ *                         stack.append(obj[raw_idx])
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):             # <<<<<<<<<<<<<<
+ *                         keys = list(obj.keys())
+ *                         if 0 <= raw_idx < len(keys):
+*/
+            __pyx_t_3 = PyLong_Check(__pyx_v_raw_idx); 
+            if (__pyx_t_3) {
+            } else {
+              __pyx_t_8 = __pyx_t_3;
+              goto __pyx_L67_bool_binop_done;
+            }
+            __pyx_t_3 = PyBool_Check(__pyx_v_raw_idx); 
+            __pyx_t_11 = (!__pyx_t_3);
+            __pyx_t_8 = __pyx_t_11;
+            __pyx_L67_bool_binop_done:;
+            if (__pyx_t_8) {
+
+              /* "src/zexus/vm/fastops.pyx":241
+ *                         stack.append(obj[raw_idx])
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+ *                         keys = list(obj.keys())             # <<<<<<<<<<<<<<
+ *                         if 0 <= raw_idx < len(keys):
+ *                             stack.append(obj[keys[raw_idx]])
+*/
+              __pyx_t_2 = __pyx_v_obj;
+              __Pyx_INCREF(__pyx_t_2);
+              __pyx_t_10 = 0;
+              {
+                PyObject *__pyx_callargs[2] = {__pyx_t_2, NULL};
+                __pyx_t_6 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_keys, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+                __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
+                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 241, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_6);
+              }
+              __pyx_t_2 = __Pyx_PySequence_ListKeepNew(__pyx_t_6); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 241, __pyx_L53_error)
+              __Pyx_GOTREF(__pyx_t_2);
+              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+              __Pyx_XDECREF_SET(__pyx_v_keys, ((PyObject*)__pyx_t_2));
+              __pyx_t_2 = 0;
+
+              /* "src/zexus/vm/fastops.pyx":242
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+ *                         keys = list(obj.keys())
+ *                         if 0 <= raw_idx < len(keys):             # <<<<<<<<<<<<<<
+ *                             stack.append(obj[keys[raw_idx]])
+ *                         else:
+*/
+              __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_raw_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 242, __pyx_L53_error)
+              if (__Pyx_PyObject_IsTrue(__pyx_t_2)) {
+                __Pyx_DECREF(__pyx_t_2);
+                __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 242, __pyx_L53_error)
+                __pyx_t_6 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 242, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_2 = PyObject_RichCompare(__pyx_v_raw_idx, __pyx_t_6, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 242, __pyx_L53_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+              }
+              __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 242, __pyx_L53_error)
+              __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+              if (__pyx_t_8) {
+
+                /* "src/zexus/vm/fastops.pyx":243
+ *                         keys = list(obj.keys())
+ *                         if 0 <= raw_idx < len(keys):
+ *                             stack.append(obj[keys[raw_idx]])             # <<<<<<<<<<<<<<
+ *                         else:
+ *                             stack.append(None)
+*/
+                __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_raw_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 243, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_2);
+                __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 243, __pyx_L53_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 243, __pyx_L53_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+
+                /* "src/zexus/vm/fastops.pyx":242
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):
+ *                         keys = list(obj.keys())
+ *                         if 0 <= raw_idx < len(keys):             # <<<<<<<<<<<<<<
+ *                             stack.append(obj[keys[raw_idx]])
+ *                         else:
+*/
+                goto __pyx_L69;
+              }
+
+              /* "src/zexus/vm/fastops.pyx":245
+ *                             stack.append(obj[keys[raw_idx]])
+ *                         else:
+ *                             stack.append(None)             # <<<<<<<<<<<<<<
+ *                     else:
+ *                         stack.append(None)
+*/
+              /*else*/ {
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 245, __pyx_L53_error)
+              }
+              __pyx_L69:;
+
+              /* "src/zexus/vm/fastops.pyx":240
+ *                     if raw_idx in obj:
+ *                         stack.append(obj[raw_idx])
+ *                     elif isinstance(raw_idx, int) and not isinstance(raw_idx, bool):             # <<<<<<<<<<<<<<
+ *                         keys = list(obj.keys())
+ *                         if 0 <= raw_idx < len(keys):
+*/
+              goto __pyx_L66;
+            }
+
+            /* "src/zexus/vm/fastops.pyx":247
+ *                             stack.append(None)
  *                     else:
  *                         stack.append(None)             # <<<<<<<<<<<<<<
  *                 else:
  *                     stack.append(obj[idx] if obj is not None else None)
 */
             /*else*/ {
-              __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 227, __pyx_L48_error)
+              __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 247, __pyx_L53_error)
             }
-            __pyx_L59:;
+            __pyx_L66:;
 
-            /* "src/zexus/vm/fastops.pyx":222
- *                 elif isinstance(obj, ZMap):
- *                     stack.append(obj.get(idx))
- *                 elif isinstance(obj, dict) and isinstance(idx, int):             # <<<<<<<<<<<<<<
- *                     keys = list(obj.keys())
- *                     if 0 <= idx < len(keys):
+            /* "src/zexus/vm/fastops.pyx":236
+ *                     else:
+ *                         stack.append(None)
+ *                 elif isinstance(obj, dict):             # <<<<<<<<<<<<<<
+ *                     raw_idx = idx.value if hasattr(idx, 'value') else idx
+ *                     if raw_idx in obj:
 */
-            goto __pyx_L56;
+            goto __pyx_L61;
           }
 
-          /* "src/zexus/vm/fastops.pyx":229
+          /* "src/zexus/vm/fastops.pyx":249
  *                         stack.append(None)
  *                 else:
  *                     stack.append(obj[idx] if obj is not None else None)             # <<<<<<<<<<<<<<
@@ -7372,20 +7765,20 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
           /*else*/ {
             __pyx_t_8 = (__pyx_v_obj != Py_None);
             if (__pyx_t_8) {
-              __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_v_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 229, __pyx_L48_error)
+              __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_v_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 249, __pyx_L53_error)
               __Pyx_GOTREF(__pyx_t_2);
-              __pyx_t_5 = __pyx_t_2;
+              __pyx_t_6 = __pyx_t_2;
               __pyx_t_2 = 0;
             } else {
               __Pyx_INCREF(Py_None);
-              __pyx_t_5 = Py_None;
+              __pyx_t_6 = Py_None;
             }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 229, __pyx_L48_error)
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 249, __pyx_L53_error)
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
           }
-          __pyx_L56:;
+          __pyx_L61:;
 
-          /* "src/zexus/vm/fastops.pyx":217
+          /* "src/zexus/vm/fastops.pyx":221
  *             idx = stack.pop()
  *             obj = stack.pop()
  *             try:             # <<<<<<<<<<<<<<
@@ -7393,68 +7786,69 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                     stack.append(obj.get(idx))
 */
         }
-        __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
         __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
         __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
-        goto __pyx_L55_try_end;
-        __pyx_L48_error:;
+        __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
+        goto __pyx_L60_try_end;
+        __pyx_L53_error:;
+        __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
         __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
         __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":230
+        /* "src/zexus/vm/fastops.pyx":250
  *                 else:
  *                     stack.append(obj[idx] if obj is not None else None)
  *             except Exception:             # <<<<<<<<<<<<<<
  *                 stack.append(None)
  *         elif op_name == "FOR_ITER":
 */
-        __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
-        if (__pyx_t_16) {
+        __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
+        if (__pyx_t_17) {
           __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-          if (__Pyx_GetException(&__pyx_t_5, &__pyx_t_2, &__pyx_t_4) < 0) __PYX_ERR(0, 230, __pyx_L50_except_error)
-          __Pyx_XGOTREF(__pyx_t_5);
+          if (__Pyx_GetException(&__pyx_t_6, &__pyx_t_2, &__pyx_t_4) < 0) __PYX_ERR(0, 250, __pyx_L55_except_error)
+          __Pyx_XGOTREF(__pyx_t_6);
           __Pyx_XGOTREF(__pyx_t_2);
           __Pyx_XGOTREF(__pyx_t_4);
 
-          /* "src/zexus/vm/fastops.pyx":231
+          /* "src/zexus/vm/fastops.pyx":251
  *                     stack.append(obj[idx] if obj is not None else None)
  *             except Exception:
  *                 stack.append(None)             # <<<<<<<<<<<<<<
  *         elif op_name == "FOR_ITER":
  *             var_count = operand if operand else 1
 */
-          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 231, __pyx_L50_except_error)
-          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 251, __pyx_L55_except_error)
+          __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
           __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-          goto __pyx_L49_exception_handled;
+          goto __pyx_L54_exception_handled;
         }
-        goto __pyx_L50_except_error;
+        goto __pyx_L55_except_error;
 
-        /* "src/zexus/vm/fastops.pyx":217
+        /* "src/zexus/vm/fastops.pyx":221
  *             idx = stack.pop()
  *             obj = stack.pop()
  *             try:             # <<<<<<<<<<<<<<
  *                 if isinstance(obj, ZList):
  *                     stack.append(obj.get(idx))
 */
-        __pyx_L50_except_error:;
-        __Pyx_XGIVEREF(__pyx_t_13);
+        __pyx_L55_except_error:;
         __Pyx_XGIVEREF(__pyx_t_14);
         __Pyx_XGIVEREF(__pyx_t_15);
-        __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
+        __Pyx_XGIVEREF(__pyx_t_16);
+        __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
         goto __pyx_L1_error;
-        __pyx_L49_exception_handled:;
-        __Pyx_XGIVEREF(__pyx_t_13);
+        __pyx_L54_exception_handled:;
         __Pyx_XGIVEREF(__pyx_t_14);
         __Pyx_XGIVEREF(__pyx_t_15);
-        __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
-        __pyx_L55_try_end:;
+        __Pyx_XGIVEREF(__pyx_t_16);
+        __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
+        __pyx_L60_try_end:;
       }
 
-      /* "src/zexus/vm/fastops.pyx":214
+      /* "src/zexus/vm/fastops.pyx":218
  *             elements = [stack.pop() for _ in range(count)][::-1]
  *             stack.append(set(elements))
  *         elif op_name == "INDEX":             # <<<<<<<<<<<<<<
@@ -7464,24 +7858,24 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":232
+    /* "src/zexus/vm/fastops.pyx":252
  *             except Exception:
  *                 stack.append(None)
  *         elif op_name == "FOR_ITER":             # <<<<<<<<<<<<<<
  *             var_count = operand if operand else 1
  *             idx = stack.pop() if stack else 0
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_FOR_ITER, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 232, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_FOR_ITER, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 252, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":233
+      /* "src/zexus/vm/fastops.pyx":253
  *                 stack.append(None)
  *         elif op_name == "FOR_ITER":
  *             var_count = operand if operand else 1             # <<<<<<<<<<<<<<
  *             idx = stack.pop() if stack else 0
  *             obj = stack.pop() if stack else None
 */
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_operand); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 233, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_operand); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 253, __pyx_L1_error)
       if (__pyx_t_8) {
         __Pyx_INCREF(__pyx_v_operand);
         __pyx_t_4 = __pyx_v_operand;
@@ -7492,7 +7886,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_var_count, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":234
+      /* "src/zexus/vm/fastops.pyx":254
  *         elif op_name == "FOR_ITER":
  *             var_count = operand if operand else 1
  *             idx = stack.pop() if stack else 0             # <<<<<<<<<<<<<<
@@ -7501,12 +7895,12 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 234, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 254, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_2 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 234, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 254, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
         __pyx_t_4 = __pyx_t_2;
         __pyx_t_2 = 0;
@@ -7517,7 +7911,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_idx, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":235
+      /* "src/zexus/vm/fastops.pyx":255
  *             var_count = operand if operand else 1
  *             idx = stack.pop() if stack else 0
  *             obj = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -7526,12 +7920,12 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 235, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 255, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_2 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 235, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 255, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
         __pyx_t_4 = __pyx_t_2;
         __pyx_t_2 = 0;
@@ -7542,7 +7936,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":236
+      /* "src/zexus/vm/fastops.pyx":256
  *             idx = stack.pop() if stack else 0
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
@@ -7552,13 +7946,13 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       {
         __Pyx_PyThreadState_declare
         __Pyx_PyThreadState_assign
-        __Pyx_ExceptionSave(&__pyx_t_15, &__pyx_t_14, &__pyx_t_13);
+        __Pyx_ExceptionSave(&__pyx_t_16, &__pyx_t_15, &__pyx_t_14);
+        __Pyx_XGOTREF(__pyx_t_16);
         __Pyx_XGOTREF(__pyx_t_15);
         __Pyx_XGOTREF(__pyx_t_14);
-        __Pyx_XGOTREF(__pyx_t_13);
         /*try:*/ {
 
-          /* "src/zexus/vm/fastops.pyx":237
+          /* "src/zexus/vm/fastops.pyx":257
  *             obj = stack.pop() if stack else None
  *             try:
  *                 if isinstance(obj, dict):             # <<<<<<<<<<<<<<
@@ -7568,7 +7962,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
           __pyx_t_8 = PyDict_Check(__pyx_v_obj); 
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":238
+            /* "src/zexus/vm/fastops.pyx":258
  *             try:
  *                 if isinstance(obj, dict):
  *                     keys = list(obj.keys())             # <<<<<<<<<<<<<<
@@ -7582,97 +7976,97 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
               PyObject *__pyx_callargs[2] = {__pyx_t_2, NULL};
               __pyx_t_4 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_keys, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
               __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 238, __pyx_L62_error)
+              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 258, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
             }
-            __pyx_t_2 = __Pyx_PySequence_ListKeepNew(__pyx_t_4); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 238, __pyx_L62_error)
+            __pyx_t_2 = __Pyx_PySequence_ListKeepNew(__pyx_t_4); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 258, __pyx_L72_error)
             __Pyx_GOTREF(__pyx_t_2);
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             __Pyx_XDECREF_SET(__pyx_v_keys, ((PyObject*)__pyx_t_2));
             __pyx_t_2 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":239
+            /* "src/zexus/vm/fastops.pyx":259
  *                 if isinstance(obj, dict):
  *                     keys = list(obj.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
  *                         key = keys[idx]
  *                         if var_count == 2:
 */
-            __pyx_t_3 = PyLong_Check(__pyx_v_idx); 
-            if (__pyx_t_3) {
+            __pyx_t_11 = PyLong_Check(__pyx_v_idx); 
+            if (__pyx_t_11) {
             } else {
-              __pyx_t_8 = __pyx_t_3;
-              goto __pyx_L72_bool_binop_done;
+              __pyx_t_8 = __pyx_t_11;
+              goto __pyx_L82_bool_binop_done;
             }
-            __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 239, __pyx_L62_error)
+            __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 259, __pyx_L72_error)
             if (__Pyx_PyObject_IsTrue(__pyx_t_2)) {
               __Pyx_DECREF(__pyx_t_2);
-              __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 239, __pyx_L62_error)
-              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 239, __pyx_L62_error)
+              __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 259, __pyx_L72_error)
+              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 259, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_2 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 239, __pyx_L62_error)
+              __pyx_t_2 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 259, __pyx_L72_error)
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             }
-            __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 239, __pyx_L62_error)
+            __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 259, __pyx_L72_error)
             __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-            __pyx_t_8 = __pyx_t_3;
-            __pyx_L72_bool_binop_done:;
+            __pyx_t_8 = __pyx_t_11;
+            __pyx_L82_bool_binop_done:;
             if (__pyx_t_8) {
 
-              /* "src/zexus/vm/fastops.pyx":240
+              /* "src/zexus/vm/fastops.pyx":260
  *                     keys = list(obj.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]             # <<<<<<<<<<<<<<
  *                         if var_count == 2:
  *                             stack.append(key)
 */
-              __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 240, __pyx_L62_error)
+              __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 260, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_2);
               __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_2);
               __pyx_t_2 = 0;
 
-              /* "src/zexus/vm/fastops.pyx":241
+              /* "src/zexus/vm/fastops.pyx":261
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(key)
  *                             stack.append(obj[key])
 */
-              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 241, __pyx_L62_error)
+              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 261, __pyx_L72_error)
               if (__pyx_t_8) {
 
-                /* "src/zexus/vm/fastops.pyx":242
+                /* "src/zexus/vm/fastops.pyx":262
  *                         key = keys[idx]
  *                         if var_count == 2:
  *                             stack.append(key)             # <<<<<<<<<<<<<<
  *                             stack.append(obj[key])
  *                         else:
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 242, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 262, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":243
+                /* "src/zexus/vm/fastops.pyx":263
  *                         if var_count == 2:
  *                             stack.append(key)
  *                             stack.append(obj[key])             # <<<<<<<<<<<<<<
  *                         else:
  *                             stack.append(key)
 */
-                __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_v_key); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 243, __pyx_L62_error)
+                __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_obj, __pyx_v_key); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 263, __pyx_L72_error)
                 __Pyx_GOTREF(__pyx_t_2);
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_2); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 243, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_2); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 263, __pyx_L72_error)
                 __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":241
+                /* "src/zexus/vm/fastops.pyx":261
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(key)
  *                             stack.append(obj[key])
 */
-                goto __pyx_L74;
+                goto __pyx_L84;
               }
 
-              /* "src/zexus/vm/fastops.pyx":245
+              /* "src/zexus/vm/fastops.pyx":265
  *                             stack.append(obj[key])
  *                         else:
  *                             stack.append(key)             # <<<<<<<<<<<<<<
@@ -7680,21 +8074,21 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                         for _ in range(var_count):
 */
               /*else*/ {
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 245, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 265, __pyx_L72_error)
               }
-              __pyx_L74:;
+              __pyx_L84:;
 
-              /* "src/zexus/vm/fastops.pyx":239
+              /* "src/zexus/vm/fastops.pyx":259
  *                 if isinstance(obj, dict):
  *                     keys = list(obj.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
  *                         key = keys[idx]
  *                         if var_count == 2:
 */
-              goto __pyx_L71;
+              goto __pyx_L81;
             }
 
-            /* "src/zexus/vm/fastops.pyx":247
+            /* "src/zexus/vm/fastops.pyx":267
  *                             stack.append(key)
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -7708,12 +8102,12 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
                 PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_v_var_count};
                 __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
                 __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-                if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 247, __pyx_L62_error)
+                if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 267, __pyx_L72_error)
                 __Pyx_GOTREF(__pyx_t_2);
               }
-              __pyx_t_4 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 247, __pyx_L62_error)
+              __pyx_t_4 = PyObject_GetIter(__pyx_t_2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 267, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 247, __pyx_L62_error)
+              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 267, __pyx_L72_error)
               __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
               for (;;) {
                 {
@@ -7721,7 +8115,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
                   if (unlikely(!__pyx_t_2)) {
                     PyObject* exc_type = PyErr_Occurred();
                     if (exc_type) {
-                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 247, __pyx_L62_error)
+                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 267, __pyx_L72_error)
                       PyErr_Clear();
                     }
                     break;
@@ -7731,16 +8125,16 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
                 __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_2);
                 __pyx_t_2 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":248
+                /* "src/zexus/vm/fastops.pyx":268
  *                     else:
  *                         for _ in range(var_count):
  *                             stack.append(None)             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, ZMap):
  *                     keys = list(obj.pairs.keys())
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 248, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 268, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":247
+                /* "src/zexus/vm/fastops.pyx":267
  *                             stack.append(key)
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -7750,142 +8144,142 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
               }
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             }
-            __pyx_L71:;
+            __pyx_L81:;
 
-            /* "src/zexus/vm/fastops.pyx":237
+            /* "src/zexus/vm/fastops.pyx":257
  *             obj = stack.pop() if stack else None
  *             try:
  *                 if isinstance(obj, dict):             # <<<<<<<<<<<<<<
  *                     keys = list(obj.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
 */
-            goto __pyx_L70;
+            goto __pyx_L80;
           }
 
-          /* "src/zexus/vm/fastops.pyx":249
+          /* "src/zexus/vm/fastops.pyx":269
  *                         for _ in range(var_count):
  *                             stack.append(None)
  *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
  *                     keys = list(obj.pairs.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 249, __pyx_L62_error)
+          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 269, __pyx_L72_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 249, __pyx_L62_error)
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 269, __pyx_L72_error)
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":250
+            /* "src/zexus/vm/fastops.pyx":270
  *                             stack.append(None)
  *                 elif isinstance(obj, ZMap):
  *                     keys = list(obj.pairs.keys())             # <<<<<<<<<<<<<<
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]
 */
-            __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 250, __pyx_L62_error)
-            __Pyx_GOTREF(__pyx_t_5);
-            __pyx_t_2 = __pyx_t_5;
+            __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 270, __pyx_L72_error)
+            __Pyx_GOTREF(__pyx_t_6);
+            __pyx_t_2 = __pyx_t_6;
             __Pyx_INCREF(__pyx_t_2);
             __pyx_t_10 = 0;
             {
               PyObject *__pyx_callargs[2] = {__pyx_t_2, NULL};
               __pyx_t_4 = __Pyx_PyObject_FastCallMethod((PyObject*)__pyx_mstate_global->__pyx_n_u_keys, __pyx_callargs+__pyx_t_10, (1-__pyx_t_10) | (1*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
               __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 250, __pyx_L62_error)
+              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 270, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
             }
-            __pyx_t_5 = __Pyx_PySequence_ListKeepNew(__pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 250, __pyx_L62_error)
-            __Pyx_GOTREF(__pyx_t_5);
+            __pyx_t_6 = __Pyx_PySequence_ListKeepNew(__pyx_t_4); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 270, __pyx_L72_error)
+            __Pyx_GOTREF(__pyx_t_6);
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-            __Pyx_XDECREF_SET(__pyx_v_keys, ((PyObject*)__pyx_t_5));
-            __pyx_t_5 = 0;
+            __Pyx_XDECREF_SET(__pyx_v_keys, ((PyObject*)__pyx_t_6));
+            __pyx_t_6 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":251
+            /* "src/zexus/vm/fastops.pyx":271
  *                 elif isinstance(obj, ZMap):
  *                     keys = list(obj.pairs.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
  *                         key = keys[idx]
  *                         if var_count == 2:
 */
-            __pyx_t_3 = PyLong_Check(__pyx_v_idx); 
-            if (__pyx_t_3) {
+            __pyx_t_11 = PyLong_Check(__pyx_v_idx); 
+            if (__pyx_t_11) {
             } else {
-              __pyx_t_8 = __pyx_t_3;
-              goto __pyx_L79_bool_binop_done;
+              __pyx_t_8 = __pyx_t_11;
+              goto __pyx_L89_bool_binop_done;
             }
-            __pyx_t_5 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_5); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 251, __pyx_L62_error)
-            if (__Pyx_PyObject_IsTrue(__pyx_t_5)) {
-              __Pyx_DECREF(__pyx_t_5);
-              __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 251, __pyx_L62_error)
-              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 251, __pyx_L62_error)
+            __pyx_t_6 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_6); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 271, __pyx_L72_error)
+            if (__Pyx_PyObject_IsTrue(__pyx_t_6)) {
+              __Pyx_DECREF(__pyx_t_6);
+              __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_keys); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 271, __pyx_L72_error)
+              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 271, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_5 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_5); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 251, __pyx_L62_error)
+              __pyx_t_6 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_6); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 271, __pyx_L72_error)
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             }
-            __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 251, __pyx_L62_error)
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-            __pyx_t_8 = __pyx_t_3;
-            __pyx_L79_bool_binop_done:;
+            __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_6); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 271, __pyx_L72_error)
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+            __pyx_t_8 = __pyx_t_11;
+            __pyx_L89_bool_binop_done:;
             if (__pyx_t_8) {
 
-              /* "src/zexus/vm/fastops.pyx":252
+              /* "src/zexus/vm/fastops.pyx":272
  *                     keys = list(obj.pairs.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]             # <<<<<<<<<<<<<<
  *                         if var_count == 2:
  *                             stack.append(key)
 */
-              __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_idx); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 252, __pyx_L62_error)
-              __Pyx_GOTREF(__pyx_t_5);
-              __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_5);
-              __pyx_t_5 = 0;
+              __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_keys, __pyx_v_idx); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 272, __pyx_L72_error)
+              __Pyx_GOTREF(__pyx_t_6);
+              __Pyx_XDECREF_SET(__pyx_v_key, __pyx_t_6);
+              __pyx_t_6 = 0;
 
-              /* "src/zexus/vm/fastops.pyx":253
+              /* "src/zexus/vm/fastops.pyx":273
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(key)
  *                             stack.append(obj.pairs[key])
 */
-              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 253, __pyx_L62_error)
+              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 273, __pyx_L72_error)
               if (__pyx_t_8) {
 
-                /* "src/zexus/vm/fastops.pyx":254
+                /* "src/zexus/vm/fastops.pyx":274
  *                         key = keys[idx]
  *                         if var_count == 2:
  *                             stack.append(key)             # <<<<<<<<<<<<<<
  *                             stack.append(obj.pairs[key])
  *                         else:
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 254, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 274, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":255
+                /* "src/zexus/vm/fastops.pyx":275
  *                         if var_count == 2:
  *                             stack.append(key)
  *                             stack.append(obj.pairs[key])             # <<<<<<<<<<<<<<
  *                         else:
  *                             stack.append(key)
 */
-                __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 255, __pyx_L62_error)
-                __Pyx_GOTREF(__pyx_t_5);
-                __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_5, __pyx_v_key); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 255, __pyx_L62_error)
+                __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 275, __pyx_L72_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_6, __pyx_v_key); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 275, __pyx_L72_error)
                 __Pyx_GOTREF(__pyx_t_4);
-                __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 255, __pyx_L62_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 275, __pyx_L72_error)
                 __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":253
+                /* "src/zexus/vm/fastops.pyx":273
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
  *                         key = keys[idx]
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(key)
  *                             stack.append(obj.pairs[key])
 */
-                goto __pyx_L81;
+                goto __pyx_L91;
               }
 
-              /* "src/zexus/vm/fastops.pyx":257
+              /* "src/zexus/vm/fastops.pyx":277
  *                             stack.append(obj.pairs[key])
  *                         else:
  *                             stack.append(key)             # <<<<<<<<<<<<<<
@@ -7893,21 +8287,21 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                         for _ in range(var_count):
 */
               /*else*/ {
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 257, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_key); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 277, __pyx_L72_error)
               }
-              __pyx_L81:;
+              __pyx_L91:;
 
-              /* "src/zexus/vm/fastops.pyx":251
+              /* "src/zexus/vm/fastops.pyx":271
  *                 elif isinstance(obj, ZMap):
  *                     keys = list(obj.pairs.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):             # <<<<<<<<<<<<<<
  *                         key = keys[idx]
  *                         if var_count == 2:
 */
-              goto __pyx_L78;
+              goto __pyx_L88;
             }
 
-            /* "src/zexus/vm/fastops.pyx":259
+            /* "src/zexus/vm/fastops.pyx":279
  *                             stack.append(key)
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -7915,26 +8309,26 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 elif isinstance(obj, (list, ZList)):
 */
             /*else*/ {
-              __pyx_t_5 = NULL;
+              __pyx_t_6 = NULL;
               __pyx_t_10 = 1;
               {
-                PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_v_var_count};
+                PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_v_var_count};
                 __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-                __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-                if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 259, __pyx_L62_error)
+                __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+                if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 279, __pyx_L72_error)
                 __Pyx_GOTREF(__pyx_t_4);
               }
-              __pyx_t_5 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 259, __pyx_L62_error)
-              __Pyx_GOTREF(__pyx_t_5);
-              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_5); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 259, __pyx_L62_error)
+              __pyx_t_6 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 279, __pyx_L72_error)
+              __Pyx_GOTREF(__pyx_t_6);
+              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_6); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 279, __pyx_L72_error)
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
               for (;;) {
                 {
-                  __pyx_t_4 = __pyx_t_12(__pyx_t_5);
+                  __pyx_t_4 = __pyx_t_12(__pyx_t_6);
                   if (unlikely(!__pyx_t_4)) {
                     PyObject* exc_type = PyErr_Occurred();
                     if (exc_type) {
-                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 259, __pyx_L62_error)
+                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 279, __pyx_L72_error)
                       PyErr_Clear();
                     }
                     break;
@@ -7944,16 +8338,16 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
                 __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_4);
                 __pyx_t_4 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":260
+                /* "src/zexus/vm/fastops.pyx":280
  *                     else:
  *                         for _ in range(var_count):
  *                             stack.append(None)             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, (list, ZList)):
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 260, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 280, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":259
+                /* "src/zexus/vm/fastops.pyx":279
  *                             stack.append(key)
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -7961,134 +8355,134 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 elif isinstance(obj, (list, ZList)):
 */
               }
-              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
             }
-            __pyx_L78:;
+            __pyx_L88:;
 
-            /* "src/zexus/vm/fastops.pyx":249
+            /* "src/zexus/vm/fastops.pyx":269
  *                         for _ in range(var_count):
  *                             stack.append(None)
  *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
  *                     keys = list(obj.pairs.keys())
  *                     if isinstance(idx, int) and 0 <= idx < len(keys):
 */
-            goto __pyx_L70;
+            goto __pyx_L80;
           }
 
-          /* "src/zexus/vm/fastops.pyx":261
+          /* "src/zexus/vm/fastops.pyx":281
  *                         for _ in range(var_count):
  *                             stack.append(None)
  *                 elif isinstance(obj, (list, ZList)):             # <<<<<<<<<<<<<<
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 261, __pyx_L62_error)
-          __Pyx_GOTREF(__pyx_t_5);
-          __pyx_t_3 = PyList_Check(__pyx_v_obj); 
-          if (!__pyx_t_3) {
+          __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 281, __pyx_L72_error)
+          __Pyx_GOTREF(__pyx_t_6);
+          __pyx_t_11 = PyList_Check(__pyx_v_obj); 
+          if (!__pyx_t_11) {
           } else {
-            __pyx_t_8 = __pyx_t_3;
-            goto __pyx_L85_bool_binop_done;
+            __pyx_t_8 = __pyx_t_11;
+            goto __pyx_L95_bool_binop_done;
           }
-          __pyx_t_3 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_5); 
-          __pyx_t_8 = __pyx_t_3;
-          __pyx_L85_bool_binop_done:;
-          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __pyx_t_11 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_6); 
+          __pyx_t_8 = __pyx_t_11;
+          __pyx_L95_bool_binop_done:;
+          __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
           if (likely(__pyx_t_8)) {
 
-            /* "src/zexus/vm/fastops.pyx":262
+            /* "src/zexus/vm/fastops.pyx":282
  *                             stack.append(None)
  *                 elif isinstance(obj, (list, ZList)):
  *                     elems = obj.elements if isinstance(obj, ZList) else obj             # <<<<<<<<<<<<<<
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
  *                         if var_count == 2:
 */
-            __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 262, __pyx_L62_error)
+            __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 282, __pyx_L72_error)
             __Pyx_GOTREF(__pyx_t_4);
-            __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 262, __pyx_L62_error)
+            __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 282, __pyx_L72_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             if (__pyx_t_8) {
-              __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 262, __pyx_L62_error)
+              __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 282, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_5 = __pyx_t_4;
+              __pyx_t_6 = __pyx_t_4;
               __pyx_t_4 = 0;
             } else {
               __Pyx_INCREF(__pyx_v_obj);
-              __pyx_t_5 = __pyx_v_obj;
+              __pyx_t_6 = __pyx_v_obj;
             }
-            __Pyx_XDECREF_SET(__pyx_v_elems, __pyx_t_5);
-            __pyx_t_5 = 0;
+            __Pyx_XDECREF_SET(__pyx_v_elems, __pyx_t_6);
+            __pyx_t_6 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":263
+            /* "src/zexus/vm/fastops.pyx":283
  *                 elif isinstance(obj, (list, ZList)):
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):             # <<<<<<<<<<<<<<
  *                         if var_count == 2:
  *                             stack.append(idx)
 */
-            __pyx_t_3 = PyLong_Check(__pyx_v_idx); 
-            if (__pyx_t_3) {
+            __pyx_t_11 = PyLong_Check(__pyx_v_idx); 
+            if (__pyx_t_11) {
             } else {
-              __pyx_t_8 = __pyx_t_3;
-              goto __pyx_L88_bool_binop_done;
+              __pyx_t_8 = __pyx_t_11;
+              goto __pyx_L98_bool_binop_done;
             }
-            __pyx_t_5 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_5); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 263, __pyx_L62_error)
-            if (__Pyx_PyObject_IsTrue(__pyx_t_5)) {
-              __Pyx_DECREF(__pyx_t_5);
-              __pyx_t_1 = PyObject_Length(__pyx_v_elems); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 263, __pyx_L62_error)
-              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 263, __pyx_L62_error)
+            __pyx_t_6 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_6); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 283, __pyx_L72_error)
+            if (__Pyx_PyObject_IsTrue(__pyx_t_6)) {
+              __Pyx_DECREF(__pyx_t_6);
+              __pyx_t_1 = PyObject_Length(__pyx_v_elems); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 283, __pyx_L72_error)
+              __pyx_t_4 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 283, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_5 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_5); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 263, __pyx_L62_error)
+              __pyx_t_6 = PyObject_RichCompare(__pyx_v_idx, __pyx_t_4, Py_LT); __Pyx_XGOTREF(__pyx_t_6); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 283, __pyx_L72_error)
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             }
-            __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 263, __pyx_L62_error)
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-            __pyx_t_8 = __pyx_t_3;
-            __pyx_L88_bool_binop_done:;
+            __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_6); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 283, __pyx_L72_error)
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+            __pyx_t_8 = __pyx_t_11;
+            __pyx_L98_bool_binop_done:;
             if (__pyx_t_8) {
 
-              /* "src/zexus/vm/fastops.pyx":264
+              /* "src/zexus/vm/fastops.pyx":284
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(idx)
  *                             stack.append(elems[idx])
 */
-              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 264, __pyx_L62_error)
+              __pyx_t_8 = (__Pyx_PyLong_BoolEqObjC(__pyx_v_var_count, __pyx_mstate_global->__pyx_int_2, 2, 0)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 284, __pyx_L72_error)
               if (__pyx_t_8) {
 
-                /* "src/zexus/vm/fastops.pyx":265
+                /* "src/zexus/vm/fastops.pyx":285
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
  *                         if var_count == 2:
  *                             stack.append(idx)             # <<<<<<<<<<<<<<
  *                             stack.append(elems[idx])
  *                         else:
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_idx); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 265, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_v_idx); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 285, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":266
+                /* "src/zexus/vm/fastops.pyx":286
  *                         if var_count == 2:
  *                             stack.append(idx)
  *                             stack.append(elems[idx])             # <<<<<<<<<<<<<<
  *                         else:
  *                             stack.append(elems[idx])
 */
-                __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_elems, __pyx_v_idx); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 266, __pyx_L62_error)
-                __Pyx_GOTREF(__pyx_t_5);
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 266, __pyx_L62_error)
-                __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+                __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_elems, __pyx_v_idx); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 286, __pyx_L72_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 286, __pyx_L72_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":264
+                /* "src/zexus/vm/fastops.pyx":284
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
  *                         if var_count == 2:             # <<<<<<<<<<<<<<
  *                             stack.append(idx)
  *                             stack.append(elems[idx])
 */
-                goto __pyx_L90;
+                goto __pyx_L100;
               }
 
-              /* "src/zexus/vm/fastops.pyx":268
+              /* "src/zexus/vm/fastops.pyx":288
  *                             stack.append(elems[idx])
  *                         else:
  *                             stack.append(elems[idx])             # <<<<<<<<<<<<<<
@@ -8096,24 +8490,24 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                         for _ in range(var_count):
 */
               /*else*/ {
-                __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_v_elems, __pyx_v_idx); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 268, __pyx_L62_error)
-                __Pyx_GOTREF(__pyx_t_5);
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 268, __pyx_L62_error)
-                __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+                __pyx_t_6 = __Pyx_PyObject_GetItem(__pyx_v_elems, __pyx_v_idx); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 288, __pyx_L72_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 288, __pyx_L72_error)
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
               }
-              __pyx_L90:;
+              __pyx_L100:;
 
-              /* "src/zexus/vm/fastops.pyx":263
+              /* "src/zexus/vm/fastops.pyx":283
  *                 elif isinstance(obj, (list, ZList)):
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):             # <<<<<<<<<<<<<<
  *                         if var_count == 2:
  *                             stack.append(idx)
 */
-              goto __pyx_L87;
+              goto __pyx_L97;
             }
 
-            /* "src/zexus/vm/fastops.pyx":270
+            /* "src/zexus/vm/fastops.pyx":290
  *                             stack.append(elems[idx])
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -8125,41 +8519,41 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
               __pyx_t_10 = 1;
               {
                 PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_v_var_count};
-                __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+                __pyx_t_6 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
                 __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-                if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 270, __pyx_L62_error)
-                __Pyx_GOTREF(__pyx_t_5);
+                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 290, __pyx_L72_error)
+                __Pyx_GOTREF(__pyx_t_6);
               }
-              __pyx_t_4 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 270, __pyx_L62_error)
+              __pyx_t_4 = PyObject_GetIter(__pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 290, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
-              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 270, __pyx_L62_error)
-              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+              __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 290, __pyx_L72_error)
+              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
               for (;;) {
                 {
-                  __pyx_t_5 = __pyx_t_12(__pyx_t_4);
-                  if (unlikely(!__pyx_t_5)) {
+                  __pyx_t_6 = __pyx_t_12(__pyx_t_4);
+                  if (unlikely(!__pyx_t_6)) {
                     PyObject* exc_type = PyErr_Occurred();
                     if (exc_type) {
-                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 270, __pyx_L62_error)
+                      if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 290, __pyx_L72_error)
                       PyErr_Clear();
                     }
                     break;
                   }
                 }
-                __Pyx_GOTREF(__pyx_t_5);
-                __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_5);
-                __pyx_t_5 = 0;
+                __Pyx_GOTREF(__pyx_t_6);
+                __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_6);
+                __pyx_t_6 = 0;
 
-                /* "src/zexus/vm/fastops.pyx":271
+                /* "src/zexus/vm/fastops.pyx":291
  *                     else:
  *                         for _ in range(var_count):
  *                             stack.append(None)             # <<<<<<<<<<<<<<
  *                 else:
  *                     raise NotImplementedError("FOR_ITER target type not supported")
 */
-                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 271, __pyx_L62_error)
+                __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 291, __pyx_L72_error)
 
-                /* "src/zexus/vm/fastops.pyx":270
+                /* "src/zexus/vm/fastops.pyx":290
  *                             stack.append(elems[idx])
  *                     else:
  *                         for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -8169,19 +8563,19 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
               }
               __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
             }
-            __pyx_L87:;
+            __pyx_L97:;
 
-            /* "src/zexus/vm/fastops.pyx":261
+            /* "src/zexus/vm/fastops.pyx":281
  *                         for _ in range(var_count):
  *                             stack.append(None)
  *                 elif isinstance(obj, (list, ZList)):             # <<<<<<<<<<<<<<
  *                     elems = obj.elements if isinstance(obj, ZList) else obj
  *                     if isinstance(idx, int) and 0 <= idx < len(elems):
 */
-            goto __pyx_L70;
+            goto __pyx_L80;
           }
 
-          /* "src/zexus/vm/fastops.pyx":273
+          /* "src/zexus/vm/fastops.pyx":293
  *                             stack.append(None)
  *                 else:
  *                     raise NotImplementedError("FOR_ITER target type not supported")             # <<<<<<<<<<<<<<
@@ -8189,22 +8583,22 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 raise
 */
           /*else*/ {
-            __pyx_t_5 = NULL;
+            __pyx_t_6 = NULL;
             __pyx_t_10 = 1;
             {
-              PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_mstate_global->__pyx_kp_u_FOR_ITER_target_type_not_support};
+              PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_mstate_global->__pyx_kp_u_FOR_ITER_target_type_not_support};
               __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_NotImplementedError)), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-              __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 273, __pyx_L62_error)
+              __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 293, __pyx_L72_error)
               __Pyx_GOTREF(__pyx_t_4);
             }
             __Pyx_Raise(__pyx_t_4, 0, 0, 0);
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-            __PYX_ERR(0, 273, __pyx_L62_error)
+            __PYX_ERR(0, 293, __pyx_L72_error)
           }
-          __pyx_L70:;
+          __pyx_L80:;
 
-          /* "src/zexus/vm/fastops.pyx":236
+          /* "src/zexus/vm/fastops.pyx":256
  *             idx = stack.pop() if stack else 0
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
@@ -8212,32 +8606,33 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                     keys = list(obj.keys())
 */
         }
+        __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
         __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
         __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
+        goto __pyx_L79_try_end;
+        __pyx_L72_error:;
         __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
-        goto __pyx_L69_try_end;
-        __pyx_L62_error:;
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
         __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
         __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":274
+        /* "src/zexus/vm/fastops.pyx":294
  *                 else:
  *                     raise NotImplementedError("FOR_ITER target type not supported")
  *             except NotImplementedError:             # <<<<<<<<<<<<<<
  *                 raise
  *             except Exception:
 */
-        __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_NotImplementedError))));
-        if (__pyx_t_16) {
+        __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_NotImplementedError))));
+        if (__pyx_t_17) {
           __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-          if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_5, &__pyx_t_2) < 0) __PYX_ERR(0, 274, __pyx_L64_except_error)
+          if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_6, &__pyx_t_2) < 0) __PYX_ERR(0, 294, __pyx_L74_except_error)
           __Pyx_XGOTREF(__pyx_t_4);
-          __Pyx_XGOTREF(__pyx_t_5);
+          __Pyx_XGOTREF(__pyx_t_6);
           __Pyx_XGOTREF(__pyx_t_2);
 
-          /* "src/zexus/vm/fastops.pyx":275
+          /* "src/zexus/vm/fastops.pyx":295
  *                     raise NotImplementedError("FOR_ITER target type not supported")
  *             except NotImplementedError:
  *                 raise             # <<<<<<<<<<<<<<
@@ -8245,74 +8640,74 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 for _ in range(var_count):
 */
           __Pyx_GIVEREF(__pyx_t_4);
-          __Pyx_GIVEREF(__pyx_t_5);
+          __Pyx_GIVEREF(__pyx_t_6);
           __Pyx_XGIVEREF(__pyx_t_2);
-          __Pyx_ErrRestoreWithState(__pyx_t_4, __pyx_t_5, __pyx_t_2);
-          __pyx_t_4 = 0;  __pyx_t_5 = 0;  __pyx_t_2 = 0; 
-          __PYX_ERR(0, 275, __pyx_L64_except_error)
+          __Pyx_ErrRestoreWithState(__pyx_t_4, __pyx_t_6, __pyx_t_2);
+          __pyx_t_4 = 0;  __pyx_t_6 = 0;  __pyx_t_2 = 0; 
+          __PYX_ERR(0, 295, __pyx_L74_except_error)
         }
 
-        /* "src/zexus/vm/fastops.pyx":276
+        /* "src/zexus/vm/fastops.pyx":296
  *             except NotImplementedError:
  *                 raise
  *             except Exception:             # <<<<<<<<<<<<<<
  *                 for _ in range(var_count):
  *                     stack.append(None)
 */
-        __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
-        if (__pyx_t_16) {
+        __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
+        if (__pyx_t_17) {
           __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-          if (__Pyx_GetException(&__pyx_t_2, &__pyx_t_5, &__pyx_t_4) < 0) __PYX_ERR(0, 276, __pyx_L64_except_error)
+          if (__Pyx_GetException(&__pyx_t_2, &__pyx_t_6, &__pyx_t_4) < 0) __PYX_ERR(0, 296, __pyx_L74_except_error)
           __Pyx_XGOTREF(__pyx_t_2);
-          __Pyx_XGOTREF(__pyx_t_5);
+          __Pyx_XGOTREF(__pyx_t_6);
           __Pyx_XGOTREF(__pyx_t_4);
 
-          /* "src/zexus/vm/fastops.pyx":277
+          /* "src/zexus/vm/fastops.pyx":297
  *                 raise
  *             except Exception:
  *                 for _ in range(var_count):             # <<<<<<<<<<<<<<
  *                     stack.append(None)
  *         elif op_name == "SLICE":
 */
-          __pyx_t_17 = NULL;
+          __pyx_t_13 = NULL;
           __pyx_t_10 = 1;
           {
-            PyObject *__pyx_callargs[2] = {__pyx_t_17, __pyx_v_var_count};
-            __pyx_t_6 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-            __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
-            if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 277, __pyx_L64_except_error)
-            __Pyx_GOTREF(__pyx_t_6);
+            PyObject *__pyx_callargs[2] = {__pyx_t_13, __pyx_v_var_count};
+            __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+            __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
+            if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 297, __pyx_L74_except_error)
+            __Pyx_GOTREF(__pyx_t_5);
           }
-          __pyx_t_17 = PyObject_GetIter(__pyx_t_6); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 277, __pyx_L64_except_error)
-          __Pyx_GOTREF(__pyx_t_17);
-          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_17); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 277, __pyx_L64_except_error)
-          __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+          __pyx_t_13 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 297, __pyx_L74_except_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_13); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 297, __pyx_L74_except_error)
+          __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
           for (;;) {
             {
-              __pyx_t_6 = __pyx_t_12(__pyx_t_17);
-              if (unlikely(!__pyx_t_6)) {
+              __pyx_t_5 = __pyx_t_12(__pyx_t_13);
+              if (unlikely(!__pyx_t_5)) {
                 PyObject* exc_type = PyErr_Occurred();
                 if (exc_type) {
-                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 277, __pyx_L64_except_error)
+                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 297, __pyx_L74_except_error)
                   PyErr_Clear();
                 }
                 break;
               }
             }
-            __Pyx_GOTREF(__pyx_t_6);
-            __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_6);
-            __pyx_t_6 = 0;
+            __Pyx_GOTREF(__pyx_t_5);
+            __Pyx_XDECREF_SET(__pyx_v__, __pyx_t_5);
+            __pyx_t_5 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":278
+            /* "src/zexus/vm/fastops.pyx":298
  *             except Exception:
  *                 for _ in range(var_count):
  *                     stack.append(None)             # <<<<<<<<<<<<<<
  *         elif op_name == "SLICE":
  *             end = stack.pop() if stack else None
 */
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 278, __pyx_L64_except_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 298, __pyx_L74_except_error)
 
-            /* "src/zexus/vm/fastops.pyx":277
+            /* "src/zexus/vm/fastops.pyx":297
  *                 raise
  *             except Exception:
  *                 for _ in range(var_count):             # <<<<<<<<<<<<<<
@@ -8320,36 +8715,36 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *         elif op_name == "SLICE":
 */
           }
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-          goto __pyx_L63_exception_handled;
+          goto __pyx_L73_exception_handled;
         }
-        goto __pyx_L64_except_error;
+        goto __pyx_L74_except_error;
 
-        /* "src/zexus/vm/fastops.pyx":236
+        /* "src/zexus/vm/fastops.pyx":256
  *             idx = stack.pop() if stack else 0
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
  *                 if isinstance(obj, dict):
  *                     keys = list(obj.keys())
 */
-        __pyx_L64_except_error:;
+        __pyx_L74_except_error:;
+        __Pyx_XGIVEREF(__pyx_t_16);
         __Pyx_XGIVEREF(__pyx_t_15);
         __Pyx_XGIVEREF(__pyx_t_14);
-        __Pyx_XGIVEREF(__pyx_t_13);
-        __Pyx_ExceptionReset(__pyx_t_15, __pyx_t_14, __pyx_t_13);
+        __Pyx_ExceptionReset(__pyx_t_16, __pyx_t_15, __pyx_t_14);
         goto __pyx_L1_error;
-        __pyx_L63_exception_handled:;
+        __pyx_L73_exception_handled:;
+        __Pyx_XGIVEREF(__pyx_t_16);
         __Pyx_XGIVEREF(__pyx_t_15);
         __Pyx_XGIVEREF(__pyx_t_14);
-        __Pyx_XGIVEREF(__pyx_t_13);
-        __Pyx_ExceptionReset(__pyx_t_15, __pyx_t_14, __pyx_t_13);
-        __pyx_L69_try_end:;
+        __Pyx_ExceptionReset(__pyx_t_16, __pyx_t_15, __pyx_t_14);
+        __pyx_L79_try_end:;
       }
 
-      /* "src/zexus/vm/fastops.pyx":232
+      /* "src/zexus/vm/fastops.pyx":252
  *             except Exception:
  *                 stack.append(None)
  *         elif op_name == "FOR_ITER":             # <<<<<<<<<<<<<<
@@ -8359,17 +8754,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":279
+    /* "src/zexus/vm/fastops.pyx":299
  *                 for _ in range(var_count):
  *                     stack.append(None)
  *         elif op_name == "SLICE":             # <<<<<<<<<<<<<<
  *             end = stack.pop() if stack else None
  *             start = stack.pop() if stack else None
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_SLICE, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 279, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_SLICE, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 299, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":280
+      /* "src/zexus/vm/fastops.pyx":300
  *                     stack.append(None)
  *         elif op_name == "SLICE":
  *             end = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -8378,15 +8773,15 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 280, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 300, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 280, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_4 = __pyx_t_5;
-        __pyx_t_5 = 0;
+        __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 300, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_4 = __pyx_t_6;
+        __pyx_t_6 = 0;
       } else {
         __Pyx_INCREF(Py_None);
         __pyx_t_4 = Py_None;
@@ -8394,7 +8789,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_end, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":281
+      /* "src/zexus/vm/fastops.pyx":301
  *         elif op_name == "SLICE":
  *             end = stack.pop() if stack else None
  *             start = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -8403,15 +8798,15 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 281, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 301, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 281, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_4 = __pyx_t_5;
-        __pyx_t_5 = 0;
+        __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 301, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_4 = __pyx_t_6;
+        __pyx_t_6 = 0;
       } else {
         __Pyx_INCREF(Py_None);
         __pyx_t_4 = Py_None;
@@ -8419,7 +8814,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_start, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":282
+      /* "src/zexus/vm/fastops.pyx":302
  *             end = stack.pop() if stack else None
  *             start = stack.pop() if stack else None
  *             obj = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -8428,15 +8823,15 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 282, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 302, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 282, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_5);
-        __pyx_t_4 = __pyx_t_5;
-        __pyx_t_5 = 0;
+        __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 302, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_4 = __pyx_t_6;
+        __pyx_t_6 = 0;
       } else {
         __Pyx_INCREF(Py_None);
         __pyx_t_4 = Py_None;
@@ -8444,29 +8839,29 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_4);
       __pyx_t_4 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":283
+      /* "src/zexus/vm/fastops.pyx":303
  *             start = stack.pop() if stack else None
  *             obj = stack.pop() if stack else None
  *             if hasattr(start, "value"):             # <<<<<<<<<<<<<<
  *                 start = start.value
  *             if hasattr(end, "value"):
 */
-      __pyx_t_8 = __Pyx_HasAttr(__pyx_v_start, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 283, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_HasAttr(__pyx_v_start, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 303, __pyx_L1_error)
       if (__pyx_t_8) {
 
-        /* "src/zexus/vm/fastops.pyx":284
+        /* "src/zexus/vm/fastops.pyx":304
  *             obj = stack.pop() if stack else None
  *             if hasattr(start, "value"):
  *                 start = start.value             # <<<<<<<<<<<<<<
  *             if hasattr(end, "value"):
  *                 end = end.value
 */
-        __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_start, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 284, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_start, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 304, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         __Pyx_DECREF_SET(__pyx_v_start, __pyx_t_4);
         __pyx_t_4 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":283
+        /* "src/zexus/vm/fastops.pyx":303
  *             start = stack.pop() if stack else None
  *             obj = stack.pop() if stack else None
  *             if hasattr(start, "value"):             # <<<<<<<<<<<<<<
@@ -8475,29 +8870,29 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       }
 
-      /* "src/zexus/vm/fastops.pyx":285
+      /* "src/zexus/vm/fastops.pyx":305
  *             if hasattr(start, "value"):
  *                 start = start.value
  *             if hasattr(end, "value"):             # <<<<<<<<<<<<<<
  *                 end = end.value
  *             try:
 */
-      __pyx_t_8 = __Pyx_HasAttr(__pyx_v_end, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 285, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_HasAttr(__pyx_v_end, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 305, __pyx_L1_error)
       if (__pyx_t_8) {
 
-        /* "src/zexus/vm/fastops.pyx":286
+        /* "src/zexus/vm/fastops.pyx":306
  *                 start = start.value
  *             if hasattr(end, "value"):
  *                 end = end.value             # <<<<<<<<<<<<<<
  *             try:
  *                 if isinstance(obj, ZList):
 */
-        __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_end, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 286, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_end, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 306, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         __Pyx_DECREF_SET(__pyx_v_end, __pyx_t_4);
         __pyx_t_4 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":285
+        /* "src/zexus/vm/fastops.pyx":305
  *             if hasattr(start, "value"):
  *                 start = start.value
  *             if hasattr(end, "value"):             # <<<<<<<<<<<<<<
@@ -8506,7 +8901,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       }
 
-      /* "src/zexus/vm/fastops.pyx":287
+      /* "src/zexus/vm/fastops.pyx":307
  *             if hasattr(end, "value"):
  *                 end = end.value
  *             try:             # <<<<<<<<<<<<<<
@@ -8516,88 +8911,88 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       {
         __Pyx_PyThreadState_declare
         __Pyx_PyThreadState_assign
-        __Pyx_ExceptionSave(&__pyx_t_13, &__pyx_t_14, &__pyx_t_15);
-        __Pyx_XGOTREF(__pyx_t_13);
+        __Pyx_ExceptionSave(&__pyx_t_14, &__pyx_t_15, &__pyx_t_16);
         __Pyx_XGOTREF(__pyx_t_14);
         __Pyx_XGOTREF(__pyx_t_15);
+        __Pyx_XGOTREF(__pyx_t_16);
         /*try:*/ {
 
-          /* "src/zexus/vm/fastops.pyx":288
+          /* "src/zexus/vm/fastops.pyx":308
  *                 end = end.value
  *             try:
  *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
  *                     stack.append(ZList(obj.elements[start:end]))
  *                 elif isinstance(obj, ZString):
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 288, __pyx_L103_error)
+          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 308, __pyx_L113_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 288, __pyx_L103_error)
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 308, __pyx_L113_error)
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":289
+            /* "src/zexus/vm/fastops.pyx":309
  *             try:
  *                 if isinstance(obj, ZList):
  *                     stack.append(ZList(obj.elements[start:end]))             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, ZString):
  *                     stack.append(ZString(obj.value[start:end]))
 */
-            __pyx_t_5 = NULL;
-            __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 289, __pyx_L103_error)
+            __pyx_t_6 = NULL;
+            __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 309, __pyx_L113_error)
             __Pyx_GOTREF(__pyx_t_2);
-            __pyx_t_17 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 289, __pyx_L103_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_6 = __Pyx_PyObject_GetSlice(__pyx_t_17, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 289, __pyx_L103_error)
-            __Pyx_GOTREF(__pyx_t_6);
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 309, __pyx_L113_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_5 = __Pyx_PyObject_GetSlice(__pyx_t_13, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 309, __pyx_L113_error)
+            __Pyx_GOTREF(__pyx_t_5);
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
             __pyx_t_10 = 1;
             #if CYTHON_UNPACK_METHODS
             if (unlikely(PyMethod_Check(__pyx_t_2))) {
-              __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_2);
-              assert(__pyx_t_5);
+              __pyx_t_6 = PyMethod_GET_SELF(__pyx_t_2);
+              assert(__pyx_t_6);
               PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_2);
-              __Pyx_INCREF(__pyx_t_5);
+              __Pyx_INCREF(__pyx_t_6);
               __Pyx_INCREF(__pyx__function);
               __Pyx_DECREF_SET(__pyx_t_2, __pyx__function);
               __pyx_t_10 = 0;
             }
             #endif
             {
-              PyObject *__pyx_callargs[2] = {__pyx_t_5, __pyx_t_6};
+              PyObject *__pyx_callargs[2] = {__pyx_t_6, __pyx_t_5};
               __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_2, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-              __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
-              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+              __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
               __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 289, __pyx_L103_error)
+              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 309, __pyx_L113_error)
               __Pyx_GOTREF(__pyx_t_4);
             }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 289, __pyx_L103_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 309, __pyx_L113_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":288
+            /* "src/zexus/vm/fastops.pyx":308
  *                 end = end.value
  *             try:
  *                 if isinstance(obj, ZList):             # <<<<<<<<<<<<<<
  *                     stack.append(ZList(obj.elements[start:end]))
  *                 elif isinstance(obj, ZString):
 */
-            goto __pyx_L111;
+            goto __pyx_L121;
           }
 
-          /* "src/zexus/vm/fastops.pyx":290
+          /* "src/zexus/vm/fastops.pyx":310
  *                 if isinstance(obj, ZList):
  *                     stack.append(ZList(obj.elements[start:end]))
  *                 elif isinstance(obj, ZString):             # <<<<<<<<<<<<<<
  *                     stack.append(ZString(obj.value[start:end]))
  *                 else:
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 290, __pyx_L103_error)
+          __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 310, __pyx_L113_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 290, __pyx_L103_error)
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_4); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 310, __pyx_L113_error)
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":291
+            /* "src/zexus/vm/fastops.pyx":311
  *                     stack.append(ZList(obj.elements[start:end]))
  *                 elif isinstance(obj, ZString):
  *                     stack.append(ZString(obj.value[start:end]))             # <<<<<<<<<<<<<<
@@ -8605,48 +9000,48 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                     stack.append(obj[start:end] if obj is not None else None)
 */
             __pyx_t_2 = NULL;
-            __Pyx_GetModuleGlobalName(__pyx_t_6, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 291, __pyx_L103_error)
-            __Pyx_GOTREF(__pyx_t_6);
-            __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 291, __pyx_L103_error)
+            __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 311, __pyx_L113_error)
             __Pyx_GOTREF(__pyx_t_5);
-            __pyx_t_17 = __Pyx_PyObject_GetSlice(__pyx_t_5, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 291, __pyx_L103_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+            __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 311, __pyx_L113_error)
+            __Pyx_GOTREF(__pyx_t_6);
+            __pyx_t_13 = __Pyx_PyObject_GetSlice(__pyx_t_6, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 311, __pyx_L113_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
             __pyx_t_10 = 1;
             #if CYTHON_UNPACK_METHODS
-            if (unlikely(PyMethod_Check(__pyx_t_6))) {
-              __pyx_t_2 = PyMethod_GET_SELF(__pyx_t_6);
+            if (unlikely(PyMethod_Check(__pyx_t_5))) {
+              __pyx_t_2 = PyMethod_GET_SELF(__pyx_t_5);
               assert(__pyx_t_2);
-              PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_6);
+              PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_5);
               __Pyx_INCREF(__pyx_t_2);
               __Pyx_INCREF(__pyx__function);
-              __Pyx_DECREF_SET(__pyx_t_6, __pyx__function);
+              __Pyx_DECREF_SET(__pyx_t_5, __pyx__function);
               __pyx_t_10 = 0;
             }
             #endif
             {
-              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_t_17};
-              __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_6, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+              PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_t_13};
+              __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_5, __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
               __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-              __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-              __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 291, __pyx_L103_error)
+              __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+              __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+              if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 311, __pyx_L113_error)
               __Pyx_GOTREF(__pyx_t_4);
             }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 291, __pyx_L103_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 311, __pyx_L113_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":290
+            /* "src/zexus/vm/fastops.pyx":310
  *                 if isinstance(obj, ZList):
  *                     stack.append(ZList(obj.elements[start:end]))
  *                 elif isinstance(obj, ZString):             # <<<<<<<<<<<<<<
  *                     stack.append(ZString(obj.value[start:end]))
  *                 else:
 */
-            goto __pyx_L111;
+            goto __pyx_L121;
           }
 
-          /* "src/zexus/vm/fastops.pyx":293
+          /* "src/zexus/vm/fastops.pyx":313
  *                     stack.append(ZString(obj.value[start:end]))
  *                 else:
  *                     stack.append(obj[start:end] if obj is not None else None)             # <<<<<<<<<<<<<<
@@ -8656,20 +9051,20 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
           /*else*/ {
             __pyx_t_8 = (__pyx_v_obj != Py_None);
             if (__pyx_t_8) {
-              __pyx_t_6 = __Pyx_PyObject_GetSlice(__pyx_v_obj, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 293, __pyx_L103_error)
-              __Pyx_GOTREF(__pyx_t_6);
-              __pyx_t_4 = __pyx_t_6;
-              __pyx_t_6 = 0;
+              __pyx_t_5 = __Pyx_PyObject_GetSlice(__pyx_v_obj, 0, 0, &__pyx_v_start, &__pyx_v_end, NULL, 0, 0, 0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 313, __pyx_L113_error)
+              __Pyx_GOTREF(__pyx_t_5);
+              __pyx_t_4 = __pyx_t_5;
+              __pyx_t_5 = 0;
             } else {
               __Pyx_INCREF(Py_None);
               __pyx_t_4 = Py_None;
             }
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 293, __pyx_L103_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 313, __pyx_L113_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           }
-          __pyx_L111:;
+          __pyx_L121:;
 
-          /* "src/zexus/vm/fastops.pyx":287
+          /* "src/zexus/vm/fastops.pyx":307
  *             if hasattr(end, "value"):
  *                 end = end.value
  *             try:             # <<<<<<<<<<<<<<
@@ -8677,69 +9072,69 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                     stack.append(ZList(obj.elements[start:end]))
 */
         }
-        __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
         __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
         __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
-        goto __pyx_L110_try_end;
-        __pyx_L103_error:;
-        __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
+        __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
+        goto __pyx_L120_try_end;
+        __pyx_L113_error:;
+        __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
         __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
         __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":294
+        /* "src/zexus/vm/fastops.pyx":314
  *                 else:
  *                     stack.append(obj[start:end] if obj is not None else None)
  *             except Exception:             # <<<<<<<<<<<<<<
  *                 stack.append(None)
  *         elif op_name == "GET_LENGTH":
 */
-        __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
-        if (__pyx_t_16) {
+        __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
+        if (__pyx_t_17) {
           __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-          if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_6, &__pyx_t_17) < 0) __PYX_ERR(0, 294, __pyx_L105_except_error)
+          if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_5, &__pyx_t_13) < 0) __PYX_ERR(0, 314, __pyx_L115_except_error)
           __Pyx_XGOTREF(__pyx_t_4);
-          __Pyx_XGOTREF(__pyx_t_6);
-          __Pyx_XGOTREF(__pyx_t_17);
+          __Pyx_XGOTREF(__pyx_t_5);
+          __Pyx_XGOTREF(__pyx_t_13);
 
-          /* "src/zexus/vm/fastops.pyx":295
+          /* "src/zexus/vm/fastops.pyx":315
  *                     stack.append(obj[start:end] if obj is not None else None)
  *             except Exception:
  *                 stack.append(None)             # <<<<<<<<<<<<<<
  *         elif op_name == "GET_LENGTH":
  *             obj = stack.pop() if stack else None
 */
-          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 295, __pyx_L105_except_error)
+          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 315, __pyx_L115_except_error)
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-          __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
-          __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
-          goto __pyx_L104_exception_handled;
+          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+          __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
+          goto __pyx_L114_exception_handled;
         }
-        goto __pyx_L105_except_error;
+        goto __pyx_L115_except_error;
 
-        /* "src/zexus/vm/fastops.pyx":287
+        /* "src/zexus/vm/fastops.pyx":307
  *             if hasattr(end, "value"):
  *                 end = end.value
  *             try:             # <<<<<<<<<<<<<<
  *                 if isinstance(obj, ZList):
  *                     stack.append(ZList(obj.elements[start:end]))
 */
-        __pyx_L105_except_error:;
-        __Pyx_XGIVEREF(__pyx_t_13);
+        __pyx_L115_except_error:;
         __Pyx_XGIVEREF(__pyx_t_14);
         __Pyx_XGIVEREF(__pyx_t_15);
-        __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
+        __Pyx_XGIVEREF(__pyx_t_16);
+        __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
         goto __pyx_L1_error;
-        __pyx_L104_exception_handled:;
-        __Pyx_XGIVEREF(__pyx_t_13);
+        __pyx_L114_exception_handled:;
         __Pyx_XGIVEREF(__pyx_t_14);
         __Pyx_XGIVEREF(__pyx_t_15);
-        __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
-        __pyx_L110_try_end:;
+        __Pyx_XGIVEREF(__pyx_t_16);
+        __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
+        __pyx_L120_try_end:;
       }
 
-      /* "src/zexus/vm/fastops.pyx":279
+      /* "src/zexus/vm/fastops.pyx":299
  *                 for _ in range(var_count):
  *                     stack.append(None)
  *         elif op_name == "SLICE":             # <<<<<<<<<<<<<<
@@ -8749,17 +9144,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":296
+    /* "src/zexus/vm/fastops.pyx":316
  *             except Exception:
  *                 stack.append(None)
  *         elif op_name == "GET_LENGTH":             # <<<<<<<<<<<<<<
  *             obj = stack.pop() if stack else None
  *             try:
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_GET_LENGTH, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 296, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_GET_LENGTH, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 316, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":297
+      /* "src/zexus/vm/fastops.pyx":317
  *                 stack.append(None)
  *         elif op_name == "GET_LENGTH":
  *             obj = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -8768,23 +9163,23 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 297, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 317, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_6 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 297, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_17 = __pyx_t_6;
-        __pyx_t_6 = 0;
+        __pyx_t_5 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 317, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __pyx_t_13 = __pyx_t_5;
+        __pyx_t_5 = 0;
       } else {
         __Pyx_INCREF(Py_None);
-        __pyx_t_17 = Py_None;
+        __pyx_t_13 = Py_None;
       }
-      __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_17);
-      __pyx_t_17 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_obj, __pyx_t_13);
+      __pyx_t_13 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":298
+      /* "src/zexus/vm/fastops.pyx":318
  *         elif op_name == "GET_LENGTH":
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
@@ -8794,13 +9189,13 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       {
         __Pyx_PyThreadState_declare
         __Pyx_PyThreadState_assign
-        __Pyx_ExceptionSave(&__pyx_t_15, &__pyx_t_14, &__pyx_t_13);
+        __Pyx_ExceptionSave(&__pyx_t_16, &__pyx_t_15, &__pyx_t_14);
+        __Pyx_XGOTREF(__pyx_t_16);
         __Pyx_XGOTREF(__pyx_t_15);
         __Pyx_XGOTREF(__pyx_t_14);
-        __Pyx_XGOTREF(__pyx_t_13);
         /*try:*/ {
 
-          /* "src/zexus/vm/fastops.pyx":299
+          /* "src/zexus/vm/fastops.pyx":319
  *             obj = stack.pop() if stack else None
  *             try:
  *                 if obj is None:             # <<<<<<<<<<<<<<
@@ -8810,143 +9205,143 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
           __pyx_t_8 = (__pyx_v_obj == Py_None);
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":300
+            /* "src/zexus/vm/fastops.pyx":320
  *             try:
  *                 if obj is None:
  *                     stack.append(0)             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, ZList):
  *                     stack.append(len(obj.elements))
 */
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_mstate_global->__pyx_int_0); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 300, __pyx_L114_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_mstate_global->__pyx_int_0); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 320, __pyx_L124_error)
 
-            /* "src/zexus/vm/fastops.pyx":299
+            /* "src/zexus/vm/fastops.pyx":319
  *             obj = stack.pop() if stack else None
  *             try:
  *                 if obj is None:             # <<<<<<<<<<<<<<
  *                     stack.append(0)
  *                 elif isinstance(obj, ZList):
 */
-            goto __pyx_L122;
+            goto __pyx_L132;
           }
 
-          /* "src/zexus/vm/fastops.pyx":301
+          /* "src/zexus/vm/fastops.pyx":321
  *                 if obj is None:
  *                     stack.append(0)
  *                 elif isinstance(obj, ZList):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.elements))
  *                 elif isinstance(obj, ZMap):
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_17, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 301, __pyx_L114_error)
-          __Pyx_GOTREF(__pyx_t_17);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_17); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 301, __pyx_L114_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_ZList); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 321, __pyx_L124_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_13); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 321, __pyx_L124_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":302
+            /* "src/zexus/vm/fastops.pyx":322
  *                     stack.append(0)
  *                 elif isinstance(obj, ZList):
  *                     stack.append(len(obj.elements))             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, ZMap):
  *                     stack.append(len(obj.pairs))
 */
-            __pyx_t_17 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 302, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_1 = PyObject_Length(__pyx_t_17); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 302, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-            __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 302, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_17); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 302, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_elements); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 322, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_1 = PyObject_Length(__pyx_t_13); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 322, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+            __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 322, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_13); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 322, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":301
+            /* "src/zexus/vm/fastops.pyx":321
  *                 if obj is None:
  *                     stack.append(0)
  *                 elif isinstance(obj, ZList):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.elements))
  *                 elif isinstance(obj, ZMap):
 */
-            goto __pyx_L122;
+            goto __pyx_L132;
           }
 
-          /* "src/zexus/vm/fastops.pyx":303
+          /* "src/zexus/vm/fastops.pyx":323
  *                 elif isinstance(obj, ZList):
  *                     stack.append(len(obj.elements))
  *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.pairs))
  *                 elif isinstance(obj, ZString):
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_17, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 303, __pyx_L114_error)
-          __Pyx_GOTREF(__pyx_t_17);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_17); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 303, __pyx_L114_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_ZMap); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 323, __pyx_L124_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_13); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 323, __pyx_L124_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":304
+            /* "src/zexus/vm/fastops.pyx":324
  *                     stack.append(len(obj.elements))
  *                 elif isinstance(obj, ZMap):
  *                     stack.append(len(obj.pairs))             # <<<<<<<<<<<<<<
  *                 elif isinstance(obj, ZString):
  *                     stack.append(len(obj.value))
 */
-            __pyx_t_17 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 304, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_1 = PyObject_Length(__pyx_t_17); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 304, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-            __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 304, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_17); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 304, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_pairs); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 324, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_1 = PyObject_Length(__pyx_t_13); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 324, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+            __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 324, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_13); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 324, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":303
+            /* "src/zexus/vm/fastops.pyx":323
  *                 elif isinstance(obj, ZList):
  *                     stack.append(len(obj.elements))
  *                 elif isinstance(obj, ZMap):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.pairs))
  *                 elif isinstance(obj, ZString):
 */
-            goto __pyx_L122;
+            goto __pyx_L132;
           }
 
-          /* "src/zexus/vm/fastops.pyx":305
+          /* "src/zexus/vm/fastops.pyx":325
  *                 elif isinstance(obj, ZMap):
  *                     stack.append(len(obj.pairs))
  *                 elif isinstance(obj, ZString):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.value))
  *                 else:
 */
-          __Pyx_GetModuleGlobalName(__pyx_t_17, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 305, __pyx_L114_error)
-          __Pyx_GOTREF(__pyx_t_17);
-          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_17); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 305, __pyx_L114_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_ZString); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 325, __pyx_L124_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __pyx_t_8 = PyObject_IsInstance(__pyx_v_obj, __pyx_t_13); if (unlikely(__pyx_t_8 == ((int)-1))) __PYX_ERR(0, 325, __pyx_L124_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           if (__pyx_t_8) {
 
-            /* "src/zexus/vm/fastops.pyx":306
+            /* "src/zexus/vm/fastops.pyx":326
  *                     stack.append(len(obj.pairs))
  *                 elif isinstance(obj, ZString):
  *                     stack.append(len(obj.value))             # <<<<<<<<<<<<<<
  *                 else:
  *                     stack.append(len(obj))
 */
-            __pyx_t_17 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 306, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_1 = PyObject_Length(__pyx_t_17); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 306, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-            __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 306, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_17); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 306, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __pyx_t_13 = __Pyx_PyObject_GetAttrStr(__pyx_v_obj, __pyx_mstate_global->__pyx_n_u_value); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 326, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_1 = PyObject_Length(__pyx_t_13); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 326, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+            __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 326, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_13); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 326, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":305
+            /* "src/zexus/vm/fastops.pyx":325
  *                 elif isinstance(obj, ZMap):
  *                     stack.append(len(obj.pairs))
  *                 elif isinstance(obj, ZString):             # <<<<<<<<<<<<<<
  *                     stack.append(len(obj.value))
  *                 else:
 */
-            goto __pyx_L122;
+            goto __pyx_L132;
           }
 
-          /* "src/zexus/vm/fastops.pyx":308
+          /* "src/zexus/vm/fastops.pyx":328
  *                     stack.append(len(obj.value))
  *                 else:
  *                     stack.append(len(obj))             # <<<<<<<<<<<<<<
@@ -8954,15 +9349,15 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 stack.append(0)
 */
           /*else*/ {
-            __pyx_t_1 = PyObject_Length(__pyx_v_obj); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 308, __pyx_L114_error)
-            __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 308, __pyx_L114_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_17); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 308, __pyx_L114_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __pyx_t_1 = PyObject_Length(__pyx_v_obj); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 328, __pyx_L124_error)
+            __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 328, __pyx_L124_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_13); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 328, __pyx_L124_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           }
-          __pyx_L122:;
+          __pyx_L132:;
 
-          /* "src/zexus/vm/fastops.pyx":298
+          /* "src/zexus/vm/fastops.pyx":318
  *         elif op_name == "GET_LENGTH":
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
@@ -8970,69 +9365,69 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                     stack.append(0)
 */
         }
+        __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
         __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
         __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
+        goto __pyx_L131_try_end;
+        __pyx_L124_error:;
         __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
-        goto __pyx_L121_try_end;
-        __pyx_L114_error:;
-        __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
         __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
         __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-        /* "src/zexus/vm/fastops.pyx":309
+        /* "src/zexus/vm/fastops.pyx":329
  *                 else:
  *                     stack.append(len(obj))
  *             except Exception:             # <<<<<<<<<<<<<<
  *                 stack.append(0)
  *         elif op_name == "CALL_NAME":
 */
-        __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
-        if (__pyx_t_16) {
+        __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
+        if (__pyx_t_17) {
           __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-          if (__Pyx_GetException(&__pyx_t_17, &__pyx_t_6, &__pyx_t_4) < 0) __PYX_ERR(0, 309, __pyx_L116_except_error)
-          __Pyx_XGOTREF(__pyx_t_17);
-          __Pyx_XGOTREF(__pyx_t_6);
+          if (__Pyx_GetException(&__pyx_t_13, &__pyx_t_5, &__pyx_t_4) < 0) __PYX_ERR(0, 329, __pyx_L126_except_error)
+          __Pyx_XGOTREF(__pyx_t_13);
+          __Pyx_XGOTREF(__pyx_t_5);
           __Pyx_XGOTREF(__pyx_t_4);
 
-          /* "src/zexus/vm/fastops.pyx":310
+          /* "src/zexus/vm/fastops.pyx":330
  *                     stack.append(len(obj))
  *             except Exception:
  *                 stack.append(0)             # <<<<<<<<<<<<<<
  *         elif op_name == "CALL_NAME":
  *             name_idx, arg_count = operand
 */
-          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_mstate_global->__pyx_int_0); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 310, __pyx_L116_except_error)
-          __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
-          __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+          __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_mstate_global->__pyx_int_0); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 330, __pyx_L126_except_error)
+          __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
+          __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-          goto __pyx_L115_exception_handled;
+          goto __pyx_L125_exception_handled;
         }
-        goto __pyx_L116_except_error;
+        goto __pyx_L126_except_error;
 
-        /* "src/zexus/vm/fastops.pyx":298
+        /* "src/zexus/vm/fastops.pyx":318
  *         elif op_name == "GET_LENGTH":
  *             obj = stack.pop() if stack else None
  *             try:             # <<<<<<<<<<<<<<
  *                 if obj is None:
  *                     stack.append(0)
 */
-        __pyx_L116_except_error:;
+        __pyx_L126_except_error:;
+        __Pyx_XGIVEREF(__pyx_t_16);
         __Pyx_XGIVEREF(__pyx_t_15);
         __Pyx_XGIVEREF(__pyx_t_14);
-        __Pyx_XGIVEREF(__pyx_t_13);
-        __Pyx_ExceptionReset(__pyx_t_15, __pyx_t_14, __pyx_t_13);
+        __Pyx_ExceptionReset(__pyx_t_16, __pyx_t_15, __pyx_t_14);
         goto __pyx_L1_error;
-        __pyx_L115_exception_handled:;
+        __pyx_L125_exception_handled:;
+        __Pyx_XGIVEREF(__pyx_t_16);
         __Pyx_XGIVEREF(__pyx_t_15);
         __Pyx_XGIVEREF(__pyx_t_14);
-        __Pyx_XGIVEREF(__pyx_t_13);
-        __Pyx_ExceptionReset(__pyx_t_15, __pyx_t_14, __pyx_t_13);
-        __pyx_L121_try_end:;
+        __Pyx_ExceptionReset(__pyx_t_16, __pyx_t_15, __pyx_t_14);
+        __pyx_L131_try_end:;
       }
 
-      /* "src/zexus/vm/fastops.pyx":296
+      /* "src/zexus/vm/fastops.pyx":316
  *             except Exception:
  *                 stack.append(None)
  *         elif op_name == "GET_LENGTH":             # <<<<<<<<<<<<<<
@@ -9042,17 +9437,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":311
+    /* "src/zexus/vm/fastops.pyx":331
  *             except Exception:
  *                 stack.append(0)
  *         elif op_name == "CALL_NAME":             # <<<<<<<<<<<<<<
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_NAME, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 311, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_NAME, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 331, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":312
+      /* "src/zexus/vm/fastops.pyx":332
  *                 stack.append(0)
  *         elif op_name == "CALL_NAME":
  *             name_idx, arg_count = operand             # <<<<<<<<<<<<<<
@@ -9065,167 +9460,167 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         if (unlikely(size != 2)) {
           if (size > 2) __Pyx_RaiseTooManyValuesError(2);
           else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-          __PYX_ERR(0, 312, __pyx_L1_error)
+          __PYX_ERR(0, 332, __pyx_L1_error)
         }
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
         if (likely(PyTuple_CheckExact(sequence))) {
           __pyx_t_4 = PyTuple_GET_ITEM(sequence, 0);
           __Pyx_INCREF(__pyx_t_4);
-          __pyx_t_6 = PyTuple_GET_ITEM(sequence, 1);
-          __Pyx_INCREF(__pyx_t_6);
+          __pyx_t_5 = PyTuple_GET_ITEM(sequence, 1);
+          __Pyx_INCREF(__pyx_t_5);
         } else {
           __pyx_t_4 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 312, __pyx_L1_error)
+          if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 332, __pyx_L1_error)
           __Pyx_XGOTREF(__pyx_t_4);
-          __pyx_t_6 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 312, __pyx_L1_error)
-          __Pyx_XGOTREF(__pyx_t_6);
+          __pyx_t_5 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
+          if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 332, __pyx_L1_error)
+          __Pyx_XGOTREF(__pyx_t_5);
         }
         #else
-        __pyx_t_4 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 312, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 332, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 312, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 332, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
         #endif
       } else {
         Py_ssize_t index = -1;
-        __pyx_t_17 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 312, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_17);
-        index = 0; __pyx_t_4 = __pyx_t_7(__pyx_t_17); if (unlikely(!__pyx_t_4)) goto __pyx_L125_unpacking_failed;
+        __pyx_t_13 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 332, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_13);
+        index = 0; __pyx_t_4 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_4)) goto __pyx_L135_unpacking_failed;
         __Pyx_GOTREF(__pyx_t_4);
-        index = 1; __pyx_t_6 = __pyx_t_7(__pyx_t_17); if (unlikely(!__pyx_t_6)) goto __pyx_L125_unpacking_failed;
-        __Pyx_GOTREF(__pyx_t_6);
-        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_17), 2) < (0)) __PYX_ERR(0, 312, __pyx_L1_error)
+        index = 1; __pyx_t_5 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_5)) goto __pyx_L135_unpacking_failed;
+        __Pyx_GOTREF(__pyx_t_5);
+        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_13), 2) < (0)) __PYX_ERR(0, 332, __pyx_L1_error)
         __pyx_t_7 = NULL;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-        goto __pyx_L126_unpacking_done;
-        __pyx_L125_unpacking_failed:;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+        goto __pyx_L136_unpacking_done;
+        __pyx_L135_unpacking_failed:;
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
         __pyx_t_7 = NULL;
         if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-        __PYX_ERR(0, 312, __pyx_L1_error)
-        __pyx_L126_unpacking_done:;
+        __PYX_ERR(0, 332, __pyx_L1_error)
+        __pyx_L136_unpacking_done:;
       }
       __Pyx_XDECREF_SET(__pyx_v_name_idx, __pyx_t_4);
       __pyx_t_4 = 0;
-      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":313
+      /* "src/zexus/vm/fastops.pyx":333
  *         elif op_name == "CALL_NAME":
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx             # <<<<<<<<<<<<<<
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)
 */
-      __pyx_t_3 = PyLong_Check(__pyx_v_name_idx); 
-      if (__pyx_t_3) {
+      __pyx_t_11 = PyLong_Check(__pyx_v_name_idx); 
+      if (__pyx_t_11) {
       } else {
-        __pyx_t_8 = __pyx_t_3;
-        goto __pyx_L127_bool_binop_done;
+        __pyx_t_8 = __pyx_t_11;
+        goto __pyx_L137_bool_binop_done;
       }
-      __pyx_t_4 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_name_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 313, __pyx_L1_error)
+      __pyx_t_4 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_name_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 333, __pyx_L1_error)
       if (__Pyx_PyObject_IsTrue(__pyx_t_4)) {
         __Pyx_DECREF(__pyx_t_4);
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "object of type 'NoneType' has no len()");
-          __PYX_ERR(0, 313, __pyx_L1_error)
+          __PYX_ERR(0, 333, __pyx_L1_error)
         }
-        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 313, __pyx_L1_error)
-        __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 313, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_4 = PyObject_RichCompare(__pyx_v_name_idx, __pyx_t_17, Py_LT); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 313, __pyx_L1_error)
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 333, __pyx_L1_error)
+        __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 333, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_4 = PyObject_RichCompare(__pyx_v_name_idx, __pyx_t_13, Py_LT); __Pyx_XGOTREF(__pyx_t_4); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 333, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
       }
-      __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_4); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 313, __pyx_L1_error)
+      __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_4); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 333, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-      __pyx_t_8 = __pyx_t_3;
-      __pyx_L127_bool_binop_done:;
+      __pyx_t_8 = __pyx_t_11;
+      __pyx_L137_bool_binop_done:;
       if (__pyx_t_8) {
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-          __PYX_ERR(0, 313, __pyx_L1_error)
+          __PYX_ERR(0, 333, __pyx_L1_error)
         }
-        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_name_idx); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 313, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_name_idx); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 333, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       } else {
         __Pyx_INCREF(__pyx_v_name_idx);
-        __pyx_t_6 = __pyx_v_name_idx;
+        __pyx_t_5 = __pyx_v_name_idx;
       }
-      __Pyx_XDECREF_SET(__pyx_v_func_name, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_func_name, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":314
+      /* "src/zexus/vm/fastops.pyx":334
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []             # <<<<<<<<<<<<<<
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)
  *             if fn is None:
 */
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 314, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 334, __pyx_L1_error)
       if (__pyx_t_8) {
         { /* enter inner scope */
-          __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 314, __pyx_L131_error)
+          __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 334, __pyx_L141_error)
           __Pyx_GOTREF(__pyx_t_4);
           __pyx_t_2 = NULL;
           __pyx_t_10 = 1;
           {
             PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_v_arg_count};
-            __pyx_t_17 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+            __pyx_t_13 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
             __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-            if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 314, __pyx_L131_error)
-            __Pyx_GOTREF(__pyx_t_17);
+            if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 334, __pyx_L141_error)
+            __Pyx_GOTREF(__pyx_t_13);
           }
-          __pyx_t_2 = PyObject_GetIter(__pyx_t_17); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 314, __pyx_L131_error)
+          __pyx_t_2 = PyObject_GetIter(__pyx_t_13); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L141_error)
           __Pyx_GOTREF(__pyx_t_2);
-          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 314, __pyx_L131_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_2); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 334, __pyx_L141_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           for (;;) {
             {
-              __pyx_t_17 = __pyx_t_12(__pyx_t_2);
-              if (unlikely(!__pyx_t_17)) {
+              __pyx_t_13 = __pyx_t_12(__pyx_t_2);
+              if (unlikely(!__pyx_t_13)) {
                 PyObject* exc_type = PyErr_Occurred();
                 if (exc_type) {
-                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 314, __pyx_L131_error)
+                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 334, __pyx_L141_error)
                   PyErr_Clear();
                 }
                 break;
               }
             }
-            __Pyx_GOTREF(__pyx_t_17);
-            __Pyx_XDECREF_SET(__pyx_8genexpr2__pyx_v__, __pyx_t_17);
-            __pyx_t_17 = 0;
-            __pyx_t_17 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 314, __pyx_L131_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_4, (PyObject*)__pyx_t_17))) __PYX_ERR(0, 314, __pyx_L131_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __Pyx_GOTREF(__pyx_t_13);
+            __Pyx_XDECREF_SET(__pyx_8genexpr2__pyx_v__, __pyx_t_13);
+            __pyx_t_13 = 0;
+            __pyx_t_13 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 334, __pyx_L141_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_4, (PyObject*)__pyx_t_13))) __PYX_ERR(0, 334, __pyx_L141_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           }
           __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
           __Pyx_XDECREF(__pyx_8genexpr2__pyx_v__); __pyx_8genexpr2__pyx_v__ = 0;
-          goto __pyx_L135_exit_scope;
-          __pyx_L131_error:;
+          goto __pyx_L145_exit_scope;
+          __pyx_L141_error:;
           __Pyx_XDECREF(__pyx_8genexpr2__pyx_v__); __pyx_8genexpr2__pyx_v__ = 0;
           goto __pyx_L1_error;
-          __pyx_L135_exit_scope:;
+          __pyx_L145_exit_scope:;
         } /* exit inner scope */
-        __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_t_4, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 314, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_t_4, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
         __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-        __pyx_t_6 = __pyx_t_2;
+        __pyx_t_5 = __pyx_t_2;
         __pyx_t_2 = 0;
       } else {
-        __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 314, __pyx_L1_error)
+        __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_6 = __pyx_t_2;
+        __pyx_t_5 = __pyx_t_2;
         __pyx_t_2 = 0;
       }
-      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_6));
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_5));
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":315
+      /* "src/zexus/vm/fastops.pyx":335
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)             # <<<<<<<<<<<<<<
@@ -9233,51 +9628,51 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 stack.append(None)
 */
       __pyx_t_4 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_17, __pyx_mstate_global->__pyx_n_u_resolve); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 315, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_17);
+      __Pyx_GetModuleGlobalName(__pyx_t_13, __pyx_mstate_global->__pyx_n_u_resolve); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 335, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_13);
       __pyx_t_10 = 1;
       #if CYTHON_UNPACK_METHODS
-      if (unlikely(PyMethod_Check(__pyx_t_17))) {
-        __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_17);
+      if (unlikely(PyMethod_Check(__pyx_t_13))) {
+        __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_13);
         assert(__pyx_t_4);
-        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_17);
+        PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_13);
         __Pyx_INCREF(__pyx_t_4);
         __Pyx_INCREF(__pyx__function);
-        __Pyx_DECREF_SET(__pyx_t_17, __pyx__function);
+        __Pyx_DECREF_SET(__pyx_t_13, __pyx__function);
         __pyx_t_10 = 0;
       }
       #endif
       {
         PyObject *__pyx_callargs[4] = {__pyx_t_4, __pyx_v_func_name, __pyx_v_env, __pyx_v_closure_cells};
-        __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_17, __pyx_callargs+__pyx_t_10, (4-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __pyx_t_2 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_13, __pyx_callargs+__pyx_t_10, (4-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-        if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 315, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+        if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 335, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
       }
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 315, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 335, __pyx_L1_error)
       if (!__pyx_t_8) {
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
       } else {
         __Pyx_INCREF(__pyx_t_2);
-        __pyx_t_6 = __pyx_t_2;
+        __pyx_t_5 = __pyx_t_2;
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        goto __pyx_L136_bool_binop_done;
+        goto __pyx_L146_bool_binop_done;
       }
       if (unlikely(__pyx_v_builtins == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 315, __pyx_L1_error)
+        __PYX_ERR(0, 335, __pyx_L1_error)
       }
-      __pyx_t_2 = __Pyx_PyDict_GetItemDefault(__pyx_v_builtins, __pyx_v_func_name, Py_None); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 315, __pyx_L1_error)
+      __pyx_t_2 = __Pyx_PyDict_GetItemDefault(__pyx_v_builtins, __pyx_v_func_name, Py_None); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 335, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __Pyx_INCREF(__pyx_t_2);
-      __pyx_t_6 = __pyx_t_2;
+      __pyx_t_5 = __pyx_t_2;
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-      __pyx_L136_bool_binop_done:;
-      __Pyx_XDECREF_SET(__pyx_v_fn, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __pyx_L146_bool_binop_done:;
+      __Pyx_XDECREF_SET(__pyx_v_fn, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":316
+      /* "src/zexus/vm/fastops.pyx":336
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)
  *             if fn is None:             # <<<<<<<<<<<<<<
@@ -9287,26 +9682,26 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __pyx_t_8 = (__pyx_v_fn == Py_None);
       if (__pyx_t_8) {
 
-        /* "src/zexus/vm/fastops.pyx":317
+        /* "src/zexus/vm/fastops.pyx":337
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)
  *             if fn is None:
  *                 stack.append(None)             # <<<<<<<<<<<<<<
  *             else:
  *                 stack.append(fn(*args))
 */
-        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 317, __pyx_L1_error)
+        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 337, __pyx_L1_error)
 
-        /* "src/zexus/vm/fastops.pyx":316
+        /* "src/zexus/vm/fastops.pyx":336
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = _resolve(func_name, env, closure_cells) or builtins.get(func_name)
  *             if fn is None:             # <<<<<<<<<<<<<<
  *                 stack.append(None)
  *             else:
 */
-        goto __pyx_L138;
+        goto __pyx_L148;
       }
 
-      /* "src/zexus/vm/fastops.pyx":319
+      /* "src/zexus/vm/fastops.pyx":339
  *                 stack.append(None)
  *             else:
  *                 stack.append(fn(*args))             # <<<<<<<<<<<<<<
@@ -9314,17 +9709,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             name_idx, arg_count = operand
 */
       /*else*/ {
-        __pyx_t_6 = PySequence_Tuple(__pyx_v_args); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 319, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
-        __pyx_t_2 = __Pyx_PyObject_Call(__pyx_v_fn, __pyx_t_6, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 319, __pyx_L1_error)
+        __pyx_t_5 = PySequence_Tuple(__pyx_v_args); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 339, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
+        __pyx_t_2 = __Pyx_PyObject_Call(__pyx_v_fn, __pyx_t_5, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 339, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_2); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 319, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_2); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 339, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
       }
-      __pyx_L138:;
+      __pyx_L148:;
 
-      /* "src/zexus/vm/fastops.pyx":311
+      /* "src/zexus/vm/fastops.pyx":331
  *             except Exception:
  *                 stack.append(0)
  *         elif op_name == "CALL_NAME":             # <<<<<<<<<<<<<<
@@ -9334,17 +9729,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":320
+    /* "src/zexus/vm/fastops.pyx":340
  *             else:
  *                 stack.append(fn(*args))
  *         elif op_name == "CALL_BUILTIN":             # <<<<<<<<<<<<<<
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_BUILTIN, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 320, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_BUILTIN, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 340, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":321
+      /* "src/zexus/vm/fastops.pyx":341
  *                 stack.append(fn(*args))
  *         elif op_name == "CALL_BUILTIN":
  *             name_idx, arg_count = operand             # <<<<<<<<<<<<<<
@@ -9357,167 +9752,167 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         if (unlikely(size != 2)) {
           if (size > 2) __Pyx_RaiseTooManyValuesError(2);
           else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-          __PYX_ERR(0, 321, __pyx_L1_error)
+          __PYX_ERR(0, 341, __pyx_L1_error)
         }
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
         if (likely(PyTuple_CheckExact(sequence))) {
           __pyx_t_2 = PyTuple_GET_ITEM(sequence, 0);
           __Pyx_INCREF(__pyx_t_2);
-          __pyx_t_6 = PyTuple_GET_ITEM(sequence, 1);
-          __Pyx_INCREF(__pyx_t_6);
+          __pyx_t_5 = PyTuple_GET_ITEM(sequence, 1);
+          __Pyx_INCREF(__pyx_t_5);
         } else {
           __pyx_t_2 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 321, __pyx_L1_error)
+          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 341, __pyx_L1_error)
           __Pyx_XGOTREF(__pyx_t_2);
-          __pyx_t_6 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 321, __pyx_L1_error)
-          __Pyx_XGOTREF(__pyx_t_6);
+          __pyx_t_5 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
+          if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 341, __pyx_L1_error)
+          __Pyx_XGOTREF(__pyx_t_5);
         }
         #else
-        __pyx_t_2 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 321, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 341, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 321, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 341, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
         #endif
       } else {
         Py_ssize_t index = -1;
-        __pyx_t_17 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 321, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_17);
-        index = 0; __pyx_t_2 = __pyx_t_7(__pyx_t_17); if (unlikely(!__pyx_t_2)) goto __pyx_L139_unpacking_failed;
+        __pyx_t_13 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 341, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_13);
+        index = 0; __pyx_t_2 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_2)) goto __pyx_L149_unpacking_failed;
         __Pyx_GOTREF(__pyx_t_2);
-        index = 1; __pyx_t_6 = __pyx_t_7(__pyx_t_17); if (unlikely(!__pyx_t_6)) goto __pyx_L139_unpacking_failed;
-        __Pyx_GOTREF(__pyx_t_6);
-        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_17), 2) < (0)) __PYX_ERR(0, 321, __pyx_L1_error)
+        index = 1; __pyx_t_5 = __pyx_t_7(__pyx_t_13); if (unlikely(!__pyx_t_5)) goto __pyx_L149_unpacking_failed;
+        __Pyx_GOTREF(__pyx_t_5);
+        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_13), 2) < (0)) __PYX_ERR(0, 341, __pyx_L1_error)
         __pyx_t_7 = NULL;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-        goto __pyx_L140_unpacking_done;
-        __pyx_L139_unpacking_failed:;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+        goto __pyx_L150_unpacking_done;
+        __pyx_L149_unpacking_failed:;
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
         __pyx_t_7 = NULL;
         if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-        __PYX_ERR(0, 321, __pyx_L1_error)
-        __pyx_L140_unpacking_done:;
+        __PYX_ERR(0, 341, __pyx_L1_error)
+        __pyx_L150_unpacking_done:;
       }
       __Pyx_XDECREF_SET(__pyx_v_name_idx, __pyx_t_2);
       __pyx_t_2 = 0;
-      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":322
+      /* "src/zexus/vm/fastops.pyx":342
  *         elif op_name == "CALL_BUILTIN":
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx             # <<<<<<<<<<<<<<
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = builtins.get(func_name)
 */
-      __pyx_t_3 = PyLong_Check(__pyx_v_name_idx); 
-      if (__pyx_t_3) {
+      __pyx_t_11 = PyLong_Check(__pyx_v_name_idx); 
+      if (__pyx_t_11) {
       } else {
-        __pyx_t_8 = __pyx_t_3;
-        goto __pyx_L141_bool_binop_done;
+        __pyx_t_8 = __pyx_t_11;
+        goto __pyx_L151_bool_binop_done;
       }
-      __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_name_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 322, __pyx_L1_error)
+      __pyx_t_2 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_name_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 342, __pyx_L1_error)
       if (__Pyx_PyObject_IsTrue(__pyx_t_2)) {
         __Pyx_DECREF(__pyx_t_2);
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "object of type 'NoneType' has no len()");
-          __PYX_ERR(0, 322, __pyx_L1_error)
+          __PYX_ERR(0, 342, __pyx_L1_error)
         }
-        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 322, __pyx_L1_error)
-        __pyx_t_17 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 322, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_2 = PyObject_RichCompare(__pyx_v_name_idx, __pyx_t_17, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 322, __pyx_L1_error)
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 342, __pyx_L1_error)
+        __pyx_t_13 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 342, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_2 = PyObject_RichCompare(__pyx_v_name_idx, __pyx_t_13, Py_LT); __Pyx_XGOTREF(__pyx_t_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 342, __pyx_L1_error)
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
       }
-      __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 322, __pyx_L1_error)
+      __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_2); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 342, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-      __pyx_t_8 = __pyx_t_3;
-      __pyx_L141_bool_binop_done:;
+      __pyx_t_8 = __pyx_t_11;
+      __pyx_L151_bool_binop_done:;
       if (__pyx_t_8) {
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-          __PYX_ERR(0, 322, __pyx_L1_error)
+          __PYX_ERR(0, 342, __pyx_L1_error)
         }
-        __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_name_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 322, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_name_idx); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 342, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_6 = __pyx_t_2;
+        __pyx_t_5 = __pyx_t_2;
         __pyx_t_2 = 0;
       } else {
         __Pyx_INCREF(__pyx_v_name_idx);
-        __pyx_t_6 = __pyx_v_name_idx;
+        __pyx_t_5 = __pyx_v_name_idx;
       }
-      __Pyx_XDECREF_SET(__pyx_v_func_name, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_func_name, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":323
+      /* "src/zexus/vm/fastops.pyx":343
  *             name_idx, arg_count = operand
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []             # <<<<<<<<<<<<<<
  *             fn = builtins.get(func_name)
  *             if fn is None:
 */
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 323, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 343, __pyx_L1_error)
       if (__pyx_t_8) {
         { /* enter inner scope */
-          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 323, __pyx_L145_error)
+          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 343, __pyx_L155_error)
           __Pyx_GOTREF(__pyx_t_2);
           __pyx_t_4 = NULL;
           __pyx_t_10 = 1;
           {
             PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_v_arg_count};
-            __pyx_t_17 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+            __pyx_t_13 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
             __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-            if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 323, __pyx_L145_error)
-            __Pyx_GOTREF(__pyx_t_17);
+            if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 343, __pyx_L155_error)
+            __Pyx_GOTREF(__pyx_t_13);
           }
-          __pyx_t_4 = PyObject_GetIter(__pyx_t_17); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 323, __pyx_L145_error)
+          __pyx_t_4 = PyObject_GetIter(__pyx_t_13); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 343, __pyx_L155_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 323, __pyx_L145_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 343, __pyx_L155_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           for (;;) {
             {
-              __pyx_t_17 = __pyx_t_12(__pyx_t_4);
-              if (unlikely(!__pyx_t_17)) {
+              __pyx_t_13 = __pyx_t_12(__pyx_t_4);
+              if (unlikely(!__pyx_t_13)) {
                 PyObject* exc_type = PyErr_Occurred();
                 if (exc_type) {
-                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 323, __pyx_L145_error)
+                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 343, __pyx_L155_error)
                   PyErr_Clear();
                 }
                 break;
               }
             }
-            __Pyx_GOTREF(__pyx_t_17);
-            __Pyx_XDECREF_SET(__pyx_8genexpr3__pyx_v__, __pyx_t_17);
-            __pyx_t_17 = 0;
-            __pyx_t_17 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 323, __pyx_L145_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_17))) __PYX_ERR(0, 323, __pyx_L145_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __Pyx_GOTREF(__pyx_t_13);
+            __Pyx_XDECREF_SET(__pyx_8genexpr3__pyx_v__, __pyx_t_13);
+            __pyx_t_13 = 0;
+            __pyx_t_13 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 343, __pyx_L155_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_13))) __PYX_ERR(0, 343, __pyx_L155_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           }
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           __Pyx_XDECREF(__pyx_8genexpr3__pyx_v__); __pyx_8genexpr3__pyx_v__ = 0;
-          goto __pyx_L149_exit_scope;
-          __pyx_L145_error:;
+          goto __pyx_L159_exit_scope;
+          __pyx_L155_error:;
           __Pyx_XDECREF(__pyx_8genexpr3__pyx_v__); __pyx_8genexpr3__pyx_v__ = 0;
           goto __pyx_L1_error;
-          __pyx_L149_exit_scope:;
+          __pyx_L159_exit_scope:;
         } /* exit inner scope */
-        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 323, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 343, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       } else {
-        __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 323, __pyx_L1_error)
+        __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 343, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       }
-      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_6));
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_5));
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":324
+      /* "src/zexus/vm/fastops.pyx":344
  *             func_name = consts[name_idx] if isinstance(name_idx, int) and 0 <= name_idx < len(consts) else name_idx
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = builtins.get(func_name)             # <<<<<<<<<<<<<<
@@ -9526,14 +9921,14 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       if (unlikely(__pyx_v_builtins == Py_None)) {
         PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "get");
-        __PYX_ERR(0, 324, __pyx_L1_error)
+        __PYX_ERR(0, 344, __pyx_L1_error)
       }
-      __pyx_t_6 = __Pyx_PyDict_GetItemDefault(__pyx_v_builtins, __pyx_v_func_name, Py_None); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 324, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_6);
-      __Pyx_XDECREF_SET(__pyx_v_fn, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __pyx_t_5 = __Pyx_PyDict_GetItemDefault(__pyx_v_builtins, __pyx_v_func_name, Py_None); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 344, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_5);
+      __Pyx_XDECREF_SET(__pyx_v_fn, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":325
+      /* "src/zexus/vm/fastops.pyx":345
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = builtins.get(func_name)
  *             if fn is None:             # <<<<<<<<<<<<<<
@@ -9543,26 +9938,26 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __pyx_t_8 = (__pyx_v_fn == Py_None);
       if (__pyx_t_8) {
 
-        /* "src/zexus/vm/fastops.pyx":326
+        /* "src/zexus/vm/fastops.pyx":346
  *             fn = builtins.get(func_name)
  *             if fn is None:
  *                 stack.append(None)             # <<<<<<<<<<<<<<
  *             else:
  *                 try:
 */
-        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 326, __pyx_L1_error)
+        __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 346, __pyx_L1_error)
 
-        /* "src/zexus/vm/fastops.pyx":325
+        /* "src/zexus/vm/fastops.pyx":345
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn = builtins.get(func_name)
  *             if fn is None:             # <<<<<<<<<<<<<<
  *                 stack.append(None)
  *             else:
 */
-        goto __pyx_L150;
+        goto __pyx_L160;
       }
 
-      /* "src/zexus/vm/fastops.pyx":328
+      /* "src/zexus/vm/fastops.pyx":348
  *                 stack.append(None)
  *             else:
  *                 try:             # <<<<<<<<<<<<<<
@@ -9573,28 +9968,28 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         {
           __Pyx_PyThreadState_declare
           __Pyx_PyThreadState_assign
-          __Pyx_ExceptionSave(&__pyx_t_13, &__pyx_t_14, &__pyx_t_15);
-          __Pyx_XGOTREF(__pyx_t_13);
+          __Pyx_ExceptionSave(&__pyx_t_14, &__pyx_t_15, &__pyx_t_16);
           __Pyx_XGOTREF(__pyx_t_14);
           __Pyx_XGOTREF(__pyx_t_15);
+          __Pyx_XGOTREF(__pyx_t_16);
           /*try:*/ {
 
-            /* "src/zexus/vm/fastops.pyx":329
+            /* "src/zexus/vm/fastops.pyx":349
  *             else:
  *                 try:
  *                     stack.append(fn(*args))             # <<<<<<<<<<<<<<
  *                 except Exception:
  *                     stack.append(None)
 */
-            __pyx_t_6 = PySequence_Tuple(__pyx_v_args); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 329, __pyx_L151_error)
-            __Pyx_GOTREF(__pyx_t_6);
-            __pyx_t_4 = __Pyx_PyObject_Call(__pyx_v_fn, __pyx_t_6, NULL); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 329, __pyx_L151_error)
+            __pyx_t_5 = PySequence_Tuple(__pyx_v_args); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 349, __pyx_L161_error)
+            __Pyx_GOTREF(__pyx_t_5);
+            __pyx_t_4 = __Pyx_PyObject_Call(__pyx_v_fn, __pyx_t_5, NULL); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 349, __pyx_L161_error)
             __Pyx_GOTREF(__pyx_t_4);
-            __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 329, __pyx_L151_error)
+            __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_4); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 349, __pyx_L161_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
 
-            /* "src/zexus/vm/fastops.pyx":328
+            /* "src/zexus/vm/fastops.pyx":348
  *                 stack.append(None)
  *             else:
  *                 try:             # <<<<<<<<<<<<<<
@@ -9602,71 +9997,71 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *                 except Exception:
 */
           }
-          __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
           __Pyx_XDECREF(__pyx_t_14); __pyx_t_14 = 0;
           __Pyx_XDECREF(__pyx_t_15); __pyx_t_15 = 0;
-          goto __pyx_L158_try_end;
-          __pyx_L151_error:;
-          __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_XDECREF(__pyx_t_16); __pyx_t_16 = 0;
+          goto __pyx_L168_try_end;
+          __pyx_L161_error:;
+          __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
           __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
           __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
           __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
           __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
 
-          /* "src/zexus/vm/fastops.pyx":330
+          /* "src/zexus/vm/fastops.pyx":350
  *                 try:
  *                     stack.append(fn(*args))
  *                 except Exception:             # <<<<<<<<<<<<<<
  *                     stack.append(None)
  *         elif op_name == "CALL_METHOD":
 */
-          __pyx_t_16 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
-          if (__pyx_t_16) {
+          __pyx_t_17 = __Pyx_PyErr_ExceptionMatches(((PyObject *)(((PyTypeObject*)PyExc_Exception))));
+          if (__pyx_t_17) {
             __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
-            if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_6, &__pyx_t_2) < 0) __PYX_ERR(0, 330, __pyx_L153_except_error)
+            if (__Pyx_GetException(&__pyx_t_4, &__pyx_t_5, &__pyx_t_2) < 0) __PYX_ERR(0, 350, __pyx_L163_except_error)
             __Pyx_XGOTREF(__pyx_t_4);
-            __Pyx_XGOTREF(__pyx_t_6);
+            __Pyx_XGOTREF(__pyx_t_5);
             __Pyx_XGOTREF(__pyx_t_2);
 
-            /* "src/zexus/vm/fastops.pyx":331
+            /* "src/zexus/vm/fastops.pyx":351
  *                     stack.append(fn(*args))
  *                 except Exception:
  *                     stack.append(None)             # <<<<<<<<<<<<<<
  *         elif op_name == "CALL_METHOD":
  *             method_idx, arg_count = operand
 */
-            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 331, __pyx_L153_except_error)
+            __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, Py_None); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 351, __pyx_L163_except_error)
             __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-            __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
+            __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
             __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-            goto __pyx_L152_exception_handled;
+            goto __pyx_L162_exception_handled;
           }
-          goto __pyx_L153_except_error;
+          goto __pyx_L163_except_error;
 
-          /* "src/zexus/vm/fastops.pyx":328
+          /* "src/zexus/vm/fastops.pyx":348
  *                 stack.append(None)
  *             else:
  *                 try:             # <<<<<<<<<<<<<<
  *                     stack.append(fn(*args))
  *                 except Exception:
 */
-          __pyx_L153_except_error:;
-          __Pyx_XGIVEREF(__pyx_t_13);
+          __pyx_L163_except_error:;
           __Pyx_XGIVEREF(__pyx_t_14);
           __Pyx_XGIVEREF(__pyx_t_15);
-          __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
+          __Pyx_XGIVEREF(__pyx_t_16);
+          __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
           goto __pyx_L1_error;
-          __pyx_L152_exception_handled:;
-          __Pyx_XGIVEREF(__pyx_t_13);
+          __pyx_L162_exception_handled:;
           __Pyx_XGIVEREF(__pyx_t_14);
           __Pyx_XGIVEREF(__pyx_t_15);
-          __Pyx_ExceptionReset(__pyx_t_13, __pyx_t_14, __pyx_t_15);
-          __pyx_L158_try_end:;
+          __Pyx_XGIVEREF(__pyx_t_16);
+          __Pyx_ExceptionReset(__pyx_t_14, __pyx_t_15, __pyx_t_16);
+          __pyx_L168_try_end:;
         }
       }
-      __pyx_L150:;
+      __pyx_L160:;
 
-      /* "src/zexus/vm/fastops.pyx":320
+      /* "src/zexus/vm/fastops.pyx":340
  *             else:
  *                 stack.append(fn(*args))
  *         elif op_name == "CALL_BUILTIN":             # <<<<<<<<<<<<<<
@@ -9676,17 +10071,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":332
+    /* "src/zexus/vm/fastops.pyx":352
  *                 except Exception:
  *                     stack.append(None)
  *         elif op_name == "CALL_METHOD":             # <<<<<<<<<<<<<<
  *             method_idx, arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_METHOD, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 332, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_METHOD, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 352, __pyx_L1_error)
     if (__pyx_t_8) {
 
-      /* "src/zexus/vm/fastops.pyx":333
+      /* "src/zexus/vm/fastops.pyx":353
  *                     stack.append(None)
  *         elif op_name == "CALL_METHOD":
  *             method_idx, arg_count = operand             # <<<<<<<<<<<<<<
@@ -9699,85 +10094,85 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
         if (unlikely(size != 2)) {
           if (size > 2) __Pyx_RaiseTooManyValuesError(2);
           else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-          __PYX_ERR(0, 333, __pyx_L1_error)
+          __PYX_ERR(0, 353, __pyx_L1_error)
         }
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
         if (likely(PyTuple_CheckExact(sequence))) {
           __pyx_t_2 = PyTuple_GET_ITEM(sequence, 0);
           __Pyx_INCREF(__pyx_t_2);
-          __pyx_t_6 = PyTuple_GET_ITEM(sequence, 1);
-          __Pyx_INCREF(__pyx_t_6);
+          __pyx_t_5 = PyTuple_GET_ITEM(sequence, 1);
+          __Pyx_INCREF(__pyx_t_5);
         } else {
           __pyx_t_2 = __Pyx_PyList_GetItemRefFast(sequence, 0, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 333, __pyx_L1_error)
+          if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 353, __pyx_L1_error)
           __Pyx_XGOTREF(__pyx_t_2);
-          __pyx_t_6 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
-          if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 333, __pyx_L1_error)
-          __Pyx_XGOTREF(__pyx_t_6);
+          __pyx_t_5 = __Pyx_PyList_GetItemRefFast(sequence, 1, __Pyx_ReferenceSharing_SharedReference);
+          if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 353, __pyx_L1_error)
+          __Pyx_XGOTREF(__pyx_t_5);
         }
         #else
-        __pyx_t_2 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 333, __pyx_L1_error)
+        __pyx_t_2 = __Pyx_PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 353, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_6 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 333, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        __pyx_t_5 = __Pyx_PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 353, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
         #endif
       } else {
         Py_ssize_t index = -1;
-        __pyx_t_4 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 333, __pyx_L1_error)
+        __pyx_t_4 = PyObject_GetIter(__pyx_v_operand); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 353, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         __pyx_t_7 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4);
-        index = 0; __pyx_t_2 = __pyx_t_7(__pyx_t_4); if (unlikely(!__pyx_t_2)) goto __pyx_L161_unpacking_failed;
+        index = 0; __pyx_t_2 = __pyx_t_7(__pyx_t_4); if (unlikely(!__pyx_t_2)) goto __pyx_L171_unpacking_failed;
         __Pyx_GOTREF(__pyx_t_2);
-        index = 1; __pyx_t_6 = __pyx_t_7(__pyx_t_4); if (unlikely(!__pyx_t_6)) goto __pyx_L161_unpacking_failed;
-        __Pyx_GOTREF(__pyx_t_6);
-        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_4), 2) < (0)) __PYX_ERR(0, 333, __pyx_L1_error)
+        index = 1; __pyx_t_5 = __pyx_t_7(__pyx_t_4); if (unlikely(!__pyx_t_5)) goto __pyx_L171_unpacking_failed;
+        __Pyx_GOTREF(__pyx_t_5);
+        if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_4), 2) < (0)) __PYX_ERR(0, 353, __pyx_L1_error)
         __pyx_t_7 = NULL;
         __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-        goto __pyx_L162_unpacking_done;
-        __pyx_L161_unpacking_failed:;
+        goto __pyx_L172_unpacking_done;
+        __pyx_L171_unpacking_failed:;
         __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
         __pyx_t_7 = NULL;
         if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-        __PYX_ERR(0, 333, __pyx_L1_error)
-        __pyx_L162_unpacking_done:;
+        __PYX_ERR(0, 353, __pyx_L1_error)
+        __pyx_L172_unpacking_done:;
       }
       __Pyx_XDECREF_SET(__pyx_v_method_idx, __pyx_t_2);
       __pyx_t_2 = 0;
-      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":334
+      /* "src/zexus/vm/fastops.pyx":354
  *         elif op_name == "CALL_METHOD":
  *             method_idx, arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []             # <<<<<<<<<<<<<<
  *             target = stack.pop() if stack else None
  *             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx
 */
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 334, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 354, __pyx_L1_error)
       if (__pyx_t_8) {
         { /* enter inner scope */
-          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 334, __pyx_L165_error)
+          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 354, __pyx_L175_error)
           __Pyx_GOTREF(__pyx_t_2);
-          __pyx_t_17 = NULL;
+          __pyx_t_13 = NULL;
           __pyx_t_10 = 1;
           {
-            PyObject *__pyx_callargs[2] = {__pyx_t_17, __pyx_v_arg_count};
+            PyObject *__pyx_callargs[2] = {__pyx_t_13, __pyx_v_arg_count};
             __pyx_t_4 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-            __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
-            if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 334, __pyx_L165_error)
+            __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
+            if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 354, __pyx_L175_error)
             __Pyx_GOTREF(__pyx_t_4);
           }
-          __pyx_t_17 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 334, __pyx_L165_error)
-          __Pyx_GOTREF(__pyx_t_17);
-          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_17); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 334, __pyx_L165_error)
+          __pyx_t_13 = PyObject_GetIter(__pyx_t_4); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 354, __pyx_L175_error)
+          __Pyx_GOTREF(__pyx_t_13);
+          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_13); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 354, __pyx_L175_error)
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           for (;;) {
             {
-              __pyx_t_4 = __pyx_t_12(__pyx_t_17);
+              __pyx_t_4 = __pyx_t_12(__pyx_t_13);
               if (unlikely(!__pyx_t_4)) {
                 PyObject* exc_type = PyErr_Occurred();
                 if (exc_type) {
-                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 334, __pyx_L165_error)
+                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 354, __pyx_L175_error)
                   PyErr_Clear();
                 }
                 break;
@@ -9786,34 +10181,34 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
             __Pyx_GOTREF(__pyx_t_4);
             __Pyx_XDECREF_SET(__pyx_8genexpr4__pyx_v__, __pyx_t_4);
             __pyx_t_4 = 0;
-            __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 334, __pyx_L165_error)
+            __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 354, __pyx_L175_error)
             __Pyx_GOTREF(__pyx_t_4);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_4))) __PYX_ERR(0, 334, __pyx_L165_error)
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_4))) __PYX_ERR(0, 354, __pyx_L175_error)
             __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           }
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           __Pyx_XDECREF(__pyx_8genexpr4__pyx_v__); __pyx_8genexpr4__pyx_v__ = 0;
-          goto __pyx_L169_exit_scope;
-          __pyx_L165_error:;
+          goto __pyx_L179_exit_scope;
+          __pyx_L175_error:;
           __Pyx_XDECREF(__pyx_8genexpr4__pyx_v__); __pyx_8genexpr4__pyx_v__ = 0;
           goto __pyx_L1_error;
-          __pyx_L169_exit_scope:;
+          __pyx_L179_exit_scope:;
         } /* exit inner scope */
-        __pyx_t_17 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 334, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
+        __pyx_t_13 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 354, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        __pyx_t_6 = __pyx_t_17;
-        __pyx_t_17 = 0;
+        __pyx_t_5 = __pyx_t_13;
+        __pyx_t_13 = 0;
       } else {
-        __pyx_t_17 = PyList_New(0); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 334, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_6 = __pyx_t_17;
-        __pyx_t_17 = 0;
+        __pyx_t_13 = PyList_New(0); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 354, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_5 = __pyx_t_13;
+        __pyx_t_13 = 0;
       }
-      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_6));
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_5));
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":335
+      /* "src/zexus/vm/fastops.pyx":355
  *             method_idx, arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             target = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -9822,102 +10217,102 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 335, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 355, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_17 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 335, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_6 = __pyx_t_17;
-        __pyx_t_17 = 0;
+        __pyx_t_13 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 355, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_5 = __pyx_t_13;
+        __pyx_t_13 = 0;
       } else {
         __Pyx_INCREF(Py_None);
-        __pyx_t_6 = Py_None;
+        __pyx_t_5 = Py_None;
       }
-      __Pyx_XDECREF_SET(__pyx_v_target, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_target, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":336
+      /* "src/zexus/vm/fastops.pyx":356
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             target = stack.pop() if stack else None
  *             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx             # <<<<<<<<<<<<<<
  *             stack.append(_call_method(target, method_name, args))
  *         elif op_name == "CALL_TOP":
 */
-      __pyx_t_3 = PyLong_Check(__pyx_v_method_idx); 
-      if (__pyx_t_3) {
+      __pyx_t_11 = PyLong_Check(__pyx_v_method_idx); 
+      if (__pyx_t_11) {
       } else {
-        __pyx_t_8 = __pyx_t_3;
-        goto __pyx_L170_bool_binop_done;
+        __pyx_t_8 = __pyx_t_11;
+        goto __pyx_L180_bool_binop_done;
       }
-      __pyx_t_17 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_method_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_17); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 336, __pyx_L1_error)
-      if (__Pyx_PyObject_IsTrue(__pyx_t_17)) {
-        __Pyx_DECREF(__pyx_t_17);
+      __pyx_t_13 = PyObject_RichCompare(__pyx_mstate_global->__pyx_int_0, __pyx_v_method_idx, Py_LE); __Pyx_XGOTREF(__pyx_t_13); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 356, __pyx_L1_error)
+      if (__Pyx_PyObject_IsTrue(__pyx_t_13)) {
+        __Pyx_DECREF(__pyx_t_13);
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "object of type 'NoneType' has no len()");
-          __PYX_ERR(0, 336, __pyx_L1_error)
+          __PYX_ERR(0, 356, __pyx_L1_error)
         }
-        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 336, __pyx_L1_error)
-        __pyx_t_2 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 336, __pyx_L1_error)
+        __pyx_t_1 = __Pyx_PyList_GET_SIZE(__pyx_v_consts); if (unlikely(__pyx_t_1 == ((Py_ssize_t)-1))) __PYX_ERR(0, 356, __pyx_L1_error)
+        __pyx_t_2 = PyLong_FromSsize_t(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 356, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
-        __pyx_t_17 = PyObject_RichCompare(__pyx_v_method_idx, __pyx_t_2, Py_LT); __Pyx_XGOTREF(__pyx_t_17); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 336, __pyx_L1_error)
+        __pyx_t_13 = PyObject_RichCompare(__pyx_v_method_idx, __pyx_t_2, Py_LT); __Pyx_XGOTREF(__pyx_t_13); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 356, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
       }
-      __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_17); if (unlikely((__pyx_t_3 < 0))) __PYX_ERR(0, 336, __pyx_L1_error)
-      __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-      __pyx_t_8 = __pyx_t_3;
-      __pyx_L170_bool_binop_done:;
+      __pyx_t_11 = __Pyx_PyObject_IsTrue(__pyx_t_13); if (unlikely((__pyx_t_11 < 0))) __PYX_ERR(0, 356, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+      __pyx_t_8 = __pyx_t_11;
+      __pyx_L180_bool_binop_done:;
       if (__pyx_t_8) {
         if (unlikely(__pyx_v_consts == Py_None)) {
           PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-          __PYX_ERR(0, 336, __pyx_L1_error)
+          __PYX_ERR(0, 356, __pyx_L1_error)
         }
-        __pyx_t_17 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_method_idx); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 336, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_17);
-        __pyx_t_6 = __pyx_t_17;
-        __pyx_t_17 = 0;
+        __pyx_t_13 = __Pyx_PyObject_GetItem(__pyx_v_consts, __pyx_v_method_idx); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 356, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_13);
+        __pyx_t_5 = __pyx_t_13;
+        __pyx_t_13 = 0;
       } else {
         __Pyx_INCREF(__pyx_v_method_idx);
-        __pyx_t_6 = __pyx_v_method_idx;
+        __pyx_t_5 = __pyx_v_method_idx;
       }
-      __Pyx_XDECREF_SET(__pyx_v_method_name, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_method_name, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":337
+      /* "src/zexus/vm/fastops.pyx":357
  *             target = stack.pop() if stack else None
  *             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx
  *             stack.append(_call_method(target, method_name, args))             # <<<<<<<<<<<<<<
  *         elif op_name == "CALL_TOP":
  *             arg_count = operand
 */
-      __pyx_t_17 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_call_method_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 337, __pyx_L1_error)
+      __pyx_t_13 = NULL;
+      __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_call_method_2); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 357, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __pyx_t_10 = 1;
       #if CYTHON_UNPACK_METHODS
       if (unlikely(PyMethod_Check(__pyx_t_2))) {
-        __pyx_t_17 = PyMethod_GET_SELF(__pyx_t_2);
-        assert(__pyx_t_17);
+        __pyx_t_13 = PyMethod_GET_SELF(__pyx_t_2);
+        assert(__pyx_t_13);
         PyObject* __pyx__function = PyMethod_GET_FUNCTION(__pyx_t_2);
-        __Pyx_INCREF(__pyx_t_17);
+        __Pyx_INCREF(__pyx_t_13);
         __Pyx_INCREF(__pyx__function);
         __Pyx_DECREF_SET(__pyx_t_2, __pyx__function);
         __pyx_t_10 = 0;
       }
       #endif
       {
-        PyObject *__pyx_callargs[4] = {__pyx_t_17, __pyx_v_target, __pyx_v_method_name, __pyx_v_args};
-        __pyx_t_6 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_2, __pyx_callargs+__pyx_t_10, (4-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
-        __Pyx_XDECREF(__pyx_t_17); __pyx_t_17 = 0;
+        PyObject *__pyx_callargs[4] = {__pyx_t_13, __pyx_v_target, __pyx_v_method_name, __pyx_v_args};
+        __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_2, __pyx_callargs+__pyx_t_10, (4-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __Pyx_XDECREF(__pyx_t_13); __pyx_t_13 = 0;
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 337, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 357, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
       }
-      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 337, __pyx_L1_error)
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 357, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":332
+      /* "src/zexus/vm/fastops.pyx":352
  *                 except Exception:
  *                     stack.append(None)
  *         elif op_name == "CALL_METHOD":             # <<<<<<<<<<<<<<
@@ -9927,17 +10322,17 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":338
+    /* "src/zexus/vm/fastops.pyx":358
  *             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx
  *             stack.append(_call_method(target, method_name, args))
  *         elif op_name == "CALL_TOP":             # <<<<<<<<<<<<<<
  *             arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
 */
-    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_TOP, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 338, __pyx_L1_error)
+    __pyx_t_8 = (__Pyx_PyUnicode_Equals(__pyx_v_op_name, __pyx_mstate_global->__pyx_n_u_CALL_TOP, Py_EQ)); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 358, __pyx_L1_error)
     if (likely(__pyx_t_8)) {
 
-      /* "src/zexus/vm/fastops.pyx":339
+      /* "src/zexus/vm/fastops.pyx":359
  *             stack.append(_call_method(target, method_name, args))
  *         elif op_name == "CALL_TOP":
  *             arg_count = operand             # <<<<<<<<<<<<<<
@@ -9947,74 +10342,74 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       __Pyx_INCREF(__pyx_v_operand);
       __Pyx_XDECREF_SET(__pyx_v_arg_count, __pyx_v_operand);
 
-      /* "src/zexus/vm/fastops.pyx":340
+      /* "src/zexus/vm/fastops.pyx":360
  *         elif op_name == "CALL_TOP":
  *             arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []             # <<<<<<<<<<<<<<
  *             fn_obj = stack.pop() if stack else None
  *             stack.append(_call_top(fn_obj, args))
 */
-      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 340, __pyx_L1_error)
+      __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_arg_count); if (unlikely((__pyx_t_8 < 0))) __PYX_ERR(0, 360, __pyx_L1_error)
       if (__pyx_t_8) {
         { /* enter inner scope */
-          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 340, __pyx_L174_error)
+          __pyx_t_2 = PyList_New(0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 360, __pyx_L184_error)
           __Pyx_GOTREF(__pyx_t_2);
           __pyx_t_4 = NULL;
           __pyx_t_10 = 1;
           {
             PyObject *__pyx_callargs[2] = {__pyx_t_4, __pyx_v_arg_count};
-            __pyx_t_17 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+            __pyx_t_13 = __Pyx_PyObject_FastCall((PyObject*)(&PyRange_Type), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
             __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-            if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 340, __pyx_L174_error)
-            __Pyx_GOTREF(__pyx_t_17);
+            if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 360, __pyx_L184_error)
+            __Pyx_GOTREF(__pyx_t_13);
           }
-          __pyx_t_4 = PyObject_GetIter(__pyx_t_17); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 340, __pyx_L174_error)
+          __pyx_t_4 = PyObject_GetIter(__pyx_t_13); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 360, __pyx_L184_error)
           __Pyx_GOTREF(__pyx_t_4);
-          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 340, __pyx_L174_error)
-          __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+          __pyx_t_12 = (CYTHON_COMPILING_IN_LIMITED_API) ? PyIter_Next : __Pyx_PyObject_GetIterNextFunc(__pyx_t_4); if (unlikely(!__pyx_t_12)) __PYX_ERR(0, 360, __pyx_L184_error)
+          __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           for (;;) {
             {
-              __pyx_t_17 = __pyx_t_12(__pyx_t_4);
-              if (unlikely(!__pyx_t_17)) {
+              __pyx_t_13 = __pyx_t_12(__pyx_t_4);
+              if (unlikely(!__pyx_t_13)) {
                 PyObject* exc_type = PyErr_Occurred();
                 if (exc_type) {
-                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 340, __pyx_L174_error)
+                  if (unlikely(!__Pyx_PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) __PYX_ERR(0, 360, __pyx_L184_error)
                   PyErr_Clear();
                 }
                 break;
               }
             }
-            __Pyx_GOTREF(__pyx_t_17);
-            __Pyx_XDECREF_SET(__pyx_8genexpr5__pyx_v__, __pyx_t_17);
-            __pyx_t_17 = 0;
-            __pyx_t_17 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 340, __pyx_L174_error)
-            __Pyx_GOTREF(__pyx_t_17);
-            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_17))) __PYX_ERR(0, 340, __pyx_L174_error)
-            __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
+            __Pyx_GOTREF(__pyx_t_13);
+            __Pyx_XDECREF_SET(__pyx_8genexpr5__pyx_v__, __pyx_t_13);
+            __pyx_t_13 = 0;
+            __pyx_t_13 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 360, __pyx_L184_error)
+            __Pyx_GOTREF(__pyx_t_13);
+            if (unlikely(__Pyx_ListComp_Append(__pyx_t_2, (PyObject*)__pyx_t_13))) __PYX_ERR(0, 360, __pyx_L184_error)
+            __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
           }
           __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
           __Pyx_XDECREF(__pyx_8genexpr5__pyx_v__); __pyx_8genexpr5__pyx_v__ = 0;
-          goto __pyx_L178_exit_scope;
-          __pyx_L174_error:;
+          goto __pyx_L188_exit_scope;
+          __pyx_L184_error:;
           __Pyx_XDECREF(__pyx_8genexpr5__pyx_v__); __pyx_8genexpr5__pyx_v__ = 0;
           goto __pyx_L1_error;
-          __pyx_L178_exit_scope:;
+          __pyx_L188_exit_scope:;
         } /* exit inner scope */
-        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 340, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyObject_GetItem(__pyx_t_2, __pyx_mstate_global->__pyx_slice[0]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 360, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       } else {
-        __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 340, __pyx_L1_error)
+        __pyx_t_4 = PyList_New(0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 360, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       }
-      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_6));
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_args, ((PyObject*)__pyx_t_5));
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":341
+      /* "src/zexus/vm/fastops.pyx":361
  *             arg_count = operand
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn_obj = stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -10023,23 +10418,23 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
       {
         Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 341, __pyx_L1_error)
+        if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 361, __pyx_L1_error)
         __pyx_t_8 = (__pyx_temp != 0);
       }
 
       if (__pyx_t_8) {
-        __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 341, __pyx_L1_error)
+        __pyx_t_4 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 361, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
-        __pyx_t_6 = __pyx_t_4;
+        __pyx_t_5 = __pyx_t_4;
         __pyx_t_4 = 0;
       } else {
         __Pyx_INCREF(Py_None);
-        __pyx_t_6 = Py_None;
+        __pyx_t_5 = Py_None;
       }
-      __Pyx_XDECREF_SET(__pyx_v_fn_obj, __pyx_t_6);
-      __pyx_t_6 = 0;
+      __Pyx_XDECREF_SET(__pyx_v_fn_obj, __pyx_t_5);
+      __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":342
+      /* "src/zexus/vm/fastops.pyx":362
  *             args = [stack.pop() for _ in range(arg_count)][::-1] if arg_count else []
  *             fn_obj = stack.pop() if stack else None
  *             stack.append(_call_top(fn_obj, args))             # <<<<<<<<<<<<<<
@@ -10047,7 +10442,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
  *             raise NotImplementedError(f"opcode not supported: {op_name}")
 */
       __pyx_t_4 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_call_top); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 342, __pyx_L1_error)
+      __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_mstate_global->__pyx_n_u_call_top); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 362, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __pyx_t_10 = 1;
       #if CYTHON_UNPACK_METHODS
@@ -10063,16 +10458,16 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       #endif
       {
         PyObject *__pyx_callargs[3] = {__pyx_t_4, __pyx_v_fn_obj, __pyx_v_args};
-        __pyx_t_6 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_2, __pyx_callargs+__pyx_t_10, (3-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)__pyx_t_2, __pyx_callargs+__pyx_t_10, (3-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 342, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 362, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
       }
-      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_6); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 342, __pyx_L1_error)
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+      __pyx_t_9 = __Pyx_PyList_Append(__pyx_v_stack, __pyx_t_5); if (unlikely(__pyx_t_9 == ((int)-1))) __PYX_ERR(0, 362, __pyx_L1_error)
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-      /* "src/zexus/vm/fastops.pyx":338
+      /* "src/zexus/vm/fastops.pyx":358
  *             method_name = consts[method_idx] if isinstance(method_idx, int) and 0 <= method_idx < len(consts) else method_idx
  *             stack.append(_call_method(target, method_name, args))
  *         elif op_name == "CALL_TOP":             # <<<<<<<<<<<<<<
@@ -10082,7 +10477,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
       goto __pyx_L7;
     }
 
-    /* "src/zexus/vm/fastops.pyx":344
+    /* "src/zexus/vm/fastops.pyx":364
  *             stack.append(_call_top(fn_obj, args))
  *         else:
  *             raise NotImplementedError(f"opcode not supported: {op_name}")             # <<<<<<<<<<<<<<
@@ -10091,28 +10486,28 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
 */
     /*else*/ {
       __pyx_t_2 = NULL;
-      __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_v_op_name, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 344, __pyx_L1_error)
+      __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_v_op_name, __pyx_mstate_global->__pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 364, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_4);
-      __pyx_t_17 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_opcode_not_supported, __pyx_t_4); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 344, __pyx_L1_error)
-      __Pyx_GOTREF(__pyx_t_17);
+      __pyx_t_13 = __Pyx_PyUnicode_Concat(__pyx_mstate_global->__pyx_kp_u_opcode_not_supported, __pyx_t_4); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 364, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_13);
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
       __pyx_t_10 = 1;
       {
-        PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_t_17};
-        __pyx_t_6 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_NotImplementedError)), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
+        PyObject *__pyx_callargs[2] = {__pyx_t_2, __pyx_t_13};
+        __pyx_t_5 = __Pyx_PyObject_FastCall((PyObject*)(((PyTypeObject*)PyExc_NotImplementedError)), __pyx_callargs+__pyx_t_10, (2-__pyx_t_10) | (__pyx_t_10*__Pyx_PY_VECTORCALL_ARGUMENTS_OFFSET));
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
-        __Pyx_DECREF(__pyx_t_17); __pyx_t_17 = 0;
-        if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 344, __pyx_L1_error)
-        __Pyx_GOTREF(__pyx_t_6);
+        __Pyx_DECREF(__pyx_t_13); __pyx_t_13 = 0;
+        if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 364, __pyx_L1_error)
+        __Pyx_GOTREF(__pyx_t_5);
       }
-      __Pyx_Raise(__pyx_t_6, 0, 0, 0);
-      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-      __PYX_ERR(0, 344, __pyx_L1_error)
+      __Pyx_Raise(__pyx_t_5, 0, 0, 0);
+      __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+      __PYX_ERR(0, 364, __pyx_L1_error)
     }
     __pyx_L7:;
   }
 
-  /* "src/zexus/vm/fastops.pyx":346
+  /* "src/zexus/vm/fastops.pyx":366
  *             raise NotImplementedError(f"opcode not supported: {op_name}")
  * 
  *     return stack.pop() if stack else None             # <<<<<<<<<<<<<<
@@ -10120,21 +10515,21 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
   __Pyx_XDECREF(__pyx_r);
   {
     Py_ssize_t __pyx_temp = __Pyx_PyList_GET_SIZE(__pyx_v_stack);
-    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 346, __pyx_L1_error)
+    if (unlikely(((!CYTHON_ASSUME_SAFE_SIZE) && __pyx_temp < 0))) __PYX_ERR(0, 366, __pyx_L1_error)
     __pyx_t_8 = (__pyx_temp != 0);
   }
 
   if (__pyx_t_8) {
-    __pyx_t_17 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_17)) __PYX_ERR(0, 346, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_17);
-    __pyx_t_6 = __pyx_t_17;
-    __pyx_t_17 = 0;
+    __pyx_t_13 = __Pyx_PyList_Pop(__pyx_v_stack); if (unlikely(!__pyx_t_13)) __PYX_ERR(0, 366, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_13);
+    __pyx_t_5 = __pyx_t_13;
+    __pyx_t_13 = 0;
   } else {
     __Pyx_INCREF(Py_None);
-    __pyx_t_6 = Py_None;
+    __pyx_t_5 = Py_None;
   }
-  __pyx_r = __pyx_t_6;
-  __pyx_t_6 = 0;
+  __pyx_r = __pyx_t_5;
+  __pyx_t_5 = 0;
   goto __pyx_L0;
 
   /* "src/zexus/vm/fastops.pyx":91
@@ -10151,7 +10546,7 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_6);
-  __Pyx_XDECREF(__pyx_t_17);
+  __Pyx_XDECREF(__pyx_t_13);
   __Pyx_AddTraceback("src.zexus.vm.fastops.execute", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
@@ -10165,11 +10560,16 @@ static PyObject *__pyx_pf_3src_5zexus_2vm_7fastops_8execute(CYTHON_UNUSED PyObje
   __Pyx_XDECREF(__pyx_v_cond);
   __Pyx_XDECREF(__pyx_v_count);
   __Pyx_XDECREF(__pyx_v_elements);
-  __Pyx_XDECREF(__pyx_v_result);
+  __Pyx_XDECREF(__pyx_v_pairs);
   __Pyx_XDECREF(__pyx_v__);
   __Pyx_XDECREF(__pyx_v_key);
+  __Pyx_XDECREF(__pyx_v_result);
+  __Pyx_XDECREF(__pyx_v_k);
+  __Pyx_XDECREF(__pyx_v_v);
   __Pyx_XDECREF(__pyx_v_idx);
   __Pyx_XDECREF(__pyx_v_obj);
+  __Pyx_XDECREF(__pyx_v_idx_str);
+  __Pyx_XDECREF(__pyx_v_raw_idx);
   __Pyx_XDECREF(__pyx_v_keys);
   __Pyx_XDECREF(__pyx_v_var_count);
   __Pyx_XDECREF(__pyx_v_elems);
@@ -10846,34 +11246,34 @@ static int __Pyx_InitCachedConstants(__pyx_mstatetype *__pyx_mstate) {
 static int __Pyx_InitConstants(__pyx_mstatetype *__pyx_mstate) {
   CYTHON_UNUSED_VAR(__pyx_mstate);
   {
-    const struct { const unsigned int length: 12; } index[] = {{1},{30},{34},{179},{1},{8},{11},{22},{3},{10},{9},{9},{12},{11},{9},{8},{3},{3},{2},{8},{10},{2},{3},{5},{4},{13},{10},{9},{2},{3},{4},{3},{3},{3},{3},{3},{3},{3},{20},{6},{5},{10},{3},{6},{5},{4},{7},{1},{1},{9},{4},{18},{4},{1},{8},{8},{11},{12},{9},{9},{4},{17},{18},{13},{4},{6},{5},{7},{8},{5},{3},{3},{7},{2},{6},{8},{9},{3},{3},{11},{6},{2},{13},{5},{3},{4},{8},{10},{11},{10},{4},{8},{8},{3},{7},{7},{5},{3},{12},{8},{6},{3},{12},{10},{20},{5},{5},{6},{6},{8},{3},{5},{6},{9},{12},{2774},{121},{97},{306},{79}};
-    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (2071 bytes) */
-const char* const cstring = "BZh91AY&SY\306+\211\334\000\002:\377\377\377\377\377\377\377\357\377\377\377\377\377\333\277\377\377\373@@@@@@@@@@@@@\000@\000`\007\337\000\033\266\024hR\200;\307\265V\203\316\234%\022\"\232\000\320z\206\304\203\324\365?L\246)\275S'\2154FQ\345<\221\352\003@i\3524\310\000\036\243 m\021\241\264\324\022\210#A0M4dL\230\223S\023#F#\322\003@\000\000\000\000\032\003\324\323CM\003\320\2004\322b\024\321M\037\25224d\3204\000\0004\000\032\000\000\000\000\000\000\000\000\004\246\244\240\000\000\023\003D\300\000\t\200\000\t\200\000\006\200\003Q\200\010\300\002\014\230\0010\000\023\000F\230F\000\000\000\t\223LM\006\000F\000\000\000\000H\246\223\020\232T\364F\206M4=G\241\032\000\362\231\251\352\000\000\000\000\365\014\206\231\017Q\223M\r=G\211\250\365\032[{klA\270\222\352\200n\255\355\320\336\2416\000\330\215\3461\253\250\332SU_\352G\374\326\025&\212*_\225\020**%E\276!Eq\230\022\353`#\026\220u\260\320)l\345\016\303\n6#4\304\010\301\240\te\301!$\270B\353\352\221 \006\301\221V\200m\014`\240Bm\010\214\213\001\240\203)\0203&\246D\211\033\373\270\204d\2245\233\014\030\026H\245\324\236(iY\200\303\n\225\021UZ\201\231\24646\025\002\315\252\245R\247p\212\001\205+\332\244\223\220\301X\260X\014\211\232\rP\240\013\177\204\0327&\272\341\005\004\260B\302\326Y\301\253\357h\261m,q\022\213\315\365gY\313E\256*\316,\302\310cs\232\300a\244\005:\036\236\336\317\225\263\267\351t\345\344\362\356\334\304\272\377\327\233O\362\343#\237\325\276'+Er\341\013\200i\353\002\340.\030q\245G\035\310U\202 \222\010\272;\251\306\214\3169\310\275Ayz\261\005\205p\034\230D-+\210#\251\345\271\321\260$Q\242\227\367\331r\361h\376\234\235ii\260\304$\351\211\3665U\033[\036\255\021\356{\004f\277\020\030\010\003\235\306d` R\254\225B\210\350\212\214\310\010\317*;D\227\022r\n\253\243\tz\334^O\271\301\330>\244sv\027#8\031\322Y\200\320\210\223b\210\032\326\265\255o\017\317\303\257\253\034n\226*\372_d+\270\224\3055\347hMoJ\212\233\323w\010\253\315\230I\223\\\331f\311\323k$\304=\246\017\211y\337ul\316%\250R\031y\275<0\2160\264\276""\\\365\360\343a\243nZ\265\003\340\347\030\351\352_Hg\261.KRK\327q\nh\245\253\023iA\177*\365I\004^\tLrA\351)\305\271>\2146G\307\224\321\273\256\323\005\343\032\263\204\324\\\3157M')\217\250\201\243qh\242A\333\016D\210l$\301\200\334\206Hp\003\034OV\262\307\000i\271\262D\307v,z\026iA\177\0355\242\"J\025\242V\\l\206\2321\014\032\327-\003,q2\002L\022\275\014A\223\250k\315bH\222\025\244\246\244\257\010\310\210\2162`:A\021\344*\217\273\317\266\t\371\251\200\247T\277\036\2758\214\216\036-\023\366t9\344:\035~\016.\016\2072 /\354\275\"04\242L&\333\221!'q<\007\274\010r*l\206\261\200s\022\013\362Y\277\230\272\325K2x\327\366\022p8\267\242\237\311\344\021\361P\023\330\235\311\226|\223F\347\357\240\233\341\276'$N@p!\3369\361\n\256b\304\301U\024w9\217\325=\347_w\305L5W\333Cp\227Y|\246\016s\3322A{\021\305-\357\360U\252R=0R\324\307m\371\273\362\270\322\340\242gX\342{\234*\265\351=\346.\003a\246|\223\356\344\3365\252hZ\245\222\003\370\347(\310\342>\335\221\256\253\217V\273\026\t\013\240\337<Re^\373\023\"\323\rd\240\346\337FI\221\250\022\rL\034o\331\264\303\004)\321\317\314o-\213\233x\202o\355\007\304\231\021\2212\344\014Dxs\037\204Q\223\3347k\240\323<\006j]*nM,\270M\314#\255mvg-Ka\265.\336\252\256\214\006\366K\201R\333\250\246\324%Yj\034*aF\010\303\031\251[\010\212U2\327\225\205\266\342\316\307\274\247\224\254\246DJK \3700\216\365$TkM29#\220\202\252\256\366\003\342\335\263\214\031H\347\275\320\036n\343\232I\330\217\036c\2517\226\327\206\262\322\334K\256\266\021\252\225\316d\034[\311\272\306{\372M\210\206s\265W\206\305z\203^\3664~\227\260\030\212\342\027\332\254\026\252m\307\221YTvH\022#\0102'8\242\242\222\232\245\202\311C\t\261\255\261?\217\026l$U\323\021\215\270\313_\006:\320\242q\362ly$\363)\255\204j\\\310\256.\020\272\354\271N^\310JJU\272\272\2321ne-\255\261\261\254\206\021\215\317\023\356%\3110J\022\256\022\013#$t#!8-\354\357Ez\311)$\010;.Q\014\271M\302i\254\362\230b;A\273\035Nb0jC0\255\027YE\024&~^Z\255\237\006\344\33319r \302p\237<\345\250\306#\351H\246\347\276\213\363\243o\350""\305\265\365\327XP\232\354*\001\030\032\307\215\010\217\203\304\3757~P\027DD\2267{<\332=\202F\244\254@M+\372B\010\344*h\344\252\010l'\201F3\230 \035\240n\004\362rnt\010I$\223\033 f\312\017 x\325M+\261\261\240\303\223'\204\000o02\031\276\217\300\020\022C\357\370\3608G\000\374^\227@<\363\273@N\023&\030\275f\r\371\347\003!\324\202b\231\360;\310\350\237\351iL\327\261&\221ue\256)\334\002\260\224\324y\237\027\037\214\320H\373\266\\\303]\247\276\2535I\263F\204\033N\216$Q\032L$\3570$\377\341IY\361lT\210\323\343\357\203\347\203\272\211\302C\017\230\231\023s\376\016\246\233>\177\017OL\036\311I\205\333F\306\242\376\200\324+\243U\366\322\020\023A\250\2451\023V\004\204\030\300\035\177\333\320!JPQUD\033 BV\020\331aK\224j\352\037\000\365M\275R5\230k7\007\337\343##[h\334~<\247\026\345\030\005B\376\376\005h\250\246\234 \242\354\347\031\205\250j\211U\201\232\213\230bDh\241\000+2\335z\n\264\"\222I\253\253\331\374\013\024\206,Q\2108ee\004\223U\014W \240\246Pe&\020\021\361\365\310\316\236\314\202]\253h\362\244\311\203\251\024dT\327\346\2748\342\270\333\272\321\007D\332\2651\245\262\306\223\247a\327l\023Em\200\355\342\306\007\222sQ-\275aN\305a\321\353?\344\255z\2779Q\314\331\316%\360\251$\273rA%I)\215\036\347\032\215<\0301\244h\020\205\316\271\022E^\365T\307\247\016xm\3331\3249\367\344[PS\r\250\362\016=\223\306\365\220\254B]\244\346\264\005\032\007d\216\374g\314]9R\253\344\3608\247\206f\310TGN\344\363\365\3736\017\267\322YvW\177\225|\313\305\313\215\350\224\002\251\030\207`\274\237\354\360\304\230\362 \274\3168a\r\217a\250\220\270E\311\227U\201\023e\025\000\200\352Y\344\001\001\n!gY0dTE:*b\360EnT-'\0070sx\312@\350\357p\026\032#\002D\256\246*\270J$I\267Y\020\024$\222\352\274\273\310\305\300\022\225\025)1\357aI\272\315\230Ve\356I\225\031\373M\020\223$\227+F\2400Q\234E\010\020\205\320\311\236j\261\nR\"O'\276\305\334\221N\024$1\212\342w\000";
-    PyObject *data = __Pyx_DecompressString(cstring, 2071, 2);
+    const struct { const unsigned int length: 12; } index[] = {{1},{30},{16},{34},{179},{1},{8},{11},{22},{3},{10},{9},{9},{12},{11},{9},{8},{3},{3},{2},{8},{10},{2},{3},{5},{4},{13},{10},{9},{2},{3},{4},{3},{3},{3},{3},{3},{3},{3},{20},{6},{5},{10},{3},{6},{5},{4},{7},{1},{1},{9},{4},{18},{4},{1},{8},{8},{11},{12},{9},{9},{4},{17},{18},{13},{4},{6},{5},{7},{4},{8},{5},{3},{10},{3},{7},{2},{6},{8},{9},{3},{3},{7},{11},{6},{2},{13},{5},{1},{3},{4},{8},{10},{11},{10},{4},{8},{8},{3},{7},{7},{5},{3},{12},{7},{8},{6},{3},{12},{10},{20},{5},{5},{6},{6},{8},{1},{3},{5},{6},{9},{12},{2974},{121},{97},{306},{79}};
+    #if (CYTHON_COMPRESS_STRINGS) == 2 /* compression: bz2 (2214 bytes) */
+const char* const cstring = "BZh91AY&SY0\3409\275\000\002]\177\377\377\377\377\377\377\377\377\377\377\377\377\373\277\377\377\373@@@@@@@@@@@@@\000@\000`\010_\000zt\330\321\326\200\000@j\000\203\302Q&\221 \365\033P2\r=\002bf\323S&\010\311\223\nz4\312\032\006\206\201\240\001\240h\r6\223\032\214\020J\"dh\t\246&\214\223\023De\032d=!\240\320\000\000\000\000\000\000i\246\232\r\003&@\203\000\004\300\000L\230\000\021\200\002a4i\200\000\000\000F\000\023\001\032\006\201\252\247\346\244\324\364z\246\203C&\200\r\006\206A\2204\000\003A\240\323!\200\214CL\215\2504\r\r\000\0100\000L\000\020\304\3010\000\004`\004\311\202d\300\000\214\214LF\002\030\000\000H\210\022jiOH2\014\206\321=LG\250z\200l\240\000\032\000\032\003C\322\006\200\000\00044i\216w\357\374\010?\224\2274\021\375.w\364\034\353\024`\r\245\316hc\013X`Qc\007\372\221\37757(\213+e\246\310\025\225\222\262\336\022\246\371\320\010\347\350\021\233H9\3725\214\257\226\251s\243\316\355\210\324\240!\031\261\001\032zbRK\247\027Es1\240\220\006\301\224\303@6\014bR\220\233\022'T\310\rT\032\272\262Pd0\2410A\320\350\352MZ4\245\243Ny\2600\221j\332\232\210ia\200\303E\356\"\350\275\320ii\215\r\242\340`m]+\253\360Qd\032-~\002I8\030,\030\014\001\244\323Sx\325\313\200\265\247:\032\362\230k\010,%\232\003<a\035\002\0322\311\243\013\035es\314J\231\032\230\2465\n\316\276\304\014(-\002\322\014\033\353+T\200`\016\014\010\000d\325\325\241?2}\rI\304YQ\213\331\001b\336\351)\375,\013\3077\272\322H\352\025\364\343\247\026\364\355w\000:@\337\213\255\2139\341\005\330\"HA5\236\035&i\257\007\020\353\262\\zhWY\022L\344+\001\334\325\022l\\\222\177.\372\233\225\304\221\246\014\344a\020\246<\3340\351\352\376\242N\224\325\334T$\351B:\326\252\265E\251\216V\203Ts\035D\251M\361b\201`\365<\332*+c*\006JHJ\251J\232\"jI\261EkV\027\006\220\027U\235\021\310\342q\374\376\243\3459h\367\376U\263\252\006\252KQ\006\261\322R\222\314\001\316p\221\002\"9\020#+\310\255\247\212\2014\220\233\tS\024`\310.\013\302+E\270E\\\252\\\215\347\305\316\025{.)\304\235/\237<\371\271\355d\264\216i\213\236\275\267\333\225""\232D\271\n\203?_\317\307\030\343KL%\323_:\306\033\233\367\344\330\016\222(\213*\263\241\243 cb9-Hh]HUMMW\266\244\027\243^\310H\213\334\312Y\t\034\222\235=\311\364\341\275\037])\247f\355\246\013\3075\342\023S\275\216\247{\236[1]c\006\377\200\265\321\001\325\032\361$\224l!\203\001\270\031\003D\030+]\335H\311\346A\246\255\350%\267\323n\342\315(/\341\256\264DIP\255\022\262\363zMt\3200kbZFe\210\231\001&\tG!@f\350\033teH$\022\264\2256%x\306\217\037\212?\001\320\021\036\221d\216\356\337\035\350'ES\003\214\303\3641\273n\272\213\342\034-\314-\316\213].?\263m\315\311\21789\213\tT\272xs\214AmBKF\356A\202p\256\340q\305\034\244\313C\342\242\"\305\036\306G\020\317\335i\376\243\351-\223N\2366=T\234\016\247\013\347\362y$}J\003S\241]\261\323joL\357J\317\031\013\214\034av\002\331\r\264wt\255\206\350ZF\322\362\225\317g2=\331p?\275\275\342c\261r\361I\250\227i\204\2461D\346\214\224^\254o\227\007w\312\325*\034\230\251bY\235.\303\0148\213 \231\303$\364:\327\021U\235\302\254OB\252\212\252\244\332j\246\352v]\277\272\241\245k\226\022\016\344\034%\361\021\366l\214]r\272\032(\216rB\201r:7\303}Z\372\366e\353:\003\251lk\274\356J\252\265e\006\221Cs\2331\276nn\t\247&\276f'\031K\027\035\244\023\207\214\016zfF>6\357v\272\0202\022\337\253\227&\251\267\240\302|F\355\212\r5\300b\256\335\214\026hCT\272\371d\227)\223;\364\271k[K\323G\006]|V\300\213\254g\006%\324#\026\344UdL\224p\304\330\375$\346f\345z#\025\211\215\014\210\313\227\2069\207P\305\343\253$J\224*,\221\3220\217\005 \250\326\233!\022G\002EQW\217\210\355Q\355\263\2003\222Q\204\034\243\215\333g\205\014G\016-\2558\026\347\005e\245\264.\332\330F\252W9q\021o#6V{\372\215\242\032t\234*\360\332\257Pk\334\306\216{\230\365\032\212\342M\026\253\t\231\222\253l\271X\370\362\300 \ri#^\350\212\251\250\253$\262,)a5\213k\335\307~| \253\251\345\215\260\205\257\203\035hR\361\320\332\342\023\314\306\033\255#S3\037\230\314!\230\315}\347+l\222\222\2316.\266\214\\\314}QW\024\214\032\307a\030\334b\314Kt\301\000\202\341 \2632\0216H\311'\005\320\316h\243\225\362\220""\236\004\035}\342\027\227\233\204\363\345\362\030Rp\r\333\026L\344`\324\2238\255\027t\244\246\220\307\225\237'\004\367\266\346o\3379\226\222\364A\264\205:n*\025\030\304qZ>\233\371\232c\313\213Q\256\357\337\276\367\331]aJo\016\200\005\256\032\345I\013\033\276\027\343\301\370\000{\242[\005>\237L\357O\214[\356;\204\013\227\273\3721\013\213\3353\334\332bG\354\275VDp\306\004rO|8.\032\372\2768\010\033m\266\216X\036\223\337\022\302\017i\256\227\227\273\352\"\032r0\003\230\2011.y\277\003tk\205\373\022\0203\3427[\346\355\201\023\037\200\014\201\266\320\217\r \346k\300&\243\2144u\374 \217\340\346p\376\255\212\025\345`\226\221/\224)\240\013\002TS\340z\274^#A\007\305\371:\007)\256\273\355{,\331\353\311E\032\031\341b\302\220\347\233>\350\217\231\366<\335\266\346&\2225\033F\326\320m\035\2275\024\221\014\031\2404k\2127Y?RT\361\310\310\t?\2645 \272\0206\006\312-\001(\246i+\215\251\274\273\240\025\246\346\330\227\333\3077\002 \010\342\355|\235\261\270\273\235\316\341\264\212\033{h\234\204EQ\303\204#\231%I\323\r\021g\317?\223\332\325\014\265WZjeU\313\022\031B\2636Y\001\216A\263Bz*\032\360\347\212\341EO5\000u\2036\341\345f\031\331tQ\026\212\205$X\005\303\t\263\201g\024V\330\257\311\010J\253)\210\262\323\313\360&\222\325\021&Xq\005U\311uU$ \223\025\010JK\tI\300\002[\307#\34425\230\354\262?\212X\262\221U\"\274\353\303\021\203 &\304d\351\274\270\270\3173]\323\355\030M\313/8\271\354\216\324\261]\367\353\222\005P\215\252c\356\276\222\034v\315|uR\275\\\341^#W\315\377#kj\346\311T1\272\221\376\261R\320U\300\302\276<\235\213\343\005K\364\211{P\274\243Ow2%\355\361H4\006\340D\353\323\245I/\350Q\356\006\364B\365BU\253\304,\033\366:\032':\271\277\246\376xV+z\nf\235\030\266\263\013\232\030%\r\022$\316\016|\302\352\036\034\274I\262\371W\207\213\262\375\260\246\217\246\224\223oi6\215o\314Bf%_\016\026\311;\221:\357\333\210\014b\227\353\206\307\267\340\304\034k\344\331\326\357\220P\2659\031\274\21143E\335b,Z\364\203 aXt\255(\020\t\244\351X\232\322\252R\227\263\216'\231\241\3422#\027\223\336\035\036q""\000\354\362\230j\230!\024\320A\026\256j\372\"`\206\335\340\221\246\333u\210\365\264\252:\2013\210V?I+}\032#\021Z\232,\355\030\247&\264\035\276\n\336\341\220\330\362q&\007WF\353\213\030\263Sh.\234L\3013[\336\"\326\206\254\310\240@\301\003\177\213\271\"\234(H\030p\034\336\200";
+    PyObject *data = __Pyx_DecompressString(cstring, 2214, 2);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (1978 bytes) */
-const char* const cstring = "x\332\335\027KW\333V\272\2361\t\r$ 0\340\220\314T\016!iO\247\3148!\224\311t\246\343\330\202\220\032\343'\351IO\253#\244\353`bK\266\256D\200\234\316\311\322K-\357\362.\265\324RK/\275\324RK\377\204\371\t\363]\3116\346\221I\322v6s\216%\335\307\367~{%\235\312f\305\362N\236\327Q\313\254\351\010\363\273\333<:B\262i\3244uc\247(n\225\205\"oH\372Kd\360\306q\023\361\252f\360\330l65\335@JN3\020o\354K\006\237>6\3665\225\257a^A\365\332\036\322%\003\325\217yl\3505\331@:\003R\371\274\220\377ju}\225\227T\0058\036 \331\300@kO\256K\030\003o\255\312\357\231\265\272QS\003Vx\205\337\252\362\307\232\311\253\010)\274\241\361M\200\033E0\366\221\312c&\331>\342\357K*\310&1\301E@\257\251/\357\363\n\350$\033\265C\304\2607\244:F+\337J\212\"\002 \252J\330\320\232x\245y|\2445eM9\247\332c>\225\311<\251le3bv\253T\016W\333\251|\270(\t\345\300vlW\336\312\005\353m\241\374t'\023,s\251ma`\333\314\326n\246\222\027\n\003kn\ne1+\3446\313O7\313\233ea+\227\021\276\177V\331\316\263G\334\332\0207R\331\222\220\335Ie\304\364N\256T\016V\214^\266\234-\013\331\0326\266w2\333\225\354\266\324\314\t\2339\241\220\333)\347w\362\242\230?>\202'\003\346\026s\350\310(\242jQ(W\212\271Rv+-\224\312;E! S\252<)\201S\324\227/\030\255\027@\346E\270\027%\360\262(k\246\312\334\215%|\254\3125mE\326t\r\242AEX2\014}\257\357 \274wl f4Y\252\327\305\006\002\347+\342\2055\330W\006_\327\024\010\006\031\301\201\030xN\204`\252\031\250\301\266@X\254\201\303tIF{\222\374J\256k\330\324\221\310\300\261\254\251\n<\330\300\201X\262\251\353H\205\270B\r\370`\366\305HU\220z\030\206,\252\252UU\324\366\016D\261j\252r\377\255J\r\304\030*G \266\241\207\032\006K\\k\2125,\0165d2\341W\350\030~X\024\033\022\3105P\007\260\373+F\016\2165\305\254\3037\334\215\274\001\020\004\320\232\301NkB\036\250JS\252\351\270\tgb\313\224\352!\260\010\311\246\325\017\021|\314:\350b\210\"{\205\227\260R >\331\205.\257\234\240#\023\257\0346V\372\021\213\r\260\023\274tC\204\275\216\302\354\024E\003ax\037Ju\370\231(x\341C\251\257pH\004D\203|\360>\371\326m\371\321\233\204\363\243w""\350\022-P\311\217\316[\322\277\307?\031\233h/\265\213\355\226?\316Y\213d\215r4\341\217\337hK\275\361\211\366\272\365\320\222\374\311\251\366\t\341\310\027\364\221\035\265\237\330\262\263\350>t%\2407=g=')\262K\2234\325\353o\n\376\3659\253D\"\376\344\254\265\006X\177\242\007N\304\271\351.\273F\347A\247\324\275\346\025+^e\327\333\225=Y\361'9k\201DH\034\270\336\263\307\354\217D\236\261\226-\003D\276e\247\330&\0018s\004\321\344\220\312T;\020\262\014j\237;b\242V\350\035\232\032^L[c\0008O\336\330\211s\233\251\366kK\2620I\370\3231+e\025.;\t\365\230!\017F\014\360\377Oq\252\255[\263V\312\037\372\236\273E\222$ML\232\201Py\346H\016v\357u\242\235g]\251\213\275\342s\357\371\017\336\017\242'\326\274\332\201w\320\360\032\352\000\265H0]\246\272=c?\260K\316UGwg\334dox\251S\356\003D>U\220\2716M_\333\322G`=$\377;\350\0173\371/\203\376\215\344\016\001b\357b\035^s\340\374\3015gq#\351\372\210D\311\006\375\322\016\242\302\260\222\314\261\205K\357\007g1\353;r\004>:pa\263`\265\310\030)\323Y\210\2341\273\342$\234\257\335\273\2564\344{9\026c\021\210Y!\t\002,\347-DV\211A\327\3549[q\022\354@\262^\223\367\221y\017\363\3313e-,:\311\221\305u\177z\326zL\nA\351\211\335$\0134\022\220\212\330\234?\367\031i\3211Zx\307\371\256\275j\237\270\034\024\270\226\037\273\005\262\267\350\357\241\314F\374\330\202\245\003\343\215~\255\216\377\201<\247)Z\002\334\230]\260\245^\377\240\320\033\322M\321\357\355\262\263\340^\353$\374\331\230\177\241\034\307\311\004\375\273\023\271P5G6g\0259'\316\t\324\350ej\332\031\347w\316\222\263\333o\001\361?\022\205&\000<~\213<f\362\371\267\023t!P\261\277\230\265Sv\24178\355\305o\023\201\316Q\211\266N!O\2154\340\311\034(\375:\256\033\340\306\344\007\360\275B\253\240{\3546\224\255\237\203\222e\272\331\356\177\323\370],Ab\273\325;\263\271\204i/\266\350-~\305|\030x\211\013\3361K\200\316%\221\326 L\270s\341\326w\020\203\213A\277\375\033`\237\275\tk3\013\365\3518\304\362\260Z\233$\305\262@\206\320\2774N\231p\330\376\302I:\033n\342B\264\236Zr\315\345FCm\327^wV\235\327\356\001X\352\262`""\273\030V\253A\343\030\252w1/\202\350\376\330\363Q\231\n\227J2o\325a\240\201\350\277\002\366\r\035|\322\231\353(\335;\335t\367\215\367\342G\357\307\237\274\237^y\257\352\254J%\003\003\227h\224\n\201\013\337@\035\250vv\274R\231\025\2038\324\277/i\305\376\263;\353>\355d\272\221.\307\354\214\255%\250C\003\316\2277\255\337V\014\250\322D\272\21457\260\317\014}\000\006Y\210_\014\2508\231\204\251\347=L\346\240\242\336%U\372\235\335\362'\027\311=\240\360\231s\315M\270\337t\314n\306\313\027\203Al\317\333C\036\252zU\354acP-oC\301\332\267\033nr\204c\344\243\370\205tnB\202\257\333\311\336\344\2147\263L\013\336\275\177\260\364\353E'\332\217\254\250\265\001\216(\274\215\370\321\253o\315v\232M\2573\314\0240\255\302\330\3725\214\202\177%\201\222\301\347:;L\266\237\302\2442\376)C\371\027\330K\2401p\345\0224\244\361\251\366\317A\314\364Q\327X\262L[\237\20693\016M\306\332\007s\207\250\255\366\270\0259\303\370F[\2668+1\300~\024j\313\006\347q6l~\030;\226 \255>\002\310\0322x\315(\367\017\307\030\3707A\022\365\347\361\317ad\216\332i\273\345\\qd\227ci\256\204mp$\313\027\311\375`\242\237^\260\016\241\303\261\202f\330\311\260b\204D\356CG)\301\224=\017\263\332\010\334](\014\006t\247\226\0239\375\003\260f/8Q'\355\264\334+\256\334\341\302\376\n=\020\372\324\335\240\312\001:\333\246\006\272\255\263\376\310fy\026\025\r'\311\224ae\351\010r \000Z\207\260H\205\352\353`\0078y\034\230\273\n}r\222q\032\344L+\364\346\023R\243Gv\313\373\313?;\221\3202\023\223\301\367\242\305\256\276=\001\277|\016\301\033\205\270\302\016\373[\343\335H\004\346\010\3159d\276\006\203Q\362\014\271\377\000\356\207\271b";
-    PyObject *data = __Pyx_DecompressString(cstring, 1978, 1);
+    #elif (CYTHON_COMPRESS_STRINGS) != 0 /* compression: zlib (2129 bytes) */
+const char* const cstring = "x\332\335W\313W\333V\032\257\247&\241\201$\010\314#$3\221\003\t\351t\312\214\023B\230LgZ\007\213\204\324\030\374\"\235\364\264:\027\351\032D\214d\353\312\200\311\351\234,\275\324\362.\357RK-\265\364\322K-\265\344O\230?a\276+\331`\002m\222Ng3\347\330\322}|\217\337\367\274W\363\313\351lV.\255o\210&\25674\023\023qsM\304\207XiX\232\241g\264}\215\300[\334j\212G\3304V\326\013\362jI*\210\0262\267\261%Z\315\032\026u\303\022I\243V3L\013\2539\303\302\242\265\203,q\271i\355\000\247FD\025W\265-l\"\013W\233\"\261LM\261\260\311\211tqC\332\370raiAD\272\n\010v\261b\021\220\265\245T\021!\200\305\250\210[\r\255jiz\250\212\314\213\253\025\261i4D\035cU\264\014\261\006t\375\014\326\016\326E\302\221\355`q\016\351\200\rqCd`\327\364\3559Q\005\033\025K\333\307\234{\005U\t\236\377\032\251\252\014\204\270\202\210e\324\310|\255yh\324\024C}\307\264'b:\223yZ^\315f\344\354j\261\024\215\326\322\033\321\240(\225B_\362Yi5\027\216\327\244\322\363\365L8\314\245\327\244\236\2573\253\233\231\362\206\224\357y\363\231T\222\263R\356Y\351\371\263\322\263\222\264\232\313H\337\275(\257m\360\277\274\272\"\257\244\263E)\273\236\316\310\313\353\271b)\034qy\331R\266$e5b\255\255g\326\312\3315T\313I\317rR>\267^\332X\337\220\345\215\346!\3743\340n9\207\017\255\002\256\024\244R\271\220+fW\227\245bi\275 \205b\212\345\247E\010\212\276\375\212\313z\005b^Es\031A\224e\305h\350<\334\004\221\246\256h\306\274b\230\006d\207\216\t\262,s\253\033 \262\325\2640w\232\202\252Uy\017C\360U\371\334\030\374\253@\2545\025\222A\301\260 \207\221\223!\2314\013\357\361)\010\2265\010\230\211\024\274\205\224\327J\325 \r\023\313\234\234(\206\256\302\237X$\204\2454L\023\353\026HC\270\212\367`H\370\233`]\205\261f5e\025W\260\276\037%4\256\350\025]6\266ve\271\322\320\225\356SG{\230\253W\017\341'\363\364\004\361fdv8$ZM\326\210|b6\007J^\277\306M\370\021Y\336C\200\266g$\210\350\216\270XX6\324F\025\336\321\254\357\t\204\000\304\250\2053\243\006\325\241\2535\244\231\244\006kr\275\201\252\021\261\211\0168\255\014\225iT\3671\274\032U0\322\222e\376\210h`""\004f\"\276a*\363G\370\260A\346\367\367\346\273\351L,p\"<L\013\2143L\034\225\256,[\230\300s\177\037U\341\327\300\341\203\354\243\256\345\221\024\200\010\325\342\177\362\265W\017\3427\250\020\304\357\260\031\226g(\210O\330\350\337\203\237\014\014\265fZ\205V=\030\024\354i\272\310\004\226\014\006\257\265\320\361\340Pk\311~h\243`\370z\353\210\n\364s\366\310\211;O\035\305\235\366\036z\010\344\215\214\333/i\232n\262\024K\037w'\371\340\352\270]\244\261`x\314^\004\256?\261]7\346\336\360\356zV\373A\273\330\271\342\027\312~y\323\337T|E\r\206\005{\222\306\350\024h\275\347\0148\037\311<j\337\265-\200|\323I\363I\022x\306)f\251\023)\327[!\310\022\230\375\316\022\207ZfwX\372dc\304\036\000\302\t\372\306I\2763\271\336:\260\221Mh2\030I\330i;\177\321Jd\307(}\320\347\200\377\177\211\327[\246=f\247\203\221\t\177b\216\325\235X \334\244)\272L\033,\003\271\362\302E.\361\356\265\343\355\027\035\324!~\341\245\377\362{\377{\331\2275_\333\365w\367\374=\275\027\214\002%\354.3\235Q\347\201St/\273\2467\352\245\216O6M&|\000\346S\013yl\227\331\201\203>\202\353!\375\337Q\177\230\317\177\035\365o\204;\"H\374\234\352h[\200\350\367\266\005[\350\253\327G4NW\330\027N\230\026\226\235\342\201\315_\270\337[K\330\337\322C\210\321\256\007\223I\273N\007h\211\215A\346\0148e7\351>\366f=t\242\367b.\310\303\010f\231&)\250\234\2601]\240\026[t\306\035\325MF\311\3654\354\t h\n\304\014sT\300\362)\000\212q\006d7h\372=j\336\003n\354L\337\213\272R\252op5\030\031\263\237\320|\210#q\203N\262X(*\346\010\301\370mZg\003,\177n\375V\330\241\356;\263\316\266\233w\261\007\234\177\240\n\233v\036\203\372G\336\265\266\322\021:\367\375\002t\303\037\374\037\266\375\355\235 \0018\203)N\225\010;\374\324M\372\230%\241m\307\202[I6\tr\307\234\364qw(\034O\375\236\276diP}\212\341\254\006\304%\036Ba&\203.m1\304vc\006:\376*\370a\326U\275?\266\323\355\177v@\331m\360{\n\212\256\001\335\0304?\240Ev\305\231q\362P\203\247\332\235\222+\270\311\363\030\216O\314O\263\357\200h\322\273\322N\006c\211\340\334\2612E\207\330\337\335\330\271\356\33779\353""\357\233\220\021u\366i\350\006\260\347\010\316\232\273\0002\343\376\316\235q7\273G\031xM\005W\2458\362'\334\314\036f\241\037|\276\017\370-*\261q\206X\375\224\362\324\217=\235<\017\321\177\247u\005\202\221\372\000\275\227X\005lO\334\202\356\373S\330y\033^\266\363K\026\377\234J@\354\324\217\317L.Pz\234\230\366\247\277\014\243\313\243$\204\317\204-\301\t\214h\275\227\315\302;U\321\r\020\247K\300\275\341o\300}v':c\016\240G\215LA\311\235\234:\274F\241X\025^\301\027\225\023\007G\234\317\335\224\273\342%\317\025\325\251'\027=\241?\3256\235%w\301=\360v\301S\027%\333\371\264Z\010\017\300\023\363\316\227oX$\037\273\336\217)\177!\222\t\273\ne\010\331\177\t\374\033\005\370\250=\336V;w:\313\2357\376+\350\001?\372?\276\366_Wy\263M\205\016.\2628\223\302\020\276\201vUi\257\373\305R\267\017\322/X\331\371\2637\346=og:\261\216\300\375L\354\031\350\215=\315\027\237\275\277-\0148l(\272H\265\320\363\317({\000\016\231\234:\237PSt\030no\357Q2\016\007\303,\255\260o\235z0<M\357\201\204\333\356\025/\351}\325nt2\376F!\274Pn\371[\330\307\025\277B|b\365\232\372-h\241;\316\236\227\352\323\030\373(}\221\234\033P\340KN\352xx\324\037\275\313\362\376\275\177\360\362;\216\017\265\036\331q{\005\002\221\177\033\013\342\227\3376Z\313\374\026>\312]\001\267n\270~?\206+\355_ihd\370\272\312\027S\255\347p\350\r~\306Y\376\005\376\222\240\331\227y\237\r\006\257\267~\ns\246\313\272\310\213e\304\376,\252\231A8\370\354\035pw\304Zo\r\332\2613\212\257\265\024[\260\223=\356G\221\265\374\003`\220_\232?L\035/\220z\227\001\260F\n\016\270\344\356\342\000'\377*,\242\356w\305}\270\372\307\235e\247\356^r\025O\340e\256F\247y_\225O\323\271\360\313dd\322\336\207\203\23074\313IE\035#\0222\347$\340\342\030s'\340\312\331G7\013\215\301r\026@z\354\364Cf\321\231t\343\356\262[\367.yJ[\210\256\001pT\303\005e6\354r\300\316\247\351\236mK\374\030\347\337$<+\366\334\0247\206\267\245C\250\201\220h\t\322\"\035\231o\202\037`\345I\350\356\n\034\347\303\\S\257f\352Q4\237R\215\035:u\377/\337\264c\221g\206\206\303\367y\217]~{\004q\271\017\311""\033\207\274\".\377<\363\257%CwD\356<Q\276\010\367\273\324\031q\377\001\214\276\035\351";
+    PyObject *data = __Pyx_DecompressString(cstring, 2129, 1);
     if (unlikely(!data)) __PYX_ERR(0, 1, __pyx_L1_error)
     const char* const bytes = __Pyx_PyBytes_AsString(data);
     #if !CYTHON_ASSUME_SAFE_MACROS
     if (likely(bytes)); else { Py_DECREF(data); __PYX_ERR(0, 1, __pyx_L1_error) }
     #endif
-    #else /* compression: none (4392 bytes) */
-const char* const bytes = ".CALL_TOP requires VM executionFOR_ITER target type not supportedNote that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_notefastops.pyxopcode not supported: ADDBUILD_LISTBUILD_MAPBUILD_SETCALL_BUILTINCALL_METHODCALL_NAMECALL_TOPDIVDUPEQFOR_ITERGET_LENGTHGTGTEINDEXJUMPJUMP_IF_FALSELOAD_CONSTLOAD_NAMELTLTEListMODMULMapNEGNEQNOTPOP__Pyx_PyDict_NextRefRETURNSLICESTORE_NAMESUBStringZListZMapZString_aarg_countargsasyncio.coroutinesattrbbuiltinsbytecodecall_method_call_method_call_topcandidatecell__class_getitem__cline_in_tracebackclosure_cellscondconstscountcurrentelementselemsendenvexecutefnfn_obj__func__func_namegetidxinstr_countinstrsip_is_coroutineitemskeykeys__main__method_idxmethod_name__module__name__name__name_idxobjop_nameoperandpairspop__qualname___resolveresultset__set_name__setdefaultsrc.zexus.vm.fastopsstackstart_storetarget__test__valvaluevaluesvar_countzexus.object\320\000?\270q\330\004\031\230\021\330\004\"\240#\240Q\240a\330\004\026\220a\360\010\000\005\013\210#\210R\210q\330\010\021\220\032\2306\240\021\240!\330\010\016\210a\340\010\013\2108\2203\220a\330\014\017\210z\230\021\230)\2405\250\004\250B\250c\260\032\2703\270a\270q\330\020\025\220W\230A\230V\2401\240A\340\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\023\2206\230\021\230,\240j\260\001\260\031\270%\270t\3002\300S\310\n\320RU\320UV\320Vc\320cd\330\014\021\220\027\230\001\230\030\240\021\240&\250\005\250Q\330\r\025\220S\230\001\330\014\023\2206\230\021\230,\240j\260\001\260\031\270%\270t\3002\300S\310\n\320RU\320UV\320Vc\320cd\330\014\022\220%\220t\2306\240\033\250A\330\014\022\220!\2206\230\025\230e\2401\330\r\025\220S\230\001\330\014\017\210q\330\020\025\220T\230\021\330\r\025\220S\230\001\330\014\017\210q\330\020\025\220W\230A\230U\240\"\240A\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014""\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210r\220\023\220A\330\020\025\220W\230A\230Q\330\021\033\2301\230C\230u\240D\250\004\250J\260a\260s\270&\300\004\300J\310a\310s\320RW\320W[\320[_\320_i\320ij\320jm\320mn\330\020\025\220W\230A\230R\230s\240%\240r\250\022\2502\250S\260\007\260r\270\022\2701\340\020\025\220W\230A\230R\230r\240\021\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2302\230U\240\"\240C\240w\250a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2302\230Q\330""\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\024\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\021\230!\330\r\025\220S\230\001\330\014\021\220\021\330\r\025\220S\230\001\330\014\023\2205\230\004\230F\240+\250Q\330\014\017\210t\2201\330\020\025\220Q\330\r\025\220S\230\001\330\014\023\2205\230\004\230F\240+\250Q\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\027\220q\230\005\230T\240\023\240D\250\005\250U\260!\2607\270$\270a\330\014\021\220\027\230\001\230\021\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\025\220Q\330\014\020\220\005\220U\230!\2301\330\020\026\220e\2304\230t\2406\250\025\250d\260!\330\020\026\220a\220w\230a\330\014\021\220\027\230\001\230\021\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\027\220q\230\005\230T\240\023\240D\250\005\250U\260!\2607\270$\270a\330\014\021\220\027\230\001\230\023\230A\230Q\330\r\025\220S\230\001\330\014\022\220%\220t\2301\330\014\022\220%\220t\2301\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\031\230\027\240\001\240\023\240D\250\001\250\021\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240D\250\001\250\021\330\025\037\230q\240\005\240V\2504\250z\270\021\270%\270q\330\024\033\2304\230q\240\003\2405\250\001\330\024\027\220r\230\023\230F\240#\240Q\240a\330\030\035\230W\240A\240S\250\001\250\024\250Q\250a\340\030\035\230W\240A\240Q\340\024\031\230\027\240\001\240\023\240A\240X\250T\260\027\270\n\300!\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\030\230\013\240=\260\001\330\014\022\220%\220t\2306""\240\033\250A\330\014\022\220%\220t\2306\240\033\250A\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\033\2304\230q\240\003\2405\250\001\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\036\230d\240!\2401\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\023\250A\250Q\340\034!\240\027\250\001\250\021\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\330\025\037\230q\240\005\240Q\330\024\033\2304\230q\240\003\2406\250\025\250a\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\036\230d\240!\2401\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\023\250F\260!\2601\340\034!\240\027\250\001\250\021\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\330\025\037\230q\240\006\240f\250A\330\024\034\230C\230}\250J\260a\260u\270L\310\001\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\025\250a\250q\340\034!\240\027\250\001\250\025\250a\250q\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\340\024\032\320\032-\250Q\250a\330\023\024\330\020\021\330\023\024\330\020\024\220E\230\025\230a\230q\330\024\031\230\027\240\001\240\021\330\r\025\220S\230\001\330\014\022\220%\220t\2306\240\033\250A\330\014\024\220E\230\024\230V\240;\250a\330\014\022\220%\220t\2306\240\033\250A\330\014\017\210w\220a\220w\230a\330\020\030\230\005\230Q\330\014\017\210w\220a\220u\230A\330\020\026\220c\230\021\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\031\230\027\240\001\240\025\240a\240s\250)\2601\260F\270!\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\027\250\001\250\023\250F\260!\2606\270\021\340\024\031\230\027\240\001\240\023\240A\240V\2508\2604\260w\270j\310\001\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\022\220%\220t\2306\240\033\250A\330""\014\r\330\020\023\2204\220s\230!\330\024\031\230\027\240\001\240\021\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\340\024\031\230\027\240\001\240\023\240A\240Q\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\026\220l\240!\330\014\030\230\006\230a\230}\250J\260a\260z\300\025\300d\310\"\310C\310{\320Z]\320]^\320^k\320kl\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\021\220\030\230\021\230+\240U\250/\270\023\270H\300D\310\001\310\021\330\014\017\210s\220#\220Q\330\020\025\220W\230A\230Q\340\020\025\220W\230A\230R\230r\240\021\330\r\025\220S\230\001\330\014\026\220l\240!\330\014\030\230\006\230a\230}\250J\260a\260z\300\025\300d\310\"\310C\310{\320Z]\320]^\320^k\320kl\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\021\220\030\230\024\230Q\230a\330\014\017\210s\220#\220Q\330\020\025\220W\230A\230Q\340\020\021\330\024\031\230\027\240\001\240\022\2402\240Q\330\027\030\330\024\031\230\027\240\001\240\021\330\r\025\220S\230\001\330\014\030\230\014\240A\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\025\220U\230$\230f\240K\250q\330\014\032\230&\240\001\240\037\260\n\270!\270<\300u\310D\320PR\320RU\320Ub\320be\320ef\320fs\320st\330\014\021\220\027\230\001\230\034\240Q\240h\250m\2701\330\r\025\220S\230\001\330\014\030\230\001\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\025\220U\230$\230f\240K\250q\330\014\021\220\027\230\001\230\031\240!\2408\2501\340\014\022\320\022%\240Q\320&>\270a\270q\340\004\013\2105\220\004\220F\230+\240Q\200\001\330\004\007\200u\210C\210q\330\010\022\220#\220Q\220a\330\010\013\2107\220!\2209\230A\330\014\023\2209\230A\330\014\r\330\010""\013\2101\210H\220A\330\010\t\330\004\007\200~\220W\230E\240\024\240U\250#\250Q\330\010\017\210}\230A\230Q\330\010\013\2107\220!\2206\230\021\330\014\020\220\t\230\021\330\014\r\330\010\025\220Q\220h\230a\330\010\t\330\004\007\200q\210\010\220\001\200\001\330\004\007\200u\210C\210q\330\010\016\210c\220\021\220!\330\010\013\2107\220!\2205\230\001\330\014\023\2203\220a\330\010\017\210q\330\004\007\200~\220W\230E\240\024\240U\250#\250Q\330\010\017\210}\230A\230Q\330\010\013\2107\220!\2206\230\021\330\014\023\2204\220q\330\010\017\210q\330\004\013\2101\200\001\330\004\007\200w\210c\220\021\330\010\017\210q\330\004\005\330\010\013\210<\220s\230!\330\014\017\210z\230\021\230(\240&\250\004\250C\250q\260\006\260c\270\021\330\020\026\220d\230!\2301\330\020\023\220:\230Q\230e\2401\330\024\032\230'\240\021\240!\330\020\027\220v\230T\240\021\240%\240t\2501\250A\330\014\017\210z\230\021\230(\240'\250\024\250S\260\001\260\026\260s\270!\330\020\027\220v\230T\240\021\240$\240a\240t\2504\250q\260\001\330\014\017\210z\230\021\230)\2406\250\027\260\004\260C\260q\270\006\270c\300\021\330\020\026\220a\220t\2301\230F\240$\240a\240q\330\020\027\220t\2301\230A\330\010\013\2107\220!\2208\2301\330\014\023\2206\230\034\240Q\240m\2601\330\010\017\210w\220a\220x\230}\250A\330\010\013\2108\2201\220A\330\014\023\2204\220r\230\021\330\010\013\210:\220Q\220h\230f\240D\250\014\260C\260q\330\014\030\230\006\230a\230q\330\014\023\2209\230B\230i\240x\250q\3200@\300\001\330\010\017\210q\330\013\014\330\010\017\210q\200\001\330\004\007\200w\210c\220\021\330\010\017\210q\330\004\007\200z\220\021\220(\230&\240\004\240K\250s\260!\330\010\016\320\016!\240\021\240!\330\004\005\330\010\013\2108\2201\220A\330\014\023\2206\230\022\2301\330\010\017\210q\330\013\014\330\010\017\210q";
+    #else /* compression: none (4638 bytes) */
+const char* const bytes = ".CALL_TOP requires VM executionDivision by zeroFOR_ITER target type not supportedNote that Cython is deliberately stricter than PEP-484 and rejects subclasses of builtin types. If you need to pass subclasses then set the 'annotation_typing' directive to False.?add_notefastops.pyxopcode not supported: ADDBUILD_LISTBUILD_MAPBUILD_SETCALL_BUILTINCALL_METHODCALL_NAMECALL_TOPDIVDUPEQFOR_ITERGET_LENGTHGTGTEINDEXJUMPJUMP_IF_FALSELOAD_CONSTLOAD_NAMELTLTEListMODMULMapNEGNEQNOTPOP__Pyx_PyDict_NextRefRETURNSLICESTORE_NAMESUBStringZListZMapZString_aarg_countargsasyncio.coroutinesattrbbuiltinsbytecodecall_method_call_method_call_topcandidatecell__class_getitem__cline_in_tracebackclosure_cellscondconstscountcurrentdataelementselemsendentity_defenvexecutefnfn_obj__func__func_namegetidxidx_strinstr_countinstrsip_is_coroutineitemskkeykeys__main__method_idxmethod_name__module__name__name__name_idxobjop_nameoperandpairspop__qualname__raw_idx_resolveresultset__set_name__setdefaultsrc.zexus.vm.fastopsstackstart_storetarget__test__vvalvaluevaluesvar_countzexus.object\320\000?\270q\330\004\031\230\021\330\004\"\240#\240Q\240a\330\004\026\220a\360\010\000\005\013\210#\210R\210q\330\010\021\220\032\2306\240\021\240!\330\010\016\210a\340\010\013\2108\2203\220a\330\014\017\210z\230\021\230)\2405\250\004\250B\250c\260\032\2703\270a\270q\330\020\025\220W\230A\230V\2401\240A\340\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\023\2206\230\021\230,\240j\260\001\260\031\270%\270t\3002\300S\310\n\320RU\320UV\320Vc\320cd\330\014\021\220\027\230\001\230\030\240\021\240&\250\005\250Q\330\r\025\220S\230\001\330\014\023\2206\230\021\230,\240j\260\001\260\031\270%\270t\3002\300S\310\n\320RU\320UV\320Vc\320cd\330\014\022\220%\220t\2306\240\033\250A\330\014\022\220!\2206\230\025\230e\2401\330\r\025\220S\230\001\330\014\017\210q\330\020\025\220T\230\021\330\r\025\220S\230\001\330\014\017\210q\330\020\025\220W\230A\230U\240\"\240A\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330""\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210w\220a\220s\230!\330\020\024\220A\220Q\330\014\017\210r\220\023\220A\330\020\026\320\026'\240q\250\001\330\021\033\2301\230C\230u\240D\250\004\250J\260a\260s\270&\300\004\300J\310a\310s\320RW\320W[\320[_\320_i\320ij\320jm\320mn\330\020\025\220W\230A\230R\230s\240%\240r\250\022\2502\250S\260\007\260r\270\022\2701\340\020\025\220W\230A\230R\230r\240\021\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2302\230U\240\"\240C\240w\250a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{""\250!\330\014\021\220\027\230\001\230\022\2302\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\022\2303\230a\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\024\230Q\330\r\025\220S\230\001\330\014\020\220\005\220T\230\026\230{\250!\330\014\021\220\027\230\001\230\021\230!\330\r\025\220S\230\001\330\014\021\220\021\330\r\025\220S\230\001\330\014\023\2205\230\004\230F\240+\250Q\330\014\017\210t\2201\330\020\025\220Q\330\r\025\220S\230\001\330\014\023\2205\230\004\230F\240+\250Q\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\027\220q\230\005\230T\240\023\240D\250\005\250U\260!\2607\270$\270a\330\014\021\220\027\230\001\230\021\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\024\220A\330\014\020\220\005\220U\230!\2301\330\020\026\220e\2304\230t\2406\250\025\250d\260!\330\020\025\220W\230B\230e\2401\330\014\021\220\030\230\021\330\014\025\220Q\330\014\020\220\003\2205\230\001\330\020\026\220a\220u\230A\330\014\021\220\027\230\001\230\021\330\r\025\220S\230\001\330\014\024\220K\230x\240w\250j\270\001\330\014\027\220q\230\005\230T\240\023\240D\250\005\250U\260!\2607\270$\270a\330\014\021\220\027\230\001\230\023\230A\230Q\330\r\025\220S\230\001\330\014\022\220%\220t\2301\330\014\022\220%\220t\2301\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\031\230\027\240\001\240\023\240D\250\001\250\021\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240D\250\001\250\021\330\025\034\230A\230U\240(\250$\250g\260Q\260e\2701\330\024\036\230c\240\032\2507\260!\2605\270\016\300c\310\021\310(\320RV\320V]\320]g\320gh\330\024\027\220q\330\030\036\230c\240\024\240Q\240a\330\030\033\2307\240!\2405\250\001\330\034!\240\027\250\001""\250\023\250A\340\034!\240\027\250\001\250\021\340\030\035\230W\240A\240Q\330\025\037\230q\240\005\240Q\330\024\036\230c\240\032\2507\260!\2605\270\016\300a\330\024\027\220x\230s\240!\330\030\035\230W\240A\240S\250\001\250\021\330\031#\2401\240I\250U\260$\260d\270*\300A\300Y\310a\330\030\037\230t\2401\240C\240u\250A\330\030\033\2302\230S\240\n\250#\250Q\250a\330\034!\240\027\250\001\250\023\250A\250T\260\021\260!\340\034!\240\027\250\001\250\021\340\030\035\230W\240A\240Q\340\024\031\230\027\240\001\240\023\240A\240X\250T\260\027\270\n\300!\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\030\230\013\240=\260\001\330\014\022\220%\220t\2306\240\033\250A\330\014\022\220%\220t\2306\240\033\250A\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\033\2304\230q\240\003\2405\250\001\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\036\230d\240!\2401\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\023\250A\250Q\340\034!\240\027\250\001\250\021\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\330\025\037\230q\240\005\240Q\330\024\033\2304\230q\240\003\2406\250\025\250a\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\036\230d\240!\2401\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\023\250F\260!\2601\340\034!\240\027\250\001\250\021\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\330\025\037\230q\240\006\240f\250A\330\024\034\230C\230}\250J\260a\260u\270L\310\001\330\024\027\220z\240\021\240%\240u\250D\260\002\260#\260V\2703\270a\270q\330\030\033\230:\240S\250\001\330\034!\240\027\250\001\250\021\330\034!\240\027\250\001\250\025\250a\250q\340\034!\240\027\250\001\250\025\250a\250q\340\030\034\230E\240\025\240a\240q\330\034!\240\027\250\001\250\021\340\024\032\320\032-\250Q\250a\330\023\024\330\020\021\330\023\024\330\020\024\220E\230\025\230a\230q\330\024\031\230""\027\240\001\240\021\330\r\025\220S\230\001\330\014\022\220%\220t\2306\240\033\250A\330\014\024\220E\230\024\230V\240;\250a\330\014\022\220%\220t\2306\240\033\250A\330\014\017\210w\220a\220w\230a\330\020\030\230\005\230Q\330\014\017\210w\220a\220u\230A\330\020\026\220c\230\021\330\014\r\330\020\023\220:\230Q\230e\2401\330\024\031\230\027\240\001\240\025\240a\240s\250)\2601\260F\270!\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\027\250\001\250\023\250F\260!\2606\270\021\340\024\031\230\027\240\001\240\023\240A\240V\2508\2604\260w\270j\310\001\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\022\220%\220t\2306\240\033\250A\330\014\r\330\020\023\2204\220s\230!\330\024\031\230\027\240\001\240\021\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\330\025\037\230q\240\005\240Q\330\024\031\230\027\240\001\240\023\240A\240S\250\001\340\024\031\230\027\240\001\240\023\240A\240Q\330\023\024\330\020\025\220W\230A\230Q\330\r\025\220S\230\001\330\014\026\220l\240!\330\014\030\230\006\230a\230}\250J\260a\260z\300\025\300d\310\"\310C\310{\320Z]\320]^\320^k\320kl\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\021\220\030\230\021\230+\240U\250/\270\023\270H\300D\310\001\310\021\330\014\017\210s\220#\220Q\330\020\025\220W\230A\230Q\340\020\025\220W\230A\230R\230r\240\021\330\r\025\220S\230\001\330\014\026\220l\240!\330\014\030\230\006\230a\230}\250J\260a\260z\300\025\300d\310\"\310C\310{\320Z]\320]^\320^k\320kl\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\021\220\030\230\024\230Q\230a\330\014\017\210s\220#\220Q\330\020\025\220W\230A\230Q\340\020\021\330\024\031\230\027\240\001\240\022\2402\240Q\330\027\030\330\024\031\230\027\240\001\240\021\330\r\025\220S\230\001\330\014\030\230\014\240A\330\014\023\2201\220E\230\024\230S\240\004""\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\025\220U\230$\230f\240K\250q\330\014\032\230&\240\001\240\037\260\n\270!\270<\300u\310D\320PR\320RU\320Ub\320be\320ef\320fs\320st\330\014\021\220\027\230\001\230\034\240Q\240h\250m\2701\330\r\025\220S\230\001\330\014\030\230\001\330\014\023\2201\220E\230\024\230S\240\004\240E\250\025\250a\250{\270$\270f\300O\320ST\330\014\025\220U\230$\230f\240K\250q\330\014\021\220\027\230\001\230\031\240!\2408\2501\340\014\022\320\022%\240Q\320&>\270a\270q\340\004\013\2105\220\004\220F\230+\240Q\200\001\330\004\007\200u\210C\210q\330\010\022\220#\220Q\220a\330\010\013\2107\220!\2209\230A\330\014\023\2209\230A\330\014\r\330\010\013\2101\210H\220A\330\010\t\330\004\007\200~\220W\230E\240\024\240U\250#\250Q\330\010\017\210}\230A\230Q\330\010\013\2107\220!\2206\230\021\330\014\020\220\t\230\021\330\014\r\330\010\025\220Q\220h\230a\330\010\t\330\004\007\200q\210\010\220\001\200\001\330\004\007\200u\210C\210q\330\010\016\210c\220\021\220!\330\010\013\2107\220!\2205\230\001\330\014\023\2203\220a\330\010\017\210q\330\004\007\200~\220W\230E\240\024\240U\250#\250Q\330\010\017\210}\230A\230Q\330\010\013\2107\220!\2206\230\021\330\014\023\2204\220q\330\010\017\210q\330\004\013\2101\200\001\330\004\007\200w\210c\220\021\330\010\017\210q\330\004\005\330\010\013\210<\220s\230!\330\014\017\210z\230\021\230(\240&\250\004\250C\250q\260\006\260c\270\021\330\020\026\220d\230!\2301\330\020\023\220:\230Q\230e\2401\330\024\032\230'\240\021\240!\330\020\027\220v\230T\240\021\240%\240t\2501\250A\330\014\017\210z\230\021\230(\240'\250\024\250S\260\001\260\026\260s\270!\330\020\027\220v\230T\240\021\240$\240a\240t\2504\250q\260\001\330\014\017\210z\230\021\230)\2406\250\027\260\004\260C\260q\270\006\270c\300\021\330\020\026\220a\220t\2301\230F\240$\240a\240q\330\020\027\220t\2301\230A\330\010\013\2107\220!\2208\2301\330\014\023\2206\230\034\240Q\240m\2601\330\010\017\210w\220a\220x\230}\250A\330\010\013\2108\2201\220A\330\014\023\2204\220r\230\021\330""\010\013\210:\220Q\220h\230f\240D\250\014\260C\260q\330\014\030\230\006\230a\230q\330\014\023\2209\230B\230i\240x\250q\3200@\300\001\330\010\017\210q\330\013\014\330\010\017\210q\200\001\330\004\007\200w\210c\220\021\330\010\017\210q\330\004\007\200z\220\021\220(\230&\240\004\240K\250s\260!\330\010\016\320\016!\240\021\240!\330\004\005\330\010\013\2108\2201\220A\330\014\023\2206\230\022\2301\330\010\017\210q\330\013\014\330\010\017\210q";
     PyObject *data = NULL;
     CYTHON_UNUSED_VAR(__Pyx_DecompressString);
     #endif
     PyObject **stringtab = __pyx_mstate->__pyx_string_tab;
     Py_ssize_t pos = 0;
-    for (int i = 0; i < 115; i++) {
+    for (int i = 0; i < 122; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyUnicode_DecodeUTF8(bytes + pos, bytes_length, NULL);
-      if (likely(string) && i >= 8) PyUnicode_InternInPlace(&string);
+      if (likely(string) && i >= 9) PyUnicode_InternInPlace(&string);
       if (unlikely(!string)) {
         Py_XDECREF(data);
         __PYX_ERR(0, 1, __pyx_L1_error)
@@ -10881,7 +11281,7 @@ const char* const bytes = ".CALL_TOP requires VM executionFOR_ITER target type n
       stringtab[i] = string;
       pos += bytes_length;
     }
-    for (int i = 115; i < 120; i++) {
+    for (int i = 122; i < 127; i++) {
       Py_ssize_t bytes_length = index[i].length;
       PyObject *string = PyBytes_FromStringAndSize(bytes + pos, bytes_length);
       stringtab[i] = string;
@@ -10892,14 +11292,14 @@ const char* const bytes = ".CALL_TOP requires VM executionFOR_ITER target type n
       }
     }
     Py_XDECREF(data);
-    for (Py_ssize_t i = 0; i < 120; i++) {
+    for (Py_ssize_t i = 0; i < 127; i++) {
       if (unlikely(PyObject_Hash(stringtab[i]) == -1)) {
         __PYX_ERR(0, 1, __pyx_L1_error)
       }
     }
     #if CYTHON_IMMORTAL_CONSTANTS
     {
-      PyObject **table = stringtab + 115;
+      PyObject **table = stringtab + 122;
       for (Py_ssize_t i=0; i<5; ++i) {
         #if CYTHON_COMPILING_IN_CPYTHON_FREETHREADING
         #if PY_VERSION_HEX < 0x030E0000
@@ -10992,8 +11392,8 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
     __pyx_mstate_global->__pyx_codeobj_tab[3] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fastops_pyx, __pyx_mstate->__pyx_n_u_call_top, __pyx_mstate->__pyx_kp_b_iso88591_wc_q_z_Ks_81A_6_1_q_q, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[3])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 42, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 91};
-    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_instrs, __pyx_mstate->__pyx_n_u_consts, __pyx_mstate->__pyx_n_u_env, __pyx_mstate->__pyx_n_u_builtins, __pyx_mstate->__pyx_n_u_closure_cells, __pyx_mstate->__pyx_n_u_ip, __pyx_mstate->__pyx_n_u_instr_count, __pyx_mstate->__pyx_n_u_stack, __pyx_mstate->__pyx_n_u_op_name, __pyx_mstate->__pyx_n_u_operand, __pyx_mstate->__pyx_n_u_name, __pyx_mstate->__pyx_n_u_val, __pyx_mstate->__pyx_n_u_b, __pyx_mstate->__pyx_n_u_a, __pyx_mstate->__pyx_n_u_cond, __pyx_mstate->__pyx_n_u_count, __pyx_mstate->__pyx_n_u_elements, __pyx_mstate->__pyx_n_u_result, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_idx, __pyx_mstate->__pyx_n_u_obj, __pyx_mstate->__pyx_n_u_keys, __pyx_mstate->__pyx_n_u_var_count, __pyx_mstate->__pyx_n_u_elems, __pyx_mstate->__pyx_n_u_end, __pyx_mstate->__pyx_n_u_start, __pyx_mstate->__pyx_n_u_name_idx, __pyx_mstate->__pyx_n_u_arg_count, __pyx_mstate->__pyx_n_u_func_name, __pyx_mstate->__pyx_n_u_args, __pyx_mstate->__pyx_n_u_fn, __pyx_mstate->__pyx_n_u_method_idx, __pyx_mstate->__pyx_n_u_target, __pyx_mstate->__pyx_n_u_method_name, __pyx_mstate->__pyx_n_u_fn_obj, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3};
+    const __Pyx_PyCode_New_function_description descr = {5, 0, 0, 47, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 91};
+    PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_instrs, __pyx_mstate->__pyx_n_u_consts, __pyx_mstate->__pyx_n_u_env, __pyx_mstate->__pyx_n_u_builtins, __pyx_mstate->__pyx_n_u_closure_cells, __pyx_mstate->__pyx_n_u_ip, __pyx_mstate->__pyx_n_u_instr_count, __pyx_mstate->__pyx_n_u_stack, __pyx_mstate->__pyx_n_u_op_name, __pyx_mstate->__pyx_n_u_operand, __pyx_mstate->__pyx_n_u_name, __pyx_mstate->__pyx_n_u_val, __pyx_mstate->__pyx_n_u_b, __pyx_mstate->__pyx_n_u_a, __pyx_mstate->__pyx_n_u_cond, __pyx_mstate->__pyx_n_u_count, __pyx_mstate->__pyx_n_u_elements, __pyx_mstate->__pyx_n_u_pairs, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u_key, __pyx_mstate->__pyx_n_u_result, __pyx_mstate->__pyx_n_u_k, __pyx_mstate->__pyx_n_u_v, __pyx_mstate->__pyx_n_u_idx, __pyx_mstate->__pyx_n_u_obj, __pyx_mstate->__pyx_n_u_idx_str, __pyx_mstate->__pyx_n_u_raw_idx, __pyx_mstate->__pyx_n_u_keys, __pyx_mstate->__pyx_n_u_var_count, __pyx_mstate->__pyx_n_u_elems, __pyx_mstate->__pyx_n_u_end, __pyx_mstate->__pyx_n_u_start, __pyx_mstate->__pyx_n_u_name_idx, __pyx_mstate->__pyx_n_u_arg_count, __pyx_mstate->__pyx_n_u_func_name, __pyx_mstate->__pyx_n_u_args, __pyx_mstate->__pyx_n_u_fn, __pyx_mstate->__pyx_n_u_method_idx, __pyx_mstate->__pyx_n_u_target, __pyx_mstate->__pyx_n_u_method_name, __pyx_mstate->__pyx_n_u_fn_obj, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3, __pyx_mstate->__pyx_n_u__3};
     __pyx_mstate_global->__pyx_codeobj_tab[4] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_fastops_pyx, __pyx_mstate->__pyx_n_u_execute, __pyx_mstate->__pyx_kp_b_iso88591_q_Qa_a_Rq_6_a_83a_z_5_Bc_3aq_WA, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[4])) goto bad;
   }
   Py_DECREF(tuple_dedup_map);
