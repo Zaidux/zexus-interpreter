@@ -2728,6 +2728,9 @@ class ContextStackParser:
                                 # IDENT followed by DOT (method call) or LPAREN (function call) on new line
                                 if next_tok.type in {DOT, LPAREN}:
                                     is_new_statement = True
+                                # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
+                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
+                                    is_new_statement = True
                                 # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
                                 elif next_tok.type == LBRACKET:
                                     # Look ahead to confirm it's an indexed assignment
@@ -4463,6 +4466,9 @@ class ContextStackParser:
                                 # Assignment: ident = or ident.prop =
                                 elif next_tok.type == ASSIGN:
                                     is_new_statement_start = True
+                                # Compound assignment: ident += / -= / *= / /= / %= / **=
+                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
+                                    is_new_statement_start = True
                                 # CRITICAL FIX: Indexed assignment: ident[...]  =
                                 elif next_tok.type == LBRACKET:
                                     # Scan for matching RBRACKET followed by ASSIGN
@@ -4522,8 +4528,9 @@ class ContextStackParser:
                     j += 1
 
                 if run_tokens:
-                    # Check if this is an assignment (contains ASSIGN token)
-                    has_assign = any(t.type == ASSIGN for t in run_tokens)
+                    # Check if this is an assignment (contains ASSIGN or compound assignment token)
+                    _compound_assign_types = {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+                    has_assign = any(t.type == ASSIGN or t.type in _compound_assign_types for t in run_tokens)
                     if has_assign:
                         # Parse as assignment statement
                         block_info = {'tokens': run_tokens}
