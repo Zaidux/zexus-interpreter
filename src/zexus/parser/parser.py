@@ -1899,7 +1899,14 @@ class UltimateParser:
                 self.next_token()
             # Otherwise, continue — body parsing will attempt to parse the current token
 
-        body = self.parse_expression(LOWEST)
+        # Support brace-style lambda body: lambda(x) { return x * x }
+        if self.peek_token_is(LBRACE):
+            self.next_token()  # Move to LBRACE
+            body = self.parse_block_statement()
+        elif self.cur_token_is(LBRACE):
+            body = self.parse_block_statement()
+        else:
+            body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)
 
     def parse_lambda_infix(self, left):
