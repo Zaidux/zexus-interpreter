@@ -18,33 +18,41 @@ x = 10
 
 ---
 
-## Rule 2: Use `=` for reassignment, not `+=`
+## Rule 2: Compound assignment operators work
 
-Compound operators (`+=`, `-=`, `*=`) are parsed but **do not update** the variable. Always use explicit reassignment.
+Compound operators (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`) work correctly as of v1.8.4.
 
 ```zexus
-// ❌ Broken — x stays 10
+// ✅ All compound operators work
 let x = 10
 x += 5
+print(x)   // 15
 
-// ✅ Works — x becomes 15
-let x = 10
-x = x + 5
+x -= 3
+print(x)   // 12
+
+x *= 2
+print(x)   // 24
 ```
 
 ---
 
-## Rule 3: Use `for each`, not `for...in range()`
+## Rule 3: Both `for each` and `for...in range()` work
 
-The `for i in range(n)` syntax compiles but does not execute the loop body. Use `while` or `for each` instead.
+Both loop syntaxes work correctly as of v1.8.4.
 
 ```zexus
-// ❌ Loop body never runs
+// ✅ Range-based for loop
 for i in range(5) {
   print(i)
 }
 
-// ✅ Use while
+// ✅ for-each loop
+for each item in [10, 20, 30] {
+  print(item)
+}
+
+// ✅ While loop (also works)
 let i = 0
 while i < 5 {
   print(i)
@@ -54,15 +62,20 @@ while i < 5 {
 
 ---
 
-## Rule 4: Use contracts, not entities, for stateful objects
+## Rule 4: Entities support constructors
 
-Entities have limited constructor and method support. Contracts are the reliable way to create objects with state and behavior.
+Entities accept positional constructor arguments matching their declared fields (fixed in v1.8.4). Contracts are still recommended for objects with methods and mutable state.
 
 ```zexus
-// ⚠️ Entity — constructors don't accept args, methods may fail
-entity Dog { name }
+// ✅ Entity with constructor args (v1.8.4+)
+entity Dog {
+  name
+  breed
+}
+let d = Dog("Rex", "Husky")
+print(d.name)    // "Rex"
 
-// ✅ Contract — fully functional
+// ✅ Contract — fully functional with state and methods
 contract Dog {
   state { name: "default" }
   action set_name(n) { this.name = n }

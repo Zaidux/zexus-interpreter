@@ -1,7 +1,7 @@
 # Zexus Language Guide
 
 A practical, test-verified guide to the Zexus programming language.
-Every example in this guide was executed and verified against Zexus v1.8.3.
+Every example in this guide was executed and verified against Zexus v1.8.4.
 
 > **How to run:** Save code to a `.zx` file and run with `zx run file.zx`
 
