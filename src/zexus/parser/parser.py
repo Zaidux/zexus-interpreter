@@ -3786,34 +3786,54 @@ class UltimateParser:
 
         while not self.peek_token_is(RBRACE) and not self.peek_token_is(EOF):
             if self.peek_token_is(CASE):
-                # case pattern: result syntax
+                # case pattern { body } or case pattern: result
                 self.next_token() # Consume CASE
                 if not self.peek_token_is(COLON):
                     self.next_token()
                 pattern = self.parse_expression(LOWEST)
-                if not self.expect_peek(COLON):
-                    return None
                 result = None
+                # Support both colon and brace syntax for case bodies
                 if self.peek_token_is(LBRACE):
+                    # Brace syntax: case pattern { ... }
                     if not self.expect_peek(LBRACE):
                         return None
                     result = self.parse_block_statement()
+                elif self.peek_token_is(COLON):
+                    # Colon syntax: case pattern: result or case pattern: { block }
+                    self.next_token()  # Consume COLON
+                    if self.peek_token_is(LBRACE):
+                        if not self.expect_peek(LBRACE):
+                            return None
+                        result = self.parse_block_statement()
+                    else:
+                        self.next_token()
+                        result = self.parse_expression(LOWEST)
+                        if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                            self.next_token()
                 else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' or ':' after match case pattern")
+                    return None
+                case = MatchCase(pattern=pattern, result=result)
+                expression.cases.append(case)
+            elif self.peek_token_is(DEFAULT):
+                # default { body } or default: result
+                self.next_token() # Consume DEFAULT
+                result = None
+                if self.peek_token_is(LBRACE):
+                    # Brace syntax: default { ... }
+                    if not self.expect_peek(LBRACE):
+                        return None
+                    result = self.parse_block_statement()
+                elif self.peek_token_is(COLON):
+                    # Colon syntax: default: result
+                    self.next_token()  # Consume COLON
                     self.next_token()
                     result = self.parse_expression(LOWEST)
                     if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
                         self.next_token()
-                case = MatchCase(pattern=pattern, result=result)
-                expression.cases.append(case)
-            elif self.peek_token_is(DEFAULT):
-                # default: result syntax
-                self.next_token() # Consume DEFAULT
-                if not self.expect_peek(COLON):
+                else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' or ':' after default")
                     return None
-                self.next_token()
-                result = self.parse_expression(LOWEST)
-                if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
-                    self.next_token()
                 pattern = Identifier(value="_")
                 case = MatchCase(pattern=pattern, result=result)
                 expression.cases.append(case)

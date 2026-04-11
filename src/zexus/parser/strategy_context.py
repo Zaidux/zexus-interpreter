@@ -5629,15 +5629,68 @@ class ContextStackParser:
                     continue
 
                 pattern = None
+                use_brace_syntax = False
 
                 if body_tokens[i].type == DEFAULT:
                     pattern = WildcardPattern()
                     i += 1
                     if i < len(body_tokens) and body_tokens[i].type == COLON:
                         i += 1
+                    elif i < len(body_tokens) and body_tokens[i].type == LBRACE:
+                        use_brace_syntax = True
                 elif body_tokens[i].type == CASE:
                     i += 1
                     pattern_start = i
+                    depth = 0
+                    while i < len(body_tokens):
+                        t = body_tokens[i]
+                        if t.type in {LPAREN, LBRACKET}:
+                            depth += 1
+                        elif t.type in {RPAREN, RBRACKET}:
+                            depth -= 1
+                        elif t.type == LBRACE and depth == 0:
+                            # Brace-style case: case pattern { body }
+                            use_brace_syntax = True
+                            break
+                        elif t.type == COLON and depth == 0:
+                            break
+                        i += 1
+
+                    separator_idx = i
+                    pattern_tokens = body_tokens[pattern_start:separator_idx]
+                    pattern = self._parse_pattern(pattern_tokens) if pattern_tokens else None
+
+                    if i < len(body_tokens) and body_tokens[i].type == COLON:
+                        i += 1
+                    # For brace syntax, don't skip - we'll handle LBRACE below
+                else:
+                    i += 1
+                    continue
+
+                # Parse the result - either from brace block or inline expression
+                if use_brace_syntax and i < len(body_tokens) and body_tokens[i].type == LBRACE:
+                    # Brace-style: collect tokens inside { ... } and parse as block
+                    i += 1  # Skip opening LBRACE
+                    brace_depth = 1
+                    block_tokens = []
+                    while i < len(body_tokens) and brace_depth > 0:
+                        if body_tokens[i].type == LBRACE:
+                            brace_depth += 1
+                        elif body_tokens[i].type == RBRACE:
+                            brace_depth -= 1
+                            if brace_depth == 0:
+                                break
+                        block_tokens.append(body_tokens[i])
+                        i += 1
+                    if i < len(body_tokens) and body_tokens[i].type == RBRACE:
+                        i += 1  # Skip closing RBRACE
+                    # Parse block statements inside the case body
+                    block_stmts = self._parse_block_statements(block_tokens)
+                    block = BlockStatement()
+                    block.statements = block_stmts
+                    result_expr = block
+                else:
+                    result_start = i
                     depth = 0
                     while i < len(body_tokens):
                         t = body_tokens[i]
@@ -5645,36 +5698,14 @@ class ContextStackParser:
                             depth += 1
                         elif t.type in {RPAREN, RBRACE, RBRACKET}:
                             depth -= 1
-                        elif t.type == COLON and depth == 0:
+                        elif depth == 0 and t.type in {CASE, DEFAULT}:
+                            break
+                        elif depth == 0 and t.type in {COMMA, SEMICOLON}:
                             break
                         i += 1
 
-                    colon_idx = i
-                    pattern_tokens = body_tokens[pattern_start:colon_idx]
-                    pattern = self._parse_pattern(pattern_tokens) if pattern_tokens else None
-
-                    if i < len(body_tokens) and body_tokens[i].type == COLON:
-                        i += 1
-                else:
-                    i += 1
-                    continue
-
-                result_start = i
-                depth = 0
-                while i < len(body_tokens):
-                    t = body_tokens[i]
-                    if t.type in {LPAREN, LBRACE, LBRACKET}:
-                        depth += 1
-                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
-                        depth -= 1
-                    elif depth == 0 and t.type in {CASE, DEFAULT}:
-                        break
-                    elif depth == 0 and t.type in {COMMA, SEMICOLON}:
-                        break
-                    i += 1
-
-                result_tokens = body_tokens[result_start:i]
-                result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
+                    result_tokens = body_tokens[result_start:i]
+                    result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
 
                 if pattern:
                     cases.append(MatchCase(pattern=pattern, result=result_expr))
