@@ -196,9 +196,9 @@ print("Hello, ${name}!")   // ✅ Works
 
 ---
 
-## Rule 14: `break` and `continue` work in `while` loops
+## Rule 14: `break` and `continue` work in loops
 
-Both keywords are supported and tested in while loops.
+Both work in `while` loops and `for each` loops.
 
 ```zexus
 let i = 0

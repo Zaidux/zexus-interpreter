@@ -200,8 +200,6 @@ print(msg)
 
 **Output:** `Hello, Zexus!`
 
-> **Note:** This may fall back to interpreter mode internally, but works correctly.
-
 ---
 
 ### Print Output
@@ -734,11 +732,15 @@ contract Dog {
 
 ### 4. `not` operator returns `null` instead of `false`
 
-```zexus
-print(not true)    // prints null (expected: false)
-```
+This is a known bug. Use comparison instead.
 
-Use comparison instead: `x == false`.
+```zexus
+// ⚠️ Bug: prints null
+print(not true)
+
+// ✅ Workaround
+print(true == false)   // prints false
+```
 
 ### 5. `for i in range(n)` produces no output
 
