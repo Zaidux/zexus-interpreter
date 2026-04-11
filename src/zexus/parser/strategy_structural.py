@@ -1075,7 +1075,8 @@ class StructuralAnalyzer:
                     # CRITICAL FIX: IDENT followed by ASSIGN is an assignment statement
                     # BUT: Don't treat it as a new statement if the previous token was DOT (property access)
                     is_assignment_start = False
-                    if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN:
+                    _all_assign_tokens = {ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+                    if tj.type == IDENT and j + 1 < n and tokens[j + 1].type in _all_assign_tokens:
                         # Check if previous token was DOT (part of property access)
                         prev_is_dot = (j > 0 and tokens[j - 1].type == DOT)
                         if not prev_is_dot:
@@ -1083,7 +1084,7 @@ class StructuralAnalyzer:
                     # Pattern 2: IDENT followed by DOT could be property assignment (obj.prop = ...)
                     elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == DOT:
                         # Look ahead: IDENT DOT IDENT ASSIGN is a property assignment
-                        if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type == ASSIGN:
+                        if j + 3 < n and tokens[j + 2].type == IDENT and tokens[j + 3].type in _all_assign_tokens:
                             is_assignment_start = True
                     # Pattern 3: IDENT followed by LBRACKET could be indexed assignment (arr[i] = ...)
                     elif tj.type == IDENT and j + 1 < n and tokens[j + 1].type == LBRACKET:

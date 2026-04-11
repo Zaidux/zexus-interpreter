@@ -230,10 +230,11 @@ print(greet("Alice"))
 
 | Do This | Not This | Why |
 |---------|----------|-----|
-| `x = x + 1` | `x += 1` | `+=` is broken |
-| `while` or `for each` | `for i in range()` | range loop doesn't execute |
-| `contract` | `entity` with constructor args | entity constructors are broken |
+| `x += 1` or `x = x + 1` | — | both work correctly (v1.8.4) |
+| `for i in range(n)` | — | works correctly (v1.8.4) |
+| `Entity("arg1", "arg2")` | — | entity constructors work (v1.8.4) |
+| `not condition` | — | `not` operator works (v1.8.4) |
 | `str(val)` in concatenation | raw number in `+` | type mismatch error |
 | `length(list)` | `list.length` | length is a function |
-| `{key: val}` upfront | `map["key"] = val` after | map mutation unreliable |
+| `map["key"] = val` | — | map mutation works correctly |
 | `{}` braces on all blocks | braceless blocks | parser requires braces |

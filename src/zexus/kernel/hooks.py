@@ -196,7 +196,7 @@ class Kernel:
         builtins = [
             {
                 "name": "blockchain",
-                "version": "1.8.3",
+                "version": "1.8.4",
                 "description": "Ledger, smart-contract execution, crypto, gas metering",
                 "opcodes": {
                     0x1000: "HASH_BLOCK",
@@ -215,7 +215,7 @@ class Kernel:
             },
             {
                 "name": "web",
-                "version": "1.8.3",
+                "version": "1.8.4",
                 "description": "HTTP server/client, WebSocket, middleware",
                 "opcodes": {
                     0x1100: "HTTP_ROUTE",
@@ -228,7 +228,7 @@ class Kernel:
             },
             {
                 "name": "system",
-                "version": "1.8.3",
+                "version": "1.8.4",
                 "description": "File I/O, process management, environment variables",
                 "opcodes": {
                     0x1200: "FS_READ",
@@ -242,7 +242,7 @@ class Kernel:
             },
             {
                 "name": "ui",
-                "version": "1.8.3",
+                "version": "1.8.4",
                 "description": "Terminal graphics, web rendering, native widgets",
                 "opcodes": {},
             },

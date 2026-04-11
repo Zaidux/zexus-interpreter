@@ -674,94 +674,76 @@ z: 3
 
 ## Known Quirks & Gotchas
 
-These are verified behaviors as of v1.8.3 that may surprise you.
+These are verified behaviors as of v1.8.4.
 
-### 1. Use `x = x + n` instead of `x += n`
+### 1. Compound assignment works (fixed in v1.8.4)
 
-The `+=` operator is declared but does not update the variable. Use explicit reassignment instead.
+`+=`, `-=`, `*=`, `/=`, `%=`, `**=` all work correctly.
 
 ```zexus
-// ❌ Does NOT work — x stays 10
 let x = 10
 x += 5
-print(x)   // prints 10 (bug)
-
-// ✅ Works correctly
-let x = 10
-x = x + 5
-print(x)   // prints 15
+print(x)   // prints 15 ✅
 ```
 
-### 2. Map indexed assignment may not persist
+### 2. Map indexed assignment works (confirmed in v1.8.4)
 
-Assigning values to map keys via `map["key"] = value` does not always update the map.
+Assigning values to map keys via `map["key"] = value` works correctly.
 
 ```zexus
-// ⚠️ May not work as expected
 let data = {count: 0}
 data["count"] = 42
-print(data["count"])   // may print 0
-
-// ✅ Create maps with all needed values upfront
-let data = {count: 42}
+print(data["count"])   // prints 42 ✅
 ```
 
-### 3. Entity constructors don't accept arguments
+### 3. Entity constructors with arguments (fixed in v1.8.4)
 
-Entities defined with bare field names cannot receive constructor arguments. Pass data via methods or use contracts instead.
+Entities accept positional arguments matching their declared fields.
 
 ```zexus
-// ❌ Does NOT work
 entity Dog {
   name
   breed
 }
-let d = Dog("Rex", "Husky")   // fields will be null
+let d = Dog("Rex", "Husky")
+print(d.name)    // "Rex" ✅
+print(d.breed)   // "Husky" ✅
+```
 
-// ✅ Use contracts for stateful objects with initial data
-contract Dog {
-  state {
-    name: "Rex"
-    breed: "Husky"
-  }
-  action get_name() {
-    return this.name
-  }
+You can also use typed fields:
+
+```zexus
+entity User {
+  name: string
+  age: int = 0
+}
+let u = User("Alice", 25)
+```
+
+### 4. `not` operator works (fixed in v1.8.4)
+
+The `not` keyword is now properly supported as a prefix operator.
+
+```zexus
+print(not true)    // false ✅
+print(not false)   // true ✅
+if not done {
+  print("still going")
 }
 ```
 
-### 4. `not` operator returns `null` instead of `false`
+### 5. `for i in range(n)` works (fixed in v1.8.4)
 
-This is a known bug. Use comparison instead.
-
-```zexus
-// ⚠️ Bug: prints null
-print(not true)
-
-// ✅ Workaround
-print(true == false)   // prints false
-```
-
-### 5. `for i in range(n)` produces no output
-
-The `for...in range()` syntax compiles but the loop body does not execute. Use `while` or `for each` with a list instead.
+Both `for each` and `for...in` syntax work correctly.
 
 ```zexus
-// ❌ Does NOT work
+// ✅ Shorthand syntax
 for i in range(5) {
-  print(i)
+  print(i)   // 0, 1, 2, 3, 4
 }
 
-// ✅ Use while loop instead
-let i = 0
-while i < 5 {
-  print(i)
-  i = i + 1
-}
-
-// ✅ Or iterate a list
-let items = [0, 1, 2, 3, 4]
-for each item in items {
+// ✅ Traditional syntax
+for each item in [10, 20, 30] {
   print(item)
 }
 ```
@@ -791,11 +773,11 @@ Using `"${expr}"` triggers a VM fallback to interpreter mode. It works correctly
 |---------|--------|--------|
 | Variable declaration | `let x = 10` | ✅ |
 | Reassignment | `x = x + 1` | ✅ |
-| Compound assignment | `x += 1` | ❌ |
+| Compound assignment | `x += 1` | ✅ |
 | If/else | `if cond { } else { }` | ✅ |
 | While loop | `while cond { }` | ✅ |
 | For each | `for each item in list { }` | ✅ |
-| For in range | `for i in range(n) { }` | ❌ |
+| For in range | `for i in range(n) { }` | ✅ |
 | Functions | `function name(args) { }` | ✅ |
 | Return | `return value` | ✅ |
 | Lists | `[1, 2, 3]` | ✅ |
@@ -803,9 +785,11 @@ Using `"${expr}"` triggers a VM fallback to interpreter mode. It works correctly
 | List index | `list[0]` | ✅ |
 | Maps | `{key: value}` | ✅ |
 | Map access | `map["key"]` | ✅ |
-| Map mutation | `map["key"] = val` | ⚠️ |
+| Map mutation | `map["key"] = val` | ✅ |
 | Contracts | `contract Name { state { } action fn() { } }` | ✅ |
-| Entities | `entity Name { field }` | ⚠️ |
+| Entities | `entity Name { field }` | ✅ |
+| Entity constructor | `Entity("arg1", "arg2")` | ✅ |
+| Not operator | `not true` / `!false` | ✅ |
 | Try/catch | `try { } catch (e) { }` | ✅ |
 | Throw | `throw "message"` | ✅ |
 | Break | `break` | ✅ |
@@ -818,4 +802,4 @@ Using `"${expr}"` triggers a VM fallback to interpreter mode. It works correctly
 | Emit events | `emit event name { }` | ✅ |
 | Exponentiation | `a ** b` | ✅ |
 
-**Legend:** ✅ = works reliably, ⚠️ = partial/limited, ❌ = broken
+**Legend:** ✅ = works reliably
