@@ -247,7 +247,10 @@ class ExpressionEvaluatorMixin:
         elif operator == "!=": 
             return TRUE if left_val != right_val else FALSE
         
-        return EvaluationError(f"Unknown integer operator: {operator}")
+        return EvaluationError(
+            f"Unknown integer operator: {operator}",
+            suggestion=f"The operator '{operator}' is not supported for integer values. Supported operators: + - * / % ** < > <= >= == !="
+        )
     
     def eval_float_infix(self, operator, left, right):
         left_val = left.value
@@ -261,7 +264,10 @@ class ExpressionEvaluatorMixin:
             return Float(left_val * right_val)
         elif operator == "/":
             if right_val == 0: 
-                return EvaluationError("Division by zero")
+                return EvaluationError(
+                    "Division by zero",
+                    suggestion="Check your divisor value. Consider adding a condition: if (divisor != 0) { ... }"
+                )
             return Float(left_val / right_val)
         elif operator == "<": 
             return TRUE if left_val < right_val else FALSE
@@ -279,14 +285,23 @@ class ExpressionEvaluatorMixin:
             try:
                 return Float(left_val ** right_val)
             except (OverflowError, ValueError) as e:
-                return EvaluationError(f"Exponentiation error: {e}")
+                return EvaluationError(
+                    f"Exponentiation error: {e}",
+                    suggestion="The result is too large. Try smaller exponents or use a loop for incremental computation."
+                )
         # R-017 fix: Add modulo support for floats
         elif operator == "%":
             if right_val == 0:
-                return EvaluationError("Modulo by zero")
+                return EvaluationError(
+                    "Modulo by zero",
+                    suggestion="Check your divisor value. Modulo operation requires a non-zero divisor."
+                )
             return Float(left_val % right_val)
         
-        return EvaluationError(f"Unknown float operator: {operator}")
+        return EvaluationError(
+            f"Unknown float operator: {operator}",
+            suggestion=f"The operator '{operator}' is not supported for float values. Supported operators: + - * / % ** < > <= >= == !="
+        )
     
     def eval_string_infix(self, operator, left, right):
         if operator == "+":
@@ -319,8 +334,14 @@ class ExpressionEvaluatorMixin:
         elif operator == "*":
             # String repetition: "x" * 3 = "xxx"
             # Only works with String * Integer, not String * String
-            return EvaluationError(f"Type mismatch: STRING * STRING (use STRING * INTEGER for repetition)")
-        return EvaluationError(f"Unknown string operator: {operator}")
+            return EvaluationError(
+                f"Type mismatch: STRING * STRING (use STRING * INTEGER for repetition)",
+                suggestion="To repeat a string, use: \"text\" * 3 (string times integer). You cannot multiply two strings together."
+            )
+        return EvaluationError(
+            f"Unknown string operator: {operator}",
+            suggestion=f"The operator '{operator}' is not supported for strings. Supported: + (concatenation), == != (comparison), * (repetition with integer)."
+        )
     
     def eval_infix_expression(self, node, env, stack_trace):
         debug_log("eval_infix_expression", f"{node.left} {node.operator} {node.right}")
@@ -541,7 +562,11 @@ class ExpressionEvaluatorMixin:
                     f"Use explicit conversion if needed: int(value) or float(value)"
                 )
 
-        return EvaluationError(f"Type mismatch: {left.type()} {operator} {right.type()}")
+        return EvaluationError(
+            f"Type mismatch: {left.type()} {operator} {right.type()}",
+            suggestion=f"Cannot use '{operator}' between {left.type()} and {right.type()}. "
+                       f"Make sure both operands are the same type, or convert with str(), int(), or float()."
+        )
     
     def eval_prefix_expression(self, node, env, stack_trace):
         debug_log("eval_prefix_expression", f"{node.operator} {node.right}")
@@ -564,9 +589,17 @@ class ExpressionEvaluatorMixin:
                 return Integer(-right.value)
             elif isinstance(right, Float):
                 return Float(-right.value)
-            return EvaluationError(f"Unknown operator: -{right.type()}")
+            return EvaluationError(
+                f"Unknown operator: -{right.type()}",
+                suggestion=f"The negation operator '-' only works with numbers (Integer or Float), not {right.type()}. "
+                           f"Convert first with int(value) or float(value)."
+            )
         
-        return EvaluationError(f"Unknown operator: {operator}{right.type()}")
+        return EvaluationError(
+            f"Unknown operator: {operator}{right.type()}",
+            suggestion=f"The prefix operator '{operator}' is not supported for type {right.type()}. "
+                       f"Supported prefix operators: '!' (boolean negation) and '-' (numeric negation)."
+        )
     
     def eval_if_expression(self, node, env, stack_trace):
         debug_log("eval_if_expression", "Evaluating condition")

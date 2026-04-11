@@ -191,6 +191,18 @@ class ImportError(ZexusError):
         super().__init__(message, error_code="IMPORT", **kwargs)
 
 
+class DivisionError(ZexusError):
+    """Division by zero and modulo by zero errors"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="DIVISION", **kwargs)
+
+
+class FormulaError(ZexusError):
+    """Unknown or invalid formula/function errors"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="FORMULA", **kwargs)
+
+
 class InterpreterError(ZexusError):
     """Internal interpreter errors (bugs in Zexus itself)"""
     def __init__(self, message: str, **kwargs):

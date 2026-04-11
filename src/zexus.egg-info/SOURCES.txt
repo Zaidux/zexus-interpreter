@@ -134,6 +134,8 @@ blockchain_test/zexus_blockchain/security_tests/test_reentrancy.zx
 blockchain_test/zexus_blockchain/security_tests/test_unauthorized.zx
 docs/ARCHITECTURE.md
 docs/BLOCKCHAIN_FEATURES.md
+docs/BUILTINS.md
+docs/CLI_COMMANDS.md
 docs/CONCURRENCY.md
 docs/CONTRACT_ACCESS_CONTROL.md
 docs/CONTRACT_REFERENCES.md
@@ -142,6 +144,7 @@ docs/ECOSYSTEM_GUIDE.md
 docs/ERROR_REPORTING.md
 docs/INDEX.md
 docs/INTEGER_OVERFLOW_PROTECTION.md
+docs/KEYWORDS.md
 docs/MAIN_ENTRY_POINT.md
 docs/MANDATORY_SANITIZATION.md
 docs/MODULE_SYSTEM.md
@@ -153,6 +156,7 @@ docs/PLUGIN_SYSTEM.md
 docs/QUICK_REFERENCE.md
 docs/QUICK_START.md
 docs/README.md
+docs/REDUNDANT_KEYWORDS.md
 docs/RESOURCE_LIMITS.md
 docs/SECURITY_FEATURES.md
 docs/SECURITY_FEATURES_GUIDE.zx

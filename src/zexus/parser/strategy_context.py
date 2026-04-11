@@ -248,6 +248,16 @@ class ContextStackParser:
 
             # CRITICAL: Don't wrap Statement nodes, only wrap Expressions
             if result is not None:
+                # Enrich AST node with source line/column from the block's start token
+                start_tok = block_info.get('start_token')
+                if start_tok is not None:
+                    tok_line = getattr(start_tok, 'line', 0)
+                    tok_col = getattr(start_tok, 'column', 0)
+                    if tok_line and not getattr(result, 'line', 0):
+                        result.line = tok_line
+                    if tok_col and not getattr(result, 'column', 0):
+                        result.column = tok_col
+
                 if isinstance(result, Statement):
                     parser_debug(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                     # If we got a BlockStatement but it has no inner statements,
@@ -4750,6 +4760,25 @@ class ContextStackParser:
 
     def _parse_expression(self, tokens):
         """Parse a full expression with operator precedence handling"""
+        if not tokens or len(tokens) == 0:
+            return StringLiteral("")
+        
+        result = self._parse_expression_inner(tokens)
+        
+        # Propagate source position from the first token to the AST node
+        if result is not None and tokens:
+            first_tok = tokens[0]
+            tok_line = getattr(first_tok, 'line', 0)
+            tok_col = getattr(first_tok, 'column', 0)
+            if tok_line and not getattr(result, 'line', 0):
+                result.line = tok_line
+            if tok_col and not getattr(result, 'column', 0):
+                result.column = tok_col
+        
+        return result
+
+    def _parse_expression_inner(self, tokens):
+        """Internal expression parser with operator precedence"""
         if not tokens or len(tokens) == 0:
             return StringLiteral("")
         

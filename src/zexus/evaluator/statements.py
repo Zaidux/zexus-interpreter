@@ -2987,15 +2987,15 @@ class StatementEvaluatorMixin:
             for expr in node.values:
                 val = self.eval_node(expr, env, stack_trace)
                 if is_error(val):
-                    print(f"❌ Error: {val}", file=sys.stderr)
-                    return NULL
+                    # Return the error to the caller for proper rich display
+                    return val
                 values_to_print.append(val)
         elif hasattr(node, 'value') and node.value is not None:
             # Legacy single value format
             val = self.eval_node(node.value, env, stack_trace)
             if is_error(val):
-                print(f"❌ Error: {val}", file=sys.stderr)
-                return NULL
+                # Return the error to the caller for proper rich display
+                return val
             values_to_print.append(val)
         else:
             return NULL

@@ -225,6 +225,42 @@ def cli(ctx, syntax_style, advanced_parsing, execution_mode, debug, no_debug, ze
         config.use_hybrid_compiler = False
 
 
+def _show_enriched_parser_error(console, error_str, error_reporter, filename):
+    """Display a parser error string with source context when possible.
+    
+    Parser errors follow the format: "Line {line}:{col} - {message}"
+    This function extracts the location info and shows the source line with a caret.
+    """
+    import re
+    match = re.match(r"Line\s+(\d+):(\d+)\s*-\s*(.*)", error_str, re.DOTALL)
+    if match:
+        line_num = int(match.group(1))
+        col_num = int(match.group(2))
+        message = match.group(3).strip()
+        source_line = error_reporter.get_source_line(filename, line_num)
+
+        # ANSI colors
+        RED = "\033[91m"
+        CYAN = "\033[96m"
+        YELLOW = "\033[93m"
+        BOLD = "\033[1m"
+        RESET = "\033[0m"
+
+        import sys as _sys
+        if not _sys.stderr.isatty():
+            RED = CYAN = YELLOW = BOLD = RESET = ""
+
+        parts = [f"  {RED}❌ {BOLD}ParseError{RESET} at {CYAN}{filename}:{line_num}:{col_num}{RESET}"]
+        if source_line is not None:
+            parts.append(f"     {line_num} | {source_line}")
+            caret_pad = " " * (len(str(line_num)) + 3 + max(0, col_num - 1))
+            parts.append(f"     {caret_pad}{RED}^{RESET}")
+        parts.append(f"     {message}")
+        console.print("\n".join(parts))
+    else:
+        console.print(f"  ❌ {error_str}")
+
+
 def _execute_inline_code(ctx, source_code):
     """Execute inline Zexus code passed via -r flag.
     
@@ -256,7 +292,7 @@ def _execute_inline_code(ctx, source_code):
         if parser.errors and any("critical" in e.lower() for e in parser.errors):
             console.print("[bold red]❌ Parse error in inline code:[/bold red]")
             for error in parser.errors:
-                console.print(f"  ❌ {error}")
+                _show_enriched_parser_error(console, error, error_reporter, "<inline>")
             sys.exit(1)
 
         # Set up environment
@@ -319,7 +355,22 @@ def _execute_inline_code(ctx, source_code):
             result = evaluate(program, env, debug_mode=debug_mode, use_vm=False)
 
         # Print result if meaningful
-        if result and hasattr(result, 'inspect') and result.inspect() != 'null':
+        from ..object import EvaluationError as EvalError
+        if isinstance(result, EvalError):
+            from ..error_reporter import ZexusError as _ZE, ErrorCategory as _EC
+            _source_line = error_reporter.get_source_line("<inline>", result.line) if result.line else None
+            _rich_err = _ZE(
+                message=result.message,
+                category=_EC.USER_CODE,
+                filename="<inline>",
+                line=result.line,
+                column=result.column,
+                source_line=_source_line,
+                suggestion=result.suggestion,
+            )
+            print_error(_rich_err)
+            sys.exit(1)
+        elif result and hasattr(result, 'inspect') and result.inspect() != 'null':
             console.print(result.inspect())
         elif isinstance(result, str) and result:
             console.print(result)
@@ -435,7 +486,8 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
         if parser.errors and any("critical" in e.lower() for e in parser.errors):
             console.print("[bold red]❌ Critical parser errors detected, cannot continue:[/bold red]")
             for error in parser.errors:
-                console.print(f"  ❌ {error}")
+                # Try to extract line:column and show source context
+                _show_enriched_parser_error(console, error, error_reporter, file)
             sys.exit(1)
 
         # Pre-compile imported modules (parse + optional bytecode) before execution
@@ -590,7 +642,24 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
             # No bytecode generated but VM not requested or compile skipped
             result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'], use_vm=False)
         
-        if result and hasattr(result, 'inspect') and result.inspect() != 'null':
+        # Check if the result is a runtime error and display it with rich formatting
+        from ..object import EvaluationError as EvalError
+        if isinstance(result, EvalError):
+            # Convert to ZexusError for rich display with source line, caret, suggestion
+            from ..error_reporter import ZexusError as _ZE, ErrorCategory as _EC
+            _source_line = error_reporter.get_source_line(file, result.line) if result.line else None
+            _rich_err = _ZE(
+                message=result.message,
+                category=_EC.USER_CODE,
+                filename=result.filename or file,
+                line=result.line,
+                column=result.column,
+                source_line=_source_line,
+                suggestion=result.suggestion,
+            )
+            print_error(_rich_err)
+            sys.exit(1)
+        elif result and hasattr(result, 'inspect') and result.inspect() != 'null':
             console.print(f"\n✅ [bold green]Result:[/bold green] {result.inspect()}")
         elif isinstance(result, str) and result:
             console.print(f"\n📤 [bold blue]Output:[/bold blue] {result}")
@@ -910,7 +979,24 @@ def repl(ctx):
             # UPDATED: Use evaluate from the evaluator package
             result = evaluate(program, env, debug_mode=ctx.obj['DEBUG'])
             
-            if result and hasattr(result, 'inspect') and result.inspect() != 'null':
+            from ..object import EvaluationError as EvalError
+            if isinstance(result, EvalError):
+                # Rich error display in REPL
+                _err_reporter = get_error_reporter()
+                _err_reporter.register_source("<repl>", code)
+                _src_line = _err_reporter.get_source_line("<repl>", result.line) if result.line else code
+                from ..error_reporter import ZexusError as _ZE, ErrorCategory as _EC
+                _rich_err = _ZE(
+                    message=result.message,
+                    category=_EC.USER_CODE,
+                    filename="<repl>",
+                    line=result.line,
+                    column=result.column,
+                    source_line=_src_line,
+                    suggestion=result.suggestion,
+                )
+                print_error(_rich_err)
+            elif result and hasattr(result, 'inspect') and result.inspect() != 'null':
                 console.print(f"[green]{result.inspect()}[/green]")
             
         except KeyboardInterrupt:

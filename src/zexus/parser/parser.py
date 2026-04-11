@@ -416,6 +416,11 @@ class UltimateParser:
             return program
 
         except Exception as e:
+            # Re-raise lexer errors (ZexusError) to the caller so
+            # unterminated strings, invalid characters, etc. reach the user.
+            from ..error_reporter import ZexusError as _ZE
+            if isinstance(e, _ZE):
+                raise
             self._log(f"⚠️ Advanced parsing failed, falling back to traditional: {e}", "normal")
             self.use_advanced_parsing = False
             return self._parse_traditional()
