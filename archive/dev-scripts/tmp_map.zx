@@ -1,2 +1,0 @@
-let m = {"key": "value"};
-print(m["key"]);
