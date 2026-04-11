@@ -745,10 +745,11 @@ class StructuralAnalyzer:
                     # BUT: Don't break if we're in a LET/CONST before the main ASSIGN (type annotation case)
                     # ALSO: Don't break if we're in the middle of a property access chain (obj.prop = ...)
                     if nesting == 0 and len(stmt_tokens) > 1:  # Only check if we've collected some tokens
-                        # Pattern 1: IDENT followed by ASSIGN is an assignment statement
+                        # Pattern 1: IDENT followed by ASSIGN or compound ASSIGN (+=, -=, etc.)
                         # EXCEPT: In LET/CONST before main assign (e.g., "let x : string =" - string is type, not new var)
                         # EXCEPT: After DOT (property access within same statement: obj.prop = ...)
-                        if tj.type == IDENT and j + 1 < n and tokens[j + 1].type == ASSIGN:
+                        _assign_types = {ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+                        if tj.type == IDENT and j + 1 < n and tokens[j + 1].type in _assign_types:
                             # Check if previous token was DOT (we're in property chain)
                             prev_token = stmt_tokens[-1] if stmt_tokens else None
                             is_property_access = prev_token and prev_token.type == DOT
@@ -1388,7 +1389,8 @@ class StructuralAnalyzer:
                 bracket_count = sum(1 if tok.type == LBRACKET else -1 if tok.type == RBRACKET else 0 for tok in cur)
                 if paren_count == 0 and bracket_count == 0:
                     # Check if there's an ASSIGN in cur (this is a complete assignment statement)
-                    has_assign = any(tok.type == ASSIGN for tok in cur)
+                    _all_assign_types = {ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+                    has_assign = any(tok.type in _all_assign_types for tok in cur)
                     if has_assign:
                         # Check if current token is on a new line
                         last_line = cur[-1].line if cur else 0

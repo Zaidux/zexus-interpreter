@@ -2911,12 +2911,16 @@ class UltimateParser:
     def parse_for_each_statement(self):
         stmt = ForEachStatement(item=None, iterable=None, body=None)
 
-        if not self.expect_peek(EACH):
-            self.errors.append("Expected 'each' after 'for' in for-each loop")
-            return None
-
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected identifier after 'each' in for-each loop")
+        # Support both "for each item in ..." and "for item in ..." syntax
+        if self.peek_token_is(EACH):
+            self.next_token()  # consume EACH
+            if not self.expect_peek(IDENT):
+                self.errors.append("Expected identifier after 'each' in for-each loop")
+                return None
+        elif self.peek_token_is(IDENT):
+            self.next_token()  # consume the IDENT directly (no EACH keyword)
+        else:
+            self.errors.append("Expected 'each' or identifier after 'for' in for loop")
             return None
 
         first_ident = Identifier(value=self.cur_token.literal)

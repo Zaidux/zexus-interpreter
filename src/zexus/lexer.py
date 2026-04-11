@@ -13,7 +13,7 @@ _STRICT_KEYWORDS = {
     'return', 'break', 'continue', 'throw', 'try', 'catch',
     'await', 'async', 'spawn', 'let', 'const', 'print',
     'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda',
-    'case', 'default'
+    'case', 'default', 'not'
 }
 
 _CONTEXTS_ALLOWING_KEYWORD_IDENTS = {
@@ -131,6 +131,7 @@ _KEYWORDS = {
     "inject": INJECT,
     "validate": VALIDATE,
     "sanitize": SANITIZE,
+    "not": BANG,
 }
 
 _FUNCTION_DECL_KEYWORDS = {"action", "function"}

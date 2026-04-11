@@ -1566,6 +1566,44 @@ class ContextStackParser:
                             if i < brace_end and tokens[i].type == COMMA:
                                 i += 1
                             continue
+                    else:
+                        # Bare property name (no type annotation): entity Person { name; age }
+                        # Check for optional default value: name = "default"
+                        default_value = None
+                        prop_end = i + 1
+                        if prop_end < brace_end and tokens[prop_end].type == ASSIGN:
+                            prop_end += 1  # Skip =
+                            val_tokens = []
+                            nesting = 0
+                            while prop_end < brace_end:
+                                vt = tokens[prop_end]
+                                if vt.type in {LPAREN, LBRACE, LBRACKET}:
+                                    nesting += 1
+                                elif vt.type in {RPAREN, RBRACE, RBRACKET}:
+                                    nesting -= 1
+                                elif nesting == 0 and vt.type == COMMA:
+                                    prop_end += 1
+                                    break
+                                elif nesting == 0 and len(val_tokens) > 0:
+                                    prev_vt = val_tokens[-1]
+                                    if vt.line > prev_vt.line and vt.type == IDENT:
+                                        break
+                                val_tokens.append(vt)
+                                prop_end += 1
+                            if val_tokens:
+                                default_value = self._parse_expression(val_tokens)
+
+                        properties.append(AstNodeShim(
+                            name=Identifier(prop_name),
+                            type=Identifier("any"),
+                            default_value=default_value
+                        ))
+                        parser_debug(f"  📝 Property (bare): {prop_name}" + (f" = {default_value}" if default_value else ""))
+                        i = prop_end
+                        # Skip trailing comma
+                        if i < brace_end and tokens[i].type == COMMA:
+                            i += 1
+                        continue
 
                 i += 1
 
@@ -3913,7 +3951,7 @@ class ContextStackParser:
                 j = i + 1
                 stmt_tokens = [token]
                 
-                # Expect EACH keyword
+                # Expect EACH keyword or IDENT (for "for i in range(n)" syntax)
                 if j < len(tokens) and tokens[j].type == EACH:
                     j += 1
                     
@@ -3974,6 +4012,65 @@ class ContextStackParser:
                         
                         stmt = ForEachStatement(
                             item=Identifier(item_name if item_name else 'item'),
+                            iterable=iterable,
+                            body=body_block,
+                            index=Identifier(index_name) if index_name else None
+                        )
+                        if stmt:
+                            statements.append(stmt)
+
+                # Support "for IDENT in EXPR { ... }" syntax (shorthand for "for each")
+                elif j < len(tokens) and tokens[j].type == IDENT:
+                    item_name = tokens[j].literal
+                    j += 1
+                    index_name = None
+
+                    # Check for two-variable form: for i, item in ...
+                    if j < len(tokens) and tokens[j].type == COMMA:
+                        j += 1  # skip comma
+                        if j < len(tokens) and tokens[j].type == IDENT:
+                            index_name = item_name
+                            item_name = tokens[j].literal
+                            j += 1
+
+                    # Expect IN keyword
+                    if j < len(tokens) and tokens[j].type == IN:
+                        j += 1
+
+                        # Collect iterable expression tokens (until {)
+                        iterable_tokens = []
+                        while j < len(tokens) and tokens[j].type != LBRACE:
+                            iterable_tokens.append(tokens[j])
+                            j += 1
+
+                        # Parse iterable
+                        iterable = self._parse_expression(iterable_tokens) if iterable_tokens else Identifier("[]")
+
+                        # Collect body block (between { and })
+                        body_block = BlockStatement()
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            j += 1  # Skip opening brace
+                            body_tokens = []
+                            brace_nest = 1
+
+                            while j < len(tokens) and brace_nest > 0:
+                                if tokens[j].type == LBRACE:
+                                    brace_nest += 1
+                                elif tokens[j].type == RBRACE:
+                                    brace_nest -= 1
+                                    if brace_nest == 0:
+                                        j += 1  # Skip closing brace
+                                        break
+                                body_tokens.append(tokens[j])
+                                j += 1
+
+                            # Recursively parse body statements
+                            body_block.statements = self._parse_block_statements(body_tokens)
+
+                        parser_debug(f"    📝 Found for-in statement with {len(body_block.statements)} body statements")
+
+                        stmt = ForEachStatement(
+                            item=Identifier(item_name),
                             iterable=iterable,
                             body=body_block,
                             index=Identifier(index_name) if index_name else None
