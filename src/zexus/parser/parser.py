@@ -77,6 +77,7 @@ class UltimateParser:
             BREAK: self.parse_break_statement,
             THROW: self.parse_throw_statement,
             PRINT: self.parse_print_statement,
+            PRINT_IF: self.parse_print_if_statement,
             FOR: self.parse_for_each_statement,
             SCREEN: self.parse_screen_statement,
             COLOR: self.parse_color_statement,
@@ -1718,6 +1719,43 @@ class UltimateParser:
             self.next_token()
 
         return stmt
+
+    def parse_print_if_statement(self):
+        """Parse print_if(condition, message) — conditional print.
+        
+        Prints *message* only when *condition* is truthy.
+        Requires exactly 2 arguments inside parentheses.
+        """
+        # Expect: print_if( condition , message )
+        if not self.peek_token_is(LPAREN):
+            self.errors.append(
+                f"Line {self.cur_token.line}:{self.cur_token.column} - "
+                "print_if requires parenthesized arguments: print_if(condition, message)"
+            )
+            return None
+
+        self.next_token()  # consume LPAREN
+        self.next_token()  # move to first expression (condition)
+        condition = self.parse_expression(LOWEST)
+
+        if not self.peek_token_is(COMMA):
+            self.errors.append(
+                f"Line {self.cur_token.line}:{self.cur_token.column} - "
+                "print_if requires exactly 2 arguments: print_if(condition, message)"
+            )
+            return None
+        self.next_token()  # consume COMMA
+        self.next_token()  # move to second expression (value)
+        value = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(RPAREN):
+            self.next_token()
+
+        # TOLERANT: Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return PrintIfStatement(condition=condition, value=value)
 
     def parse_try_catch_statement(self):
         """Enhanced try-catch parsing with structural awareness"""

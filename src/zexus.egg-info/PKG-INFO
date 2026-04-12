@@ -217,7 +217,7 @@ World-class error messages (rivaling Rust), generic types, pattern matching, ope
 
 ### v0.1.3 — Foundation (2025-11)
 
-130+ keywords, dual-mode DEBUG, conditional print, multiple syntax styles, enterprise keywords, async/await, UI renderer, enhanced VERIFY, blockchain keywords, 100+ builtins.
+130+ keywords, dual-mode DEBUG, multi-argument print, multiple syntax styles, enterprise keywords, async/await, UI renderer, enhanced VERIFY, blockchain keywords, 100+ builtins.
 
 ---
 
@@ -1148,16 +1148,9 @@ let x = debug(42)           # Outputs: [DEBUG] 42, x = 42
 # Statement mode - logs with metadata
 debug myVariable;           # Outputs: 🔍 DEBUG: <value> with context
 
-# CONDITIONAL PRINT (NEW!):
-# Only prints if condition is true
-let debugMode = true
-print(debugMode, "Debug mode active")  # Prints: "Debug mode active"
-
-let verbose = false
-print(verbose, "Verbose output")       # Does NOT print
-
 # Multi-argument print
-print("Value:", x, "Result:", y)       # Outputs all separated by spaces
+print("Value:", x, "Result:", y)       # Outputs: Value: <x> Result: <y>
+print("Hello", "World", 42)           # Outputs: Hello World 42
 
 # Other debug tools
 debug_log("message", context)
@@ -1893,7 +1886,7 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`defer`** - Deferred cleanup execution
 
 #### I/O & Output
-- **`print`** - Output to console (supports multi-argument and conditional printing)
+- **`print`** - Output to console (supports multi-argument printing, space-separated)
 - **`debug`** - Debug output (dual-mode: function returns value, statement logs with metadata)
 - **`log`** - Redirect output to file (scope-aware, supports any extension)
 
@@ -2304,7 +2297,7 @@ Source Code (.zx)
 - **[IF/ELIF/ELSE](docs/keywords/IF_ELIF_ELSE.md)** - Conditional execution
 - **[WHILE/FOR/EACH/IN](docs/keywords/WHILE_FOR_EACH_IN.md)** - Loops and iteration
 - **[BREAK](docs/keywords/BREAK.md)** - Loop control - exit loops early
-- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging (includes conditional print)
+- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging (includes multi-argument print)
 - **[LOG](docs/keywords/LOG.md)** - Output redirection and code generation
 
 #### Error Handling

@@ -160,15 +160,44 @@ class BytecodeCompiler:
     
     # ==================== Program & Statements ====================
     
+    # AST node types that represent function declarations and should be hoisted
+    _HOISTABLE_FUNC_TYPES = None  # lazily initialised
+
+    @classmethod
+    def _get_hoistable_types(cls):
+        if cls._HOISTABLE_FUNC_TYPES is None:
+            from .. import zexus_ast as _ast
+            cls._HOISTABLE_FUNC_TYPES = tuple(
+                getattr(_ast, n) for n in (
+                    'ActionStatement', 'FunctionStatement', 'PureFunctionStatement',
+                ) if hasattr(_ast, n)
+            )
+        return cls._HOISTABLE_FUNC_TYPES
+
+    def _compile_statements_with_hoisting(self, statements):
+        """Two-pass compilation: hoist function declarations, then compile the rest.
+
+        Pass 1 – emit STORE_FUNC for every function/action declaration so that
+        they are available before any call site (JavaScript-style hoisting).
+        Pass 2 – compile every *non-function* statement in original order.
+        """
+        hoistable = self._get_hoistable_types()
+        # Pass 1: hoist function declarations
+        for stmt in statements:
+            if isinstance(stmt, hoistable):
+                self._compile_node(stmt)
+        # Pass 2: compile everything else in order
+        for stmt in statements:
+            if not isinstance(stmt, hoistable):
+                self._compile_node(stmt)
+
     def _compile_Program(self, node):
-        """Compile program (list of statements)"""
-        for stmt in node.statements:
-            self._compile_node(stmt)
+        """Compile program (list of statements) with function hoisting"""
+        self._compile_statements_with_hoisting(node.statements)
     
     def _compile_BlockStatement(self, node):
-        """Compile block of statements"""
-        for stmt in node.statements:
-            self._compile_node(stmt)
+        """Compile block of statements with function hoisting"""
+        self._compile_statements_with_hoisting(node.statements)
     
     def _compile_ExpressionStatement(self, node):
         """Compile expression statement"""
@@ -197,6 +226,18 @@ class BytecodeCompiler:
             self._emit(Opcode.LOAD_CONST, null_idx)
             self._emit(Opcode.PRINT)
     
+    def _compile_PrintIfStatement(self, node):
+        """Compile print_if(condition, message) — conditional print.
+
+        Emits: evaluate condition → JUMP_IF_FALSE skip → evaluate value → PRINT → skip:
+        """
+        skip_label = self._make_label()
+        self._compile_node(node.condition)
+        self._emit(Opcode.JUMP_IF_FALSE, skip_label)
+        self._compile_node(node.value)
+        self._emit(Opcode.PRINT)
+        self._mark_label(skip_label)
+
     def _compile_LetStatement(self, node):
         """Compile let/const declaration, including destructuring patterns."""
         from ..zexus_ast import DestructurePattern

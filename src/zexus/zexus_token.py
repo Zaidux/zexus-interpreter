@@ -64,6 +64,7 @@ LET = "LET"
 CONST = "CONST"                # NEW: Const immutable variables
 DATA = "DATA"                  # NEW: Dataclass definitions
 PRINT = "PRINT"
+PRINT_IF = "PRINT_IF"          # Conditional print: print_if(condition, message)
 IF = "IF"
 THEN = "THEN"                  # NEW: Then for if-then-else expressions
 ELIF = "ELIF"                  # NEW: Elif else-if conditionals

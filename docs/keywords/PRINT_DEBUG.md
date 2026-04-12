@@ -679,6 +679,42 @@ print.to("output.txt", message);
 
 ---
 
+## print_if — Conditional Print
+
+The `print_if` keyword provides unambiguous conditional printing. It replaces the
+old `print(condition, message)` two-argument form that conflicted with multi-arg
+print.
+
+### Syntax
+```zexus
+print_if(condition, message);
+```
+
+Prints `message` only when `condition` is truthy. If `condition` is falsy the
+statement is silently skipped — no output is produced.
+
+### Examples
+```zexus
+let debug_mode = true;
+print_if(debug_mode, "debug mode active");   // prints "debug mode active"
+
+let verbose = false;
+print_if(verbose, "verbose output");         // silent — nothing printed
+
+let score = 85;
+print_if(score > 80, "Great score!");        // prints "Great score!"
+print_if(score > 90, "Excellent!");          // silent
+```
+
+### Why not `print(condition, message)`?
+The two-argument conditional form was removed because it was ambiguous with
+multi-argument print:
+- `print("Score:", 100)` printed `100` instead of `Score: 100`
+- `print(0, "msg")` printed nothing (0 is falsy) — silent failure
+- There was no way to print exactly 2 values without triggering conditional mode
+
+`print_if` eliminates this ambiguity with a distinct keyword.
+
 ## Summary
 
 ### When to Use Each
@@ -702,7 +738,7 @@ print.to("output.txt", message);
 2. Both accept any expression or value
 3. Print outputs one value per line
 4. Debug adds [DEBUG] prefix for visibility
-5. **Conditional print**: `print(condition, message)` only prints if condition is true
+5. **Conditional print**: Use `print_if(condition, message)` to print only when condition is truthy
 6. Use sparingly in loops to avoid output spam
 7. Remove or disable debug statements in production
 8. Format output with string concatenation for clarity

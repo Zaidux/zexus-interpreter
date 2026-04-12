@@ -9,7 +9,7 @@ from types import SimpleNamespace # Helper for AST node creation
 from collections import OrderedDict
 
 STATEMENT_STARTERS = {
-    LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION,
+    LET, CONST, DATA, PRINT, PRINT_IF, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION,
     TRY, FINALLY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
     EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
     STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
@@ -105,6 +105,8 @@ class ContextStackParser:
             CONST: self._parse_const_statement_block,  # Handle CONST token type
             'print_statement': self._parse_print_statement_block,
             PRINT: self._parse_print_statement_block,  # Handle PRINT token type from structural analyzer
+            'print_if_statement': self._parse_print_if_statement_block,
+            PRINT_IF: self._parse_print_if_statement_block,
             'debug_statement': self._parse_debug_statement_block,
             DEBUG: self._parse_debug_statement_block,
             'assignment_statement': self._parse_assignment_statement,
@@ -1115,6 +1117,75 @@ class ContextStackParser:
         
         # Regular print: print(arg1, arg2, ...) or print(single_arg)
         return PrintStatement(values=values)
+
+    def _parse_print_if_statement_block(self, block_info, all_tokens):
+        """Parse print_if(condition, message) statement block.
+        
+        Requires exactly 2 comma-separated arguments:
+        - First argument is the condition
+        - Second argument is the value to print when condition is truthy
+        """
+        tokens = block_info['tokens']
+
+        if len(tokens) < 2:
+            return PrintIfStatement(condition=Boolean(True), value=StringLiteral(""))
+
+        # Get all tokens after PRINT_IF keyword
+        expression_tokens = tokens[1:]
+
+        # Strip outer parentheses
+        tokens_to_parse = expression_tokens
+        if (len(expression_tokens) >= 2
+                and expression_tokens[0].type == LPAREN
+                and expression_tokens[-1].type == RPAREN):
+            tokens_to_parse = expression_tokens[1:-1]
+
+        # Split by commas at depth 0
+        args = []
+        current_arg = []
+        paren_depth = 0
+        bracket_depth = 0
+        brace_depth = 0
+
+        for token in tokens_to_parse:
+            if token.type == LPAREN:
+                paren_depth += 1
+            elif token.type == RPAREN:
+                paren_depth -= 1
+            elif token.type == LBRACKET:
+                bracket_depth += 1
+            elif token.type == RBRACKET:
+                bracket_depth -= 1
+            elif token.type == LBRACE:
+                brace_depth += 1
+            elif token.type == RBRACE:
+                brace_depth -= 1
+
+            if (token.type == COMMA
+                    and paren_depth == 0
+                    and bracket_depth == 0
+                    and brace_depth == 0):
+                if current_arg:
+                    expr = self._parse_expression(current_arg)
+                    if expr:
+                        args.append(expr)
+                    current_arg = []
+            else:
+                current_arg.append(token)
+
+        # Last argument
+        if current_arg:
+            expr = self._parse_expression(current_arg)
+            if expr:
+                args.append(expr)
+
+        if len(args) >= 2:
+            return PrintIfStatement(condition=args[0], value=args[1])
+        elif len(args) == 1:
+            # Fallback: treat single arg as always-true condition with arg as value
+            return PrintIfStatement(condition=Boolean(True), value=args[0])
+        else:
+            return PrintIfStatement(condition=Boolean(True), value=StringLiteral(""))
 
     def _parse_debug_statement_block(self, block_info, all_tokens):
         """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
@@ -2375,6 +2446,8 @@ class ContextStackParser:
             return self._parse_const_statement_block(block_info, all_tokens)
         elif subtype == 'print_statement':
             return self._parse_print_statement_block(block_info, all_tokens)
+        elif subtype == 'print_if_statement':
+            return self._parse_print_if_statement_block(block_info, all_tokens)
         elif subtype == 'function_call_statement':
             return self._parse_function_call_statement(block_info, all_tokens)
         elif subtype == 'assignment_statement':
