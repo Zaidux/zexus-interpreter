@@ -70,7 +70,12 @@ def run(script_name):
         if not script:
             click.echo(f"Error: Script '{script_name}' not found in zexus.json.", err=True); return
         click.echo(f"> {script}")
-        subprocess.run(script, shell=True)
+        import shlex
+        try:
+            args = shlex.split(script)
+        except ValueError as e:
+            click.echo(f"Error: Invalid script syntax: {e}", err=True); return
+        subprocess.run(args, shell=False)
     except FileNotFoundError: click.echo("Error: zexus.json not found.", err=True)
     except Exception as e: click.echo(f"An error occurred: {e}", err=True)
 
@@ -108,11 +113,16 @@ def install_single_package(package_name):
                 click.echo("Warning: pip editable install failed. Attempting to create a user shim for 'zx' as a fallback.")
                 try:
                     # Create a small shim script in user's local bin
+                    import shlex as _shlex
                     local_bin = os.path.expanduser('~/.local/bin')
                     os.makedirs(local_bin, exist_ok=True)
                     shim_path = os.path.join(local_bin, 'zx')
                     repo_root = os.path.abspath(os.path.dirname(__file__))
-                    shim = f"#!/usr/bin/env bash\nPYTHONPATH=\"{repo_root}:$PYTHONPATH\" {sys.executable} {os.path.join(repo_root,'main.py')} \"$@\"\n"
+                    # Quote all paths for safe shell expansion
+                    repo_root_q = _shlex.quote(repo_root)
+                    exe_q = _shlex.quote(sys.executable)
+                    main_q = _shlex.quote(os.path.join(repo_root, 'main.py'))
+                    shim = f"#!/usr/bin/env bash\nexport PYTHONPATH={repo_root_q}:$PYTHONPATH\nexec {exe_q} {main_q} \"$@\"\n"
                     with open(shim_path, 'w') as fh:
                         fh.write(shim)
                     os.chmod(shim_path, 0o755)
@@ -184,7 +194,7 @@ if __name__ == '__main__':
         # Final fallback: run the Python module directly with project src on PYTHONPATH
         click.echo("No 'zx' binary found; running CLI via Python module...")
         env = os.environ.copy()
-        repo_root = os.path.abspath(os.path.dirname(__file__))
+        repo_root = os.path.realpath(os.path.dirname(__file__))
         env['PYTHONPATH'] = repo_root + os.pathsep + env.get('PYTHONPATH', '')
         cmd = [sys.executable, '-m', 'zexus.cli.main'] + list(args)
         subprocess.run(cmd, env=env)

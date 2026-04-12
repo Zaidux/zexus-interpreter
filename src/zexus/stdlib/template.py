@@ -333,8 +333,16 @@ class TemplateModule:
 
         Raises:
             FileNotFoundError: If *filepath* does not exist.
+            ValueError: If *filepath* escapes the current working directory.
         """
-        with open(filepath, "r", encoding="utf-8") as f:
+        import os as _os
+        resolved = _os.path.realpath(_os.path.normpath(filepath))
+        cwd = _os.path.realpath(_os.getcwd())
+        if not (resolved == cwd or resolved.startswith(cwd + _os.sep)):
+            raise ValueError(
+                f"Template path '{filepath}' resolves outside the working directory"
+            )
+        with open(resolved, "r", encoding="utf-8") as f:
             template_str = f.read()
         return TemplateModule.render(template_str, context)
 

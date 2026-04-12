@@ -242,7 +242,10 @@ impl RustStateAdapter {
             return false;
         }
         // Pop snapshot but keep current state — changes are committed
-        let _snapshot = self.tx_stack.pop().unwrap();
+        let _snapshot = match self.tx_stack.pop() {
+            Some(s) => s,
+            None => return false,
+        };
         // Merge dirty keys from this transaction into the parent
         // (dirty set already contains all writes — nothing extra needed)
         true

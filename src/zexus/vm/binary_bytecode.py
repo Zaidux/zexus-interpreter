@@ -232,22 +232,16 @@ def _serialize_constant(w: _Writer, value: Any):
             w.u8(ConstTag.FUNC_DESC)
             w.string(json_str)
         except (TypeError, ValueError):
-            # Fall back to opaque
-            import pickle
-            data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
-            w.u8(ConstTag.OPAQUE)
-            w.raw_bytes(data)
-    else:
-        # Callable, AST nodes, or other Python objects → opaque
-        import pickle
-        try:
-            data = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
-            w.u8(ConstTag.OPAQUE)
-            w.raw_bytes(data)
-        except (pickle.PicklingError, TypeError, AttributeError):
-            # Truly unserializable → store repr as string
+            # SECURITY: Fall back to repr() instead of pickle to avoid
+            # deserialization-based code execution.
             w.u8(ConstTag.STRING)
             w.string(repr(value))
+    else:
+        # Callable, AST nodes, or other Python objects → store repr as string.
+        # SECURITY: pickle removed to prevent arbitrary code execution via
+        # crafted bytecode containing malicious __reduce__ payloads.
+        w.u8(ConstTag.STRING)
+        w.string(repr(value))
 
 
 def _serialize_instruction(w: _Writer, opcode_val: int, operand: Any):
