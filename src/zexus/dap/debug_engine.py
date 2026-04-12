@@ -371,11 +371,30 @@ def _safe_eval(expression: str, variables: Dict[str, Any]) -> Any:
     arithmetic (+, -, *, /, %), boolean logic (and, or, not), and
     string literals.
     """
+    import ast as _ast
+
     allowed_names = dict(variables)
     allowed_names.update({"True": True, "False": False, "None": None,
                           "true": True, "false": False, "null": None})
+
+    # AST-level validation: reject function calls, attribute access,
+    # imports, comprehensions, and lambdas.
+    try:
+        tree = _ast.parse(expression, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"Invalid expression: {exc}") from exc
+
+    for node in _ast.walk(tree):
+        if isinstance(node, (_ast.Call, _ast.Attribute, _ast.Import,
+                             _ast.ImportFrom, _ast.Lambda,
+                             _ast.ListComp, _ast.SetComp,
+                             _ast.DictComp, _ast.GeneratorExp)):
+            raise NameError(
+                f"Disallowed expression construct: {type(node).__name__}"
+            )
+
     # Compile with restricted builtins to prevent code execution
-    code = compile(expression, "<expr>", "eval")
+    code = compile(tree, "<expr>", "eval")
     # Disallow any names that are not in our whitelist
     for name in code.co_names:
         if name not in allowed_names:

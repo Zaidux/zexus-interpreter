@@ -50,7 +50,9 @@ impl RustMerkle {
             while current.len() > 1 {
                 // Duplicate last if odd
                 if current.len() % 2 != 0 {
-                    current.push(*current.last().unwrap());
+                    if let Some(last) = current.last().copied() {
+                        current.push(last);
+                    }
                 }
 
                 // Pair and hash in parallel

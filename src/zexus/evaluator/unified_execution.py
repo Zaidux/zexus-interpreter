@@ -598,8 +598,11 @@ class UnifiedExecutor:
                                 dump_lines.append(f"  {idx:04d}: {op_name} {operand}")
                             else:
                                 dump_lines.append(f"  {idx:04d}: {instr}")
-                        dump_path = f"/tmp/zexus_vm_dump_{loop_id}.txt"
-                        with open(dump_path, "w", encoding="utf-8") as handle:
+                        import tempfile
+                        dump_fd, dump_path = tempfile.mkstemp(
+                            prefix=f"zexus_vm_dump_{loop_id}_", suffix=".txt"
+                        )
+                        with os.fdopen(dump_fd, "w", encoding="utf-8") as handle:
                             handle.write("\n".join(dump_lines))
                     except Exception:
                         pass

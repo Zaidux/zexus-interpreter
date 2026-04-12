@@ -694,7 +694,8 @@ impl RustVM {
         }
         let base_cost = op.gas_cost();
         let cost = ((base_cost as f64) * self.gas_discount).ceil() as u64;
-        self.gas_used += cost;
+        // SECURITY: use checked_add to prevent gas metering bypass via overflow
+        self.gas_used = self.gas_used.checked_add(cost).unwrap_or(u64::MAX);
         if self.gas_used > self.gas_limit {
             return Err(VmError::OutOfGas {
                 used: self.gas_used,
@@ -712,9 +713,10 @@ impl RustVM {
             return Ok(());
         }
         let base_cost = op.gas_cost();
-        let total = base_cost + extra;
+        let total = base_cost.saturating_add(extra);
         let cost = ((total as f64) * self.gas_discount).ceil() as u64;
-        self.gas_used += cost;
+        // SECURITY: use checked_add to prevent gas metering bypass via overflow
+        self.gas_used = self.gas_used.checked_add(cost).unwrap_or(u64::MAX);
         if self.gas_used > self.gas_limit {
             return Err(VmError::OutOfGas {
                 used: self.gas_used,
@@ -1097,16 +1099,25 @@ impl RustVM {
                     let obj = self.pop();
                     match (&obj, &idx) {
                         (ZxValue::List(items), ZxValue::Int(i)) => {
-                            let i = *i as usize;
-                            self.push(items.get(i).cloned().unwrap_or(ZxValue::Null));
+                            // SECURITY: reject negative indices to avoid wrapping
+                            // on cast to usize (e.g. -1_i64 as usize → huge number)
+                            if *i < 0 {
+                                self.push(ZxValue::Null);
+                            } else {
+                                let i = *i as usize;
+                                self.push(items.get(i).cloned().unwrap_or(ZxValue::Null));
+                            }
                         }
                         (ZxValue::Map(pairs), ZxValue::Str(key)) => {
                             let found = pairs.iter().find(|(k, _)| k == key);
                             self.push(found.map(|(_, v)| v.clone()).unwrap_or(ZxValue::Null));
                         }
                         (ZxValue::Str(s), ZxValue::Int(i)) => {
-                            let i = *i as usize;
-                            self.push(
+                            if *i < 0 {
+                                self.push(ZxValue::Null);
+                            } else {
+                                let i = *i as usize;
+                                self.push(
                                 s.chars()
                                     .nth(i)
                                     .map(|c| ZxValue::Str(c.to_string()))

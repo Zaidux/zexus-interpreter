@@ -178,9 +178,24 @@ class AuditLog:
         self.entries = []
     
     def export_to_file(self, filename):
-        """Export entire audit log to file"""
+        """Export entire audit log to file.
+
+        *filename* must be a relative path (no ``..`` components) that
+        stays within the current working directory to prevent directory
+        traversal attacks.
+        """
         try:
-            with open(filename, 'w') as f:
+            # Resolve and validate the target path
+            resolved = os.path.realpath(
+                os.path.normpath(os.path.join(os.getcwd(), filename))
+                if not os.path.isabs(filename) else os.path.normpath(filename)
+            )
+            cwd = os.path.realpath(os.getcwd())
+            if not (resolved == cwd or resolved.startswith(cwd + os.sep)):
+                print(f"Warning: Refusing to export audit log outside working directory: {filename}")
+                return False
+
+            with open(resolved, 'w') as f:
                 json.dump(self.entries, f, indent=2)
             return True
         except IOError as e:
@@ -445,12 +460,22 @@ class SecurityContext:
                     elif stype == 'file':
                         _ensure_storage_dirs()
                         path = sink.get('path') or os.path.join(AUDIT_DIR, 'trails.jsonl')
-                        with open(path, 'a', encoding='utf-8') as sf:
+                        # Validate path stays within AUDIT_DIR
+                        real_path = os.path.realpath(os.path.normpath(path))
+                        real_audit = os.path.realpath(AUDIT_DIR)
+                        if not (real_path == real_audit or real_path.startswith(real_audit + os.sep)):
+                            continue  # skip this sink — path escapes audit directory
+                        with open(real_path, 'a', encoding='utf-8') as sf:
                             sf.write(json.dumps(entry) + '\n')
                     elif stype == 'sqlite':
                         _ensure_storage_dirs()
                         db_path = sink.get('db_path') or os.path.join(STORAGE_DIR, 'trails.db')
-                        conn = sqlite3.connect(db_path, check_same_thread=False)
+                        # Validate path stays within STORAGE_DIR
+                        real_db = os.path.realpath(os.path.normpath(db_path))
+                        real_storage = os.path.realpath(STORAGE_DIR)
+                        if not (real_db == real_storage or real_db.startswith(real_storage + os.sep)):
+                            continue  # skip — path escapes storage directory
+                        conn = sqlite3.connect(real_db, check_same_thread=False)
                         try:
                             cur = conn.cursor()
                             cur.execute('''CREATE TABLE IF NOT EXISTS trails (

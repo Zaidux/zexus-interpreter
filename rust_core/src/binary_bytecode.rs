@@ -342,6 +342,23 @@ pub fn deserialize_zxc(data: &[u8], verify_checksum: bool) -> Result<ZxcModule, 
     let n_consts = r.u32()? as usize;
     let n_instrs = r.u32()? as usize;
 
+    // SECURITY: reject unreasonably large counts to prevent OOM/DoS via
+    // crafted bytecode files.
+    const MAX_CONSTANTS: usize = 1_000_000;
+    const MAX_INSTRUCTIONS: usize = 10_000_000;
+    if n_consts > MAX_CONSTANTS {
+        return Err(format!(
+            "Too many constants: {} (max {})",
+            n_consts, MAX_CONSTANTS
+        ));
+    }
+    if n_instrs > MAX_INSTRUCTIONS {
+        return Err(format!(
+            "Too many instructions: {} (max {})",
+            n_instrs, MAX_INSTRUCTIONS
+        ));
+    }
+
     // Constants
     let mut constants = Vec::with_capacity(n_consts);
     for _ in 0..n_consts {

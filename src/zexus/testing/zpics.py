@@ -13,9 +13,16 @@ Date: December 2025
 import json
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
+
+
+def _sanitize_test_name(name: str) -> str:
+    """Sanitize test_name to prevent path traversal in snapshot filenames."""
+    # Strip path separators and traversal sequences
+    return re.sub(r'[/\\]|\.\.', '_', name)
 
 
 @dataclass
@@ -130,13 +137,13 @@ class ZPICSValidator:
     
     def save_snapshot(self, test_name: str, snapshot: ParseSnapshot):
         """Save snapshot to disk"""
-        snapshot_file = self.snapshot_dir / f"{test_name}.json"
+        snapshot_file = self.snapshot_dir / f"{_sanitize_test_name(test_name)}.json"
         with open(snapshot_file, 'w') as f:
             json.dump(snapshot.to_dict(), f, indent=2)
     
     def load_snapshot(self, test_name: str) -> Optional[ParseSnapshot]:
         """Load snapshot from disk"""
-        snapshot_file = self.snapshot_dir / f"{test_name}.json"
+        snapshot_file = self.snapshot_dir / f"{_sanitize_test_name(test_name)}.json"
         if not snapshot_file.exists():
             return None
         

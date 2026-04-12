@@ -365,7 +365,12 @@ impl RustContractVM {
 
                 let d_py = receipt.to_py_dict(py);
                 // Add extra fields
-                let d = d_py.downcast_bound::<PyDict>(py).unwrap();
+                let d = match d_py.downcast_bound::<PyDict>(py) {
+                    Ok(dict) => dict,
+                    Err(_) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Failed to create receipt dict"
+                    )),
+                };
                 let _ = d.set_item("needs_fallback", false);
                 let _ = d.set_item("gas_discount", self.gas_discount);
                 let _ = d.set_item("gas_saved", gas_saved);
@@ -413,7 +418,12 @@ impl RustContractVM {
                     &format!("Out of gas: used={}, limit={}, op={}", used, limit, opcode),
                 );
                 let d_py = receipt.to_py_dict(py);
-                let d = d_py.downcast_bound::<PyDict>(py).unwrap();
+                let d = match d_py.downcast_bound::<PyDict>(py) {
+                    Ok(dict) => dict,
+                    Err(_) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Failed to create receipt dict"
+                    )),
+                };
                 let _ = d.set_item("needs_fallback", false);
                 let _ = d.set_item("gas_discount", self.gas_discount);
                 let _ = d.set_item("gas_saved", 0u64);
@@ -431,7 +441,12 @@ impl RustContractVM {
                     &msg,
                 );
                 let d_py = receipt.to_py_dict(py);
-                let d = d_py.downcast_bound::<PyDict>(py).unwrap();
+                let d = match d_py.downcast_bound::<PyDict>(py) {
+                    Ok(dict) => dict,
+                    Err(_) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Failed to create receipt dict"
+                    )),
+                };
                 let _ = d.set_item("needs_fallback", false);
                 let _ = d.set_item("gas_discount", self.gas_discount);
                 let _ = d.set_item("gas_saved", gas_saved);
@@ -465,7 +480,12 @@ impl RustContractVM {
                     &format!("{}", e),
                 );
                 let d_py = receipt.to_py_dict(py);
-                let d = d_py.downcast_bound::<PyDict>(py).unwrap();
+                let d = match d_py.downcast_bound::<PyDict>(py) {
+                    Ok(dict) => dict,
+                    Err(_) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Failed to create receipt dict"
+                    )),
+                };
                 let _ = d.set_item("needs_fallback", false);
                 let _ = d.set_item("gas_discount", self.gas_discount);
                 let _ = d.set_item("gas_saved", gas_saved);

@@ -132,8 +132,11 @@ class SandboxFileSystem:
                 rel_path = virtual_path[len(mount_point)+1:]
                 real_path = os.path.normpath(os.path.join(mount.real_path, rel_path))
                 
-                # Ensure real path is still under mounted root
-                if real_path.startswith(mount.real_path):
+                # Ensure real path is still under mounted root.
+                # Use os.sep suffix check to prevent prefix collisions
+                # (e.g. "/opt/app" should NOT match "/opt/app_secret").
+                mount_root = mount.real_path.rstrip(os.sep) + os.sep
+                if real_path == mount.real_path or real_path.startswith(mount_root):
                     return real_path, mount.access_mode
         
         return None

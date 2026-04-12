@@ -44,6 +44,58 @@ except Exception:
     NativeJITBackend = None
 
 
+# ── Safe numeric helpers (replaces eval()-based constant folding) ──────
+
+import re as _re
+
+_NUMERIC_RE = _re.compile(r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
+
+
+def _safe_parse_number(value):
+    """Parse a string as int or float without using eval().
+
+    Returns ``None`` if the string is not a plain numeric literal.
+    """
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if not s:
+        return None
+    if not _NUMERIC_RE.match(s):
+        return None
+    try:
+        if "." in s or "e" in s.lower():
+            return float(s)
+        return int(s)
+    except (ValueError, OverflowError):
+        return None
+
+
+_SAFE_OPS = {
+    "+": lambda a, b: a + b,
+    "-": lambda a, b: a - b,
+    "*": lambda a, b: a * b,
+    "/": lambda a, b: a / b if b != 0 else 0,
+    "%": lambda a, b: a % b if b != 0 else 0,
+    "**": lambda a, b: a ** b,
+}
+
+
+def _safe_binop(a, operator, b):
+    """Compute *a op b* safely without ``eval()``.
+
+    Returns ``None`` if the operator is unknown or the operands are not
+    numeric.
+    """
+    fn = _SAFE_OPS.get(operator)
+    if fn is None:
+        return None
+    try:
+        return fn(a, b)
+    except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+        return None
+
+
 class ExecutionTier(Enum):
     """Execution tiers for tiered compilation"""
     INTERPRETED = 0  # AST interpretation (slowest)
@@ -509,8 +561,9 @@ class JITCompiler:
                     try:
                         if (a_expr.startswith('const_') and b_expr.startswith('const_')):
                             # Both are constants, can pre-compute
-                            a_const = eval(a_val) if isinstance(a_val, str) and a_val[0].isdigit() else a_val
-                            b_const = eval(b_val) if isinstance(b_val, str) and b_val[0].isdigit() else b_val
+                            # SECURITY: use safe numeric parsing instead of eval()
+                            a_const = _safe_parse_number(a_val) if isinstance(a_val, str) else a_val
+                            b_const = _safe_parse_number(b_val) if isinstance(b_val, str) else b_val
                             
                             if opcode == 'ADD':
                                 result = a_const + b_const
@@ -943,9 +996,17 @@ class JITCompiler:
                                 try:
                                     if (isinstance(a_expr, str) and isinstance(b_expr, str) and
                                             a_expr.startswith('const_') and b_expr.startswith('const_')):
-                                        # Already computed by optimizer
-                                        computed = eval(f"{a_val} {operator} {b_val}")
-                                        lines.append(f"    {result_var} = {repr(computed)}")
+                                        # SECURITY: use safe numeric computation instead of eval()
+                                        a_num = _safe_parse_number(a_val) if isinstance(a_val, str) else a_val
+                                        b_num = _safe_parse_number(b_val) if isinstance(b_val, str) else b_val
+                                        if a_num is not None and b_num is not None:
+                                            computed = _safe_binop(a_num, operator, b_num)
+                                            if computed is not None:
+                                                lines.append(f"    {result_var} = {repr(computed)}")
+                                            else:
+                                                lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
+                                        else:
+                                            lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
                                     else:
                                         lines.append(f"    {result_var} = {a_val} {operator} {b_val}")
                                 except (TypeError, ValueError, NameError, SyntaxError, AttributeError):

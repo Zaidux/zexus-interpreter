@@ -116,11 +116,16 @@ export {{
         land directly in *target_dir*.
         """
         with tarfile.open(tarball_path, "r:gz") as tar:
-            # Security: filter out absolute paths and ..'s
+            # Security: filter out absolute paths, ".." traversals,
+            # and symlink/hardlink entries that could escape target_dir.
             safe_members = []
             prefix = f"{package_name}/"
             for member in tar.getmembers():
                 if member.name.startswith("/") or ".." in member.name:
+                    continue
+                # Reject symlinks and hardlinks — they can point outside
+                # the extraction directory.
+                if member.issym() or member.islnk():
                     continue
                 # Strip the package-name prefix from the archive path
                 if member.name.startswith(prefix):

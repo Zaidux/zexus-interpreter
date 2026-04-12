@@ -76,11 +76,10 @@ ZxValue zexus_cabi_lock_release(ZxValue env, ZxValue key);
 ZxValue zexus_cabi_barrier_wait(ZxValue barrier, ZxValue timeout);
 ZxValue zexus_cabi_atomic_add(ZxValue env, ZxValue key, ZxValue delta);
 ZxValue zexus_cabi_atomic_cas(ZxValue env, ZxValue key, ZxValue expected, ZxValue new_value);
-ZxValue zexus_cabi_get_iter(ZxValue obj);
-ZxValue zexus_cabi_iter_next_pair(ZxValue iterator);
 ZxValue zexus_cabi_atomic_add(ZxValue env, ZxValue key, ZxValue delta);
 ZxValue zexus_cabi_atomic_cas(ZxValue env, ZxValue key, ZxValue expected, ZxValue new_value);
-ZxValue zexus_cabi_barrier_wait(ZxValue barrier, ZxValue timeout);
+ZxValue zexus_cabi_get_iter(ZxValue obj);
+ZxValue zexus_cabi_iter_next_pair(ZxValue iterator);
 
 ZxValue zexus_cabi_define_enum(ZxValue env, ZxValue name, ZxValue spec);
 ZxValue zexus_cabi_define_protocol(ZxValue env, ZxValue name, ZxValue spec);

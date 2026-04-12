@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <string.h>
 #include "cabi.h"
 
 static PyObject *zx_get_attr(PyObject *obj, const char *name) {
@@ -435,14 +436,25 @@ PyObject *zexus_cabi_print(PyObject *obj) {
     Py_RETURN_NONE;
 }
 
+static int zx_validate_path(PyObject *path) {
+    if (!path || !PyUnicode_Check(path)) return 0;
+    const char *cpath = PyUnicode_AsUTF8(path);
+    if (!cpath) { PyErr_Clear(); return 0; }
+    if (cpath[0] == '/' || strstr(cpath, "..") != NULL) return 0;
+    return 1;
+}
+
 PyObject *zexus_cabi_read(PyObject *path) {
     if (!path) { Py_RETURN_NONE; }
+    if (!zx_validate_path(path)) { Py_RETURN_NONE; }
     PyObject *io = PyImport_ImportModule("io");
     if (!io) { PyErr_Clear(); Py_RETURN_NONE; }
     PyObject *open_fn = PyObject_GetAttrString(io, "open");
     Py_DECREF(io);
     if (!open_fn) { PyErr_Clear(); Py_RETURN_NONE; }
-    PyObject *args = PyTuple_Pack(2, path, PyUnicode_FromString("r"));
+    PyObject *mode = PyUnicode_FromString("r");
+    PyObject *args = PyTuple_Pack(2, path, mode);
+    Py_DECREF(mode);
     PyObject *file = PyObject_CallObject(open_fn, args);
     Py_DECREF(args);
     Py_DECREF(open_fn);
@@ -463,12 +475,15 @@ PyObject *zexus_cabi_read(PyObject *path) {
 
 PyObject *zexus_cabi_write(PyObject *path, PyObject *content) {
     if (!path) { Py_RETURN_NONE; }
+    if (!zx_validate_path(path)) { Py_RETURN_NONE; }
     PyObject *io = PyImport_ImportModule("io");
     if (!io) { PyErr_Clear(); Py_RETURN_NONE; }
     PyObject *open_fn = PyObject_GetAttrString(io, "open");
     Py_DECREF(io);
     if (!open_fn) { PyErr_Clear(); Py_RETURN_NONE; }
-    PyObject *args = PyTuple_Pack(2, path, PyUnicode_FromString("w"));
+    PyObject *mode = PyUnicode_FromString("w");
+    PyObject *args = PyTuple_Pack(2, path, mode);
+    Py_DECREF(mode);
     PyObject *file = PyObject_CallObject(open_fn, args);
     Py_DECREF(args);
     Py_DECREF(open_fn);
@@ -476,11 +491,14 @@ PyObject *zexus_cabi_write(PyObject *path, PyObject *content) {
     PyObject *write_fn = PyObject_GetAttrString(file, "write");
     if (!write_fn) { PyErr_Clear(); Py_DECREF(file); Py_RETURN_NONE; }
     PyObject *text = content ? PyObject_Str(content) : PyUnicode_FromString("null");
-    PyObject *write_args = PyTuple_Pack(1, text ? text : PyUnicode_FromString(""));
+    PyObject *fallback = NULL;
+    if (!text) { fallback = PyUnicode_FromString(""); text = fallback; }
+    PyObject *write_args = PyTuple_Pack(1, text);
     PyObject *write_res = PyObject_CallObject(write_fn, write_args);
     Py_XDECREF(write_res);
     Py_DECREF(write_args);
     Py_XDECREF(text);
+    Py_XDECREF(fallback);
     Py_DECREF(write_fn);
     PyObject *close_fn = PyObject_GetAttrString(file, "close");
     if (close_fn) {
@@ -491,8 +509,30 @@ PyObject *zexus_cabi_write(PyObject *path, PyObject *content) {
     Py_RETURN_NONE;
 }
 
+static const char *ZX_IMPORT_BLOCKLIST[] = {
+    "os", "subprocess", "shutil", "ctypes", "importlib",
+    "sys", "signal", "socket", "http", "urllib",
+    "pathlib", "tempfile", "glob", "fnmatch",
+    "code", "codeop", "compile", "compileall",
+    "multiprocessing", "threading", "concurrent",
+    NULL
+};
+
+static int zx_is_import_blocked(PyObject *name) {
+    if (!name || !PyUnicode_Check(name)) return 0;
+    const char *cname = PyUnicode_AsUTF8(name);
+    if (!cname) { PyErr_Clear(); return 0; }
+    for (int i = 0; ZX_IMPORT_BLOCKLIST[i] != NULL; i++) {
+        if (strcmp(cname, ZX_IMPORT_BLOCKLIST[i]) == 0) return 1;
+        size_t blen = strlen(ZX_IMPORT_BLOCKLIST[i]);
+        if (strncmp(cname, ZX_IMPORT_BLOCKLIST[i], blen) == 0 && cname[blen] == '.') return 1;
+    }
+    return 0;
+}
+
 PyObject *zexus_cabi_import(PyObject *name) {
     if (!name) { Py_RETURN_NONE; }
+    if (zx_is_import_blocked(name)) { Py_RETURN_NONE; }
     PyObject *module = PyImport_Import(name);
     if (!module) { PyErr_Clear(); Py_RETURN_NONE; }
     return module;
@@ -681,6 +721,20 @@ PyObject *zexus_cabi_gas_charge(PyObject *env, PyObject *amount) {
     if (PyFloat_Check(cur) && PyFloat_AsDouble(cur) == Py_HUGE_VAL) return NULL;
     PyObject *zero = PyLong_FromLong(0);
     PyObject *subtrahend = amount ? amount : zero;
+    // Reject negative gas charges (would increase remaining gas)
+    int neg_amount = PyObject_RichCompareBool(subtrahend, zero, Py_LT);
+    if (neg_amount > 0) {
+        Py_DECREF(zero);
+        PyObject *err = PyDict_New();
+        if (!err) return NULL;
+        PyObject *err_type = PyUnicode_FromString("InvalidGasAmount");
+        PyObject *err_msg = PyUnicode_FromString("Gas charge amount must be non-negative");
+        PyDict_SetItemString(err, "error", err_type);
+        PyDict_SetItemString(err, "message", err_msg);
+        Py_DECREF(err_type);
+        Py_DECREF(err_msg);
+        return err;
+    }
     PyObject *new_gas = PyNumber_Subtract(cur, subtrahend);
     Py_DECREF(zero);
     if (!new_gas) { PyErr_Clear(); return NULL; }
@@ -700,7 +754,9 @@ PyObject *zexus_cabi_gas_charge(PyObject *env, PyObject *amount) {
         }
         PyObject *err = PyDict_New();
         if (!err) return NULL;
-        PyDict_SetItemString(err, "error", PyUnicode_FromString("OutOfGas"));
+        PyObject *oog_str = PyUnicode_FromString("OutOfGas");
+        PyDict_SetItemString(err, "error", oog_str);
+        Py_DECREF(oog_str);
         if (amount) {
             PyDict_SetItemString(err, "required", amount);
         } else {
@@ -750,7 +806,9 @@ PyObject *zexus_cabi_require(PyObject *env, PyObject *condition, PyObject *messa
 
     PyObject *err = PyDict_New();
     if (!err) return NULL;
-    PyDict_SetItemString(err, "error", PyUnicode_FromString("RequirementFailed"));
+    PyObject *rf_str = PyUnicode_FromString("RequirementFailed");
+    PyDict_SetItemString(err, "error", rf_str);
+    Py_DECREF(rf_str);
     PyObject *msg_obj = message && message != Py_None ? PyObject_Str(message) : PyUnicode_FromString("Requirement failed");
     if (msg_obj) {
         PyDict_SetItemString(err, "message", msg_obj);
@@ -1030,9 +1088,10 @@ PyObject *zexus_cabi_atomic_add(PyObject *env, PyObject *key, PyObject *delta) {
     PyObject *current = state ? PyDict_GetItem(state, key) : NULL;
     if (!current) current = PyLong_FromLong(0);
     else Py_INCREF(current);
-    PyObject *delta_val = delta ? delta : PyLong_FromLong(0);
-    if (!delta) Py_DECREF(delta_val);
+    PyObject *delta_owned = NULL;
+    PyObject *delta_val = delta ? delta : (delta_owned = PyLong_FromLong(0));
     PyObject *new_val = PyNumber_Add(current, delta_val);
+    Py_XDECREF(delta_owned);
     if (new_val && state) {
         PyDict_SetItem(state, key, new_val);
     }
@@ -1286,7 +1345,9 @@ PyObject *zexus_cabi_define_entity(PyObject **items, Py_ssize_t count, PyObject 
     PyObject *name_str = PyObject_Str(name_val);
     Py_DECREF(name_val);
     if (!name_str) { PyErr_Clear(); name_str = PyUnicode_FromString(""); }
-    PyDict_SetItemString(members, "_type", PyUnicode_FromString("entity"));
+    PyObject *type_str = PyUnicode_FromString("entity");
+    PyDict_SetItemString(members, "_type", type_str);
+    Py_DECREF(type_str);
     PyDict_SetItemString(members, "_name", name_str);
     Py_DECREF(name_str);
     return members;

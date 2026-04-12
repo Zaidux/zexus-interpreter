@@ -10,8 +10,17 @@ if __name__ == "__main__":
         sys.exit(1)
     
     filename = sys.argv[1]
-    if not os.path.exists(filename):
-        print(f"Error: File '{filename}' not found")
+
+    # Resolve symlinks so we operate on the real target
+    real_path = os.path.realpath(filename)
+
+    if not os.path.isfile(real_path):
+        print(f"Error: File '{filename}' not found or is not a regular file")
+        sys.exit(1)
+
+    # Restrict to .zx files
+    if not real_path.endswith('.zx'):
+        print("Error: Only .zx files are accepted")
         sys.exit(1)
     
-    main(filename)
+    main(real_path)
