@@ -161,7 +161,7 @@ class BytecodeCompiler:
     # ==================== Program & Statements ====================
     
     # AST node types that represent function declarations and should be hoisted
-    _HOISTABLE_FUNC_TYPES = None  # lazily initialised
+    _HOISTABLE_FUNC_TYPES = None  # lazily initialized
 
     @classmethod
     def _get_hoistable_types(cls):
