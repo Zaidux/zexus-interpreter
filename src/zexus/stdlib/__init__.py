@@ -12,6 +12,7 @@ from .math import MathModule
 from .encoding import EncodingModule
 from .compression import CompressionModule
 from .cache import CacheModule
+from .queue_module import QueueModule
 
 __all__ = [
     'FileSystemModule', 
@@ -25,5 +26,6 @@ __all__ = [
     'MathModule',
     'EncodingModule',
     'CompressionModule',
-    'CacheModule'
+    'CacheModule',
+    'QueueModule'
 ]
