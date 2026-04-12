@@ -58,12 +58,13 @@ def test_command_injection():
     # --- Payload 3: Command substitution ---
     payload3 = "echo $(whoami)"
     result3 = OSModule.execute(payload3)
-    subst_worked = result3.get("returncode") == 0 and len(result3.get("stdout", "").strip()) > 0
+    # With shell=False, $(whoami) is passed literally to echo, not expanded
+    subst_worked = result3.get("returncode") == 0 and result3.get("stdout", "").strip() == "$(whoami)"
     results.append({
         "payload": payload3,
         "type": "command_substitution",
-        "exploited": subst_worked,
-        "detail": f"stdout={result3.get('stdout', '').strip()!r}",
+        "exploited": not subst_worked,  # If literal, NOT exploited
+        "detail": f"stdout={result3.get('stdout', '').strip()!r} — {'literal (safe)' if subst_worked else 'expanded (vulnerable)'}",
     })
 
     # --- Payload 4: Backtick injection ---

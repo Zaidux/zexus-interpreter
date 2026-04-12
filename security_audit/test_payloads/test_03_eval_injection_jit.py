@@ -2,18 +2,18 @@
 TEST 03: eval() Injection in JIT Compiler (jit.py)
 ===================================================
 
-VULNERABILITY: The JIT optimizer uses eval() on string values that start with
-a digit character. The check `a_val[0].isdigit()` is insufficient — a string
-like "1+__import__('os').system('id')" starts with '1' (a digit) but contains
-arbitrary Python code.
+VULNERABILITY: The JIT optimizer previously used eval() on string values
+that start with a digit character. The check `a_val[0].isdigit()` was
+insufficient — a string like "1+__import__('os').system('id')" starts
+with '1' (a digit) but contains arbitrary Python code.
 
 LOCATION: src/zexus/vm/jit.py, lines 512-513, 947
 
 SEVERITY: CRITICAL - Code Execution
 
-ATTACK VECTOR: If a Zexus program produces bytecode constants whose string
-representation starts with a digit, the JIT constant-folding path will eval()
-the full string.
+FIX: Replaced eval() with _safe_parse_number() which uses a strict regex
+to accept only plain numeric literals, and _safe_binop() for compile-time
+constant folding.
 """
 
 import sys
@@ -23,68 +23,49 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 
 def test_eval_injection_in_jit():
-    """Demonstrate that eval() on digit-prefixed strings is dangerous."""
+    """Verify that the JIT now uses safe numeric parsing instead of eval()."""
     results = []
 
-    # Simulate the vulnerable pattern from jit.py lines 512-513:
-    #   a_const = eval(a_val) if isinstance(a_val, str) and a_val[0].isdigit() else a_val
+    # Import the actual fixed function
+    from zexus.vm.jit import _safe_parse_number, _safe_binop
 
-    # --- Payload 1: Simple arithmetic that sneaks through ---
+    # --- Payload 1: Simple arithmetic that should NOT be evaluated ---
     a_val = "1+1"
-    passes_check = isinstance(a_val, str) and a_val[0].isdigit()
-    try:
-        result = eval(a_val) if passes_check else a_val  # noqa: S307
-        results.append({
-            "payload": a_val,
-            "type": "arithmetic_eval",
-            "exploited": result == 2,  # Should be string "1+1", not int 2
-            "detail": f"eval({a_val!r}) = {result!r} (expected string, got computed value)",
-        })
-    except Exception as e:
-        results.append({
-            "payload": a_val, "type": "arithmetic_eval",
-            "exploited": False, "detail": f"Exception: {e}",
-        })
+    parsed = _safe_parse_number(a_val)
+    results.append({
+        "payload": a_val,
+        "type": "arithmetic_string_rejected",
+        "exploited": parsed is not None and parsed == 2,
+        "detail": f"_safe_parse_number({a_val!r}) = {parsed!r} — {'REJECTED (safe)' if parsed is None else 'EVALUATED (vulnerable)'}",
+    })
 
     # --- Payload 2: Code execution disguised as a number ---
-    # This string starts with '9' (isdigit() → True) but is actually malicious code
-    # We use a safe read-only probe: __import__('os').getpid()
     a_val_malicious = "9 if not __import__('os').getpid() else 42"
-    passes_check2 = isinstance(a_val_malicious, str) and a_val_malicious[0].isdigit()
-    try:
-        # This would run in the JIT constant folding path
-        result2 = eval(a_val_malicious) if passes_check2 else a_val_malicious  # noqa: S307
-        exploited2 = isinstance(result2, int) and result2 == 42
-        results.append({
-            "payload": a_val_malicious,
-            "type": "code_exec_via_eval",
-            "exploited": exploited2,
-            "detail": f"eval() returned {result2!r} — arbitrary Python code executed",
-        })
-    except Exception as e:
-        results.append({
-            "payload": a_val_malicious, "type": "code_exec_via_eval",
-            "exploited": False, "detail": f"Exception: {e}",
-        })
+    parsed2 = _safe_parse_number(a_val_malicious)
+    results.append({
+        "payload": a_val_malicious,
+        "type": "code_exec_via_parse",
+        "exploited": parsed2 is not None,
+        "detail": f"_safe_parse_number() = {parsed2!r} — {'REJECTED (safe)' if parsed2 is None else 'PARSED (vulnerable)'}",
+    })
 
-    # --- Payload 3: eval(f"{{a_val}} {{operator}} {{b_val}}") at line 947 ---
-    # If a_val = "1", operator = "+", b_val = "__import__('os').getpid()"
-    a_val3 = "1"
-    operator3 = "+"
-    b_val3 = "__import__('os').getpid()"
-    expr3 = f"{a_val3} {operator3} {b_val3}"
-    try:
-        result3 = eval(expr3)  # noqa: S307
+    # --- Payload 3: Verify safe binop works for legitimate values ---
+    result3 = _safe_binop(10, "+", 20)
+    results.append({
+        "payload": "_safe_binop(10, '+', 20)",
+        "type": "safe_binop_works",
+        "exploited": result3 != 30,  # If it DOESN'T work, that's a regression
+        "detail": f"_safe_binop(10, '+', 20) = {result3!r} — {'CORRECT' if result3 == 30 else 'WRONG'}",
+    })
+
+    # --- Payload 4: Verify legitimate numbers are still parsed ---
+    for num_str, expected in [("42", 42), ("3.14", 3.14), ("-7", -7), ("1e10", 1e10)]:
+        parsed = _safe_parse_number(num_str)
         results.append({
-            "payload": expr3,
-            "type": "format_string_eval",
-            "exploited": isinstance(result3, int) and result3 > 1,
-            "detail": f"eval({expr3!r}) = {result3!r} — computed 1 + getpid()",
-        })
-    except Exception as e:
-        results.append({
-            "payload": expr3, "type": "format_string_eval",
-            "exploited": False, "detail": f"Exception: {e}",
+            "payload": f"_safe_parse_number({num_str!r})",
+            "type": "legitimate_number_parsed",
+            "exploited": parsed != expected,
+            "detail": f"Got {parsed!r}, expected {expected!r}",
         })
 
     return results
@@ -92,7 +73,7 @@ def test_eval_injection_in_jit():
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("TEST 03: eval() Injection in JIT Compiler")
+    print("TEST 03: eval() Injection in JIT Compiler (AFTER FIX)")
     print("=" * 70)
     for r in test_eval_injection_in_jit():
         status = "VULNERABLE" if r["exploited"] else "SAFE"

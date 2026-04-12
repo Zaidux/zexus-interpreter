@@ -54,33 +54,54 @@ def test_env_var_leakage():
     })
 
     # --- Payload 2: setenv() can modify critical variables ---
-    original_path = os.environ.get("PATH", "")
-    OSModule.setenv("PATH", "/tmp/evil:$PATH")
-    modified = os.environ.get("PATH", "").startswith("/tmp/evil")
-    os.environ["PATH"] = original_path  # Restore immediately
+    try:
+        OSModule.setenv("PATH", "/tmp/evil:$PATH")
+        modified = True
+    except PermissionError:
+        modified = False
 
     results.append({
         "payload": 'OSModule.setenv("PATH", "/tmp/evil:$PATH")',
         "type": "env_modification",
         "exploited": modified,
-        "detail": "PATH was modified — could redirect system commands to attacker-controlled binaries",
+        "detail": "PATH modification blocked by PermissionError" if not modified else "PATH was modified — VULNERABLE",
     })
 
-    # --- Payload 3: unsetenv() can remove security-critical vars ---
-    os.environ["FAKE_SECURITY_FLAG"] = "enabled"
-    OSModule.unsetenv("FAKE_SECURITY_FLAG")
-    removed = "FAKE_SECURITY_FLAG" not in os.environ
+    # --- Payload 3: unsetenv() on non-sensitive variable still works ---
+    # Non-sensitive env vars should be modifiable (this is expected behavior)
+    os.environ["ZEXUS_USER_SETTING"] = "enabled"
+    try:
+        OSModule.unsetenv("ZEXUS_USER_SETTING")
+        removed = "ZEXUS_USER_SETTING" not in os.environ
+    except PermissionError:
+        removed = False
 
     results.append({
-        "payload": 'OSModule.unsetenv("FAKE_SECURITY_FLAG")',
-        "type": "env_deletion",
-        "exploited": removed,
-        "detail": "Security-critical env var was deleted without restriction",
+        "payload": 'OSModule.unsetenv("ZEXUS_USER_SETTING")',
+        "type": "env_deletion_non_sensitive",
+        "exploited": False,  # Non-sensitive vars SHOULD be deletable
+        "detail": f"Non-sensitive env var {'removed' if removed else 'kept'} — this is expected behavior",
+    })
+
+    # --- Payload 4: unsetenv() blocked for sensitive variable ---
+    os.environ["MY_SECRET_KEY"] = "s3cr3t"
+    try:
+        OSModule.unsetenv("MY_SECRET_KEY")
+        secret_removed = "MY_SECRET_KEY" not in os.environ
+    except PermissionError:
+        secret_removed = False
+
+    results.append({
+        "payload": 'OSModule.unsetenv("MY_SECRET_KEY")',
+        "type": "env_deletion_sensitive_blocked",
+        "exploited": secret_removed,
+        "detail": "Deletion of sensitive env var blocked" if not secret_removed else "VULNERABLE — sensitive var was deleted",
     })
 
     # Cleanup
     os.environ.pop("FAKE_API_SECRET_KEY", None)
     os.environ.pop("FAKE_DB_PASSWORD", None)
+    os.environ.pop("MY_SECRET_KEY", None)
 
     return results
 

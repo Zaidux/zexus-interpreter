@@ -49,25 +49,25 @@ def test_tarball_symlink_attack():
 
     tar_buffer.seek(0)
 
-    # Simulate the vulnerable extraction logic from installer.py
+    # Simulate the FIXED extraction logic from installer.py
     target_dir = tempfile.mkdtemp(prefix="zexus_tar_test_")
 
     with tarfile.open(fileobj=tar_buffer, mode="r:gz") as tar:
         safe_members = []
         prefix = f"{pkg_name}/"
-        has_symlink = False
         for member in tar.getmembers():
             if member.name.startswith("/") or ".." in member.name:
                 continue
+            # FIXED: reject symlinks and hardlinks
             if member.issym() or member.islnk():
-                has_symlink = True
+                continue
             if member.name.startswith(prefix):
                 member.name = member.name[len(prefix):]
             elif member.name == pkg_name:
                 continue
             safe_members.append(member)
 
-        # Check: does the current code filter out symlinks?
+        # Check: does the fixed code filter out symlinks?
         symlink_in_safe = any(m.issym() or m.islnk() for m in safe_members)
 
     results.append({

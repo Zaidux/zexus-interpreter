@@ -314,6 +314,14 @@ scripts/run_zexus_tests.py
 scripts/setup_stdlib.sh
 scripts/zpm.py
 scripts/zx-luncher.py
+security_audit/test_payloads/test_01_command_injection.py
+security_audit/test_payloads/test_02_pickle_deserialization.py
+security_audit/test_payloads/test_03_eval_injection_jit.py
+security_audit/test_payloads/test_04_path_traversal_vfs.py
+security_audit/test_payloads/test_05_env_var_leakage.py
+security_audit/test_payloads/test_06_path_traversal_evaluator.py
+security_audit/test_payloads/test_07_tarball_symlink.py
+security_audit/test_payloads/test_08_module_traversal.py
 src/README.md
 src/__init__.py
 src/tests/run_zexus_tests.py
