@@ -1113,13 +1113,8 @@ class ContextStackParser:
         if not values:
             values = [StringLiteral("")]
         
-        # Check if this is conditional print: exactly 2 arguments
-        if len(values) == 2:
-            # Conditional print: print(condition, message)
-            return PrintStatement(values=[values[1]], condition=values[0])
-        else:
-            # Regular print: print(arg1, arg2, ...) or print(single_arg)
-            return PrintStatement(values=values)
+        # Regular print: print(arg1, arg2, ...) or print(single_arg)
+        return PrintStatement(values=values)
 
     def _parse_debug_statement_block(self, block_info, all_tokens):
         """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
@@ -2724,30 +2719,35 @@ class ContextStackParser:
                             
                             # If on a new line and current token could start a statement, it's likely a new statement
                             if is_new_line and lookahead_idx < len(tokens):
-                                next_tok = tokens[lookahead_idx]
-                                # IDENT followed by DOT (method call) or LPAREN (function call) on new line
-                                if next_tok.type in {DOT, LPAREN}:
-                                    is_new_statement = True
-                                # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
-                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
-                                    is_new_statement = True
-                                # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
-                                elif next_tok.type == LBRACKET:
-                                    # Look ahead to confirm it's an indexed assignment
-                                    # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
-                                    bracket_depth = 1
-                                    scan_idx = lookahead_idx + 1
-                                    while scan_idx < len(tokens) and scan_idx < lookahead_idx + 20:
-                                        if tokens[scan_idx].type == LBRACKET:
-                                            bracket_depth += 1
-                                        elif tokens[scan_idx].type == RBRACKET:
-                                            bracket_depth -= 1
-                                            if bracket_depth == 0:
-                                                # Found matching closing bracket, check for ASSIGN
-                                                if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
-                                                    is_new_statement = True
-                                                break
-                                        scan_idx += 1
+                                prev_before_ident = tokens[j-1] if j > 0 else None
+                                # Don't break if the preceding token is AWAIT (await func() is a single expression)
+                                if prev_before_ident and prev_before_ident.type == AWAIT:
+                                    pass  # Part of await expression, not a new statement
+                                else:
+                                    next_tok = tokens[lookahead_idx]
+                                    # IDENT followed by DOT (method call) or LPAREN (function call) on new line
+                                    if next_tok.type in {DOT, LPAREN}:
+                                        is_new_statement = True
+                                    # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
+                                    elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
+                                        is_new_statement = True
+                                    # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
+                                    elif next_tok.type == LBRACKET:
+                                        # Look ahead to confirm it's an indexed assignment
+                                        # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
+                                        bracket_depth = 1
+                                        scan_idx = lookahead_idx + 1
+                                        while scan_idx < len(tokens) and scan_idx < lookahead_idx + 20:
+                                            if tokens[scan_idx].type == LBRACKET:
+                                                bracket_depth += 1
+                                            elif tokens[scan_idx].type == RBRACKET:
+                                                bracket_depth -= 1
+                                                if bracket_depth == 0:
+                                                    # Found matching closing bracket, check for ASSIGN
+                                                    if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
+                                                        is_new_statement = True
+                                                    break
+                                            scan_idx += 1
                             
                             # Original checks (keep for non-newline cases)
                             if not is_new_statement and lookahead_idx < len(tokens):
@@ -2762,6 +2762,7 @@ class ContextStackParser:
                                     EQ, NOT_EQ, LT, GT, LTE, GTE,    # Comparison operators
                                     AND, OR,                          # Logical operators
                                     COMMA,                            # List separator
+                                    AWAIT,                            # Await expression: await func()
                                 }
                                 
                                 if next_tok.type == LPAREN and not is_method_call_continuation and not is_expression_continuation:

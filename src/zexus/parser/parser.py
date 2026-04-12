@@ -1660,7 +1660,6 @@ class UltimateParser:
         """Tolerant print statement parser with support for:
         - Single argument: print(message)
         - Multiple arguments: print(arg1, arg2, arg3)
-        - Conditional print: print(condition, message) - exactly 2 args
         """
         import sys
         # Debug logging (fail silently if file operations fail)
@@ -1674,31 +1673,45 @@ class UltimateParser:
                 pass  # Silently ignore debug logging errors
         
         stmt = PrintStatement(values=[])
-        self.next_token()
         
-        # Parse first expression
-        first_expr = self.parse_expression(LOWEST)
-        if first_expr:
-            stmt.values.append(first_expr)
-        
-        # Parse additional comma-separated expressions
-        while self.peek_token_is(COMMA):
-            self.next_token()  # consume comma
-            self.next_token()  # move to next expression
-            expr = self.parse_expression(LOWEST)
-            if expr:
-                stmt.values.append(expr)
-        
-        # Check if this is conditional print (exactly 2 arguments)
-        if len(stmt.values) == 2:
-            # Conditional print: print(condition, message)
-            stmt.condition = stmt.values[0]
-            stmt.values = [stmt.values[1]]
-            stmt.value = stmt.values[0]
+        # Check if print uses parenthesized syntax: print(arg1, arg2, ...)
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume LPAREN
+            
+            # Parse comma-separated expressions inside parentheses
+            if not self.peek_token_is(RPAREN):
+                self.next_token()  # move to first expression
+                first_expr = self.parse_expression(LOWEST)
+                if first_expr:
+                    stmt.values.append(first_expr)
+                
+                while self.peek_token_is(COMMA):
+                    self.next_token()  # consume comma
+                    self.next_token()  # move to next expression
+                    expr = self.parse_expression(LOWEST)
+                    if expr:
+                        stmt.values.append(expr)
+            
+            # Consume closing paren
+            if self.peek_token_is(RPAREN):
+                self.next_token()
         else:
-            # Regular print: print(arg) or print(arg1, arg2, arg3, ...)
-            # Keep backward compatibility with .value for single-expression prints
-            stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
+            # No parentheses: print expr
+            self.next_token()
+            first_expr = self.parse_expression(LOWEST)
+            if first_expr:
+                stmt.values.append(first_expr)
+            
+            # Parse additional comma-separated expressions
+            while self.peek_token_is(COMMA):
+                self.next_token()  # consume comma
+                self.next_token()  # move to next expression
+                expr = self.parse_expression(LOWEST)
+                if expr:
+                    stmt.values.append(expr)
+        
+        # Keep backward compatibility with .value for single-expression prints
+        stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
 
         # TOLERANT: Semicolon is optional
         if self.peek_token_is(SEMICOLON):

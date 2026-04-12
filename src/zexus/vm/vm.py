@@ -2839,8 +2839,13 @@ class VM:
                     result = None
                 stack_append(self._unwrap_after_builtin(result))
             elif op_name == "PRINT":
-                val = stack_pop() if stack else None
-                print(self._format_print_value(val))
+                if operand is not None and isinstance(operand, int) and operand > 1:
+                    # Multi-value print: pop 'operand' values and print space-separated
+                    vals = [stack_pop() if stack else None for _ in range(operand)][::-1]
+                    print(' '.join(self._format_print_value(v) for v in vals))
+                else:
+                    val = stack_pop() if stack else None
+                    print(self._format_print_value(val))
             elif op_name == "GET_ATTR":
                 attr = stack_pop() if stack else None
                 obj = stack_pop() if stack else None
@@ -4324,9 +4329,13 @@ class VM:
             func = const(func_idx)
             _store(name, func)
 
-        def _op_print(_):
-            val = stack_pop() if stack else None
-            print(self._format_print_value(val))
+        def _op_print(operand):
+            if operand is not None and isinstance(operand, int) and operand > 1:
+                vals = [stack_pop() if stack else None for _ in range(operand)][::-1]
+                print(' '.join(self._format_print_value(v) for v in vals))
+            else:
+                val = stack_pop() if stack else None
+                print(self._format_print_value(val))
 
         dispatch_table: Dict[str, Callable[[Any], Any]] = {
             "LOAD_CONST": _op_load_const,
@@ -4578,8 +4587,13 @@ class VM:
                 elif op_name == "DUP":
                     if stack: stack.append(stack[-1])
                 elif op_name == "PRINT":
-                    val = stack.pop() if stack else None
-                    print(self._format_print_value(val))
+                    if operand is not None and isinstance(operand, int) and operand > 1:
+                        # Multi-value print: pop 'operand' values and print space-separated
+                        vals = [stack.pop() if stack else None for _ in range(operand)][::-1]
+                        print(' '.join(self._format_print_value(v) for v in vals))
+                    else:
+                        val = stack.pop() if stack else None
+                        print(self._format_print_value(val))
                 
                 # --- Function/Closure Ops ---
                 elif op_name == "STORE_FUNC":

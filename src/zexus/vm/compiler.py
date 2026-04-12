@@ -178,13 +178,17 @@ class BytecodeCompiler:
     def _compile_PrintStatement(self, node):
         """Compile print statement"""
         # PrintStatement can have value (single) or values (multiple)
-        if hasattr(node, 'values') and node.values:
-            # Multiple values - compile each and print
+        if hasattr(node, 'values') and node.values and len(node.values) > 1:
+            # Multiple values - compile each, then PRINT with count
             for val in node.values:
                 self._compile_node(val)
-                self._emit(Opcode.PRINT)
-        elif hasattr(node, 'value') and node.value:
+            self._emit(Opcode.PRINT, len(node.values))
+        elif hasattr(node, 'values') and node.values and len(node.values) == 1:
             # Single value
+            self._compile_node(node.values[0])
+            self._emit(Opcode.PRINT)
+        elif hasattr(node, 'value') and node.value:
+            # Single value (legacy .value attribute)
             self._compile_node(node.value)
             self._emit(Opcode.PRINT)
         else:
