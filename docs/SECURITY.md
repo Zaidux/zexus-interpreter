@@ -181,9 +181,9 @@ let query = sql("SELECT * FROM users WHERE id = ${input}")  // Error: tainted va
 ## Audit Logging
 
 Comprehensive audit logging for compliance (GDPR, HIPAA, SOC2).
+Runtime audit logging is built into the language runtime and is separate from the `use "audit"` SAST module described later.
 
 ```zexus
-use "audit"
 audit.log("user_login", { user: "admin", ip: "10.0.0.1" })
 audit.log("data_access", { table: "patients", columns: ["name", "ssn"] })
 ```
