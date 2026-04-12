@@ -70,7 +70,7 @@ let data = await fetchData("/api/data")
 
 ---
 
-## Structured Concurrency (v1.8.5+)
+## Structured Concurrency (v1.8.4+)
 
 ### select — Multiplex Across Channels
 ```zexus

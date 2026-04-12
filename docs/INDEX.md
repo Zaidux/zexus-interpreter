@@ -35,7 +35,7 @@ Welcome to the Zexus Programming Language documentation.
 
 ## 🔒 Security
 
-- **[Security](SECURITY.md)** — Capabilities, sanitization, resource limits, overflow protection, taint tracking, access control, audit logging, and new v1.8.5 security modules
+- **[Security](SECURITY.md)** — Capabilities, sanitization, resource limits, overflow protection, taint tracking, access control, audit logging, and new v1.8.4 security modules
 
 ## 🔄 Concurrency
 
@@ -65,4 +65,4 @@ See **[CHANGELOG.md](../CHANGELOG.md)** for version history.
 
 ---
 
-**Last Updated**: April 12, 2026 | **Version**: 1.8.5
+**Last Updated**: April 12, 2026 | **Version**: 1.8.4

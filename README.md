@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.8.5-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.8.4-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
@@ -69,7 +69,7 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ## 🎉 What's New
 
-### v1.8.5 — Blockchain VM, Modules, Concurrency, DX & Cybersecurity (2026-04-12)
+### v1.8.4 — Blockchain VM, Modules, Concurrency, DX, Cybersecurity, Bug Fixes & Documentation (2026-04-12)
 
 Major feature release implementing the Part 2 roadmap and Part 3 cybersecurity gap analysis.
 
@@ -88,11 +88,9 @@ Major feature release implementing the Part 2 roadmap and Part 3 cybersecurity g
 
 **Tests:** 200+ new test cases, all 523 original tests pass.
 
+Also includes the earlier v1.8.4 bug-fix/documentation work: compound assignment operators, `for i in range(n)` loops, entity constructors with positional args, the `not` operator fix, new `ZEXUS_GUIDE.md` / `ZEXUS_RULES.md` / keyword+builtin+CLI docs, and major repository cleanup.
+
 See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-### v1.8.4 — Bug Fixes & Documentation (2026-04-11)
-
-Compound assignment operators, `for i in range(n)` loops, entity constructors with positional args, `not` operator — all fixed. Added `ZEXUS_GUIDE.md`, `ZEXUS_RULES.md`, keyword/builtin/CLI docs. Major repo cleanup (removed 100+ unnecessary files).
 
 ### v1.8.3 — VM Hardening & Closure Scoping (2026-03-01)
 
@@ -2536,24 +2534,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Standard library expansion (fs, http, json, datetime, crypto, blockchain) ✅
 - [x] Performance profiling tools ✅
 - [x] Debugger integration (DAP) ✅
-- [x] Transaction mempool with gas-price ordering ✅ (v1.8.5)
-- [x] Gas price oracle (EIP-1559 dynamic base fee) ✅ (v1.8.5)
-- [x] Contract ABI encoding ✅ (v1.8.5)
-- [x] `select` statement for channel multiplexing ✅ (v1.8.5)
-- [x] Structured concurrency (TaskGroup) ✅ (v1.8.5)
-- [x] Backpressure (configurable overflow policy) ✅ (v1.8.5)
-- [x] Context propagation (tracing IDs/deadlines) ✅ (v1.8.5)
-- [x] `use "cache"` — LRU + TTL caches ✅ (v1.8.5)
-- [x] `use "queue"` — Message queue abstraction ✅ (v1.8.5)
-- [x] `use "template"` — Server-side rendering ✅ (v1.8.5)
-- [x] `use "testing"` — Assert library + mocking ✅ (v1.8.5)
-- [x] `use "fuzz"` — Coverage-guided fuzzing ✅ (v1.8.5)
-- [x] `use "secrets"` — Vault integration, envelope encryption ✅ (v1.8.5)
-- [x] `use "netsec"` — Port scanner, TLS checker, DNS enum ✅ (v1.8.5)
-- [x] `use "payloads"` — XSS/SQLi/SSRF test vectors ✅ (v1.8.5)
-- [x] `use "pentest"` — Pen-testing framework ✅ (v1.8.5)
-- [x] `zx audit` CLI — SAST scanner with SARIF output ✅ (v1.8.5)
-- [x] Contract security analyzer ✅ (v1.8.5)
+- [x] Transaction mempool with gas-price ordering ✅ (v1.8.4)
+- [x] Gas price oracle (EIP-1559 dynamic base fee) ✅ (v1.8.4)
+- [x] Contract ABI encoding ✅ (v1.8.4)
+- [x] `select` statement for channel multiplexing ✅ (v1.8.4)
+- [x] Structured concurrency (TaskGroup) ✅ (v1.8.4)
+- [x] Backpressure (configurable overflow policy) ✅ (v1.8.4)
+- [x] Context propagation (tracing IDs/deadlines) ✅ (v1.8.4)
+- [x] `use "cache"` — LRU + TTL caches ✅ (v1.8.4)
+- [x] `use "queue"` — Message queue abstraction ✅ (v1.8.4)
+- [x] `use "template"` — Server-side rendering ✅ (v1.8.4)
+- [x] `use "testing"` — Assert library + mocking ✅ (v1.8.4)
+- [x] `use "fuzz"` — Coverage-guided fuzzing ✅ (v1.8.4)
+- [x] `use "secrets"` — Vault integration, envelope encryption ✅ (v1.8.4)
+- [x] `use "netsec"` — Port scanner, TLS checker, DNS enum ✅ (v1.8.4)
+- [x] `use "payloads"` — XSS/SQLi/SSRF test vectors ✅ (v1.8.4)
+- [x] `use "pentest"` — Pen-testing framework ✅ (v1.8.4)
+- [x] `zx audit` CLI — SAST scanner with SARIF output ✅ (v1.8.4)
+- [x] Contract security analyzer ✅ (v1.8.4)
 
 ### Planned 🎯
 - [ ] WASM compilation target
@@ -2597,7 +2595,7 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
 ## 📊 Project Stats
 
 - **Language**: Python 3.8+
-- **Version**: 1.8.5 (Stable)
+- **Version**: 1.8.4 (Stable)
 - **Lines of Code**: ~75,000+
 - **Keywords**: 130+ language keywords
 - **Built-in Functions**: 100+ built-in functions
