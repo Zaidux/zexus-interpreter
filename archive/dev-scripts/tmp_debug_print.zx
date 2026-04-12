@@ -1,2 +1,0 @@
-function test(x) { print(x); print("x = " + x); }
-test("hello");

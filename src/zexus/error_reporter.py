@@ -8,8 +8,50 @@ Security Fix #10: Debug info sanitization to prevent sensitive data leakage.
 """
 
 import sys
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Sequence
 from enum import Enum
+
+
+def _levenshtein_distance(a: str, b: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(a) < len(b):
+        return _levenshtein_distance(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev_row = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr_row = [i + 1]
+        for j, cb in enumerate(b):
+            cost = 0 if ca == cb else 1
+            curr_row.append(min(
+                curr_row[j] + 1,       # insert
+                prev_row[j + 1] + 1,   # delete
+                prev_row[j] + cost,     # substitute
+            ))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def find_closest_match(name: str, candidates: Sequence[str], max_distance: int = 3) -> Optional[str]:
+    """Find the closest matching name from a list of candidates.
+    
+    Uses Levenshtein distance for accurate "did you mean?" suggestions.
+    Returns the best match or None if nothing is close enough.
+    """
+    if not candidates:
+        return None
+    best = None
+    best_dist = max_distance + 1
+    name_lower = name.lower()
+    for candidate in candidates:
+        # Quick exact/case check
+        if candidate.lower() == name_lower:
+            return candidate
+        dist = _levenshtein_distance(name_lower, candidate.lower())
+        if dist < best_dist:
+            best_dist = dist
+            best = candidate
+    return best if best_dist <= max_distance else None
 
 
 # Import debug sanitizer for Security Fix #10
@@ -191,6 +233,41 @@ class ImportError(ZexusError):
         super().__init__(message, error_code="IMPORT", **kwargs)
 
 
+class DivisionError(ZexusError):
+    """Division by zero and modulo by zero errors"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="DIVISION", **kwargs)
+
+
+class FormulaError(ZexusError):
+    """Unknown or invalid formula/function errors"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="FORMULA", **kwargs)
+
+
+class BraceMismatchError(ZexusError):
+    """Unmatched or mismatched braces/brackets/parentheses"""
+    def __init__(self, message: str, **kwargs):
+        if 'suggestion' not in kwargs:
+            kwargs['suggestion'] = (
+                "Zexus uses curly braces { } for code blocks. "
+                "Make sure every opening brace has a matching closing brace."
+            )
+        super().__init__(message, error_code="BRACE", **kwargs)
+
+
+class ArgumentError(ZexusError):
+    """Wrong number or type of function arguments"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="ARGS", **kwargs)
+
+
+class NotCallableError(ZexusError):
+    """Attempt to call something that is not a function"""
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message, error_code="CALL", **kwargs)
+
+
 class InterpreterError(ZexusError):
     """Internal interpreter errors (bugs in Zexus itself)"""
     def __init__(self, message: str, **kwargs):
@@ -229,6 +306,113 @@ class ErrorReporter:
         
         return None
     
+    def check_brace_balance(self, source: str, filename: Optional[str] = None) -> Optional[ZexusError]:
+        """Check for unmatched braces, brackets, and parentheses.
+        
+        Returns a BraceMismatchError if imbalanced, or None if OK.
+        """
+        stack = []  # (char, line, col)
+        pairs = {'{': '}', '[': ']', '(': ')'}
+        closers = {'}': '{', ']': '[', ')': '('}
+        in_string = False
+        string_char = None
+        in_comment = False
+        in_line_comment = False
+        
+        lines = source.splitlines()
+        for line_num, line_text in enumerate(lines, 1):
+            i = 0
+            while i < len(line_text):
+                ch = line_text[i]
+                
+                # Handle line comments
+                if in_line_comment:
+                    break  # Rest of line is comment
+                
+                # Handle multi-line comments
+                if in_comment:
+                    if ch == '*' and i + 1 < len(line_text) and line_text[i + 1] == '/':
+                        in_comment = False
+                        i += 2
+                        continue
+                    i += 1
+                    continue
+                
+                # Handle strings
+                if in_string:
+                    if ch == '\\':
+                        i += 2  # Skip escaped char
+                        continue
+                    if ch == string_char:
+                        in_string = False
+                    i += 1
+                    continue
+                
+                # Detect comment start
+                if ch == '/' and i + 1 < len(line_text):
+                    if line_text[i + 1] == '/':
+                        in_line_comment = True
+                        break
+                    elif line_text[i + 1] == '*':
+                        in_comment = True
+                        i += 2
+                        continue
+                
+                # Detect string start
+                if ch in ('"', "'", '`'):
+                    in_string = True
+                    string_char = ch
+                    i += 1
+                    continue
+                
+                # Track braces/brackets/parens
+                if ch in pairs:
+                    stack.append((ch, line_num, i))
+                elif ch in closers:
+                    expected_opener = closers[ch]
+                    if not stack:
+                        return BraceMismatchError(
+                            f"Unexpected closing '{ch}' with no matching opening '{expected_opener}'",
+                            filename=filename or self.current_file,
+                            line=line_num,
+                            column=i,
+                            source_line=line_text,
+                        )
+                    opener, open_line, open_col = stack.pop()
+                    if opener != expected_opener:
+                        return BraceMismatchError(
+                            f"Mismatched brackets: opening '{opener}' at line {open_line} "
+                            f"does not match closing '{ch}'",
+                            filename=filename or self.current_file,
+                            line=line_num,
+                            column=i,
+                            source_line=line_text,
+                            suggestion=(
+                                f"The '{opener}' opened at line {open_line}, column {open_col} "
+                                f"expects a closing '{pairs[opener]}', but found '{ch}' instead."
+                            ),
+                        )
+                
+                i += 1
+            
+            in_line_comment = False  # Reset for next line
+        
+        if stack:
+            opener, open_line, open_col = stack[-1]
+            return BraceMismatchError(
+                f"Unclosed '{opener}' — expected closing '{pairs[opener]}' before end of file",
+                filename=filename or self.current_file,
+                line=open_line,
+                column=open_col,
+                source_line=lines[open_line - 1] if open_line <= len(lines) else None,
+                suggestion=(
+                    f"Add a matching '{pairs[opener]}' to close the block that starts at "
+                    f"line {open_line}, column {open_col}."
+                ),
+            )
+        
+        return None
+    
     def report_error(
         self,
         error_class,
@@ -241,18 +425,6 @@ class ErrorReporter:
     ) -> ZexusError:
         """
         Create and return a properly formatted error.
-        
-        Args:
-            error_class: The error class to instantiate
-            message: Error message
-            line: Line number where error occurred
-            column: Column number where error occurred
-            filename: Filename (defaults to current file)
-            suggestion: Helpful suggestion for fixing the error
-            **kwargs: Additional arguments for the error class
-        
-        Returns:
-            ZexusError instance ready to be raised
         """
         if filename is None:
             filename = self.current_file
@@ -274,18 +446,16 @@ class ErrorReporter:
     def create_suggestion(self, error_type: str, context: Dict[str, Any]) -> Optional[str]:
         """
         Generate helpful suggestions based on error type and context.
-        
-        Args:
-            error_type: Type of error (e.g., "undefined_variable", "type_mismatch")
-            context: Additional context for generating suggestions
-        
-        Returns:
-            Helpful suggestion string or None
         """
         suggestions = {
             "undefined_variable": lambda ctx: (
                 f"Did you mean '{ctx.get('similar')}'?" if ctx.get('similar')
                 else "Make sure the variable is declared before using it."
+            ),
+            "undefined_function": lambda ctx: (
+                f"Did you mean '{ctx.get('similar')}'?" if ctx.get('similar')
+                else "Make sure the function is defined before calling it. "
+                     "Use 'action name() {{ }}' to define a function."
             ),
             "type_mismatch": lambda ctx: (
                 f"Expected {ctx.get('expected')}, got {ctx.get('actual')}. "
@@ -305,6 +475,19 @@ class ErrorReporter:
             "generic_type_args": lambda ctx: (
                 f"This generic type requires {ctx.get('expected')} type argument(s). "
                 f"Use: {ctx.get('example')}"
+            ),
+            "wrong_arg_count": lambda ctx: (
+                f"Function '{ctx.get('name', '?')}' expects {ctx.get('expected')} "
+                f"argument(s), but got {ctx.get('actual')}."
+            ),
+            "not_callable": lambda ctx: (
+                f"'{ctx.get('name', 'value')}' is a {ctx.get('type', 'value')}, not a function. "
+                "You can only call functions, actions, and lambdas."
+            ),
+            "unknown_formula": lambda ctx: (
+                f"Unknown function or formula '{ctx.get('name')}'. "
+                + (f"Did you mean '{ctx.get('similar')}'?" if ctx.get('similar') else
+                   "Check the Zexus documentation for available built-in functions.")
             ),
         }
         

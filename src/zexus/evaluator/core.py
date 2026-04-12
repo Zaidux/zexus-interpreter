@@ -464,7 +464,19 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             return EvaluationError(f"Unsupported AST node type: {node_type.__name__}")
 
         try:
-            return handler(node, env, stack_trace)
+            result = handler(node, env, stack_trace)
+            # Enrich returned EvaluationError with source position from the AST node
+            # so CLI can display the exact line/column where the error occurred.
+            # Note: AST nodes default to line=0 when the parser doesn't set a position,
+            # so we treat 0 as "not set" and only use positive line numbers.
+            if isinstance(result, EvaluationError) and not result.line:
+                node_line = getattr(node, "line", 0) or getattr(node, "token_line", 0)
+                node_col = getattr(node, "column", 0) or getattr(node, "token_column", 0)
+                if node_line and node_line > 0:
+                    result.line = node_line
+                if node_col and node_col > 0:
+                    result.column = node_col
+            return result
         except RecursionError:
             return EvaluationError(
                 "Maximum recursion depth exceeded while evaluating AST (Python recursion limit). "

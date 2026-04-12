@@ -1,2 +1,0 @@
-let t = time()
-print("Time: " + string(t))

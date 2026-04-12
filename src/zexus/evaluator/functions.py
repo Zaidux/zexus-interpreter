@@ -527,7 +527,17 @@ class FunctionEvaluatorMixin:
             if isinstance(fn, (Action, LambdaFunction)):
                 self.resource_limiter.exit_call()
         
-        return EvaluationError(f"Not a function: {fn}")
+        # Provide a helpful error for non-callable values
+        fn_type = fn.type() if hasattr(fn, 'type') else type(fn).__name__
+        fn_name = fn.inspect() if hasattr(fn, 'inspect') else str(fn)
+        suggestion = (
+            f"'{fn_name}' is a {fn_type}, not a function. "
+            "Only functions (action), lambdas, and built-in functions can be called."
+        )
+        return EvaluationError(
+            f"Not a function: {fn_type}",
+            suggestion=suggestion
+        )
     
     def eval_method_call_expression(self, node, env, stack_trace):
         debug_log("  MethodCallExpression node", f"{node.object}.{node.method}")

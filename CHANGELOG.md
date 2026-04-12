@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.4] - 2026-04-11
+
+### 🐛 Bug Fixes
+
+- **Compound assignment operators (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`)** — Fixed structural analyzer failing to recognize compound assignment as a separate statement boundary. Statements like `x += 5` after `let x = 10` were being absorbed into the same block. All compound operators now work correctly.
+- **`for i in range(n)` loops** — Added support for `for IDENT in EXPR` syntax alongside the existing `for each IDENT in EXPR`. Both the context parser and the main parser now handle this shorthand form.
+- **Entity constructors with positional arguments** — Fixed parser to create property AST nodes for bare field names (e.g., `entity Person { name; age }`) without type annotations. Previously, only `name: type` properties were registered, causing constructor arity mismatch.
+- **`not` operator returning `null`** — Added `not` as a keyword mapped to `BANG` token type in the lexer. Previously `not` was tokenized as `IDENT` and dropped silently. `not true` now correctly returns `false`.
+
+### 📚 Documentation
+
+- Added `ZEXUS_GUIDE.md` — Comprehensive test-verified tutorial (basics → intermediate → advanced)
+- Added `ZEXUS_RULES.md` — 15 rules to prevent common mistakes
+- Added `docs/KEYWORDS.md` — Complete keyword reference with descriptions
+- Added `docs/BUILTINS.md` — Complete built-in function reference (interpreter + VM)
+- Added `docs/CLI_COMMANDS.md` — CLI command reference with verified examples
+
+### 🧹 Repository Cleanup
+
+- Removed 100+ unnecessary files (debug scripts, temp outputs, stale fix reports)
+- Organized demos into `examples/`, tests into `tests/`, scripts into `scripts/`
+- Cleaned 20+ obsolete internal dev reports from `docs/`
+
+
 ## [1.8.3] - 2026-03-02
 
 ### 🐛 Bug Fixes — VM Parity (Session 6)

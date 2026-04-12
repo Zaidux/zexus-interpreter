@@ -248,6 +248,16 @@ class ContextStackParser:
 
             # CRITICAL: Don't wrap Statement nodes, only wrap Expressions
             if result is not None:
+                # Enrich AST node with source line/column from the block's start token
+                start_tok = block_info.get('start_token')
+                if start_tok is not None:
+                    tok_line = getattr(start_tok, 'line', 0)
+                    tok_col = getattr(start_tok, 'column', 0)
+                    if tok_line and not getattr(result, 'line', 0):
+                        result.line = tok_line
+                    if tok_col and not getattr(result, 'column', 0):
+                        result.column = tok_col
+
                 if isinstance(result, Statement):
                     parser_debug(f"  ✅ Parsed: {type(result).__name__} at line {block_info.get('start_token', {}).get('line', 'unknown')}")
                     # If we got a BlockStatement but it has no inner statements,
@@ -1566,6 +1576,44 @@ class ContextStackParser:
                             if i < brace_end and tokens[i].type == COMMA:
                                 i += 1
                             continue
+                    else:
+                        # Bare property name (no type annotation): entity Person { name; age }
+                        # Check for optional default value: name = "default"
+                        default_value = None
+                        prop_end = i + 1
+                        if prop_end < brace_end and tokens[prop_end].type == ASSIGN:
+                            prop_end += 1  # Skip =
+                            val_tokens = []
+                            nesting = 0
+                            while prop_end < brace_end:
+                                vt = tokens[prop_end]
+                                if vt.type in {LPAREN, LBRACE, LBRACKET}:
+                                    nesting += 1
+                                elif vt.type in {RPAREN, RBRACE, RBRACKET}:
+                                    nesting -= 1
+                                elif nesting == 0 and vt.type == COMMA:
+                                    prop_end += 1
+                                    break
+                                elif nesting == 0 and len(val_tokens) > 0:
+                                    prev_vt = val_tokens[-1]
+                                    if vt.line > prev_vt.line and vt.type == IDENT:
+                                        break
+                                val_tokens.append(vt)
+                                prop_end += 1
+                            if val_tokens:
+                                default_value = self._parse_expression(val_tokens)
+
+                        properties.append(AstNodeShim(
+                            name=Identifier(prop_name),
+                            type=Identifier("any"),
+                            default_value=default_value
+                        ))
+                        parser_debug(f"  📝 Property (bare): {prop_name}" + (f" = {default_value}" if default_value else ""))
+                        i = prop_end
+                        # Skip trailing comma
+                        if i < brace_end and tokens[i].type == COMMA:
+                            i += 1
+                        continue
 
                 i += 1
 
@@ -2679,6 +2727,9 @@ class ContextStackParser:
                                 next_tok = tokens[lookahead_idx]
                                 # IDENT followed by DOT (method call) or LPAREN (function call) on new line
                                 if next_tok.type in {DOT, LPAREN}:
+                                    is_new_statement = True
+                                # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
+                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
                                     is_new_statement = True
                                 # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
                                 elif next_tok.type == LBRACKET:
@@ -3913,7 +3964,7 @@ class ContextStackParser:
                 j = i + 1
                 stmt_tokens = [token]
                 
-                # Expect EACH keyword
+                # Expect EACH keyword or IDENT (for "for i in range(n)" syntax)
                 if j < len(tokens) and tokens[j].type == EACH:
                     j += 1
                     
@@ -3974,6 +4025,65 @@ class ContextStackParser:
                         
                         stmt = ForEachStatement(
                             item=Identifier(item_name if item_name else 'item'),
+                            iterable=iterable,
+                            body=body_block,
+                            index=Identifier(index_name) if index_name else None
+                        )
+                        if stmt:
+                            statements.append(stmt)
+
+                # Support "for IDENT in EXPR { ... }" syntax (shorthand for "for each")
+                elif j < len(tokens) and tokens[j].type == IDENT:
+                    item_name = tokens[j].literal
+                    j += 1
+                    index_name = None
+
+                    # Check for two-variable form: for i, item in ...
+                    if j < len(tokens) and tokens[j].type == COMMA:
+                        j += 1  # skip comma
+                        if j < len(tokens) and tokens[j].type == IDENT:
+                            index_name = item_name
+                            item_name = tokens[j].literal
+                            j += 1
+
+                    # Expect IN keyword
+                    if j < len(tokens) and tokens[j].type == IN:
+                        j += 1
+
+                        # Collect iterable expression tokens (until {)
+                        iterable_tokens = []
+                        while j < len(tokens) and tokens[j].type != LBRACE:
+                            iterable_tokens.append(tokens[j])
+                            j += 1
+
+                        # Parse iterable
+                        iterable = self._parse_expression(iterable_tokens) if iterable_tokens else Identifier("[]")
+
+                        # Collect body block (between { and })
+                        body_block = BlockStatement()
+                        if j < len(tokens) and tokens[j].type == LBRACE:
+                            j += 1  # Skip opening brace
+                            body_tokens = []
+                            brace_nest = 1
+
+                            while j < len(tokens) and brace_nest > 0:
+                                if tokens[j].type == LBRACE:
+                                    brace_nest += 1
+                                elif tokens[j].type == RBRACE:
+                                    brace_nest -= 1
+                                    if brace_nest == 0:
+                                        j += 1  # Skip closing brace
+                                        break
+                                body_tokens.append(tokens[j])
+                                j += 1
+
+                            # Recursively parse body statements
+                            body_block.statements = self._parse_block_statements(body_tokens)
+
+                        parser_debug(f"    📝 Found for-in statement with {len(body_block.statements)} body statements")
+
+                        stmt = ForEachStatement(
+                            item=Identifier(item_name),
                             iterable=iterable,
                             body=body_block,
                             index=Identifier(index_name) if index_name else None
@@ -4356,6 +4466,9 @@ class ContextStackParser:
                                 # Assignment: ident = or ident.prop =
                                 elif next_tok.type == ASSIGN:
                                     is_new_statement_start = True
+                                # Compound assignment: ident += / -= / *= / /= / %= / **=
+                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
+                                    is_new_statement_start = True
                                 # CRITICAL FIX: Indexed assignment: ident[...]  =
                                 elif next_tok.type == LBRACKET:
                                     # Scan for matching RBRACKET followed by ASSIGN
@@ -4415,8 +4528,9 @@ class ContextStackParser:
                     j += 1
 
                 if run_tokens:
-                    # Check if this is an assignment (contains ASSIGN token)
-                    has_assign = any(t.type == ASSIGN for t in run_tokens)
+                    # Check if this is an assignment (contains ASSIGN or compound assignment token)
+                    _compound_assign_types = {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}
+                    has_assign = any(t.type == ASSIGN or t.type in _compound_assign_types for t in run_tokens)
                     if has_assign:
                         # Parse as assignment statement
                         block_info = {'tokens': run_tokens}
@@ -4653,6 +4767,25 @@ class ContextStackParser:
 
     def _parse_expression(self, tokens):
         """Parse a full expression with operator precedence handling"""
+        if not tokens or len(tokens) == 0:
+            return StringLiteral("")
+        
+        result = self._parse_expression_inner(tokens)
+        
+        # Propagate source position from the first token to the AST node
+        if result is not None and tokens:
+            first_tok = tokens[0]
+            tok_line = getattr(first_tok, 'line', 0)
+            tok_col = getattr(first_tok, 'column', 0)
+            if tok_line and not getattr(result, 'line', 0):
+                result.line = tok_line
+            if tok_col and not getattr(result, 'column', 0):
+                result.column = tok_col
+        
+        return result
+
+    def _parse_expression_inner(self, tokens):
+        """Internal expression parser with operator precedence"""
         if not tokens or len(tokens) == 0:
             return StringLiteral("")
         
@@ -5496,15 +5629,68 @@ class ContextStackParser:
                     continue
 
                 pattern = None
+                use_brace_syntax = False
 
                 if body_tokens[i].type == DEFAULT:
                     pattern = WildcardPattern()
                     i += 1
                     if i < len(body_tokens) and body_tokens[i].type == COLON:
                         i += 1
+                    elif i < len(body_tokens) and body_tokens[i].type == LBRACE:
+                        use_brace_syntax = True
                 elif body_tokens[i].type == CASE:
                     i += 1
                     pattern_start = i
+                    depth = 0
+                    while i < len(body_tokens):
+                        t = body_tokens[i]
+                        if t.type in {LPAREN, LBRACKET}:
+                            depth += 1
+                        elif t.type in {RPAREN, RBRACKET}:
+                            depth -= 1
+                        elif t.type == LBRACE and depth == 0:
+                            # Brace-style case: case pattern { body }
+                            use_brace_syntax = True
+                            break
+                        elif t.type == COLON and depth == 0:
+                            break
+                        i += 1
+
+                    separator_idx = i
+                    pattern_tokens = body_tokens[pattern_start:separator_idx]
+                    pattern = self._parse_pattern(pattern_tokens) if pattern_tokens else None
+
+                    if i < len(body_tokens) and body_tokens[i].type == COLON:
+                        i += 1
+                    # For brace syntax, don't skip - we'll handle LBRACE below
+                else:
+                    i += 1
+                    continue
+
+                # Parse the result - either from brace block or inline expression
+                if use_brace_syntax and i < len(body_tokens) and body_tokens[i].type == LBRACE:
+                    # Brace-style: collect tokens inside { ... } and parse as block
+                    i += 1  # Skip opening LBRACE
+                    brace_depth = 1
+                    block_tokens = []
+                    while i < len(body_tokens) and brace_depth > 0:
+                        if body_tokens[i].type == LBRACE:
+                            brace_depth += 1
+                        elif body_tokens[i].type == RBRACE:
+                            brace_depth -= 1
+                            if brace_depth == 0:
+                                break
+                        block_tokens.append(body_tokens[i])
+                        i += 1
+                    if i < len(body_tokens) and body_tokens[i].type == RBRACE:
+                        i += 1  # Skip closing RBRACE
+                    # Parse block statements inside the case body
+                    block_stmts = self._parse_block_statements(block_tokens)
+                    block = BlockStatement()
+                    block.statements = block_stmts
+                    result_expr = block
+                else:
+                    result_start = i
                     depth = 0
                     while i < len(body_tokens):
                         t = body_tokens[i]
@@ -5512,36 +5698,14 @@ class ContextStackParser:
                             depth += 1
                         elif t.type in {RPAREN, RBRACE, RBRACKET}:
                             depth -= 1
-                        elif t.type == COLON and depth == 0:
+                        elif depth == 0 and t.type in {CASE, DEFAULT}:
+                            break
+                        elif depth == 0 and t.type in {COMMA, SEMICOLON}:
                             break
                         i += 1
 
-                    colon_idx = i
-                    pattern_tokens = body_tokens[pattern_start:colon_idx]
-                    pattern = self._parse_pattern(pattern_tokens) if pattern_tokens else None
-
-                    if i < len(body_tokens) and body_tokens[i].type == COLON:
-                        i += 1
-                else:
-                    i += 1
-                    continue
-
-                result_start = i
-                depth = 0
-                while i < len(body_tokens):
-                    t = body_tokens[i]
-                    if t.type in {LPAREN, LBRACE, LBRACKET}:
-                        depth += 1
-                    elif t.type in {RPAREN, RBRACE, RBRACKET}:
-                        depth -= 1
-                    elif depth == 0 and t.type in {CASE, DEFAULT}:
-                        break
-                    elif depth == 0 and t.type in {COMMA, SEMICOLON}:
-                        break
-                    i += 1
-
-                result_tokens = body_tokens[result_start:i]
-                result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
+                    result_tokens = body_tokens[result_start:i]
+                    result_expr = self._parse_expression(result_tokens) if result_tokens else NullLiteral()
 
                 if pattern:
                     cases.append(MatchCase(pattern=pattern, result=result_expr))

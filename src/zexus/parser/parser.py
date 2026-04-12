@@ -416,6 +416,11 @@ class UltimateParser:
             return program
 
         except Exception as e:
+            # Re-raise lexer errors (ZexusError) to the caller so
+            # unterminated strings, invalid characters, etc. reach the user.
+            from ..error_reporter import ZexusError as _ZE
+            if isinstance(e, _ZE):
+                raise
             self._log(f"⚠️ Advanced parsing failed, falling back to traditional: {e}", "normal")
             self.use_advanced_parsing = False
             return self._parse_traditional()
@@ -1894,7 +1899,14 @@ class UltimateParser:
                 self.next_token()
             # Otherwise, continue — body parsing will attempt to parse the current token
 
-        body = self.parse_expression(LOWEST)
+        # Support brace-style lambda body: lambda(x) { return x * x }
+        if self.peek_token_is(LBRACE):
+            self.next_token()  # Move to LBRACE
+            body = self.parse_block_statement()
+        elif self.cur_token_is(LBRACE):
+            body = self.parse_block_statement()
+        else:
+            body = self.parse_expression(LOWEST)
         return LambdaExpression(parameters=parameters, body=body)
 
     def parse_lambda_infix(self, left):
@@ -2911,12 +2923,16 @@ class UltimateParser:
     def parse_for_each_statement(self):
         stmt = ForEachStatement(item=None, iterable=None, body=None)
 
-        if not self.expect_peek(EACH):
-            self.errors.append("Expected 'each' after 'for' in for-each loop")
-            return None
-
-        if not self.expect_peek(IDENT):
-            self.errors.append("Expected identifier after 'each' in for-each loop")
+        # Support both "for each item in ..." and "for item in ..." syntax
+        if self.peek_token_is(EACH):
+            self.next_token()  # consume EACH
+            if not self.expect_peek(IDENT):
+                self.errors.append("Expected identifier after 'each' in for-each loop")
+                return None
+        elif self.peek_token_is(IDENT):
+            self.next_token()  # consume the IDENT directly (no EACH keyword)
+        else:
+            self.errors.append("Expected 'each' or identifier after 'for' in for loop")
             return None
 
         first_ident = Identifier(value=self.cur_token.literal)
@@ -3429,9 +3445,11 @@ class UltimateParser:
                         self.cur_token = saved_cur
                         self.peek_token = saved_peek
                         
-                        # If next token after IDENT is LBRACKET, ASSIGN, LPAREN, or DOT,
+                        # If next token after IDENT is LBRACKET, ASSIGN, compound assignment, LPAREN, or DOT,
                         # it's likely a new statement (e.g., this.x = 1\nthis.y = 2)
-                        if next_next.type in (LBRACKET, ASSIGN, LPAREN, DOT):
+                        if next_next.type in (LBRACKET, ASSIGN, LPAREN, DOT,
+                                              PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN,
+                                              SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN):
                             break
                     else:
                         break
@@ -3775,34 +3793,54 @@ class UltimateParser:
 
         while not self.peek_token_is(RBRACE) and not self.peek_token_is(EOF):
             if self.peek_token_is(CASE):
-                # case pattern: result syntax
+                # case pattern { body } or case pattern: result
                 self.next_token() # Consume CASE
                 if not self.peek_token_is(COLON):
                     self.next_token()
                 pattern = self.parse_expression(LOWEST)
-                if not self.expect_peek(COLON):
-                    return None
                 result = None
+                # Support both colon and brace syntax for case bodies
                 if self.peek_token_is(LBRACE):
+                    # Brace syntax: case pattern { ... }
                     if not self.expect_peek(LBRACE):
                         return None
                     result = self.parse_block_statement()
+                elif self.peek_token_is(COLON):
+                    # Colon syntax: case pattern: result or case pattern: { block }
+                    self.next_token()  # Consume COLON
+                    if self.peek_token_is(LBRACE):
+                        if not self.expect_peek(LBRACE):
+                            return None
+                        result = self.parse_block_statement()
+                    else:
+                        self.next_token()
+                        result = self.parse_expression(LOWEST)
+                        if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                            self.next_token()
                 else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' or ':' after match case pattern")
+                    return None
+                case = MatchCase(pattern=pattern, result=result)
+                expression.cases.append(case)
+            elif self.peek_token_is(DEFAULT):
+                # default { body } or default: result
+                self.next_token() # Consume DEFAULT
+                result = None
+                if self.peek_token_is(LBRACE):
+                    # Brace syntax: default { ... }
+                    if not self.expect_peek(LBRACE):
+                        return None
+                    result = self.parse_block_statement()
+                elif self.peek_token_is(COLON):
+                    # Colon syntax: default: result
+                    self.next_token()  # Consume COLON
                     self.next_token()
                     result = self.parse_expression(LOWEST)
                     if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
                         self.next_token()
-                case = MatchCase(pattern=pattern, result=result)
-                expression.cases.append(case)
-            elif self.peek_token_is(DEFAULT):
-                # default: result syntax
-                self.next_token() # Consume DEFAULT
-                if not self.expect_peek(COLON):
+                else:
+                    self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Expected '{{' or ':' after default")
                     return None
-                self.next_token()
-                result = self.parse_expression(LOWEST)
-                if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
-                    self.next_token()
                 pattern = Identifier(value="_")
                 case = MatchCase(pattern=pattern, result=result)
                 expression.cases.append(case)
