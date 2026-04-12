@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.8.5] - 2026-04-12
+
+### 🚀 New Features
+
+#### Part 2A: Blockchain VM Enhancements
+- **Transaction Mempool** (`blockchain/mempool.py`) — `PriorityMempool` with gas-price ordering (max-heap), per-sender nonce validation, configurable `max_per_sender` limits, replace-by-fee, `evict_below()` policy, and pool statistics.
+- **Gas Price Oracle** — `GasPriceOracle` implementing EIP-1559-style dynamic base fee that adjusts proportionally to block gas utilization, with `suggest_gas_price()`, `estimate_fee()`, and fee history tracking.
+- **Contract ABI Encoding** — `ABIEncoder` with Solidity-compatible 4-byte keccak256 function selectors and parameter encoding/decoding for `uint`/`int`/`bool`/`address`/`string`/`bytes`/`bytesN` types.
+
+#### Part 2B: New Stdlib Modules
+- **`use "cache"`** — LRU cache with configurable capacity and eviction, TTL cache with per-key expiry, hit/miss statistics tracking.
+- **`use "queue"`** — FIFO queue, priority queue, double-ended queue (deque), and topic-based publish/subscribe.
+- **`use "template"`** — Server-side rendering with `{{variable}}` interpolation, `{% if %}` / `{% for %}` blocks, filters (`upper`/`lower`/`escape`/`truncate`/`default`), loop metadata (`loop.index`/`first`/`last`), and auto-escaping via `render_safe()`.
+- **`use "testing"`** — 11 assertion functions (`assert_eq`, `assert_neq`, `assert_true`, `assert_false`, `assert_none`, `assert_not_none`, `assert_contains`, `assert_raises`, `assert_approx`, `assert_type`, `assert_match`), test suite runner, mock/spy creation.
+
+#### Part 2C: Concurrency Enhancements (appended to `concurrency_system.py`)
+- **`select(*channels, timeout)`** — Go-style channel multiplexing with exponential backoff polling.
+- **`TaskGroup`** — Structured concurrency with `spawn()`, `wait_all()`, `cancel_all()`, context manager support, and `results`/`errors` properties.
+- **`BackpressuredChannel`** — Configurable overflow policies: `DROP_NEWEST`, `DROP_OLDEST`, `BLOCK`, `RAISE`, with `dropped_count` tracking.
+- **`TaskContext`** — Thread-local context propagation with auto-generated `trace_id`, optional `deadline`, `is_expired()`, `with_value()`/`get_value()`, and `current()`/`run()` for cross-task tracing.
+
+#### Part 2D: Developer Experience
+- **LSP** — `get_user_defined_symbols()` extracts `let`/`action`/`entity`/`contract` declarations for context-aware completions; `ZexusFormatter` for `textDocument/formatting` (brace-based indentation, operator whitespace normalization, trailing whitespace removal).
+- **DAP** — `ConditionalBreakpoint` class with condition evaluation + hit count thresholds; `evaluate_expression()` for debug console expression evaluation; `supportsConditionalBreakpoints` advertised in capabilities.
+
+#### Part 3: Cybersecurity Gap Analysis — 7 New Security Modules
+- **`use "fuzz"`** — Coverage-guided fuzzing with mutation strategies (bit flip, byte insert, boundary values), contract fuzzer, corpus save/load.
+- **`use "secrets"`** — Encrypted secret store with PBKDF2+XOR, versioned rotation, envelope encryption (`seal`/`unseal`), environment variable loading with taint marking, full audit log.
+- **`use "netsec"`** — TCP port scanner, TLS/SSL certificate checker, DNS enumeration (A/AAAA/MX/NS/TXT/CNAME/SOA), HTTP security header grading (A–F), service banner grabbing.
+- **`use "payloads"`** — XSS, SQL injection, SSRF, path traversal, command injection, XXE, header injection, and SSTI test vector libraries with variant filtering and payload encoding (`url`/`base64`/`hex`/`html`).
+- **`use "pentest"`** — Service enumeration, web fingerprinting, credential brute-force with rate limiting, structured JSON/text reporting with severity statistics.
+- **`use "audit"` (SAST scanner)** — 8 detection rules (hardcoded secrets, SQL injection, XSS, command injection, path traversal, unsafe deserialization, missing auth, taint flow), SARIF output for GitHub Advanced Security.
+- **`use "contract_audit"`** — Smart contract analyzer: reentrancy detection, integer overflow without SafeMath, missing access control on state-modifying actions, unbounded loop gas limits, timestamp dependence, front-running patterns, unchecked return values, DoS vectors.
+
+### 🔌 Module Registration
+- All 11 new modules registered in `builtin_modules.py` with `is_builtin_module()` and evaluator bridge functions.
+- Updated `stdlib/__init__.py` to export `NetsecModule`, `PayloadsModule`, `PentestModule`, `AuditModule`, `ContractAuditModule`.
+
+### 🧪 Tests
+- **17 new test files** with ~200 test cases covering all new modules, concurrency primitives, blockchain mempool/oracle/ABI, LSP symbols/formatter, and DAP conditional breakpoints.
+- All 523 original unit tests continue to pass.
+
+### 📚 Documentation
+- Consolidated redundant documentation files across `docs/`, `docs/keywords/`, and `docs/keywords/features/`
+- Merged overlapping plugin, security, async, and keyword-testing docs into single authoritative files
+- Removed ~60 stale completion/status reports from `docs/keywords/features/`
+- Updated `docs/INDEX.md` as single documentation entry point
+
+---
+
 ## [1.8.4] - 2026-04-11
 
 ### 🐛 Bug Fixes
