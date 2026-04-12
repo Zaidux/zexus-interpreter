@@ -296,7 +296,7 @@ makes the language core leaner.
 | Old (deprecated) | New (module) |
 |-------------------|--------------|
 | `hash_password(pw)` | `password.hash(pw)` |
-| `verify_password(pw, hash)` | `password.verify(pw, hash)` |
+| `verify_password(hash, password)` | `password.verify(hash, password)` |
 
 **Why?** Password hashing is application-level crypto.  Core crypto
 builtins (`hash()`, `keccak256()`, `crypto.sha256()`) remain global.
