@@ -290,6 +290,110 @@ def create_builtin_modules(evaluator):
     
     modules["math"] = math_env
     
+    # ===== VALIDATION MODULE =====
+    # Functions previously available as global builtins are now in this module.
+    # Use:  use "validation"
+    #       validation.is_email("user@example.com")
+    validation_env = Environment()
+    
+    import re as _re
+    
+    def _val_is_email(*args):
+        if len(args) != 1:
+            return EvaluationError("is_email() takes 1 argument")
+        val = args[0]
+        email_str = val.value if isinstance(val, String) else str(val)
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return Boolean(bool(_re.match(pattern, email_str)))
+    
+    def _val_is_url(*args):
+        if len(args) != 1:
+            return EvaluationError("is_url() takes 1 argument")
+        val = args[0]
+        url_str = val.value if isinstance(val, String) else str(val)
+        pattern = r'^https?://[^\s/$.?#].[^\s]*$'
+        return Boolean(bool(_re.match(pattern, url_str)))
+    
+    def _val_is_phone(*args):
+        if len(args) != 1:
+            return EvaluationError("is_phone() takes 1 argument")
+        val = args[0]
+        phone_str = val.value if isinstance(val, String) else str(val)
+        clean = _re.sub(r'[\s\-\(\)\.]', '', phone_str)
+        return Boolean(clean.isdigit() and 10 <= len(clean) <= 15)
+    
+    def _val_password_strength(*args):
+        if len(args) != 1:
+            return EvaluationError("password_strength() takes 1 argument")
+        val = args[0]
+        password = val.value if isinstance(val, String) else str(val)
+        score = 0
+        if len(password) >= 8:
+            score += 1
+        if len(password) >= 12:
+            score += 1
+        if _re.search(r'[a-z]', password):
+            score += 1
+        if _re.search(r'[A-Z]', password):
+            score += 1
+        if _re.search(r'[0-9]', password):
+            score += 1
+        if _re.search(r'[^a-zA-Z0-9]', password):
+            score += 1
+        if score <= 2:
+            return String("weak")
+        elif score <= 4:
+            return String("medium")
+        else:
+            return String("strong")
+    
+    validation_env.set("is_email", Builtin(_val_is_email, "is_email"))
+    validation_env.set("is_url", Builtin(_val_is_url, "is_url"))
+    validation_env.set("is_phone", Builtin(_val_is_phone, "is_phone"))
+    validation_env.set("password_strength", Builtin(_val_password_strength, "password_strength"))
+    
+    modules["validation"] = validation_env
+    
+    # ===== PASSWORD MODULE =====
+    # hash_password / verify_password moved here from global builtins.
+    # Use:  use "password"
+    #       let h = password.hash("secret")
+    #       let ok = password.verify("secret", h)
+    password_env = Environment()
+    
+    def _pw_hash(*args):
+        if len(args) != 1:
+            return EvaluationError("password.hash() takes exactly 1 argument")
+        pw = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            import bcrypt
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(pw.encode('utf-8'), salt)
+            return String(hashed.decode('utf-8'), is_trusted=True)
+        except ImportError:
+            return EvaluationError("password.hash() requires bcrypt library. Install: pip install bcrypt")
+        except Exception as e:
+            return EvaluationError(f"password.hash() error: {str(e)}")
+    
+    def _pw_verify(*args):
+        if len(args) != 2:
+            return EvaluationError("password.verify() takes exactly 2 arguments: password, hash")
+        pw = args[0].value if isinstance(args[0], String) else str(args[0])
+        pw_hash = args[1].value if isinstance(args[1], String) else str(args[1])
+        try:
+            import bcrypt
+            result = bcrypt.checkpw(pw.encode('utf-8'), pw_hash.encode('utf-8'))
+            return Boolean(result)
+        except ImportError:
+            return EvaluationError("password.verify() requires bcrypt library. Install: pip install bcrypt")
+        except Exception as e:
+            return EvaluationError(f"password.verify() error: {str(e)}")
+    
+    password_env.set("hash", Builtin(_pw_hash, "hash"))
+    password_env.set("verify", Builtin(_pw_verify, "verify"))
+    
+    modules["password"] = password_env
+    
     return modules
 
 
@@ -318,4 +422,4 @@ def get_builtin_module(module_name, evaluator=None):
 
 def is_builtin_module(module_name):
     """Check if a module name refers to a builtin module"""
-    return module_name in ["crypto", "datetime", "math"]
+    return module_name in ["crypto", "datetime", "math", "validation", "password"]

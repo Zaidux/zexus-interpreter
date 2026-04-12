@@ -900,7 +900,18 @@ class FunctionEvaluatorMixin:
             """
             Hash password using bcrypt (secure, industry-standard)
             Usage: hash_password(password) -> hashed_string
+            
+            DEPRECATED: Use `use "password"` module instead:
+                use "password"
+                let h = password.hash("secret")
             """
+            import warnings
+            warnings.warn(
+                'hash_password() is deprecated as a global builtin. '
+                'Use: use "password" then password.hash()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 1:
                 return EvaluationError("hash_password() takes exactly 1 argument")
             
@@ -922,7 +933,18 @@ class FunctionEvaluatorMixin:
             """
             Verify password against bcrypt hash (constant-time comparison)
             Usage: verify_password(password, hash) -> boolean
+            
+            DEPRECATED: Use `use "password"` module instead:
+                use "password"
+                let ok = password.verify("secret", stored_hash)
             """
+            import warnings
+            warnings.warn(
+                'verify_password() is deprecated as a global builtin. '
+                'Use: use "password" then password.verify()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 2:
                 return EvaluationError("verify_password() takes exactly 2 arguments: password, hash")
             
@@ -4826,7 +4848,19 @@ class FunctionEvaluatorMixin:
         import os
         
         def _is_email(*a):
-            """Check if string is valid email format"""
+            """Check if string is valid email format
+            
+            DEPRECATED: Use `use "validation"` module instead:
+                use "validation"
+                validation.is_email("user@example.com")
+            """
+            import warnings
+            warnings.warn(
+                'is_email() is deprecated as a global builtin. '
+                'Use: use "validation" then validation.is_email()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 1:
                 return EvaluationError("is_email() takes 1 argument")
             
@@ -4839,7 +4873,19 @@ class FunctionEvaluatorMixin:
             return TRUE if is_valid else FALSE
         
         def _is_url(*a):
-            """Check if string is valid URL format"""
+            """Check if string is valid URL format
+            
+            DEPRECATED: Use `use "validation"` module instead:
+                use "validation"
+                validation.is_url("https://example.com")
+            """
+            import warnings
+            warnings.warn(
+                'is_url() is deprecated as a global builtin. '
+                'Use: use "validation" then validation.is_url()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 1:
                 return EvaluationError("is_url() takes 1 argument")
             
@@ -4852,7 +4898,19 @@ class FunctionEvaluatorMixin:
             return TRUE if is_valid else FALSE
         
         def _is_phone(*a):
-            """Check if string is valid phone number format"""
+            """Check if string is valid phone number format
+            
+            DEPRECATED: Use `use "validation"` module instead:
+                use "validation"
+                validation.is_phone("+1234567890")
+            """
+            import warnings
+            warnings.warn(
+                'is_phone() is deprecated as a global builtin. '
+                'Use: use "validation" then validation.is_phone()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 1:
                 return EvaluationError("is_phone() takes 1 argument")
             
@@ -4942,13 +5000,24 @@ class FunctionEvaluatorMixin:
         def _env_set(*a):
             """Set environment variable: env_set("VAR_NAME", "value")
             
-            SECURITY (C9): Blocks modification of security-sensitive env vars
-            (PATH, LD_PRELOAD, PYTHONPATH, etc.).
+            SECURITY: Requires the 'sys.env' capability. In sandboxed/contract
+            contexts where capabilities are restricted this function will be
+            denied.  Additionally blocks modification of security-sensitive env
+            vars (PATH, LD_PRELOAD, PYTHONPATH, etc.).
             """
             from ..object import BLOCKED_ENV_VARS
+            from ..capability_system import get_capability_manager
             
             if len(a) != 2:
                 return EvaluationError("env_set() takes 2 arguments: var_name, value")
+            
+            # Capability gate: require 'sys.env' capability
+            cap_manager = get_capability_manager()
+            allowed, reason = cap_manager.check_capability("env_set", "sys.env")
+            if not allowed:
+                return EvaluationError(
+                    f"env_set() denied: requires 'sys.env' capability. {reason}"
+                )
             
             var_name_obj = a[0]
             value_obj = a[1]
@@ -4977,7 +5046,19 @@ class FunctionEvaluatorMixin:
             return TRUE if exists else FALSE
         
         def _password_strength(*a):
-            """Check password strength: password_strength(password) -> "weak"/"medium"/"strong" """
+            """Check password strength: password_strength(password) -> "weak"/"medium"/"strong"
+            
+            DEPRECATED: Use `use "validation"` module instead:
+                use "validation"
+                validation.password_strength("MyP@ss123")
+            """
+            import warnings
+            warnings.warn(
+                'password_strength() is deprecated as a global builtin. '
+                'Use: use "validation" then validation.password_strength()',
+                DeprecationWarning,
+                stacklevel=2
+            )
             if len(a) != 1:
                 return EvaluationError("password_strength() takes 1 argument")
             

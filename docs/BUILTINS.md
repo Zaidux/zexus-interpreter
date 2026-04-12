@@ -5,6 +5,11 @@ Complete list of built-in functions available in Zexus v1.8.4.
 Functions marked with **[I]** are interpreter-only, **[VM]** are VM-optimized,
 and **[Both]** work in both execution modes.
 
+> **⚠️ Deprecation Notice (v1.8.4+):** Several builtins have been moved to
+> dedicated modules. The global builtins still work but emit deprecation
+> warnings.  See [Migration Guide](#migration-guide) at the bottom of this
+> document.
+
 ---
 
 ## Type Conversions & Inspection
@@ -108,8 +113,8 @@ and **[Both]** work in both execution modes.
 | Function | Description | Mode |
 |----------|-------------|------|
 | `hash(data)` | Hash data (default algo) | I |
-| `hash_password(password)` | Secure password hash | I |
-| `verify_password(hash, password)` | Verify password hash | I |
+| ~~`hash_password(password)`~~ | **⛔ DEPRECATED** — use `password.hash()` | I |
+| ~~`verify_password(hash, password)`~~ | **⛔ DEPRECATED** — use `password.verify()` | I |
 | `crypto_random(length)` | Cryptographic random bytes | I |
 | `keccak256(data)` | Keccak-256 hash | I |
 | `to_hex(data)` | Convert to hex string | I |
@@ -158,22 +163,38 @@ and **[Both]** work in both execution modes.
 
 ## Validation
 
+> **⚠️ DEPRECATED** — The functions below still work but emit deprecation
+> warnings.  Migrate to `use "validation"`:
+>
+> ```zexus
+> use "validation"
+> let ok = validation.is_email("user@example.com")
+> ```
+>
+> The generic `matches_pattern()`, `is_numeric()`, and `validate_length()`
+> remain as core builtins because they are general-purpose.
+
 | Function | Description | Mode |
 |----------|-------------|------|
-| `is_email(str)` | Validate email format | I |
-| `is_url(str)` | Validate URL format | I |
-| `is_phone(str)` | Validate phone number | I |
+| ~~`is_email(str)`~~ | **⛔ DEPRECATED** — use `validation.is_email()` | I |
+| ~~`is_url(str)`~~ | **⛔ DEPRECATED** — use `validation.is_url()` | I |
+| ~~`is_phone(str)`~~ | **⛔ DEPRECATED** — use `validation.is_phone()` | I |
 | `is_numeric(str)` | Check if string is numeric | I |
 | `validate_length(str, min, max)` | Validate string length | I |
-| `password_strength(str)` | Check password strength | I |
+| ~~`password_strength(str)`~~ | **⛔ DEPRECATED** — use `validation.password_strength()` | I |
 
 ## Environment
 
 | Function | Description | Mode |
 |----------|-------------|------|
 | `env_get(name)` | Get environment variable | I |
-| `env_set(name, value)` | Set environment variable | I |
+| `env_set(name, value)` | Set environment variable — **🔒 requires `sys.env` capability** | I |
 | `env_exists(name)` | Check if env var exists | I |
+
+> **Security note:** `env_set()` is now gated behind the `sys.env`
+> capability.  In sandboxed or contract execution contexts where the
+> capability is not granted, calls to `env_set()` will be denied.
+> `env_get()` and `env_exists()` remain unrestricted for read-only access.
 
 ## Persistence
 
@@ -240,4 +261,59 @@ let now_val = datetime.now()
 
 use "math"
 let r = math.random_int(1, 100)
+
+use "validation"
+let ok = validation.is_email("user@test.com")
+
+use "password"
+let hashed = password.hash("secret")
+let verified = password.verify("secret", hashed)
+```
+
+---
+
+## Migration Guide
+
+The following builtins are deprecated starting in v1.8.4 and will be removed
+in a future release.  They continue to work but emit a `DeprecationWarning`.
+
+### Validation builtins → `use "validation"`
+
+| Old (deprecated) | New (module) |
+|-------------------|--------------|
+| `is_email(s)` | `validation.is_email(s)` |
+| `is_url(s)` | `validation.is_url(s)` |
+| `is_phone(s)` | `validation.is_phone(s)` |
+| `password_strength(s)` | `validation.password_strength(s)` |
+
+**Why?** These are application-level validations, not language primitives.
+The general-purpose `matches_pattern(str, regex)` builtin covers custom
+pattern matching.  Keeping them in a module reduces the global namespace and
+makes the language core leaner.
+
+### Password crypto builtins → `use "password"`
+
+| Old (deprecated) | New (module) |
+|-------------------|--------------|
+| `hash_password(pw)` | `password.hash(pw)` |
+| `verify_password(pw, hash)` | `password.verify(pw, hash)` |
+
+**Why?** Password hashing is application-level crypto.  Core crypto
+builtins (`hash()`, `keccak256()`, `crypto.sha256()`) remain global.
+
+### `env_set()` — now capability-gated
+
+`env_set()` is **not** removed but now requires the `sys.env` capability.
+In default (AllowAll) mode this is transparent.  In sandboxed or contract
+execution contexts the capability must be explicitly granted:
+
+```zexus
+// Sandbox blocks env_set by default
+sandbox {
+    env_set("FOO", "bar")  // ⛔ denied
+}
+
+// Grant the capability first
+grant "sys.env" to current_context
+env_set("FOO", "bar")  // ✅ allowed
 ```
