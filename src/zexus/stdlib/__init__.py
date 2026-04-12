@@ -13,6 +13,7 @@ from .encoding import EncodingModule
 from .compression import CompressionModule
 from .cache import CacheModule
 from .queue_module import QueueModule
+from .template import TemplateModule
 
 __all__ = [
     'FileSystemModule', 
@@ -27,5 +28,6 @@ __all__ = [
     'EncodingModule',
     'CompressionModule',
     'CacheModule',
-    'QueueModule'
+    'QueueModule',
+    'TemplateModule'
 ]
