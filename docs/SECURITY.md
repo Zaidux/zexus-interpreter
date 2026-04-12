@@ -11,7 +11,7 @@ Zexus provides defense-in-depth security built into the language runtime. This d
 6. [Virtual Filesystem Sandboxing](#virtual-filesystem-sandboxing)
 7. [Taint Tracking](#taint-tracking)
 8. [Audit Logging](#audit-logging)
-9. [New in v1.8.4: Security Modules](#new-security-modules)
+9. [New in v1.8.4: Security Modules](#new-security-modules-v184)
 
 ---
 
