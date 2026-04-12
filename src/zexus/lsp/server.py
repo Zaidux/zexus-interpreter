@@ -71,6 +71,7 @@ try:
     from .symbol_provider import SymbolProvider
     from .hover_provider import HoverProvider
     from .definition_provider import DefinitionProvider
+    from .formatter import ZexusFormatter
     ZEXUS_AVAILABLE = True
 except ImportError as e:
     ZEXUS_AVAILABLE = False
@@ -92,6 +93,7 @@ if PYGLS_AVAILABLE:
             self.symbol_provider = SymbolProvider()
             self.hover_provider = HoverProvider()
             self.definition_provider = DefinitionProvider()
+            self.formatter = ZexusFormatter()
             self.documents = {}  # Store parsed documents
 
 
@@ -221,8 +223,23 @@ if PYGLS_AVAILABLE:
     @server.feature(TEXT_DOCUMENT_FORMATTING)
     async def formatting(ls: ZexusLanguageServer, params: DocumentFormattingParams) -> List[TextEdit]:
         """Format document."""
-        # TODO: Implement code formatting
-        return []
+        uri = params.text_document.uri
+        doc_info = ls.documents.get(uri, {})
+        text = doc_info.get('text', '')
+        if not text:
+            return []
+        indent_size = params.options.get('tabSize', 4) if hasattr(params.options, 'get') else getattr(params.options, 'tab_size', 4)
+        formatted = ls.formatter.format_document(text, indent_size=indent_size)
+        if formatted == text:
+            return []
+        lines = text.split('\n')
+        return [TextEdit(
+            range=Range(
+                start=Position(line=0, character=0),
+                end=Position(line=len(lines) - 1, character=len(lines[-1])),
+            ),
+            new_text=formatted,
+        )]
 
 
     @server.feature(TEXT_DOCUMENT_SIGNATURE_HELP)

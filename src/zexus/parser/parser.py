@@ -77,6 +77,7 @@ class UltimateParser:
             BREAK: self.parse_break_statement,
             THROW: self.parse_throw_statement,
             PRINT: self.parse_print_statement,
+            PRINT_IF: self.parse_print_if_statement,
             FOR: self.parse_for_each_statement,
             SCREEN: self.parse_screen_statement,
             COLOR: self.parse_color_statement,
@@ -1660,7 +1661,6 @@ class UltimateParser:
         """Tolerant print statement parser with support for:
         - Single argument: print(message)
         - Multiple arguments: print(arg1, arg2, arg3)
-        - Conditional print: print(condition, message) - exactly 2 args
         """
         import sys
         # Debug logging (fail silently if file operations fail)
@@ -1674,37 +1674,88 @@ class UltimateParser:
                 pass  # Silently ignore debug logging errors
         
         stmt = PrintStatement(values=[])
-        self.next_token()
         
-        # Parse first expression
-        first_expr = self.parse_expression(LOWEST)
-        if first_expr:
-            stmt.values.append(first_expr)
-        
-        # Parse additional comma-separated expressions
-        while self.peek_token_is(COMMA):
-            self.next_token()  # consume comma
-            self.next_token()  # move to next expression
-            expr = self.parse_expression(LOWEST)
-            if expr:
-                stmt.values.append(expr)
-        
-        # Check if this is conditional print (exactly 2 arguments)
-        if len(stmt.values) == 2:
-            # Conditional print: print(condition, message)
-            stmt.condition = stmt.values[0]
-            stmt.values = [stmt.values[1]]
-            stmt.value = stmt.values[0]
+        # Check if print uses parenthesized syntax: print(arg1, arg2, ...)
+        if self.peek_token_is(LPAREN):
+            self.next_token()  # consume LPAREN
+            
+            # Parse comma-separated expressions inside parentheses
+            if not self.peek_token_is(RPAREN):
+                self.next_token()  # move to first expression
+                first_expr = self.parse_expression(LOWEST)
+                if first_expr:
+                    stmt.values.append(first_expr)
+                
+                while self.peek_token_is(COMMA):
+                    self.next_token()  # consume comma
+                    self.next_token()  # move to next expression
+                    expr = self.parse_expression(LOWEST)
+                    if expr:
+                        stmt.values.append(expr)
+            
+            # Consume closing paren
+            if self.peek_token_is(RPAREN):
+                self.next_token()
         else:
-            # Regular print: print(arg) or print(arg1, arg2, arg3, ...)
-            # Keep backward compatibility with .value for single-expression prints
-            stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
+            # No parentheses: print expr
+            self.next_token()
+            first_expr = self.parse_expression(LOWEST)
+            if first_expr:
+                stmt.values.append(first_expr)
+            
+            # Parse additional comma-separated expressions
+            while self.peek_token_is(COMMA):
+                self.next_token()  # consume comma
+                self.next_token()  # move to next expression
+                expr = self.parse_expression(LOWEST)
+                if expr:
+                    stmt.values.append(expr)
+        
+        # Keep backward compatibility with .value for single-expression prints
+        stmt.value = stmt.values[0] if len(stmt.values) == 1 else None
 
         # TOLERANT: Semicolon is optional
         if self.peek_token_is(SEMICOLON):
             self.next_token()
 
         return stmt
+
+    def parse_print_if_statement(self):
+        """Parse print_if(condition, message) — conditional print.
+        
+        Prints *message* only when *condition* is truthy.
+        Requires exactly 2 arguments inside parentheses.
+        """
+        # Expect: print_if( condition , message )
+        if not self.peek_token_is(LPAREN):
+            self.errors.append(
+                f"Line {self.cur_token.line}:{self.cur_token.column} - "
+                "print_if requires parenthesized arguments: print_if(condition, message)"
+            )
+            return None
+
+        self.next_token()  # consume LPAREN
+        self.next_token()  # move to first expression (condition)
+        condition = self.parse_expression(LOWEST)
+
+        if not self.peek_token_is(COMMA):
+            self.errors.append(
+                f"Line {self.cur_token.line}:{self.cur_token.column} - "
+                "print_if requires exactly 2 arguments: print_if(condition, message)"
+            )
+            return None
+        self.next_token()  # consume COMMA
+        self.next_token()  # move to second expression (value)
+        value = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(RPAREN):
+            self.next_token()
+
+        # TOLERANT: Semicolon is optional
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+
+        return PrintIfStatement(condition=condition, value=value)
 
     def parse_try_catch_statement(self):
         """Enhanced try-catch parsing with structural awareness"""

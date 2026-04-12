@@ -2,14 +2,14 @@
 
 <div align="center">
 
-![Zexus Logo](https://img.shields.io/badge/Zexus-v1.8.3-FF6B35?style=for-the-badge)
+![Zexus Logo](https://img.shields.io/badge/Zexus-v1.8.4-FF6B35?style=for-the-badge)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python)](https://python.org)
 [![GitHub](https://img.shields.io/badge/GitHub-Zaidux/zexus--interpreter-181717?style=for-the-badge&logo=github)](https://github.com/Zaidux/zexus-interpreter)
 
 **A modern, security-first programming language with built-in blockchain support, VM-accelerated execution, advanced memory management, and policy-as-code**
 
-[What's New](#-whats-new-in-v183) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
+[What's New](#-whats-new) • [Features](#-key-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Keywords](#-complete-keyword-reference) • [Documentation](#-documentation) • [Examples](#-examples) • [Troubleshooting](#-getting-help--troubleshooting)
 
 </div>
 
@@ -18,7 +18,7 @@
 ## 📋 Table of Contents
 
 - [What is Zexus?](#-what-is-zexus)
-- [What's New](#-whats-new-in-v183)
+- [What's New](#-whats-new)
 - [Key Features](#-key-features)
   - [VM-Accelerated Performance](#-vm-accelerated-performance-new)
   - [Security & Policy-as-Code](#-security--policy-as-code--verify-enhanced)
@@ -67,68 +67,46 @@ Zexus is a next-generation, general-purpose programming language designed for se
 
 ---
 
-## 🎉 What's New in v1.8.3
+## 🎉 What's New
 
-### v1.8.3 — Phase 0 Audit Fixes, Closure Scoping Overhaul & VM Hardening (2026-03-01)
+### v1.8.4 — Blockchain VM, Modules, Concurrency, DX, Cybersecurity, Bug Fixes & Documentation (2026-04-12)
 
-19 issues from the [Ziver-Chain Phase 0 rewrite audit](issues/ISSUE8.md) resolved — including 3 VM-specific critical fixes. Key changes:
+Major feature release implementing the Part 2 roadmap and Part 3 cybersecurity gap analysis.
 
-**VM Fixes & Hardening:**
-- **R-001:** Entity field access on VM now works — proper `EntityDefinition`/`EntityInstance` construction from bytecode
-- **R-002:** Contract `state` declarations now compile correctly (`_compile_StateStatement`)
-- **R-010:** Complex programs no longer silently fail — added `_vm_warn()` diagnostics, replaced 15 silent error handlers
-- Native fast-path (`_vm_native_call`) for `push`/`append`/`length`/`str`/`range` operations on VM-native types
-- `VMRuntimeError(Exception)` replaces non-raisable `ZEvaluationError(Object)` in 15 raise sites
-- Stack overflow protection, execution timeout (30s), opcode limit (100M), configurable VM pool sizing
-- **Rust VM status indicator** — CLI/runner show "Rust VM: active", "available but disabled", or "not compiled"
+**Blockchain VM:**
+- `PriorityMempool` — Gas-price priority queue with eviction, replace-by-fee, nonce validation
+- `GasPriceOracle` — EIP-1559 dynamic base fee that adjusts to block utilization
+- `ABIEncoder` — Function selectors, parameter encoding/decoding for Solidity-compatible types
 
-**Closure & Scoping Fixes:**
-- Entity/`let` declarations before a contract no longer break contract visibility — declaration order is now flexible
-- Module-level helper functions called from contract methods now correctly propagate side-effects (`list.push()`, `map[k]=v`)
-- `action protect` now works at module level (policy enforcement added to function call path)
-- Storage sync-back in contract methods improved — `list.push()` after `map[key]=val` no longer silently ignored
-- Exported entities can now be used as constructors in importing files
+**New Stdlib Modules:** `cache`, `queue`, `template`, `testing` — LRU/TTL caches, message queues, server-side templating, assertion library with mocking
 
-**Contract & Language Fixes:**
-- `self` keyword works as alias for `this` inside contracts
-- `init()` auto-called on `Contract()` construction
-- `state { field1: val, field2: val }` multi-field blocks work correctly
-- `for each i, item in list` (indexed) and `for each key, val in map` now supported
-- `INTEGER * FLOAT` implicit coercion and `%` modulo on floats now work
-- Added `range()`, `typeof()`, `abs()`, `str()`, `length()` builtins; 8 parser edge-case fixes
+**Concurrency:** `select()` channel multiplexing, `TaskGroup` structured concurrency, `BackpressuredChannel` overflow policies, `TaskContext` cross-task tracing
 
-**Stats:** 1852 tests pass, 0 regressions. 5 new extreme test suites (83 tests across speed, stability, security, features, VM). See [CHANGELOG](CHANGELOG.md) for full details.
+**Developer Experience:** LSP user-defined symbol completions + formatter, DAP conditional breakpoints + expression eval
+
+**Cybersecurity (7 new modules):** `fuzz` (coverage-guided fuzzing), `secrets` (encrypted store + rotation), `netsec` (port scanner, TLS checker, DNS enum), `payloads` (XSS/SQLi/SSRF test vectors), `pentest` (service enum, brute-force, reporting), `audit` (SAST with SARIF output), `contract_audit` (reentrancy, overflow, access control detection)
+
+**Tests:** 200+ new test cases, all 523 original tests pass.
+
+Also includes the earlier v1.8.4 bug-fix/documentation work: compound assignment operators, `for i in range(n)` loops, entity constructors with positional args, the `not` operator fix, new `ZEXUS_GUIDE.md` / `ZEXUS_RULES.md` / keyword+builtin+CLI docs, and major repository cleanup.
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+### v1.8.3 — VM Hardening & Closure Scoping (2026-03-01)
+
+Entity field access on VM, contract `state` compilation, diagnostic warnings, native fast-path calls, `VMRuntimeError`, stack overflow protection, Rust VM status indicator. Closure scoping fixes for declaration order, module-level side-effects, exported entity constructors. `self`/`this` alias, indexed `for each`, implicit coercion. 1852 tests, 0 regressions.
 
 ### v1.8.2 — Concurrency & Channel Support (2026-02-25)
 
-- `watch =>` arrow-lambda fallback no longer hijacks the strategy parser
-- Channel support in VM compiler (`_compile_ChannelStatement`, `_compile_SendStatement`, `_compile_ReceiveStatement`)
-- SPAWN/AWAIT opcodes in sync path using `threading.Thread(daemon=True)`
-- Strategy parser channel/async handlers added
-- Fixed 10+ missing VM node types; zero VM fallbacks achieved
-- All versions bumped to 1.8.2; Rust VM builds with `maturin develop --release`
+Channel VM compiler support, SPAWN/AWAIT opcodes, strategy parser handlers. Zero VM fallbacks.
 
-### v1.8.1 — ISSUE7 Audit & Security Remediation (2026-02-23)
+### v1.8.1 — Audit & Security Remediation (2026-02-23)
 
-All 21 issues from the Phase 0 audit resolved:
-- `emit`, `protocol`, `implements` keywords fully operational in all parsers
-- Entity compilation crash in VM fixed; imported functions no longer return raw Action objects
-- `map.has()` / `map.get()` key normalization fixed
-- ExportStatement supported in VM; entity constructor arity validation relaxed
-- `persistent storage` now wires to SQLite backend with `set_persistent`/`get_persistent`
-- 5 new builtins: `track_memory()`, `cache()`, `throttle()`, `audit()`, `verify()`
-- Complete security remediation Phases 0–5 (sandboxing, ReDoS, import sandboxing, compiler parity, dead-code removal, bounded logs)
-- 1852 tests pass
+21 Phase 0 audit issues resolved. `emit`/`protocol`/`implements` working, entity VM compilation, persistent storage, 5 new builtins, security remediation Phases 0–5.
 
 ### v1.8.0 — Rust VM Pipeline & Major Features (2026-02-23)
 
-**Language Features:** Compound assignment (`+=`, `-=`, etc.), string interpolation (`"Hello ${name}"`), block comments (`/* */`), multiline strings, single-quoted strings, exponentiation (`**`), `finally` clause, destructuring assignment.
-
-**Developer Tooling:** Circular import detection, LSP go-to-definition, remote ZPM registry, static type checker.
-
-**Major Capabilities:** Debug Adapter Protocol (DAP) server, GUI backend (Tk + Web), true concurrent EventLoop, WASM compilation target.
-
-**Rust-First Execution (Phases 0–6):** Complete migration achieving **102,000+ TPS** with zero Python fallbacks. Includes binary `.zxc` format, Rust bytecode interpreter (22 MIPS, 20.7x speedup), adaptive VM routing, `RustContractVM` orchestration, GIL-free batch execution (221,593 TPS peak), and 40+ Rust builtins.
+Compound assignment, string interpolation, block comments, destructuring. DAP server, GUI backend, concurrent EventLoop, WASM target. Rust-first execution achieving **102,000+ TPS** with zero Python fallbacks.
 
 ### v1.7.x — FIND/LOAD Keywords & Performance (2026-01)
 
@@ -150,7 +128,7 @@ World-class error messages (rivaling Rust), generic types, pattern matching, ope
 
 ### v0.1.3 — Foundation (2025-11)
 
-130+ keywords, dual-mode DEBUG, conditional print, multiple syntax styles, enterprise keywords, async/await, UI renderer, enhanced VERIFY, blockchain keywords, 100+ builtins.
+130+ keywords, dual-mode DEBUG, multi-argument print, multiple syntax styles, enterprise keywords, async/await, UI renderer, enhanced VERIFY, blockchain keywords, 100+ builtins.
 
 ---
 
@@ -1081,16 +1059,9 @@ let x = debug(42)           # Outputs: [DEBUG] 42, x = 42
 # Statement mode - logs with metadata
 debug myVariable;           # Outputs: 🔍 DEBUG: <value> with context
 
-# CONDITIONAL PRINT (NEW!):
-# Only prints if condition is true
-let debugMode = true
-print(debugMode, "Debug mode active")  # Prints: "Debug mode active"
-
-let verbose = false
-print(verbose, "Verbose output")       # Does NOT print
-
 # Multi-argument print
-print("Value:", x, "Result:", y)       # Outputs all separated by spaces
+print("Value:", x, "Result:", y)       # Outputs: Value: <x> Result: <y>
+print("Hello", "World", 42)           # Outputs: Hello World 42
 
 # Other debug tools
 debug_log("message", context)
@@ -1826,7 +1797,7 @@ Zexus supports **130+ keywords** organized into functional categories:
 - **`defer`** - Deferred cleanup execution
 
 #### I/O & Output
-- **`print`** - Output to console (supports multi-argument and conditional printing)
+- **`print`** - Output to console (supports multi-argument printing, space-separated)
 - **`debug`** - Debug output (dual-mode: function returns value, statement logs with metadata)
 - **`log`** - Redirect output to file (scope-aware, supports any extension)
 
@@ -2237,7 +2208,7 @@ Source Code (.zx)
 - **[IF/ELIF/ELSE](docs/keywords/IF_ELIF_ELSE.md)** - Conditional execution
 - **[WHILE/FOR/EACH/IN](docs/keywords/WHILE_FOR_EACH_IN.md)** - Loops and iteration
 - **[BREAK](docs/keywords/BREAK.md)** - Loop control - exit loops early
-- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging (includes conditional print)
+- **[PRINT/DEBUG](docs/keywords/PRINT_DEBUG.md)** - Output and debugging (includes multi-argument print)
 - **[LOG](docs/keywords/LOG.md)** - Output redirection and code generation
 
 #### Error Handling
@@ -2562,7 +2533,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Language Server Protocol (LSP) ✅
 - [x] Standard library expansion (fs, http, json, datetime, crypto, blockchain) ✅
 - [x] Performance profiling tools ✅
-- [ ] Debugger integration (Debug Adapter Protocol in progress)
+- [x] Debugger integration (DAP) ✅
+- [x] Transaction mempool with gas-price ordering ✅ (v1.8.4)
+- [x] Gas price oracle (EIP-1559 dynamic base fee) ✅ (v1.8.4)
+- [x] Contract ABI encoding ✅ (v1.8.4)
+- [x] `select` statement for channel multiplexing ✅ (v1.8.4)
+- [x] Structured concurrency (TaskGroup) ✅ (v1.8.4)
+- [x] Backpressure (configurable overflow policy) ✅ (v1.8.4)
+- [x] Context propagation (tracing IDs/deadlines) ✅ (v1.8.4)
+- [x] `use "cache"` — LRU + TTL caches ✅ (v1.8.4)
+- [x] `use "queue"` — Message queue abstraction ✅ (v1.8.4)
+- [x] `use "template"` — Server-side rendering ✅ (v1.8.4)
+- [x] `use "testing"` — Assert library + mocking ✅ (v1.8.4)
+- [x] `use "fuzz"` — Coverage-guided fuzzing ✅ (v1.8.4)
+- [x] `use "secrets"` — Vault integration, envelope encryption ✅ (v1.8.4)
+- [x] `use "netsec"` — Port scanner, TLS checker, DNS enum ✅ (v1.8.4)
+- [x] `use "payloads"` — XSS/SQLi/SSRF test vectors ✅ (v1.8.4)
+- [x] `use "pentest"` — Pen-testing framework ✅ (v1.8.4)
+- [x] `zx audit` CLI — SAST scanner with SARIF output ✅ (v1.8.4)
+- [x] Contract security analyzer ✅ (v1.8.4)
 
 ### Planned 🎯
 - [ ] WASM compilation target
@@ -2606,12 +2595,12 @@ See [Ecosystem Strategy](docs/ECOSYSTEM_STRATEGY.md) for detailed roadmap.
 ## 📊 Project Stats
 
 - **Language**: Python 3.8+
-- **Version**: 1.5.0 (Stable)
-- **Lines of Code**: ~50,000+
+- **Version**: 1.8.4 (Stable)
+- **Lines of Code**: ~75,000+
 - **Keywords**: 130+ language keywords
 - **Built-in Functions**: 100+ built-in functions
-- **Documentation Pages**: 100+
-- **Test Cases**: 1175+ comprehensive tests
+- **Stdlib Modules**: 30+
+- **Test Cases**: 2500+ comprehensive tests
 - **Features**: 100+ language features
 - **Supported Platforms**: Linux, macOS, Windows
 

@@ -187,6 +187,13 @@ try:
 except ImportError:
     _LOADTEST_AVAILABLE = False
 
+# Advanced Mempool, Gas Oracle & ABI Encoder
+try:
+    from .mempool import PriorityMempool, GasPriceOracle, ABIEncoder
+    _MEMPOOL_AVAILABLE = True
+except ImportError:
+    _MEMPOOL_AVAILABLE = False
+
 __all__ = [
     # Ledger
     'Ledger',
@@ -351,6 +358,11 @@ __all__ = [
     'LoadProfile',
     'LoadTestReport',
     'quick_benchmark',
+
+    # Advanced Mempool, Gas Oracle & ABI Encoder
+    'PriorityMempool',
+    'GasPriceOracle',
+    'ABIEncoder',
 
     # Dependency audit
     'check_dependencies',

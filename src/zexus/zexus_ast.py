@@ -195,6 +195,21 @@ class PrintStatement(Statement):
             return f"PrintStatement(condition={self.condition}, values={self.values})"
         return f"PrintStatement(values={self.values})"
 
+class PrintIfStatement(Statement):
+    """Conditional print: print_if(condition, message).
+    
+    Prints *message* only when *condition* is truthy.
+    Uses a distinct keyword to avoid the ambiguity that existed with
+    ``print(condition, message)`` (which silently conflicted with
+    multi-argument print).
+    """
+    def __init__(self, condition, value):
+        self.condition = condition
+        self.value = value
+
+    def __repr__(self):
+        return f"PrintIfStatement(condition={self.condition}, value={self.value})"
+
 class ForEachStatement(Statement):
     def __init__(self, item, iterable, body, index=None):
         self.item = item; self.iterable = iterable; self.body = body

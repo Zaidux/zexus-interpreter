@@ -9,7 +9,7 @@ from types import SimpleNamespace # Helper for AST node creation
 from collections import OrderedDict
 
 STATEMENT_STARTERS = {
-    LET, CONST, DATA, PRINT, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION,
+    LET, CONST, DATA, PRINT, PRINT_IF, FOR, IF, WHILE, RETURN, CONTINUE, BREAK, THROW, ACTION, FUNCTION,
     TRY, FINALLY, EXTERNAL, SCREEN, COLOR, CANVAS, GRAPHICS, ANIMATION, CLOCK,
     EXPORT, USE, DEBUG, ENTITY, CONTRACT, VERIFY, PROTECT, PERSISTENT,
     STORAGE, AUDIT, RESTRICT, SANDBOX, TRAIL, NATIVE, GC, INLINE, BUFFER,
@@ -105,6 +105,8 @@ class ContextStackParser:
             CONST: self._parse_const_statement_block,  # Handle CONST token type
             'print_statement': self._parse_print_statement_block,
             PRINT: self._parse_print_statement_block,  # Handle PRINT token type from structural analyzer
+            'print_if_statement': self._parse_print_if_statement_block,
+            PRINT_IF: self._parse_print_if_statement_block,
             'debug_statement': self._parse_debug_statement_block,
             DEBUG: self._parse_debug_statement_block,
             'assignment_statement': self._parse_assignment_statement,
@@ -1113,13 +1115,77 @@ class ContextStackParser:
         if not values:
             values = [StringLiteral("")]
         
-        # Check if this is conditional print: exactly 2 arguments
-        if len(values) == 2:
-            # Conditional print: print(condition, message)
-            return PrintStatement(values=[values[1]], condition=values[0])
+        # Regular print: print(arg1, arg2, ...) or print(single_arg)
+        return PrintStatement(values=values)
+
+    def _parse_print_if_statement_block(self, block_info, all_tokens):
+        """Parse print_if(condition, message) statement block.
+        
+        Requires exactly 2 comma-separated arguments:
+        - First argument is the condition
+        - Second argument is the value to print when condition is truthy
+        """
+        tokens = block_info['tokens']
+
+        if len(tokens) < 2:
+            return PrintIfStatement(condition=Boolean(True), value=StringLiteral(""))
+
+        # Get all tokens after PRINT_IF keyword
+        expression_tokens = tokens[1:]
+
+        # Strip outer parentheses
+        tokens_to_parse = expression_tokens
+        if (len(expression_tokens) >= 2
+                and expression_tokens[0].type == LPAREN
+                and expression_tokens[-1].type == RPAREN):
+            tokens_to_parse = expression_tokens[1:-1]
+
+        # Split by commas at depth 0
+        args = []
+        current_arg = []
+        paren_depth = 0
+        bracket_depth = 0
+        brace_depth = 0
+
+        for token in tokens_to_parse:
+            if token.type == LPAREN:
+                paren_depth += 1
+            elif token.type == RPAREN:
+                paren_depth -= 1
+            elif token.type == LBRACKET:
+                bracket_depth += 1
+            elif token.type == RBRACKET:
+                bracket_depth -= 1
+            elif token.type == LBRACE:
+                brace_depth += 1
+            elif token.type == RBRACE:
+                brace_depth -= 1
+
+            if (token.type == COMMA
+                    and paren_depth == 0
+                    and bracket_depth == 0
+                    and brace_depth == 0):
+                if current_arg:
+                    expr = self._parse_expression(current_arg)
+                    if expr:
+                        args.append(expr)
+                    current_arg = []
+            else:
+                current_arg.append(token)
+
+        # Last argument
+        if current_arg:
+            expr = self._parse_expression(current_arg)
+            if expr:
+                args.append(expr)
+
+        if len(args) >= 2:
+            return PrintIfStatement(condition=args[0], value=args[1])
+        elif len(args) == 1:
+            # Fallback: treat single arg as always-true condition with arg as value
+            return PrintIfStatement(condition=Boolean(True), value=args[0])
         else:
-            # Regular print: print(arg1, arg2, ...) or print(single_arg)
-            return PrintStatement(values=values)
+            return PrintIfStatement(condition=Boolean(True), value=StringLiteral(""))
 
     def _parse_debug_statement_block(self, block_info, all_tokens):
         """Parse debug statement block - RETURNS DebugStatement (logs with metadata)
@@ -2380,6 +2446,8 @@ class ContextStackParser:
             return self._parse_const_statement_block(block_info, all_tokens)
         elif subtype == 'print_statement':
             return self._parse_print_statement_block(block_info, all_tokens)
+        elif subtype == 'print_if_statement':
+            return self._parse_print_if_statement_block(block_info, all_tokens)
         elif subtype == 'function_call_statement':
             return self._parse_function_call_statement(block_info, all_tokens)
         elif subtype == 'assignment_statement':
@@ -2724,30 +2792,35 @@ class ContextStackParser:
                             
                             # If on a new line and current token could start a statement, it's likely a new statement
                             if is_new_line and lookahead_idx < len(tokens):
-                                next_tok = tokens[lookahead_idx]
-                                # IDENT followed by DOT (method call) or LPAREN (function call) on new line
-                                if next_tok.type in {DOT, LPAREN}:
-                                    is_new_statement = True
-                                # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
-                                elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
-                                    is_new_statement = True
-                                # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
-                                elif next_tok.type == LBRACKET:
-                                    # Look ahead to confirm it's an indexed assignment
-                                    # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
-                                    bracket_depth = 1
-                                    scan_idx = lookahead_idx + 1
-                                    while scan_idx < len(tokens) and scan_idx < lookahead_idx + 20:
-                                        if tokens[scan_idx].type == LBRACKET:
-                                            bracket_depth += 1
-                                        elif tokens[scan_idx].type == RBRACKET:
-                                            bracket_depth -= 1
-                                            if bracket_depth == 0:
-                                                # Found matching closing bracket, check for ASSIGN
-                                                if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
-                                                    is_new_statement = True
-                                                break
-                                        scan_idx += 1
+                                prev_before_ident = tokens[j-1] if j > 0 else None
+                                # Don't break if the preceding token is AWAIT (await func() is a single expression)
+                                if prev_before_ident and prev_before_ident.type == AWAIT:
+                                    pass  # Part of await expression, not a new statement
+                                else:
+                                    next_tok = tokens[lookahead_idx]
+                                    # IDENT followed by DOT (method call) or LPAREN (function call) on new line
+                                    if next_tok.type in {DOT, LPAREN}:
+                                        is_new_statement = True
+                                    # IDENT followed by compound assignment (+=, -=, *=, /=, %=, **=) on new line
+                                    elif next_tok.type in {PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, MOD_ASSIGN, POWER_ASSIGN}:
+                                        is_new_statement = True
+                                    # IDENT followed by LBRACKET (indexed assignment) on new line: data["key"] = value
+                                    elif next_tok.type == LBRACKET:
+                                        # Look ahead to confirm it's an indexed assignment
+                                        # Pattern: IDENT LBRACKET ... RBRACKET ASSIGN
+                                        bracket_depth = 1
+                                        scan_idx = lookahead_idx + 1
+                                        while scan_idx < len(tokens) and scan_idx < lookahead_idx + 20:
+                                            if tokens[scan_idx].type == LBRACKET:
+                                                bracket_depth += 1
+                                            elif tokens[scan_idx].type == RBRACKET:
+                                                bracket_depth -= 1
+                                                if bracket_depth == 0:
+                                                    # Found matching closing bracket, check for ASSIGN
+                                                    if scan_idx + 1 < len(tokens) and tokens[scan_idx + 1].type == ASSIGN:
+                                                        is_new_statement = True
+                                                    break
+                                            scan_idx += 1
                             
                             # Original checks (keep for non-newline cases)
                             if not is_new_statement and lookahead_idx < len(tokens):
@@ -2762,6 +2835,7 @@ class ContextStackParser:
                                     EQ, NOT_EQ, LT, GT, LTE, GTE,    # Comparison operators
                                     AND, OR,                          # Logical operators
                                     COMMA,                            # List separator
+                                    AWAIT,                            # Await expression: await func()
                                 }
                                 
                                 if next_tok.type == LPAREN and not is_method_call_continuation and not is_expression_continuation:

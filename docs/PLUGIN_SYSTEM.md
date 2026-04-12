@@ -1,519 +1,834 @@
-# Zexus Plugin System Design
+# Zexus Plugin System - Complete Guide
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [How to Extend Zexus Without New Keywords](#how-to-extend-without-keywords)
+4. [Plugin Components](#plugin-components)
+5. [Event System](#event-system)
+6. [Hook System](#hook-system)
+7. [Capability System](#capability-system)
+8. [Creating Custom Plugins](#creating-custom-plugins)
+9. [Examples](#examples)
+10. [Best Practices](#best-practices)
+
+---
 
 ## Overview
 
-The Zexus plugin system leverages the modifier infrastructure to enable third-party extensions without compromising core language integrity. Plugins are self-contained Zexus modules that define capabilities and hooks, allowing users to extend the language with custom syntax handlers, builtin functions, security policies, and runtime behaviors.
+The Zexus plugin system allows you to **extend the language's functionality without adding new keywords**. Instead of modifying the core language, you can:
 
-## Core Concepts
+✅ Add new built-in functions  
+✅ Hook into language events (function calls, variable access, etc.)  
+✅ Create middleware for security and validation  
+✅ Implement domain-specific features  
+✅ Add external library integrations  
 
-### Plugins as Modules
+**Philosophy:** "Extend, don't modify" - Keep the language core simple and stable
 
-A plugin is a `.zx` module that:
-1. Declares capabilities via `@plugin` directive
-2. Exports hook handlers (functions with specific signatures)
-3. Registers with the runtime via `plugin.register()`
-4. Can depend on other plugins with `requires` metadata
+---
 
-```zexus
-@plugin {
-  name: "json",
-  version: "1.0.0",
-  requires: [],
-  provides: ["json.parse", "json.stringify"]
-}
-
-public action parse(input) {
-  # Parse JSON string
-  # Implementation using core language
-}
-
-public action stringify(obj) {
-  # Convert object to JSON
-  # Implementation using core language
-}
-```
-
-### Capability Model
-
-Each plugin declares **capabilities** it provides, forming a directed dependency graph:
+## Architecture
 
 ```
-core (always available)
-  ├── json.parse
-  ├── json.stringify
-  ├── crypto.hash
-  └── crypto.sign
+┌─────────────────────────────────────────────────────────┐
+│                    Zexus Core                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   Lexer      │→ │   Parser     │→ │  Evaluator   │  │
+│  └──────────────┘  └──────────────┘  └──────┬───────┘  │
+│                                               │          │
+└───────────────────────────────────────────────┼──────────┘
+                                                │
+                                                ↓
+                    ┌───────────────────────────────────┐
+                    │      Plugin System Layer          │
+                    ├───────────────────────────────────┤
+                    │  • Event Emitter                  │
+                    │  • Hook Registry                  │
+                    │  • Capability Manager             │
+                    │  • Plugin Manager                 │
+                    └───────────┬───────────────────────┘
+                                │
+                ┌───────────────┼───────────────┐
+                ↓               ↓               ↓
+        ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+        │   Plugin A   │ │   Plugin B   │ │   Plugin C   │
+        │  (Logging)   │ │  (Caching)   │ │  (Security)  │
+        └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-Code that uses a capability must either:
-- Explicitly declare dependency in its `@requires` metadata
-- Import the plugin module
-- Be explicitly granted the capability by sandboxing policy
+---
 
-### Hook System
+## How to Extend Zexus Without New Keywords
 
-Plugins can intercept language operations via hooks:
+### Method 1: Add Built-in Functions
 
-```zexus
-# Register a custom import resolver
-plugin.register_hook("import_resolver", action(path, ctx) {
-  # Custom logic to resolve import paths
-  ret custom_path;
-});
+Instead of adding keywords, add functions to the global environment.
 
-# Register a custom type validator
-plugin.register_hook("type_validator", action(value, type_spec) {
-  # Validate value against custom type specification
-  ret is_valid;
-});
-
-# Register a pre-evaluation handler
-plugin.register_hook("pre_eval", action(node, ctx) {
-  # Inspect or transform AST node before evaluation
-  ret modified_node;
-});
-```
-
-Available hooks:
-- **import_resolver**: Customize module resolution
-- **type_validator**: Implement custom type checking
-- **pre_eval**: Transform AST nodes before evaluation
-- **post_eval**: Inspect/modify evaluated results
-- **security_check**: Enforce capability-based access control
-- **optimizer**: Register optimization passes
-
-## Plugin API
-
-### `plugin` Global Object
-
-The `plugin` object provides the following interface:
-
-```zexus
-# Metadata and registration
-plugin.metadata()           # Returns {name, version, requires, provides}
-plugin.register_hook(name, handler)     # Register a hook handler
-plugin.grant_capability(cap)            # Request/declare capability
-plugin.has_capability(cap)              # Check if capability available
-
-# Introspection
-plugin.get_hooks()                      # List registered hooks
-plugin.get_capabilities()               # List available capabilities
-plugin.get_loaded_plugins()             # List active plugins
-
-# Module helpers
-plugin.load(name)                       # Load plugin module
-plugin.require_capability(caps)         # Declare required capabilities
-```
-
-### Hook Signatures
-
-Each hook type has a standardized signature:
-
-```zexus
-# import_resolver(path: string, context: object) → string
-# Resolve import path to actual module location
-action handle_import(path, ctx) {
-  ret ctx.default_resolver(path);
-}
-
-# type_validator(value: any, spec: object) → bool
-# Validate value against type specification
-action handle_type(value, spec) {
-  ret typeof(value) == spec.type;
-}
-
-# pre_eval(node: ASTNode, context: object) → ASTNode
-# Transform AST before evaluation
-action handle_pre_eval(node, ctx) {
-  ret node;  # Return modified or original node
-}
-
-# post_eval(result: any, node: ASTNode, context: object) → any
-# Inspect/modify evaluation result
-action handle_post_eval(result, node, ctx) {
-  ret result;
-}
-
-# security_check(capability: string, context: object) → bool
-# Check if capability access is allowed
-action handle_security(cap, ctx) {
-  ret true;  # Allow by default, deny raises error
-}
-
-# optimizer(ast: AST, context: object) → AST
-# Perform optimization on AST
-action handle_optimizer(ast, ctx) {
-  ret ast;  # Return optimized AST
-}
-```
-
-## Plugin Metadata
-
-Every plugin must define metadata:
-
-```zexus
-@plugin {
-  name: "string",              # Plugin identifier (required)
-  version: "semver",           # Plugin version (required)
-  author: "string",            # Plugin author
-  description: "string",       # What this plugin does
-  requires: ["capability"],    # Capabilities this plugin needs
-  provides: ["capability"],    # Capabilities this plugin exports
-  hooks: ["hook_name"],        # Hooks this plugin registers
-  config: {                    # Optional configuration schema
-    field: { type: "string", default: "value" }
-  }
-}
-```
-
-## Plugin Loading & Management
-
-### Runtime Plugin Loader
-
-The `PluginManager` class handles plugin lifecycle:
+**Example: Adding HTTP support without `http` keyword**
 
 ```python
-class PluginManager:
-    """Manage plugin loading, registration, and dependency resolution."""
+# In Python (plugin implementation)
+from zexus.object import EvaluationError, Function, String
+
+def http_get(args):
+    """Built-in function for HTTP GET requests"""
+    if len(args) != 1:
+        return EvaluationError("http_get expects 1 argument: url")
+    
+    url = args[0].value
+    response = requests.get(url)
+    return String(response.text)
+
+# Register as built-in
+environment.set("httpGet", Function(http_get))
+```
+
+**Usage in Zexus:**
+```zexus
+// No new keyword needed! Just use the function
+let response = httpGet("https://api.example.com/data");
+print("Response: " + response);
+```
+
+---
+
+### Method 2: Use the Event System
+
+Hook into language events without modifying the interpreter.
+
+**Example: Auto-logging without `log` keyword**
+
+```zexus
+// Register event listener
+on("function_call", function(event) {
+    print("Function called: " + event.name);
+    print("Arguments: " + event.args);
+});
+
+// Now all function calls are automatically logged
+let result = add(5, 3);  // Logs: "Function called: add"
+```
+
+---
+
+### Method 3: Use Hooks for Middleware
+
+Wrap existing functionality with hooks.
+
+**Example: Auto-validation without `validate` keyword**
+
+```zexus
+// Add validation hook
+beforeFunctionCall(function(funcName, args) {
+    if (funcName == "divide") {
+        if (args[1] == 0) {
+            throw("Division by zero prevented!");
+        }
+    }
+});
+
+// Now division is automatically safe
+let result = divide(10, 2);  // Works
+let bad = divide(10, 0);     // Prevented by hook
+```
+
+---
+
+### Method 4: Capability-Based Features
+
+Use the capability system for feature control.
+
+**Example: File access control without `allow` keyword**
+
+```zexus
+// Check capabilities instead of keywords
+function safeReadFile(path) {
+    if (!hasCapability("io.read")) {
+        throw("Missing io.read capability");
+    }
+    return readFile(path);
+}
+
+// Use like normal function
+let content = safeReadFile("data.txt");
+```
+
+---
+
+## Plugin Components
+
+### 1. Plugin Registration
+
+```zexus
+// Define a plugin (in Zexus code)
+let myPlugin = {
+    name: "MyPlugin",
+    version: "1.0.0",
+    
+    init: function() {
+        print("Plugin initialized");
+        registerBuiltins();
+    },
+    
+    cleanup: function() {
+        print("Plugin cleaned up");
+    }
+};
+
+// Register the plugin
+registerPlugin(myPlugin);
+```
+
+### 2. Python-Side Plugin
+
+```python
+# src/plugins/my_plugin.py
+
+class MyPlugin:
+    """Custom Zexus plugin"""
+    
+    def __init__(self, evaluator):
+        self.evaluator = evaluator
+        self.name = "MyPlugin"
+        self.version = "1.0.0"
+    
+    def register_builtins(self, env):
+        """Add custom built-in functions"""
+        from zexus.object import Function, Integer
+        
+        def custom_function(args):
+            # Your implementation
+            return Integer(42)
+        
+        env.set("customFunc", Function(custom_function))
+    
+    def register_hooks(self):
+        """Register event hooks"""
+        self.evaluator.on("function_call", self.on_function_call)
+    
+    def on_function_call(self, event):
+        """Handle function call events"""
+        print(f"[Plugin] Function {event.name} called")
+
+# Register with evaluator
+from plugins.my_plugin import MyPlugin
+plugin = MyPlugin(evaluator)
+plugin.register_builtins(environment)
+plugin.register_hooks()
+```
+
+---
+
+## Event System
+
+The event system allows plugins to listen for language events.
+
+### Available Events
+
+| Event Name | Triggered When | Data Available |
+|------------|---------------|----------------|
+| `function_call` | Function is called | name, args, caller |
+| `variable_set` | Variable is assigned | name, value, scope |
+| `variable_get` | Variable is accessed | name, scope |
+| `module_loaded` | Module is imported | name, path |
+| `error` | Runtime error occurs | message, stack |
+| `custom:*` | Custom event | plugin-defined |
+
+### Event API
+
+```zexus
+// Emit an event
+emit("custom:data_loaded", { size: 1024, time: 500 });
+
+// Listen for events
+on("custom:data_loaded", function(data) {
+    print("Data loaded: " + data.size + " bytes");
+    print("Time taken: " + data.time + "ms");
+});
+
+// One-time listener
+once("custom:startup", function() {
+    print("Application started");
+});
+
+// Remove listener
+let listener = on("custom:event", handler);
+off("custom:event", listener);
+```
+
+---
+
+## Hook System
+
+Hooks allow middleware-style interception.
+
+### Hook Types
+
+#### Before Hooks
+Run before the operation:
+
+```zexus
+beforeFunctionCall(function(name, args) {
+    print("About to call: " + name);
+    // Can modify args
+    return args;
+});
+```
+
+#### After Hooks
+Run after the operation:
+
+```zexus
+afterFunctionCall(function(name, args, result) {
+    print("Function " + name + " returned: " + result);
+    // Can modify result
+    return result;
+});
+```
+
+#### Around Hooks
+Wrap the entire operation:
+
+```zexus
+aroundFunctionCall(function(name, args, proceed) {
+    print("Before: " + name);
+    let result = proceed(args);  // Call original
+    print("After: " + name);
+    return result;
+});
+```
+
+### Hook Examples
+
+**Performance Monitoring:**
+```zexus
+afterFunctionCall(function(name, args, result) {
+    if (name == "slowFunction") {
+        recordMetric("slowFunction_calls", 1);
+    }
+    return result;
+});
+```
+
+**Automatic Caching:**
+```zexus
+let cache = {};
+
+aroundFunctionCall(function(name, args, proceed) {
+    if (name == "expensiveComputation") {
+        let key = name + "_" + args[0];
+        if (cache[key]) {
+            print("Cache hit!");
+            return cache[key];
+        }
+        let result = proceed(args);
+        cache[key] = result;
+        return result;
+    }
+    return proceed(args);
+});
+```
+
+**Input Validation:**
+```zexus
+beforeFunctionCall(function(name, args) {
+    if (name == "processUser") {
+        if (!args[0] || !args[0].email) {
+            throw("User must have email");
+        }
+    }
+    return args;
+});
+```
+
+---
+
+## Capability System
+
+Control feature access without keywords.
+
+### Checking Capabilities
+
+```zexus
+function secureOperation() {
+    if (!hasCapability("io.write")) {
+        throw("Missing io.write capability");
+    }
+    // Perform operation
+}
+```
+
+### Requesting Capabilities
+
+```zexus
+// At module/plugin level
+requireCapability("network.http");
+requireCapability("io.read");
+
+// Then use features
+let data = httpGet("https://api.com");
+```
+
+### Granting Capabilities
+
+```python
+# In Python plugin
+def grant_capabilities(env, capabilities):
+    """Grant capabilities to environment"""
+    env.capabilities = capabilities
+
+# Usage
+grant_capabilities(env, ["io.read", "io.write", "network.http"])
+```
+
+---
+
+## Creating Custom Plugins
+
+### Full Plugin Example: Database Plugin
+
+**File: `src/plugins/database_plugin.py`**
+
+```python
+import sqlite3
+from zexus.object import Function, String, Integer, Hash, Error
+
+class DatabasePlugin:
+    """SQLite database plugin for Zexus"""
     
     def __init__(self):
-        self.loaded_plugins = {}
-        self.hooks = defaultdict(list)
-        self.capabilities = {}
+        self.connections = {}
+    
+    def register(self, env):
+        """Register all database functions"""
         
-    def load_plugin(self, module_path: str) -> dict:
-        """Load and initialize a plugin module."""
-        # 1. Parse plugin metadata
-        # 2. Validate dependencies
-        # 3. Register hooks
-        # 4. Track capabilities
+        # db_connect(path)
+        def db_connect(args):
+            if len(args) != 1:
+                return Error("db_connect expects 1 arg: path")
+            path = args[0].value
+            conn = sqlite3.connect(path)
+            conn_id = id(conn)
+            self.connections[conn_id] = conn
+            return Integer(conn_id)
         
-    def register_hook(self, hook_name: str, handler: Action):
-        """Register a hook handler."""
+        # db_query(conn_id, sql)
+        def db_query(args):
+            if len(args) != 2:
+                return Error("db_query expects 2 args")
+            conn_id = args[0].value
+            sql = args[1].value
+            
+            if conn_id not in self.connections:
+                return Error("Invalid connection")
+            
+            conn = self.connections[conn_id]
+            cursor = conn.cursor()
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            
+            # Convert to Zexus list of maps
+            result = []
+            for row in rows:
+                result.append(Hash({
+                    String("data"): String(str(row))
+                }))
+            return result
         
-    def call_hooks(self, hook_name: str, *args, **kwargs):
-        """Execute all registered handlers for a hook."""
+        # db_close(conn_id)
+        def db_close(args):
+            if len(args) != 1:
+                return Error("db_close expects 1 arg")
+            conn_id = args[0].value
+            
+            if conn_id in self.connections:
+                self.connections[conn_id].close()
+                del self.connections[conn_id]
+            return None
         
-    def check_capability(self, capability: str) -> bool:
-        """Check if capability is available."""
-        
-    def grant_capability(self, capability: str):
-        """Grant a capability to the environment."""
+        # Register functions
+        env.set("dbConnect", Function(db_connect))
+        env.set("dbQuery", Function(db_query))
+        env.set("dbClose", Function(db_close))
 ```
 
-### Plugin Discovery
-
-Plugins are discovered from:
-1. Builtin plugins (shipped with Zexus)
-2. `$ZEXUS_PLUGINS` environment variable paths
-3. `~/.zexus/plugins/` directory
-4. Project `.zexus/plugins/` directory
-5. Explicit imports with `use plugin@version`
+**Usage in Zexus:**
 
 ```zexus
-# Explicit plugin loading
-use plugin("json", { version: "1.0.0" });
+// No new keywords! Just use the plugin functions
+let conn = dbConnect("users.db");
+let users = dbQuery(conn, "SELECT * FROM users");
 
-# Load with specific capabilities
-use plugin("crypto", { requires: ["crypto.hash"] });
-```
-
-### Configuration
-
-Plugins can accept configuration:
-
-```zexus
-@plugin {
-  name: "logger",
-  config: {
-    level: { type: "string", default: "info" },
-    output: { type: "string", default: "stdout" }
-  }
+for (let i = 0; i < users.length; i = i + 1) {
+    print("User: " + users[i].data);
 }
 
-action log(msg) {
-  # Use configured level and output
-}
+dbClose(conn);
 ```
 
-Configuration is passed during plugin load:
+---
+
+### Plugin Example: HTTP Client
+
+**File: `src/plugins/http_plugin.py`**
 
 ```python
-manager.load_plugin("logger", config={
-    "level": "debug",
-    "output": "/var/log/app.log"
-})
+import requests
+from zexus.object import EvaluationError, Function, Hash, Integer, String
+
+class HttpPlugin:
+    def register(self, env):
+        def http_get(args):
+            if len(args) < 1:
+                return EvaluationError("httpGet expects: url, [headers]")
+            
+            url = args[0].value
+            headers = {}
+            
+            if len(args) > 1:
+                # Parse headers from Zexus map
+                headers_map = args[1]
+                for key, value in headers_map.pairs.items():
+                    headers[key.value] = value.value
+            
+            try:
+                response = requests.get(url, headers=headers)
+                return Hash({
+                    String("status"): Integer(response.status_code),
+                    String("body"): String(response.text),
+                    String("headers"): String(str(response.headers))
+                })
+            except Exception as e:
+                return EvaluationError(f"HTTP error: {str(e)}")
+        
+        def http_post(args):
+            # Similar implementation
+            pass
+        
+        env.set("httpGet", Function(http_get))
+        env.set("httpPost", Function(http_post))
 ```
 
-## Example Plugins
-
-### 1. JSON Plugin
+**Usage:**
 
 ```zexus
-@plugin {
-  name: "json",
-  version: "1.0.0",
-  provides: ["json.parse", "json.stringify"],
-  description: "JSON serialization support"
-}
+let response = httpGet("https://api.github.com/users/octocat", {
+    "User-Agent": "Zexus",
+    "Accept": "application/json"
+});
 
-public action parse(input) {
-  # Parse JSON string into Zexus object
-  # Implementation: use builtin string parsing
-}
-
-public action stringify(obj) {
-  # Convert Zexus object to JSON string
-  # Implementation: walk object tree
+if (response.status == 200) {
+    print("Success: " + response.body);
+} else {
+    print("Error: " + response.status);
 }
 ```
 
-### 2. Validation Plugin
+---
+
+## Examples
+
+### Example 1: Logging Plugin
 
 ```zexus
-@plugin {
-  name: "validator",
-  version: "1.0.0",
-  provides: ["validation"],
-  hooks: ["type_validator"]
-}
+// logging_plugin.zx
 
-action register_validators() {
-  plugin.register_hook("type_validator", action(value, spec) {
-    cond {
-      spec.type == "email" ? validate_email(value);
-      spec.type == "url" ? validate_url(value);
-      spec.type == "phone" ? validate_phone(value);
-      else ? false;
+let LoggingPlugin = {
+    name: "Logging",
+    levels: { debug: 0, info: 1, warn: 2, error: 3 },
+    currentLevel: 1,
+    
+    init: function() {
+        print("[LoggingPlugin] Initialized");
+        
+        // Register logging functions
+        this.registerLoggers();
+        
+        // Hook all function calls for debug logging
+        afterFunctionCall(function(name, args, result) {
+            if (LoggingPlugin.currentLevel <= 0) {
+                print("[DEBUG] " + name + " returned: " + result);
+            }
+        });
+    },
+    
+    registerLoggers: function() {
+        // These become built-in-like functions
+        logDebug = function(msg) {
+            if (LoggingPlugin.currentLevel <= 0) {
+                print("[DEBUG] " + msg);
+            }
+        };
+        
+        logInfo = function(msg) {
+            if (LoggingPlugin.currentLevel <= 1) {
+                print("[INFO] " + msg);
+            }
+        };
+        
+        logWarn = function(msg) {
+            if (LoggingPlugin.currentLevel <= 2) {
+                print("[WARN] " + msg);
+            }
+        };
+        
+        logError = function(msg) {
+            print("[ERROR] " + msg);
+        };
+    },
+    
+    setLevel: function(level) {
+        this.currentLevel = level;
+        logInfo("Log level set to: " + level);
     }
-  });
-}
+};
 
-public action validate_email(addr) {
-  ret addr ~matches /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-}
+// Initialize
+LoggingPlugin.init();
+
+// Usage:
+logDebug("Application starting");
+logInfo("User logged in");
+logWarn("High memory usage");
+logError("Database connection failed");
 ```
 
-### 3. Logging Plugin (with Config)
+---
+
+### Example 2: Validation Plugin
 
 ```zexus
-@plugin {
-  name: "logger",
-  version: "2.0.0",
-  provides: ["logging"],
-  config: {
-    level: { type: "string", default: "info" },
-    format: { type: "string", default: "json" }
-  }
-}
+// validation_plugin.zx
 
-let LEVEL = { debug: 0, info: 1, warn: 2, error: 3 };
-
-public action log(level, msg) {
-  let config_level = plugin.config.level;
-  if LEVEL[level] >= LEVEL[config_level] {
-    cond {
-      plugin.config.format == "json" ?
-        stdout(json.stringify({ level, msg, ts: now() }));
-      else ?
-        stdout("[" ++ level ++ "] " ++ msg);
+let ValidationPlugin = {
+    rules: {},
+    
+    addRule: function(funcName, validator) {
+        this.rules[funcName] = validator;
+        
+        // Hook the function
+        beforeFunctionCall(function(name, args) {
+            if (ValidationPlugin.rules[name]) {
+                let isValid = ValidationPlugin.rules[name](args);
+                if (!isValid) {
+                    throw("Validation failed for: " + name);
+                }
+            }
+            return args;
+        });
     }
-  }
-}
+};
+
+// Add validation rules
+ValidationPlugin.addRule("createUser", function(args) {
+    let user = args[0];
+    return user.email && user.name;
+});
+
+ValidationPlugin.addRule("divide", function(args) {
+    return args[1] != 0;
+});
+
+// Now functions are automatically validated
+createUser({ email: "test@example.com", name: "Test" });  // ✓
+createUser({ name: "Test" });  // ✗ Validation failed
+
+divide(10, 2);  // ✓
+divide(10, 0);  // ✗ Validation failed
 ```
 
-### 4. Custom Syntax Plugin (via Optimizer Hook)
+---
+
+### Example 3: Caching Plugin
 
 ```zexus
-@plugin {
-  name: "pattern_matching",
-  version: "1.0.0",
-  provides: ["pattern_matching"],
-  hooks: ["pre_eval"]
+// caching_plugin.zx
+
+let CachingPlugin = {
+    cache: {},
+    hits: 0,
+    misses: 0,
+    
+    memoize: function(funcName) {
+        aroundFunctionCall(function(name, args, proceed) {
+            if (name == funcName) {
+                let key = name + "_" + args.join("_");
+                
+                if (CachingPlugin.cache[key]) {
+                    CachingPlugin.hits = CachingPlugin.hits + 1;
+                    print("[CACHE HIT] " + funcName);
+                    return CachingPlugin.cache[key];
+                } else {
+                    CachingPlugin.misses = CachingPlugin.misses + 1;
+                    print("[CACHE MISS] " + funcName);
+                    let result = proceed(args);
+                    CachingPlugin.cache[key] = result;
+                    return result;
+                }
+            }
+            return proceed(args);
+        });
+    },
+    
+    stats: function() {
+        print("Cache hits: " + this.hits);
+        print("Cache misses: " + this.misses);
+        let hitRate = (this.hits * 100) / (this.hits + this.misses);
+        print("Hit rate: " + hitRate + "%");
+    },
+    
+    clear: function() {
+        this.cache = {};
+        this.hits = 0;
+        this.misses = 0;
+        print("Cache cleared");
+    }
+};
+
+// Enable caching for expensive functions
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-action register_transformer() {
-  plugin.register_hook("pre_eval", action(node, ctx) {
-    # Transform custom syntax into standard Zexus
-    # e.g., convert `match expr { pattern => result }`
-    # into nested conditionals
-    ret transform_pattern_match(node);
-  });
-}
+CachingPlugin.memoize("fibonacci");
+
+let result = fibonacci(10);  // Slow, caches results
+let result2 = fibonacci(10); // Fast, from cache
+
+CachingPlugin.stats();
+// Output:
+// Cache hits: 8
+// Cache misses: 11
+// Hit rate: 42%
 ```
 
-## Integration Points
+---
 
-### 1. Evaluator Integration
+## Best Practices
 
-Hooks are called from key evaluator points:
-
-```python
-# In evaluator/core.py
-def eval_node(self, node, env):
-    # Call pre_eval hooks
-    node = self.plugin_manager.call_hooks("pre_eval", node, env)
-    
-    # Evaluate
-    result = self._eval_node_impl(node, env)
-    
-    # Call post_eval hooks
-    result = self.plugin_manager.call_hooks("post_eval", result, node, env)
-    
-    return result
-```
-
-### 2. Parser Integration
-
-Custom syntax can be registered via hooks:
-
-```python
-# In parser/parser.py
-def parse_expression(self):
-    # Call pre_parse hooks (for custom syntax)
-    expr = self.plugin_manager.call_hooks("pre_parse", self.cur_token)
-    if expr is not None:
-        return expr
-    
-    # Default parsing
-    return self._parse_expression_impl()
-```
-
-### 3. Module System Integration
-
-Plugins participate in module loading:
-
-```python
-# In module_manager.py
-def resolve_module(self, name):
-    # Call import_resolver hooks
-    path = self.plugin_manager.call_hooks("import_resolver", name)
-    if path is not None:
-        return self.load_module(path)
-    
-    # Default resolution
-    return self._resolve_default(name)
-```
-
-## Security Considerations
-
-### Capability-Based Access Control
-
-Plugins must declare required capabilities. The runtime enforces:
-1. **Capability Grant**: Only code with granted capability can invoke it
-2. **Transitive Closure**: Granting a capability grants all transitive dependencies
-3. **Audit Trail**: All capability uses are logged
-
+### 1. **Namespace Your Functions**
 ```zexus
-@requires {
-  capabilities: ["crypto.hash", "io.read"]
+// ❌ Bad - pollutes global namespace
+function get() { }
+function set() { }
+
+// ✅ Good - use prefixes or objects
+function dbGet() { }
+function dbSet() { }
+
+// or
+let db = {
+    get: function() { },
+    set: function() { }
+};
+```
+
+### 2. **Check Capabilities Early**
+```zexus
+function readConfig() {
+    // Check first
+    if (!hasCapability("io.read")) {
+        throw("Missing io.read capability");
+    }
+    
+    // Then use
+    return readFile("config.json");
+}
+```
+
+### 3. **Use Events for Loose Coupling**
+```zexus
+// ❌ Bad - tight coupling
+function saveUser(user) {
+    database.save(user);
+    emailService.sendWelcome(user);  // Direct dependency
+    analytics.trackSignup(user);     // Direct dependency
 }
 
-action process_file(path) {
-  let content = io.read(path);  # Requires io.read
-  let hash = crypto.hash(content);  # Requires crypto.hash
-  ret hash;
+// ✅ Good - loose coupling via events
+function saveUser(user) {
+    database.save(user);
+    emit("user:created", user);  // Other systems listen
+}
+
+// Separate listeners
+on("user:created", function(user) {
+    emailService.sendWelcome(user);
+});
+
+on("user:created", function(user) {
+    analytics.trackSignup(user);
+});
+```
+
+### 4. **Handle Errors Gracefully**
+```zexus
+function safeHttpGet(url) {
+    try {
+        return httpGet(url);
+    } catch (error) {
+        logError("HTTP request failed: " + error);
+        return { status: 500, body: "" };
+    }
 }
 ```
 
-### Sandbox Policy
-
-Plugins can define sandbox policies:
-
-```python
-# Default deny all, explicitly allow needed
-policy = SandboxPolicy(default_allow=False)
-policy.allow_capability("json.parse")
-policy.allow_capability("json.stringify")
-
-manager.load_plugin("json", sandbox_policy=policy)
+### 5. **Document Your Plugin API**
+```zexus
+/**
+ * HTTP Plugin - Simple HTTP client
+ * 
+ * Functions:
+ *   httpGet(url, headers?) -> { status, body, headers }
+ *   httpPost(url, data, headers?) -> { status, body }
+ * 
+ * Requires capabilities:
+ *   - network.http
+ * 
+ * Events emitted:
+ *   - http:request { url, method }
+ *   - http:response { status, time }
+ */
+let HttpPlugin = { ... };
 ```
 
-### Hook Safety
+---
 
-Hooks are executed in restricted context:
-- Limited execution time (configurable timeout)
-- Memory quotas
-- No access to parent environment unless explicitly granted
-- Changes to environment are isolated (can be rolled back)
+## Summary
 
-## Rollout Strategy
+### Adding Functionality Without Keywords
 
-### Phase 1: Core Infrastructure ✓ (Modifier System)
-- Modifiers enable semantic extension
-- Foundation for capabilities
+| What You Want | How to Do It | Example |
+|---------------|--------------|---------|
+| New operation | Add built-in function | `httpGet(url)` |
+| Middleware | Use hooks | `beforeFunctionCall(...)` |
+| Feature control | Use capabilities | `hasCapability("io.read")` |
+| Communication | Use events | `on("data:loaded", ...)` |
+| Domain features | Create plugin object | `db.query(...)` |
 
-### Phase 2: Plugin API (Current)
-- Define `plugin` global object
-- Implement `PluginManager` class
-- Create hook system
-- Example builtin plugins (json, logging)
+### Key Takeaway
 
-### Phase 3: Capability System
-- Implement capability tracking
-- Build capability-based security model
-- Integrate with evaluator
+**You don't need to modify the Zexus core or add keywords!** The plugin system provides all the extensibility you need through:
 
-### Phase 4: Advanced Features
-- Custom syntax via hooks
-- Type system integration
-- Performance optimization hooks
+1. **Built-in functions** - Add new operations
+2. **Events** - Communicate between components  
+3. **Hooks** - Intercept and modify behavior
+4. **Capabilities** - Control feature access
+5. **Plugins** - Package it all together
 
-### Phase 5: Plugin Ecosystem
-- Plugin repository/registry
-- Version management
-- Dependency resolution
-
-## Testing Strategy
-
-```python
-# Test plugin loading
-def test_load_simple_plugin():
-    manager = PluginManager()
-    plugin = manager.load_plugin("plugins/json.zx")
-    assert plugin.metadata.name == "json"
-
-# Test hook registration
-def test_register_hook():
-    manager = PluginManager()
-    handler = create_test_handler()
-    manager.register_hook("pre_eval", handler)
-    assert len(manager.hooks["pre_eval"]) == 1
-
-# Test capability checking
-def test_capability_check():
-    manager = PluginManager()
-    manager.grant_capability("json.parse")
-    assert manager.check_capability("json.parse")
-
-# Test sandbox isolation
-def test_sandbox_isolation():
-    policy = SandboxPolicy(default_allow=False)
-    # Load plugin with restricted capabilities
-    # Verify it cannot access forbidden operations
-```
-
-## References
-
-**Related Systems:**
-- Modifiers (Phase 1): Define `public`, `private`, `sealed` for plugin exports
-- Capabilities (Phase 3): Fine-grained access control for plugins
-- Metaprogramming (Phase 5): AST hooks for syntax extension
-
-**Inspiration:**
-- Node.js/npm: Plugin discovery and dependency management
-- Lua plugins: Lightweight, embedded extension model
-- Wasm plugins: Sandboxed execution with clear boundaries
-- Python importlib: Hook-based import system
+This keeps the language **simple, stable, and extensible**.
 
 ---
 
 ## Next Steps
 
-1. **Implement PluginManager** class with core methods
-2. **Define plugin metadata format** and parser
-3. **Create hook system** with execution pipeline
-4. **Build example plugins** (json, logging, validation)
-5. **Integrate with evaluator** at key points
-6. **Add capability model** (see Phase 3)
-7. **Create plugin documentation** for users
+Now that you understand the plugin system, you can:
+
+1. Create custom plugins for your domain
+2. Extend Zexus with external libraries (HTTP, databases, crypto)
+3. Add middleware for logging, validation, security
+4. Build reusable plugin packages for the ecosystem
+
+**What functionality would you like to add?** Let me know and I can help design the plugin!

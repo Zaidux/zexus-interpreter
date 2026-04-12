@@ -11,7 +11,7 @@ _LITERAL_KEYWORDS = {
 _STRICT_KEYWORDS = {
     'if', 'elif', 'else', 'while', 'for', 'each', 'in',
     'return', 'break', 'continue', 'throw', 'try', 'catch',
-    'await', 'async', 'spawn', 'let', 'const', 'print',
+    'await', 'async', 'spawn', 'let', 'const', 'print', 'print_if',
     'use', 'find', 'load', 'export', 'import', 'debug', 'match', 'lambda',
     'case', 'default', 'not'
 }
@@ -25,6 +25,7 @@ _KEYWORDS = {
     "const": CONST,
     "data": DATA,
     "print": PRINT,
+    "print_if": PRINT_IF,
     "if": IF,
     "then": THEN,
     "elif": ELIF,

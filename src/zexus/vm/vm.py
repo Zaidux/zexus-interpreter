@@ -2839,8 +2839,13 @@ class VM:
                     result = None
                 stack_append(self._unwrap_after_builtin(result))
             elif op_name == "PRINT":
-                val = stack_pop() if stack else None
-                print(self._format_print_value(val))
+                if operand is not None and isinstance(operand, int) and operand > 1:
+                    # Multi-value print: pop 'operand' values and print space-separated
+                    vals = [stack_pop() if stack else None for _ in range(operand)][::-1]
+                    print(' '.join(self._format_print_value(v) for v in vals))
+                else:
+                    val = stack_pop() if stack else None
+                    print(self._format_print_value(val))
             elif op_name == "GET_ATTR":
                 attr = stack_pop() if stack else None
                 obj = stack_pop() if stack else None
@@ -4324,9 +4329,13 @@ class VM:
             func = const(func_idx)
             _store(name, func)
 
-        def _op_print(_):
-            val = stack_pop() if stack else None
-            print(self._format_print_value(val))
+        def _op_print(operand):
+            if operand is not None and isinstance(operand, int) and operand > 1:
+                vals = [stack_pop() if stack else None for _ in range(operand)][::-1]
+                print(' '.join(self._format_print_value(v) for v in vals))
+            else:
+                val = stack_pop() if stack else None
+                print(self._format_print_value(val))
 
         dispatch_table: Dict[str, Callable[[Any], Any]] = {
             "LOAD_CONST": _op_load_const,
@@ -4578,8 +4587,13 @@ class VM:
                 elif op_name == "DUP":
                     if stack: stack.append(stack[-1])
                 elif op_name == "PRINT":
-                    val = stack.pop() if stack else None
-                    print(self._format_print_value(val))
+                    if operand is not None and isinstance(operand, int) and operand > 1:
+                        # Multi-value print: pop 'operand' values and print space-separated
+                        vals = [stack.pop() if stack else None for _ in range(operand)][::-1]
+                        print(' '.join(self._format_print_value(v) for v in vals))
+                    else:
+                        val = stack.pop() if stack else None
+                        print(self._format_print_value(val))
                 
                 # --- Function/Closure Ops ---
                 elif op_name == "STORE_FUNC":
@@ -4593,11 +4607,17 @@ class VM:
                     for key, value in self.env.items():
                         if isinstance(key, str) and key.startswith("_"):
                             continue
-                        closure_snapshot[key] = value
+                        if isinstance(value, Cell):
+                            cell = value
+                        else:
+                            cell = Cell(value)
+                            self.env[key] = cell
+                            self._bump_env_version(key, cell)
+                        closure_snapshot[key] = cell
                     # Include existing closure cells if present
                     for key, cell in self._closure_cells.items():
                         if key not in closure_snapshot:
-                            closure_snapshot[key] = cell.value
+                            closure_snapshot[key] = cell
                     if closure_snapshot:
                         func_desc_copy["closure_snapshot"] = closure_snapshot
                     func_desc_copy["parent_vm"] = self
@@ -5813,7 +5833,10 @@ class VM:
             snapshot = fn.get("closure_snapshot")
             if snapshot:
                 for key, value in snapshot.items():
-                    inner_vm._closure_cells[key] = Cell(value)
+                    if isinstance(value, Cell):
+                        inner_vm._closure_cells[key] = value
+                    else:
+                        inner_vm._closure_cells[key] = Cell(value)
             try:
                 return await inner_vm._run_stack_bytecode(func_bc, debug=False)
             finally:

@@ -570,3 +570,378 @@ def reset_concurrency_manager():
     if _concurrency_manager:
         _concurrency_manager.close_all_channels()
     _concurrency_manager = ConcurrencyManager()
+
+
+# ---------------------------------------------------------------------------
+# select() — Multiplex across multiple channels
+# ---------------------------------------------------------------------------
+
+def select(*channels, timeout=None):
+    """
+    Multiplex across multiple channels, returning the first available value.
+
+    Polls all *channels* with exponential backoff.  Returns a tuple
+    ``(channel_index, value)`` for the first channel that has data ready.
+    If *timeout* expires before any channel produces data, returns
+    ``(None, None)``.
+
+    Args:
+        *channels: One or more :class:`Channel` instances.
+        timeout: Maximum total wait time in seconds (``None`` = wait forever).
+
+    Returns:
+        ``(int, value)`` on success, ``(None, None)`` on timeout.
+    """
+    if not channels:
+        raise ValueError("select() requires at least one channel")
+
+    deadline = (time.monotonic() + timeout) if timeout is not None else None
+    poll_interval = 0.001  # start at 1 ms
+    max_interval = 0.05    # cap at 50 ms
+
+    while True:
+        for idx, ch in enumerate(channels):
+            try:
+                value = ch._queue.get_nowait()
+                if isinstance(value, _ChannelClosedSentinel):
+                    continue
+                return (idx, value)
+            except queue.Empty:
+                continue
+
+        # Check timeout
+        if deadline is not None and time.monotonic() >= deadline:
+            return (None, None)
+
+        # Check if all channels are closed and empty
+        if all(ch._closed and ch._queue.empty() for ch in channels):
+            return (None, None)
+
+        time.sleep(poll_interval)
+        poll_interval = min(poll_interval * 2, max_interval)
+
+
+# ---------------------------------------------------------------------------
+# TaskGroup — Structured concurrency with cancellation
+# ---------------------------------------------------------------------------
+
+from threading import Thread
+
+
+class TaskGroup:
+    """
+    Structured concurrency primitive that manages a group of tasks.
+
+    Tasks are spawned as threads and can be collectively waited on or
+    cancelled.  Supports the context-manager protocol so that all tasks
+    are automatically joined when leaving the ``with`` block.
+
+    Example::
+
+        with TaskGroup("workers") as g:
+            g.spawn(work, 1)
+            g.spawn(work, 2)
+        # all tasks finished here
+        print(g.results)
+    """
+
+    def __init__(self, name: str = ""):
+        self.name = name
+        self._threads: List[Thread] = []
+        self._results: List[Any] = []
+        self._errors: List[Exception] = []
+        self._cancelled = Event()
+        self._lock = Lock()
+
+    # Expose the cancellation event so spawned tasks can check it
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def spawn(self, fn, *args):
+        """
+        Schedule *fn(*args)* to run in a new thread.
+
+        The spawned function receives no special arguments; if it needs to
+        check for cancellation it should reference ``group.cancelled``.
+        """
+        idx = len(self._threads)
+
+        def _wrapper():
+            try:
+                result = fn(*args)
+                with self._lock:
+                    self._results.append((idx, result))
+            except Exception as exc:
+                with self._lock:
+                    self._errors.append((idx, exc))
+
+        t = Thread(target=_wrapper, daemon=True)
+        self._threads.append(t)
+        t.start()
+
+    def wait_all(self, timeout: Optional[float] = None) -> List[Any]:
+        """
+        Block until every spawned task completes.
+
+        Args:
+            timeout: Maximum total wait time in seconds.
+
+        Returns:
+            Ordered list of task results (``None`` for tasks that raised).
+        """
+        deadline = (time.monotonic() + timeout) if timeout is not None else None
+        for t in self._threads:
+            remaining = None
+            if deadline is not None:
+                remaining = max(0, deadline - time.monotonic())
+            t.join(timeout=remaining)
+
+        ordered: Dict[int, Any] = {idx: val for idx, val in self._results}
+        return [ordered.get(i) for i in range(len(self._threads))]
+
+    def cancel_all(self):
+        """Signal cancellation to all running tasks."""
+        self._cancelled.set()
+
+    @property
+    def results(self) -> List[Any]:
+        """List of ``(index, value)`` pairs for successfully completed tasks."""
+        with self._lock:
+            return list(self._results)
+
+    @property
+    def errors(self) -> List[Any]:
+        """List of ``(index, exception)`` pairs for failed tasks."""
+        with self._lock:
+            return list(self._errors)
+
+    # Context-manager protocol -------------------------------------------
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.wait_all()
+        return False
+
+
+# ---------------------------------------------------------------------------
+# BackpressurePolicy / BackpressuredChannel
+# ---------------------------------------------------------------------------
+
+class BackpressurePolicy(Enum):
+    """Policy applied when a :class:`BackpressuredChannel` buffer is full."""
+    DROP_NEWEST = "drop_newest"
+    DROP_OLDEST = "drop_oldest"
+    BLOCK = "block"
+    RAISE = "raise"
+
+
+class BackpressuredChannel:
+    """
+    Channel with configurable back-pressure behaviour.
+
+    Wraps a bounded buffer and applies the chosen :class:`BackpressurePolicy`
+    when a ``send`` would exceed the buffer *capacity*.
+
+    Args:
+        name: Human-readable channel name.
+        capacity: Maximum number of buffered messages (must be > 0).
+        policy: What to do when the buffer is full.
+    """
+
+    def __init__(self, name: str, capacity: int,
+                 policy: BackpressurePolicy = BackpressurePolicy.BLOCK):
+        if capacity <= 0:
+            raise ValueError("BackpressuredChannel capacity must be > 0")
+        self.name = name
+        self.capacity = capacity
+        self.policy = policy
+        self._queue: queue.Queue = queue.Queue(maxsize=capacity)
+        self._lock = Lock()
+        self._closed = False
+        self._dropped_count = 0
+
+    @property
+    def is_open(self) -> bool:
+        with self._lock:
+            return not self._closed
+
+    @property
+    def dropped_count(self) -> int:
+        """Number of messages silently dropped due to policy."""
+        with self._lock:
+            return self._dropped_count
+
+    def send(self, value, timeout: Optional[float] = None) -> bool:
+        """
+        Send a value into the channel, applying the back-pressure policy
+        when the buffer is full.
+
+        Returns:
+            ``True`` if the message was enqueued, ``False`` if it was dropped.
+
+        Raises:
+            RuntimeError: If the channel is closed, or if the policy is
+                ``RAISE`` and the buffer is full.
+        """
+        with self._lock:
+            if self._closed:
+                raise RuntimeError(
+                    f"Cannot send on closed channel '{self.name}'")
+
+        if self.policy == BackpressurePolicy.BLOCK:
+            try:
+                self._queue.put(value, timeout=timeout)
+                return True
+            except queue.Full:
+                raise RuntimeError(f"Channel '{self.name}' buffer full")
+
+        if self.policy == BackpressurePolicy.RAISE:
+            try:
+                self._queue.put_nowait(value)
+                return True
+            except queue.Full:
+                raise RuntimeError(
+                    f"Channel '{self.name}' buffer full (policy=RAISE)")
+
+        if self.policy == BackpressurePolicy.DROP_NEWEST:
+            try:
+                self._queue.put_nowait(value)
+                return True
+            except queue.Full:
+                with self._lock:
+                    self._dropped_count += 1
+                return False
+
+        if self.policy == BackpressurePolicy.DROP_OLDEST:
+            with self._lock:
+                try:
+                    self._queue.put_nowait(value)
+                    return True
+                except queue.Full:
+                    try:
+                        self._queue.get_nowait()  # discard oldest
+                    except queue.Empty:
+                        pass
+                    try:
+                        self._queue.put_nowait(value)
+                    except queue.Full:
+                        pass
+                    self._dropped_count += 1
+                    return True
+
+        return False  # unreachable but keeps linters happy
+
+    def receive(self, timeout: Optional[float] = None):
+        """Receive the next value from the channel."""
+        with self._lock:
+            if self._closed and self._queue.empty():
+                return None
+        try:
+            value = self._queue.get(timeout=timeout)
+            if isinstance(value, _ChannelClosedSentinel):
+                return None
+            return value
+        except queue.Empty:
+            with self._lock:
+                if self._closed:
+                    return None
+            raise RuntimeError(
+                f"Timeout receiving from channel '{self.name}'")
+
+    def close(self):
+        """Close the channel."""
+        with self._lock:
+            self._closed = True
+        try:
+            self._queue.put_nowait(_CHANNEL_CLOSED_SENTINEL)
+        except queue.Full:
+            pass
+
+    def __repr__(self) -> str:
+        status = "closed" if self._closed else "open"
+        return (f"BackpressuredChannel({self.name}, cap={self.capacity}, "
+                f"policy={self.policy.value}, {status})")
+
+
+# ---------------------------------------------------------------------------
+# TaskContext — Context propagation across tasks
+# ---------------------------------------------------------------------------
+
+import uuid
+from datetime import datetime
+import threading as _threading
+
+_task_context_local = _threading.local()
+
+
+class TaskContext:
+    """
+    Propagates trace/correlation metadata across threads.
+
+    Each :class:`TaskContext` carries a *trace_id*, an optional *deadline*,
+    and an arbitrary ``values`` dict.  The currently-active context is stored
+    in thread-local storage and accessible via :meth:`current`.
+
+    Example::
+
+        ctx = TaskContext(deadline=datetime(2025, 12, 31))
+        def work():
+            c = TaskContext.current()
+            print(c.trace_id)
+        ctx.run(work)
+    """
+
+    def __init__(self, trace_id: Optional[str] = None,
+                 deadline: Optional[datetime] = None,
+                 values: Optional[Dict[str, Any]] = None):
+        self.trace_id: str = trace_id or str(uuid.uuid4())
+        self.deadline: Optional[datetime] = deadline
+        self._values: Dict[str, Any] = dict(values) if values else {}
+
+    def is_expired(self) -> bool:
+        """Return ``True`` if the deadline has passed."""
+        if self.deadline is None:
+            return False
+        return datetime.now() >= self.deadline
+
+    def with_value(self, key: str, value: Any) -> "TaskContext":
+        """Return a **new** context with ``key`` set to ``value``."""
+        new_values = dict(self._values)
+        new_values[key] = value
+        return TaskContext(
+            trace_id=self.trace_id,
+            deadline=self.deadline,
+            values=new_values,
+        )
+
+    def get_value(self, key: str, default: Any = None) -> Any:
+        """Retrieve a value from the context dict."""
+        return self._values.get(key, default)
+
+    # Thread-local current context -------------------------------------
+
+    @classmethod
+    def current(cls) -> Optional["TaskContext"]:
+        """Return the active :class:`TaskContext` for the calling thread."""
+        return getattr(_task_context_local, "ctx", None)
+
+    def run(self, fn, *args):
+        """
+        Execute *fn(*args)* with this context installed as the current
+        context in thread-local storage.  The previous context is restored
+        when *fn* returns (or raises).
+        """
+        previous = getattr(_task_context_local, "ctx", None)
+        _task_context_local.ctx = self
+        try:
+            return fn(*args)
+        finally:
+            _task_context_local.ctx = previous
+
+    def __repr__(self) -> str:
+        expired = "expired" if self.is_expired() else "active"
+        return (f"TaskContext(trace={self.trace_id[:8]}..., "
+                f"{expired}, values={len(self._values)})")
