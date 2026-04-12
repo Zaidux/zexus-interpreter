@@ -24,7 +24,7 @@ _PROTECTED_ENV_NAMES = frozenset({
 })
 
 # Commands allowed for execute() – only simple, well-known utilities.
-_ALLOWED_COMMANDS: frozenset = frozenset({
+_ALLOWED_COMMANDS = frozenset({
     "echo", "cat", "ls", "dir", "pwd", "whoami", "date", "uname",
     "head", "tail", "wc", "sort", "uniq", "grep", "find", "which",
     "python", "python3", "node", "npm", "pip", "pip3", "git",
@@ -176,6 +176,19 @@ class OSModule:
                     'stderr': f"Command '{executable}' is not in the allow-list",
                     'success': False,
                 }
+
+            # Ensure the resolved path of the executable is not user-controlled
+            # (e.g. /usr/bin/../../tmp/malicious_echo would resolve outside
+            # trusted directories).
+            if os.sep in args[0]:
+                resolved_cmd = os.path.realpath(args[0])
+                if os.path.basename(resolved_cmd) not in _ALLOWED_COMMANDS:
+                    return {
+                        'returncode': -1,
+                        'stdout': '',
+                        'stderr': f"Resolved command '{resolved_cmd}' is not in the allow-list",
+                        'success': False,
+                    }
 
             result = subprocess.run(
                 args,

@@ -32,7 +32,9 @@ def test_pickle_deserialization_rce():
     # --- Payload: Craft a pickle that calls os.system ---
     # We use a safe marker-file approach (touch a temp file) to prove RCE
     # without doing any real harm.
-    marker = tempfile.mktemp(suffix=".pickle_rce_test")
+    fd, marker = tempfile.mkstemp(suffix=".pickle_rce_test")
+    os.close(fd)
+    os.unlink(marker)  # remove so we can detect if it gets recreated
 
     class Exploit:
         """Pickle payload that executes a command on unpickling."""
@@ -53,7 +55,8 @@ def test_pickle_deserialization_rce():
         "crashes": [],
     }
 
-    corpus_file = tempfile.mktemp(suffix=".json")
+    corpus_fd, corpus_file = tempfile.mkstemp(suffix=".json")
+    os.close(corpus_fd)
     with open(corpus_file, "w") as f:
         json.dump(corpus_data, f)
 

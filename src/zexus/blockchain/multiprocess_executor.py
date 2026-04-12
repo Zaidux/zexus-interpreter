@@ -42,6 +42,7 @@ import logging
 import multiprocessing
 import os
 import time
+import uuid
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -280,9 +281,10 @@ class MultiProcessBatchExecutor:
         if self._pool_mp is not None:
             return
         factory = self._vm_factory if self._vm_factory else _default_vm_factory
-        # Register the factory under a deterministic key so child
+        # Register the factory under a unique key so child
         # processes can look it up without pickle deserialisation.
-        factory_key = f"mp_executor_{id(factory)}"
+        # Use a UUID for uniqueness across processes.
+        factory_key = f"mp_executor_{uuid.uuid4().hex}"
         _vm_factory_registry[factory_key] = factory
         self._pool_mp = multiprocessing.Pool(
             processes=self._workers,

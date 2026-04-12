@@ -31,7 +31,9 @@ def test_command_injection():
     # A user calls os.execute("echo hello") but attacker controls input:
     #   os.execute("echo hello; id")
     # The "; id" part runs an additional command.
-    marker = tempfile.mktemp(suffix=".cmd_injection_test")
+    fd, marker = tempfile.mkstemp(suffix=".cmd_injection_test")
+    os.close(fd)
+    os.unlink(marker)  # remove so we can detect if it gets recreated
     payload1 = f"echo clean; touch {marker}"
     result = OSModule.execute(payload1)
     injected = os.path.exists(marker)
