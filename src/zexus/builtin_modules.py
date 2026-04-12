@@ -422,4 +422,4 @@ def get_builtin_module(module_name, evaluator=None):
 
 def is_builtin_module(module_name):
     """Check if a module name refers to a builtin module"""
-    return module_name in ["crypto", "datetime", "math", "validation", "password"]
+    return module_name in ["crypto", "datetime", "math", "validation", "password", "cache"]

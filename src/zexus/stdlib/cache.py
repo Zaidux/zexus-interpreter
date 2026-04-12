@@ -180,8 +180,8 @@ class CacheModule:
         else:
             CacheModule._evict_expired(cache)
             if len(data) >= cache["_capacity"]:
-                oldest_key, _ = data.popitem(last=False)
-                cache["_expiry"].pop(oldest_key, None)
+                evicted_key, _ = data.popitem(last=False)
+                cache["_expiry"].pop(evicted_key, None)
             data[key] = value
             cache["_expiry"][key] = time.time() + ttl
 
