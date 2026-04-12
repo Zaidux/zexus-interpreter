@@ -216,14 +216,14 @@ class ContractAuditModule:
         """
         patterns = [
             (
-                r'(?i)(balance|amount|total|supply|value)\s*[=]\s*'
-                r'(balance|amount|total|supply|value)\s*[\+\-\*]',
+                r'(?i)(?:state\.)?(balance|amount|total|supply|value)\s*[=]\s*'
+                r'(?:state\.)?(balance|amount|total|supply|value)\s*[\+\-\*]',
                 "integer-overflow",
                 "high",
                 "Arithmetic on value variable without overflow check",
             ),
             (
-                r'(?i)(balance|amount|total|supply|value)\s*'
+                r'(?i)(?:state\.)?(balance|amount|total|supply|value)\s*'
                 r'[\+\-\*]=\s*\w+',
                 "integer-overflow",
                 "high",
@@ -302,9 +302,9 @@ class ContractAuditModule:
         which may iterate an unpredictable number of times.
         """
         findings = []
-        # Match "for" with a non-literal upper bound
+        # Match both C-style for(x in ...) and Zexus-style "for item in collection {"
         loop_re = re.compile(
-            r'\bfor\s*\(\s*\w+\s*(?:=|in)\s*[^)]*\)',
+            r'\bfor\s*(?:\(\s*\w+\s*(?:=|in)\s*[^)]*\)|\w+\s+in\s+\S+)',
         )
         bounded_re = re.compile(r'\b\d+\b')
 
@@ -366,13 +366,13 @@ class ContractAuditModule:
         """
         patterns = [
             (
-                r'(?i)TX\.timestamp\s*[<>=!]+',
+                r'(?i)TX\.timestamp\s*[<>=!%]+',
                 "timestamp-dependence",
                 "medium",
                 "Critical logic depends on TX.timestamp which can be manipulated",
             ),
             (
-                r'(?i)block\.timestamp\s*[<>=!]+',
+                r'(?i)block\.timestamp\s*[<>=!%]+',
                 "timestamp-dependence",
                 "medium",
                 "Critical logic depends on block.timestamp which can be manipulated",

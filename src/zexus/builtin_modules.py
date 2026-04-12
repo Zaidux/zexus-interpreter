@@ -1,9 +1,17 @@
 """
 Builtin Module System for Zexus
 
-This module provides a registry of builtin modules (crypto, datetime, math)
-that can be imported using `use "module_name" as alias` syntax.
+This module provides a registry of builtin modules that can be imported
+using `use "module_name" as alias` syntax.
+
+Modules:
+  Core:       crypto, datetime, math
+  Validation: validation, password
+  Stdlib:     cache, queue, template, testing
+  Security:   fuzz, secrets, netsec, payloads, pentest, audit, contract_audit
 """
+
+import json
 
 from .object import Map, String, Integer, Float, Boolean, Builtin, Environment, EvaluationError
 
@@ -394,6 +402,354 @@ def create_builtin_modules(evaluator):
     
     modules["password"] = password_env
     
+    # ===== CACHE MODULE =====
+    cache_env = Environment()
+    
+    from .stdlib.cache import CacheModule
+    
+    def _cache_create(*args):
+        capacity = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 128
+        return Map({String("__cache__"): String(str(id(CacheModule.create(int(capacity)))))})
+    
+    def _cache_create_ttl(*args):
+        capacity = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 128
+        ttl = args[1].value if len(args) > 1 and hasattr(args[1], 'value') else 300
+        return Map({String("__cache__"): String(str(id(CacheModule.create_ttl(int(capacity), float(ttl)))))})
+    
+    cache_env.set("create", Builtin(_cache_create, "create"))
+    cache_env.set("create_ttl", Builtin(_cache_create_ttl, "create_ttl"))
+    modules["cache"] = cache_env
+    
+    # ===== QUEUE MODULE =====
+    queue_env = Environment()
+    
+    from .stdlib.queue_module import QueueModule
+    
+    def _queue_create(*args):
+        maxsize = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 0
+        q = QueueModule.create(int(maxsize))
+        return Map({String("__type__"): String("queue"), String("__id__"): String(str(id(q)))})
+    
+    def _queue_create_priority(*args):
+        maxsize = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 0
+        q = QueueModule.create_priority(int(maxsize))
+        return Map({String("__type__"): String("priority_queue"), String("__id__"): String(str(id(q)))})
+    
+    def _queue_create_topic(*args):
+        t = QueueModule.create_topic()
+        return Map({String("__type__"): String("topic"), String("__id__"): String(str(id(t)))})
+    
+    queue_env.set("create", Builtin(_queue_create, "create"))
+    queue_env.set("create_priority", Builtin(_queue_create_priority, "create_priority"))
+    queue_env.set("create_topic", Builtin(_queue_create_topic, "create_topic"))
+    modules["queue"] = queue_env
+    
+    # ===== TEMPLATE MODULE =====
+    template_env = Environment()
+    
+    from .stdlib.template import TemplateModule
+    
+    def _template_render(*args):
+        if len(args) < 2:
+            return EvaluationError("template.render() expects 2 arguments: template, context")
+        tpl = args[0].value if isinstance(args[0], String) else str(args[0])
+        ctx = {}
+        if isinstance(args[1], Map):
+            for k, v in args[1].pairs.items():
+                key = k.value if isinstance(k, String) else str(k)
+                val = v.value if hasattr(v, 'value') else str(v)
+                ctx[key] = val
+        result = TemplateModule.render(tpl, ctx)
+        return String(result)
+    
+    def _template_render_safe(*args):
+        if len(args) < 2:
+            return EvaluationError("template.render_safe() expects 2 arguments: template, context")
+        tpl = args[0].value if isinstance(args[0], String) else str(args[0])
+        ctx = {}
+        if isinstance(args[1], Map):
+            for k, v in args[1].pairs.items():
+                key = k.value if isinstance(k, String) else str(k)
+                val = v.value if hasattr(v, 'value') else str(v)
+                ctx[key] = val
+        result = TemplateModule.render_safe(tpl, ctx)
+        return String(result)
+    
+    template_env.set("render", Builtin(_template_render, "render"))
+    template_env.set("render_safe", Builtin(_template_render_safe, "render_safe"))
+    modules["template"] = template_env
+    
+    # ===== TESTING MODULE =====
+    testing_env = Environment()
+    
+    from .stdlib.testing import TestingModule
+    
+    def _testing_assert_eq(*args):
+        if len(args) < 2:
+            return EvaluationError("testing.assert_eq() expects 2+ arguments")
+        actual = args[0].value if hasattr(args[0], 'value') else args[0]
+        expected = args[1].value if hasattr(args[1], 'value') else args[1]
+        msg = args[2].value if len(args) > 2 and hasattr(args[2], 'value') else ""
+        try:
+            TestingModule.assert_eq(actual, expected, msg)
+            return Boolean(True)
+        except Exception as e:
+            return EvaluationError(str(e))
+    
+    def _testing_assert_true(*args):
+        if len(args) < 1:
+            return EvaluationError("testing.assert_true() expects 1+ arguments")
+        val = args[0].value if hasattr(args[0], 'value') else args[0]
+        msg = args[1].value if len(args) > 1 and hasattr(args[1], 'value') else ""
+        try:
+            TestingModule.assert_true(val, msg)
+            return Boolean(True)
+        except Exception as e:
+            return EvaluationError(str(e))
+    
+    def _testing_create_suite(*args):
+        name = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else "default"
+        suite = TestingModule.create_suite(name)
+        return Map({String("__type__"): String("test_suite"), String("name"): String(name)})
+    
+    testing_env.set("assert_eq", Builtin(_testing_assert_eq, "assert_eq"))
+    testing_env.set("assert_true", Builtin(_testing_assert_true, "assert_true"))
+    testing_env.set("create_suite", Builtin(_testing_create_suite, "create_suite"))
+    modules["testing"] = testing_env
+    
+    # ===== FUZZ MODULE =====
+    fuzz_env = Environment()
+    
+    from .stdlib.fuzz import FuzzModule
+    
+    def _fuzz_string(*args):
+        min_l = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 0
+        max_l = args[1].value if len(args) > 1 and hasattr(args[1], 'value') else 100
+        return String(FuzzModule.fuzz_string(int(min_l), int(max_l)))
+    
+    def _fuzz_int(*args):
+        min_v = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else -(2**31)
+        max_v = args[1].value if len(args) > 1 and hasattr(args[1], 'value') else 2**31
+        return Integer(FuzzModule.fuzz_int(int(min_v), int(max_v)))
+    
+    def _fuzz_mutate(*args):
+        if len(args) < 1:
+            return EvaluationError("fuzz.mutate() expects 1 argument")
+        data = args[0].value if isinstance(args[0], String) else str(args[0])
+        return String(FuzzModule.mutate(data))
+    
+    fuzz_env.set("string", Builtin(_fuzz_string, "string"))
+    fuzz_env.set("int", Builtin(_fuzz_int, "int"))
+    fuzz_env.set("mutate", Builtin(_fuzz_mutate, "mutate"))
+    modules["fuzz"] = fuzz_env
+    
+    # ===== SECRETS MODULE =====
+    secrets_env = Environment()
+    
+    from .stdlib.secrets_module import SecretsModule
+    
+    def _secrets_generate_token(*args):
+        length = args[0].value if len(args) > 0 and hasattr(args[0], 'value') else 32
+        return String(SecretsModule.generate_token(int(length)))
+    
+    def _secrets_from_env(*args):
+        if len(args) < 1:
+            return EvaluationError("secrets.from_env() expects 1 argument: env var name")
+        name = args[0].value if isinstance(args[0], String) else str(args[0])
+        required = args[1].value if len(args) > 1 and hasattr(args[1], 'value') else True
+        try:
+            result = SecretsModule.from_env(name, required)
+            return String(result) if result else EvaluationError(f"Required env var '{name}' not set")
+        except Exception as e:
+            return EvaluationError(str(e))
+    
+    secrets_env.set("generate_token", Builtin(_secrets_generate_token, "generate_token"))
+    secrets_env.set("from_env", Builtin(_secrets_from_env, "from_env"))
+    modules["secrets"] = secrets_env
+    
+    # ===== NETSEC MODULE =====
+    netsec_env = Environment()
+    
+    from .stdlib.netsec import NetsecModule
+    
+    def _netsec_security_headers(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.security_headers() expects 1 argument: url")
+        url = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            result = NetsecModule.security_headers(url)
+            # Convert to Map
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"netsec.security_headers() error: {str(e)}")
+    
+    def _netsec_dns_lookup(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.dns_lookup() expects 1-2 arguments: domain, record_type?")
+        domain = args[0].value if isinstance(args[0], String) else str(args[0])
+        rtype = args[1].value if len(args) > 1 and isinstance(args[1], String) else "A"
+        try:
+            from .object import List as ListObj
+            results = NetsecModule.dns_lookup(domain, rtype)
+            return ListObj([String(str(r)) for r in results])
+        except Exception as e:
+            return EvaluationError(f"netsec.dns_lookup() error: {str(e)}")
+    
+    netsec_env.set("security_headers", Builtin(_netsec_security_headers, "security_headers"))
+    netsec_env.set("dns_lookup", Builtin(_netsec_dns_lookup, "dns_lookup"))
+    modules["netsec"] = netsec_env
+    
+    # ===== PAYLOADS MODULE =====
+    payloads_env = Environment()
+    
+    from .stdlib.payloads import PayloadsModule
+    
+    def _payloads_xss(*args):
+        from .object import List as ListObj
+        variant = args[0].value if len(args) > 0 and isinstance(args[0], String) else "all"
+        return ListObj([String(p) for p in PayloadsModule.xss(variant)])
+    
+    def _payloads_sqli(*args):
+        from .object import List as ListObj
+        variant = args[0].value if len(args) > 0 and isinstance(args[0], String) else "all"
+        return ListObj([String(p) for p in PayloadsModule.sqli(variant)])
+    
+    def _payloads_ssrf(*args):
+        from .object import List as ListObj
+        variant = args[0].value if len(args) > 0 and isinstance(args[0], String) else "all"
+        return ListObj([String(p) for p in PayloadsModule.ssrf(variant)])
+    
+    def _payloads_path_traversal(*args):
+        from .object import List as ListObj
+        variant = args[0].value if len(args) > 0 and isinstance(args[0], String) else "all"
+        return ListObj([String(p) for p in PayloadsModule.path_traversal(variant)])
+    
+    def _payloads_command_injection(*args):
+        from .object import List as ListObj
+        variant = args[0].value if len(args) > 0 and isinstance(args[0], String) else "all"
+        return ListObj([String(p) for p in PayloadsModule.command_injection(variant)])
+    
+    def _payloads_encode(*args):
+        if len(args) < 1:
+            return EvaluationError("payloads.encode() expects 1-2 arguments")
+        payload = args[0].value if isinstance(args[0], String) else str(args[0])
+        encoding = args[1].value if len(args) > 1 and isinstance(args[1], String) else "url"
+        return String(PayloadsModule.encode_payload(payload, encoding))
+    
+    payloads_env.set("xss", Builtin(_payloads_xss, "xss"))
+    payloads_env.set("sqli", Builtin(_payloads_sqli, "sqli"))
+    payloads_env.set("ssrf", Builtin(_payloads_ssrf, "ssrf"))
+    payloads_env.set("path_traversal", Builtin(_payloads_path_traversal, "path_traversal"))
+    payloads_env.set("command_injection", Builtin(_payloads_command_injection, "command_injection"))
+    payloads_env.set("encode", Builtin(_payloads_encode, "encode"))
+    modules["payloads"] = payloads_env
+    
+    # ===== PENTEST MODULE =====
+    pentest_env = Environment()
+    
+    from .stdlib.pentest import PentestModule
+    
+    def _pentest_create_report(*args):
+        if len(args) < 2:
+            return EvaluationError("pentest.create_report() expects 2 arguments: title, target")
+        title = args[0].value if isinstance(args[0], String) else str(args[0])
+        target = args[1].value if isinstance(args[1], String) else str(args[1])
+        report = PentestModule.create_report(title, target)
+        return Map({String(k): String(str(v)) for k, v in report.items()})
+    
+    def _pentest_fingerprint_web(*args):
+        if len(args) < 1:
+            return EvaluationError("pentest.fingerprint_web() expects 1 argument: url")
+        url = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            result = PentestModule.fingerprint_web(url)
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"pentest.fingerprint_web() error: {str(e)}")
+    
+    def _pentest_test_headers(*args):
+        if len(args) < 1:
+            return EvaluationError("pentest.test_headers() expects 1 argument: url")
+        url = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            result = PentestModule.test_headers(url)
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"pentest.test_headers() error: {str(e)}")
+    
+    pentest_env.set("create_report", Builtin(_pentest_create_report, "create_report"))
+    pentest_env.set("fingerprint_web", Builtin(_pentest_fingerprint_web, "fingerprint_web"))
+    pentest_env.set("test_headers", Builtin(_pentest_test_headers, "test_headers"))
+    modules["pentest"] = pentest_env
+    
+    # ===== AUDIT MODULE =====
+    audit_env = Environment()
+    
+    from .stdlib.audit import AuditModule
+    
+    def _audit_scan(*args):
+        if len(args) < 1:
+            return EvaluationError("audit.scan() expects 1 argument: source_code")
+        source = args[0].value if isinstance(args[0], String) else str(args[0])
+        filename = args[1].value if len(args) > 1 and isinstance(args[1], String) else "<input>"
+        from .object import List as ListObj
+        findings = AuditModule.scan(source, filename)
+        return ListObj([Map({String(k): String(str(v)) for k, v in f.items()}) for f in findings])
+    
+    def _audit_scan_file(*args):
+        if len(args) < 1:
+            return EvaluationError("audit.scan_file() expects 1 argument: filepath")
+        fp = args[0].value if isinstance(args[0], String) else str(args[0])
+        from .object import List as ListObj
+        findings = AuditModule.scan_file(fp)
+        return ListObj([Map({String(k): String(str(v)) for k, v in f.items()}) for f in findings])
+    
+    def _audit_to_sarif(*args):
+        if len(args) < 1:
+            return EvaluationError("audit.to_sarif() expects 1 argument: findings list")
+        from .object import List as ListObj
+        findings = []
+        if isinstance(args[0], ListObj):
+            for item in args[0].elements:
+                if isinstance(item, Map):
+                    f = {}
+                    for k, v in item.pairs.items():
+                        f[k.value if isinstance(k, String) else str(k)] = v.value if hasattr(v, 'value') else str(v)
+                    findings.append(f)
+        sarif = AuditModule.to_sarif(findings)
+        return String(json.dumps(sarif))
+    
+    audit_env.set("scan", Builtin(_audit_scan, "scan"))
+    audit_env.set("scan_file", Builtin(_audit_scan_file, "scan_file"))
+    audit_env.set("to_sarif", Builtin(_audit_to_sarif, "to_sarif"))
+    modules["audit"] = audit_env
+    
+    # ===== CONTRACT AUDIT MODULE =====
+    contract_audit_env = Environment()
+    
+    from .stdlib.contract_audit import ContractAuditModule
+    
+    def _contract_audit(*args):
+        if len(args) < 1:
+            return EvaluationError("contract_audit.audit() expects 1 argument: source_code")
+        source = args[0].value if isinstance(args[0], String) else str(args[0])
+        filename = args[1].value if len(args) > 1 and isinstance(args[1], String) else "<contract>"
+        from .object import List as ListObj
+        findings = ContractAuditModule.audit(source, filename)
+        return ListObj([Map({String(k): String(str(v)) for k, v in f.items()}) for f in findings])
+    
+    def _contract_audit_file(*args):
+        if len(args) < 1:
+            return EvaluationError("contract_audit.audit_file() expects 1 argument: filepath")
+        fp = args[0].value if isinstance(args[0], String) else str(args[0])
+        from .object import List as ListObj
+        findings = ContractAuditModule.audit_file(fp)
+        return ListObj([Map({String(k): String(str(v)) for k, v in f.items()}) for f in findings])
+    
+    contract_audit_env.set("audit", Builtin(_contract_audit, "audit"))
+    contract_audit_env.set("audit_file", Builtin(_contract_audit_file, "audit_file"))
+    modules["contract_audit"] = contract_audit_env
+    
     return modules
 
 
@@ -422,4 +778,9 @@ def get_builtin_module(module_name, evaluator=None):
 
 def is_builtin_module(module_name):
     """Check if a module name refers to a builtin module"""
-    return module_name in ["crypto", "datetime", "math", "validation", "password", "cache"]
+    return module_name in [
+        "crypto", "datetime", "math", "validation", "password",
+        "cache", "queue", "template", "testing",
+        "fuzz", "secrets", "netsec", "payloads", "pentest",
+        "audit", "contract_audit",
+    ]

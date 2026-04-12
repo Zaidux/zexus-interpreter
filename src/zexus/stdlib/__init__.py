@@ -17,11 +17,16 @@ from .template import TemplateModule
 from .testing import TestingModule
 from .fuzz import FuzzModule
 from .secrets_module import SecretsModule
+from .netsec import NetsecModule
+from .payloads import PayloadsModule
+from .pentest import PentestModule
+from .audit import AuditModule
+from .contract_audit import ContractAuditModule
 
 __all__ = [
-    'FileSystemModule', 
-    'HttpModule', 
-    'JsonModule', 
+    'FileSystemModule',
+    'HttpModule',
+    'JsonModule',
     'DateTimeModule',
     'CryptoModule',
     'BlockchainModule',
@@ -35,5 +40,10 @@ __all__ = [
     'TemplateModule',
     'TestingModule',
     'FuzzModule',
-    'SecretsModule'
+    'SecretsModule',
+    'NetsecModule',
+    'PayloadsModule',
+    'PentestModule',
+    'AuditModule',
+    'ContractAuditModule',
 ]
