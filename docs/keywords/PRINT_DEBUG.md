@@ -11,15 +11,13 @@ These two keywords provide output and debugging capabilities in Zexus:
 ```zexus
 print expression;
 print(expression);
-print(arg1, arg2, arg3, ...);  # Multi-argument print
-print(condition, message);      # Conditional print (NEW!)
+print(arg1, arg2, arg3, ...);  # Multi-argument print (space-separated)
 ```
 
 ### Overview
 PRINT outputs values to the console. It supports:
 - **Single expressions**: `print "hello"`
 - **Multiple arguments**: `print("Value:", x, "Result:", y)` - outputs all arguments separated by spaces
-- **Conditional printing**: `print(condition, message)` - only prints if condition is truthy (NEW!)
 
 ### Basic Usage
 
@@ -367,51 +365,41 @@ action process(input) {
 }
 ```
 
-### Pattern 7: Conditional Print (NEW!)
+### Pattern 7: Multi-Argument Print
 ```zexus
-# Conditional print: print(condition, message)
-# Only prints if condition is truthy
-
-let debugMode = true
-let verbose = false
+# Print multiple values separated by spaces
 let x = 42
+let name = "Alice"
 
-# Print only if debugMode is true
-print(debugMode, "Debug mode is enabled")  # Prints: "Debug mode is enabled"
+# Two arguments - both printed
+print("Value:", x)           # Output: Value: 42
+print("Name:", name)         # Output: Name: Alice
 
-# Print only if verbose is true
-print(verbose, "Verbose logging active")  # Does NOT print
-
-# Conditional logging with expressions
-let errorCount = 5
-print(errorCount > 0, "Errors detected: " + string(errorCount))  # Prints: "Errors detected: 5"
-
-# Dynamic conditional printing
-let threshold = 10
-let value = 15
-print(value > threshold, "Value exceeds threshold: " + string(value))  # Prints
+# Multiple arguments
+print("User", name, "has value", x)  # Output: User Alice has value 42
 
 # Use in loops
 for each item in [1, 2, 3, 4, 5] {
-    print(item > 3, "Large item: " + string(item))
+    print("Item:", item)
 }
 # Output:
-# Large item: 4
-# Large item: 5
+# Item: 1
+# Item: 2
+# Item: 3
+# Item: 4
+# Item: 5
 ```
 
-**How Conditional Print Works:**
-- When `print()` has **exactly 2 arguments**, it's treated as conditional
-- First argument is the **condition** (evaluated for truthiness)
-- Second argument is the **message** (only printed if condition is true)
-- Condition can be: boolean, integer (0=false, non-zero=true), string (empty=false, non-empty=true)
+**How Multi-Argument Print Works:**
+- All arguments are evaluated and printed separated by spaces on a single line
+- Works with any number of arguments (1, 2, 3, or more)
+- Each argument can be any expression (string, number, variable, etc.)
 
 **Use Cases:**
-- Debug logging that can be toggled
-- Verbose mode output
-- Error reporting based on counts
-- Conditional status messages
-- Dynamic logging levels
+- Labeled output: `print("Result:", value)`
+- Debug logging with context
+- Formatted output with multiple values
+- Status messages with dynamic data
 
 ---
 
@@ -723,16 +711,15 @@ print.to("output.txt", message);
 
 **Related Keywords**: STRING, CONCAT (for formatting)  
 **Category**: I/O Operations  
-**Status**: ✅ Fully Working (print fully functional with conditional support, debug dual-mode complete)  
+**Status**: ✅ Fully Working (print fully functional with multi-argument support, debug dual-mode complete)  
 **Tests Created**: 20 easy, 20 medium, 20 complex  
 **Documentation**: Complete  
-**Last Updated**: December 29, 2025
+**Last Updated**: April 2026
 
-### New Feature: Conditional Print (December 2025)
-- **Syntax**: `print(condition, message)` - prints message only if condition is truthy
-- **Detection**: Exactly 2 arguments triggers conditional mode
-- **Implementation**: Parser checks argument count and sets `condition` field
-- **Use Cases**: Debug mode, verbose logging, error reporting, dynamic output control
+### Multi-Argument Print
+- **Syntax**: `print(arg1, arg2, ...)` - prints all arguments separated by spaces
+- **Implementation**: Parser collects all comma-separated arguments into `values` list
+- **Use Cases**: Labeled output, debug logging with context, formatted status messages
 
 ### DEBUG Implementation Details
 
