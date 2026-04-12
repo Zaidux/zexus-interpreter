@@ -5016,7 +5016,7 @@ class FunctionEvaluatorMixin:
             allowed, reason = cap_manager.check_capability("env_set", "sys.env")
             if not allowed:
                 return EvaluationError(
-                    f"env_set() denied: requires 'sys.env' capability. {reason}"
+                    f"env_set() denied: {reason}"
                 )
             
             var_name_obj = a[0]
