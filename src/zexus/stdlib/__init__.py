@@ -15,6 +15,8 @@ from .cache import CacheModule
 from .queue_module import QueueModule
 from .template import TemplateModule
 from .testing import TestingModule
+from .fuzz import FuzzModule
+from .secrets_module import SecretsModule
 
 __all__ = [
     'FileSystemModule', 
@@ -31,5 +33,7 @@ __all__ = [
     'CacheModule',
     'QueueModule',
     'TemplateModule',
-    'TestingModule'
+    'TestingModule',
+    'FuzzModule',
+    'SecretsModule'
 ]
