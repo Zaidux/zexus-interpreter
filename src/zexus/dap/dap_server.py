@@ -154,7 +154,7 @@ class DAPServer:
         capabilities = {
             "supportsConfigurationDoneRequest": True,
             "supportsFunctionBreakpoints": False,
-            "supportsConditionalBreakpoints": False,
+            "supportsConditionalBreakpoints": True,
             "supportsEvaluateForHovers": True,
             "supportsStepBack": False,
             "supportsSetVariable": False,
@@ -281,13 +281,15 @@ class DAPServer:
     def _cmd_evaluate(self, req: Dict):
         args = req.get("arguments", {})
         expression = args.get("expression", "")
-        # Simple variable lookup from current frame
-        frames = self.engine.get_stack_trace()
-        result = "undefined"
-        if frames:
-            vs = frames[0].variables
-            if expression in vs:
-                result = str(vs[expression])
+        frame_id = args.get("frameId")
+        # Use engine.evaluate_expression for richer evaluation
+        frame = None
+        if frame_id is not None:
+            for f in self.engine.get_stack_trace():
+                if f.id == frame_id:
+                    frame = f
+                    break
+        result = self.engine.evaluate_expression(expression, frame=frame)
         self._respond(req, body={"result": result, "variablesReference": 0})
 
     # -- Execution ---------------------------------------------------------

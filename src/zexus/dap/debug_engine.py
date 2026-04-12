@@ -80,6 +80,7 @@ class DebugEngine:
 
         # Breakpoints: file -> {line -> Breakpoint}
         self._breakpoints: Dict[str, Dict[int, Breakpoint]] = {}
+        self._conditional_breakpoints: Dict[str, Dict[int, ConditionalBreakpoint]] = {}
         self._bp_id_counter: int = 0
 
         # Current execution state (updated by evaluator hook)
@@ -220,6 +221,38 @@ class DebugEngine:
     def clear_breakpoints(self, file: str):
         with self._lock:
             self._breakpoints.pop(file, None)
+            self._conditional_breakpoints.pop(file, None)
+
+    def set_conditional_breakpoint(self, file: str, line: int,
+                                   condition: Optional[str] = None,
+                                   hit_count: Optional[int] = None,
+                                   log_message: Optional[str] = None) -> Breakpoint:
+        """Add a single conditional breakpoint and return it."""
+        self._bp_id_counter += 1
+        bp = Breakpoint(id=self._bp_id_counter, file=file, line=line,
+                        condition=condition)
+        cond_bp = ConditionalBreakpoint(file, line, condition, hit_count, log_message)
+        with self._lock:
+            self._breakpoints.setdefault(file, {})[line] = bp
+            self._conditional_breakpoints.setdefault(file, {})[line] = cond_bp
+        return bp
+
+    def evaluate_expression(self, expression: str, frame: Optional[StackFrame] = None) -> str:
+        """Evaluate *expression* against the given (or topmost) stack frame.
+
+        Returns a string representation of the result.
+        """
+        variables: Dict[str, Any] = {}
+        with self._lock:
+            if frame is not None:
+                variables = dict(frame.variables)
+            elif self._call_stack:
+                variables = dict(self._call_stack[-1].variables)
+        try:
+            result = _safe_eval(expression, variables)
+            return str(result)
+        except Exception as exc:
+            return f"<error: {exc}>"
 
     # -- Inspection --------------------------------------------------------
 
@@ -259,6 +292,14 @@ class DebugEngine:
             bp = file_bps.get(line)
             if bp and bp.enabled:
                 bp.hit_count += 1
+                # Check conditional breakpoint if one exists
+                cond_bps = self._conditional_breakpoints.get(file)
+                if cond_bps and line in cond_bps:
+                    ctx = {}
+                    if self._call_stack:
+                        ctx = dict(self._call_stack[-1].variables)
+                    if not cond_bps[line].should_break(ctx):
+                        return None
                 return StopReason.BREAKPOINT
 
         # Stepping logic
@@ -285,6 +326,61 @@ class DebugEngine:
                 except Exception:
                     result[k] = str(v)
         return result
+
+
+class ConditionalBreakpoint:
+    """A breakpoint that fires only when a condition is satisfied or
+    after a specified number of hits."""
+
+    def __init__(self, file: str, line: int, condition: Optional[str] = None,
+                 hit_count: Optional[int] = None, log_message: Optional[str] = None):
+        self.file = file
+        self.line = line
+        self.condition = condition
+        self.hit_count_threshold = hit_count
+        self.log_message = log_message
+        self._hits = 0
+
+    def should_break(self, context: Dict[str, Any]) -> bool:
+        """Return True if execution should pause at this breakpoint.
+
+        *context* is a mapping of variable-name → value from the current
+        stack frame.
+        """
+        self._hits += 1
+
+        if self.hit_count_threshold is not None:
+            if self._hits < self.hit_count_threshold:
+                return False
+
+        if self.condition is not None:
+            try:
+                result = _safe_eval(self.condition, context)
+                if not result:
+                    return False
+            except Exception:
+                return False
+
+        return True
+
+
+def _safe_eval(expression: str, variables: Dict[str, Any]) -> Any:
+    """Evaluate a simple expression against *variables*.
+
+    Supports: variable lookup, comparisons (==, !=, <, >, <=, >=),
+    arithmetic (+, -, *, /, %), boolean logic (and, or, not), and
+    string literals.
+    """
+    allowed_names = dict(variables)
+    allowed_names.update({"True": True, "False": False, "None": None,
+                          "true": True, "false": False, "null": None})
+    # Compile with restricted builtins to prevent code execution
+    code = compile(expression, "<expr>", "eval")
+    # Disallow any names that are not in our whitelist
+    for name in code.co_names:
+        if name not in allowed_names:
+            raise NameError(f"Use of '{name}' is not allowed")
+    return eval(code, {"__builtins__": {}}, allowed_names)  # noqa: S307
 
 
 def _format_value(v: Any) -> str:

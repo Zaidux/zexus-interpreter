@@ -1,11 +1,38 @@
 """Completion provider for Zexus LSP."""
 
+import re
 from typing import List, Dict, Any
 try:
     from pygls.lsp.types import CompletionItem, CompletionItemKind, Position
     PYGLS_AVAILABLE = True
 except ImportError:
     PYGLS_AVAILABLE = False
+
+
+def get_user_defined_symbols(source_text: str) -> list:
+    """Parse source for user-defined declarations and return symbol metadata.
+
+    Recognised patterns:
+      let X =       -> variable
+      action X(     -> function
+      entity X {    -> class
+      contract X {  -> class
+    """
+    symbols: list = []
+    seen: set = set()
+    patterns = [
+        (r'\blet\s+([A-Za-z_]\w*)\s*=', 'variable'),
+        (r'\baction\s+([A-Za-z_]\w*)\s*\(', 'function'),
+        (r'\bentity\s+([A-Za-z_]\w*)\s*\{', 'class'),
+        (r'\bcontract\s+([A-Za-z_]\w*)\s*\{', 'class'),
+    ]
+    for pattern, kind in patterns:
+        for match in re.finditer(pattern, source_text):
+            name = match.group(1)
+            if name not in seen:
+                seen.add(name)
+                symbols.append({"label": name, "kind": kind, "detail": "user-defined"})
+    return symbols
 
 
 # Zexus keywords
@@ -174,7 +201,7 @@ BUILTINS = {
 class CompletionProvider:
     """Provides completion suggestions for Zexus code."""
 
-    def get_completions(self, text: str, position: Position, doc_info: Dict[str, Any]) -> List:
+    def get_completions(self, text: str, position, doc_info: Dict[str, Any]) -> List:
         """Get completion items for the given position."""
         if not PYGLS_AVAILABLE:
             return []
@@ -201,7 +228,18 @@ class CompletionProvider:
                 insert_text_format=2  # Snippet format
             ))
         
-        # TODO: Add user-defined symbols from AST
-        # TODO: Add context-aware completions
-        
+        # Add user-defined symbols from source text
+        _KIND_MAP = {
+            'variable': CompletionItemKind.Variable if PYGLS_AVAILABLE else 6,
+            'function': CompletionItemKind.Function if PYGLS_AVAILABLE else 3,
+            'class': CompletionItemKind.Class if PYGLS_AVAILABLE else 7,
+        }
+        for sym in get_user_defined_symbols(text):
+            items.append(CompletionItem(
+                label=sym['label'],
+                kind=_KIND_MAP.get(sym['kind'], CompletionItemKind.Variable),
+                detail=f"{sym['detail']} ({sym['kind']})",
+                documentation=f"User-defined {sym['kind']}: {sym['label']}",
+            ))
+
         return items
