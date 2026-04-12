@@ -2,6 +2,7 @@
 
 import queue
 import collections
+import itertools
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -99,8 +100,13 @@ class QueueModule:
         """
         with q.mutex:
             q.queue.clear()
+            q.unfinished_tasks = 0
+            q.all_tasks_done.notify_all()
+            q.not_full.notify_all()
 
     # ── Priority Queue ──────────────────────────────────────────────────
+
+    _priority_counter = itertools.count()
 
     @staticmethod
     def create_priority(maxsize: int = 0) -> queue.PriorityQueue:
@@ -123,7 +129,7 @@ class QueueModule:
             item: The item to add.
             priority: Numeric priority (lower values are dequeued first).
         """
-        q.put((priority, item))
+        q.put((priority, next(QueueModule._priority_counter), item))
 
     @staticmethod
     def pop_priority(q: queue.PriorityQueue, timeout: Optional[float] = None) -> Any:
@@ -139,7 +145,7 @@ class QueueModule:
         Raises:
             queue.Empty: If the queue is empty and timeout expires.
         """
-        _priority, item = q.get(timeout=timeout)
+        _priority, _seq, item = q.get(timeout=timeout)
         return item
 
     # ── Deque (double-ended queue) ──────────────────────────────────────

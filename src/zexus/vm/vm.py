@@ -4607,11 +4607,17 @@ class VM:
                     for key, value in self.env.items():
                         if isinstance(key, str) and key.startswith("_"):
                             continue
-                        closure_snapshot[key] = value
+                        if isinstance(value, Cell):
+                            cell = value
+                        else:
+                            cell = Cell(value)
+                            self.env[key] = cell
+                            self._bump_env_version(key, cell)
+                        closure_snapshot[key] = cell
                     # Include existing closure cells if present
                     for key, cell in self._closure_cells.items():
                         if key not in closure_snapshot:
-                            closure_snapshot[key] = cell.value
+                            closure_snapshot[key] = cell
                     if closure_snapshot:
                         func_desc_copy["closure_snapshot"] = closure_snapshot
                     func_desc_copy["parent_vm"] = self
@@ -5827,7 +5833,10 @@ class VM:
             snapshot = fn.get("closure_snapshot")
             if snapshot:
                 for key, value in snapshot.items():
-                    inner_vm._closure_cells[key] = Cell(value)
+                    if isinstance(value, Cell):
+                        inner_vm._closure_cells[key] = value
+                    else:
+                        inner_vm._closure_cells[key] = Cell(value)
             try:
                 return await inner_vm._run_stack_bytecode(func_bc, debug=False)
             finally:

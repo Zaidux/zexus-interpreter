@@ -185,10 +185,10 @@ class ContractAuditModule:
             ext_calls = list(external_call_re.finditer(body))
             if not ext_calls:
                 continue
-            last_call_end = max(m.end() for m in ext_calls)
+            first_call_end = min(m.end() for m in ext_calls)
 
             for sw in state_write_re.finditer(body):
-                if sw.start() > last_call_end:
+                if sw.start() > first_call_end:
                     abs_pos = body_offset + sw.start()
                     line_no = source[:abs_pos].count("\n") + 1
                     col = abs_pos - source.rfind("\n", 0, abs_pos)

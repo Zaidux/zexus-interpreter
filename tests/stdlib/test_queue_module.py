@@ -84,7 +84,7 @@ class TestDeque:
         QueueModule.push_back(d, "b")
         # Third item should push out oldest if maxlen
         QueueModule.push_back(d, "c")
-        assert QueueModule.pop_front(d) in ("b", "c")
+        assert QueueModule.pop_front(d) == "b"
 
 
 class TestPubSub:
@@ -94,14 +94,13 @@ class TestPubSub:
 
     def test_subscribe_and_publish(self):
         t = QueueModule.create_topic()
-        received = []
         QueueModule.subscribe(t, "sub1")
-        QueueModule.publish(t, "hello")
-        # Topic stores messages for subscribers
-        assert t is not None
+        deliveries = QueueModule.publish(t, "hello")
+        assert deliveries == [("sub1", "hello")]
 
     def test_unsubscribe(self):
         t = QueueModule.create_topic()
         QueueModule.subscribe(t, "sub1")
-        QueueModule.unsubscribe(t, "sub1")
-        assert t is not None
+        removed = QueueModule.unsubscribe(t, "sub1")
+        assert removed is True
+        assert QueueModule.publish(t, "hello") == []

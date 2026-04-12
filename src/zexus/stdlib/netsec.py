@@ -544,7 +544,6 @@ class NetsecModule:
                         "not_before": not_before,
                         "not_after": not_after,
                         "san": san,
-                        "signature_algorithm": cert.get("signatureAlgorithm", "N/A"),
                         "days_until_expiry": days_until,
                         "der_length": len(der) if der else 0,
                     }

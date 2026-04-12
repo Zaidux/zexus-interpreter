@@ -108,11 +108,12 @@ class TemplateModule:
             name = parts[0]
             filters = parts[1:]
             value = TemplateModule._resolve(name, context)
+            escape_already = any(f.split(":", 1)[0] == "escape" for f in filters)
             if filters:
                 value = TemplateModule._apply_filters(value, filters)
             else:
                 value = str(value)
-            if auto_escape:
+            if auto_escape and not escape_already:
                 value = html.escape(value)
             return value
 

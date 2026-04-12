@@ -15,11 +15,11 @@ class TestVariableInterpolation:
 
     def test_missing_variable(self):
         result = TemplateModule.render("{{missing}}", {})
-        assert "missing" not in result or result == ""
+        assert result == ""
 
     def test_nested_access(self):
         result = TemplateModule.render("{{user.name}}", {"user": {"name": "Alice"}})
-        assert "Alice" in result
+        assert result == "Alice"
 
 
 class TestFilters:

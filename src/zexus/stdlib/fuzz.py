@@ -1,8 +1,10 @@
 """Coverage-guided fuzzing module for Zexus standard library."""
 
-import random
-import os
+import base64
 import json
+import os
+import pickle
+import random
 import time
 import hashlib
 import traceback
@@ -322,14 +324,21 @@ class FuzzModule:
 
         Args:
             fuzzer: A fuzzer context dict.
-            filepath: Path to write the corpus file.
+        filepath: Path to write the corpus file.
         """
         serializable_corpus = []
         for item in fuzzer.get("corpus", []):
             if isinstance(item, bytes):
                 serializable_corpus.append({"type": "bytes", "data": item.hex()})
             else:
-                serializable_corpus.append({"type": "other", "data": repr(item)})
+                try:
+                    json.dumps(item)
+                    serializable_corpus.append({"type": "json", "data": item})
+                except TypeError:
+                    serializable_corpus.append({
+                        "type": "pickle",
+                        "data": base64.b64encode(pickle.dumps(item)).decode("ascii"),
+                    })
 
         payload = {
             "corpus": serializable_corpus,
@@ -358,6 +367,8 @@ class FuzzModule:
         for item in payload.get("corpus", []):
             if item.get("type") == "bytes":
                 corpus.append(bytes.fromhex(item["data"]))
+            elif item.get("type") == "pickle":
+                corpus.append(pickle.loads(base64.b64decode(item["data"])))
             else:
                 corpus.append(item.get("data", ""))
 

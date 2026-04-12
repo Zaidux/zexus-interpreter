@@ -69,12 +69,12 @@ Instead of adding keywords, add functions to the global environment.
 
 ```python
 # In Python (plugin implementation)
-from zexus.object import Function, String
+from zexus.object import EvaluationError, Function, String
 
 def http_get(args):
     """Built-in function for HTTP GET requests"""
     if len(args) != 1:
-        return Error("http_get expects 1 argument: url")
+        return EvaluationError("http_get expects 1 argument: url")
     
     url = args[0].value
     response = requests.get(url)
@@ -475,13 +475,13 @@ dbClose(conn);
 
 ```python
 import requests
-from zexus.object import Function, String, Hash, Error
+from zexus.object import EvaluationError, Function, Hash, Integer, String
 
 class HttpPlugin:
     def register(self, env):
         def http_get(args):
             if len(args) < 1:
-                return Error("httpGet expects: url, [headers]")
+                return EvaluationError("httpGet expects: url, [headers]")
             
             url = args[0].value
             headers = {}
@@ -500,7 +500,7 @@ class HttpPlugin:
                     String("headers"): String(str(response.headers))
                 })
             except Exception as e:
-                return Error(f"HTTP error: {str(e)}")
+                return EvaluationError(f"HTTP error: {str(e)}")
         
         def http_post(args):
             # Similar implementation

@@ -30,7 +30,9 @@ class TestFuzzGenerators:
 
     def test_fuzz_json(self):
         obj = FuzzModule.fuzz_json(max_depth=2)
-        assert obj is not None  # Should be some JSON-like structure
+        assert obj is None or isinstance(
+            obj, (dict, list, str, int, float, bool)
+        )
 
     def test_mutate_string(self):
         original = "hello world"

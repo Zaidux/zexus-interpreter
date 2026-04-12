@@ -66,15 +66,17 @@ class TestLSPFormatter:
     def test_basic_formatting(self):
         from src.zexus.lsp.formatter import ZexusFormatter
         source = "let   x  =  1"
-        formatted = ZexusFormatter.format_document(source)
+        formatter = ZexusFormatter()
+        formatted = formatter.format_document(source)
         assert isinstance(formatted, str)
 
     def test_indentation(self):
         from src.zexus.lsp.formatter import ZexusFormatter
         source = """action greet() {
-print("hello")
-}"""
-        formatted = ZexusFormatter.format_document(source)
+    print("hello")
+    }"""
+        formatter = ZexusFormatter()
+        formatted = formatter.format_document(source)
         # Should have some indentation inside the block
         lines = formatted.strip().split('\n')
         assert len(lines) >= 2
@@ -82,7 +84,8 @@ print("hello")
     def test_trailing_whitespace_removed(self):
         from src.zexus.lsp.formatter import ZexusFormatter
         source = "let x = 1   \nlet y = 2   \n"
-        formatted = ZexusFormatter.format_document(source)
+        formatter = ZexusFormatter()
+        formatted = formatter.format_document(source)
         for line in formatted.split('\n'):
             assert line == line.rstrip()
 

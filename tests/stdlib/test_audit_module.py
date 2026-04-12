@@ -34,23 +34,20 @@ class TestCommandInjection:
     def test_detects_exec_with_input(self):
         source = '''
 let cmd = "rm " ++ user_input
-exec(cmd)
-shell(cmd)
+exec("rm " ++ user_input)
 '''
         findings = AuditModule.scan(source)
-        # May or may not detect depending on exact patterns
-        assert isinstance(findings, list)
+        assert any(f["rule"] == "command-injection" for f in findings)
 
 
 class TestPathTraversal:
     def test_detects_unsanitized_path(self):
         source = '''
-let path = "/data/" ++ filename
+let path = "../../etc/passwd"
 open(path)
 '''
         findings = AuditModule.scan(source)
-        # May or may not detect depending on exact patterns
-        assert isinstance(findings, list)
+        assert any(f["rule"].startswith("path-traversal") for f in findings)
 
 
 class TestMissingAuth:

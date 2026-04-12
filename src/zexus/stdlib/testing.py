@@ -78,7 +78,7 @@ class TestingModule:
         """Assert that callable raises an exception (optionally of a specific type)."""
         try:
             callable_fn()
-        except BaseException as exc:
+        except Exception as exc:
             if exception_type is not None and not isinstance(exc, exception_type):
                 msg = message or (
                     f"Expected {exception_type.__name__} to be raised, "

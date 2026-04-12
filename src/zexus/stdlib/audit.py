@@ -440,12 +440,11 @@ class AuditModule:
             r'is_authenticated|require_owner|has_permission)'
         )
         action_pattern = re.compile(
-            r'(?i)^(\s*)(public\s+)?action\s+(\w+)\s*\(',
+            r'(?i)^(\s*)(public\s+)?action\s+(async\s+)?(\w+)\s*\(',
             re.MULTILINE,
         )
-        lines = source.split("\n")
         for match in action_pattern.finditer(source):
-            action_name = match.group(3)
+            action_name = match.group(4)
             start_pos = match.start()
             line_no = source[:start_pos].count("\n") + 1
             col = match.start() - source.rfind("\n", 0, match.start())

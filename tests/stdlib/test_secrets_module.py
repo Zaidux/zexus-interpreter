@@ -84,6 +84,7 @@ class TestTokenGeneration:
 
 class TestFromEnv:
     def test_from_env_exists(self):
+        original = os.environ.get("TEST_SECRET_XYZ")
         os.environ["TEST_SECRET_XYZ"] = "my_secret"
         try:
             result = SecretsModule.from_env("TEST_SECRET_XYZ")
@@ -91,7 +92,10 @@ class TestFromEnv:
             assert result["value"] == "my_secret"
             assert result["tainted"] is True
         finally:
-            del os.environ["TEST_SECRET_XYZ"]
+            if original is None:
+                del os.environ["TEST_SECRET_XYZ"]
+            else:
+                os.environ["TEST_SECRET_XYZ"] = original
 
     def test_from_env_missing_required(self):
         with pytest.raises(Exception):

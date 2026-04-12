@@ -32,7 +32,7 @@ Capabilities are declared at module level and enforced at runtime. Attempting to
 
 ## Mandatory Input Sanitization
 
-**All user input is automatically sanitized** based on the context in which it's used. This is enforced at runtime — not optional.
+User input is **taint-tracked** and must pass through the runtime's contextual sanitizers before reaching sensitive sinks. When you use context-aware helpers (SQL builders, templating, shell-safe args), sanitization is applied automatically; raw string concatenation still requires explicit sanitization.
 
 ### Supported Contexts
 | Context | Sanitization Applied |
@@ -47,7 +47,7 @@ Capabilities are declared at module level and enforced at runtime. Attempting to
 ```zexus
 let user_input = input("Enter name: ")
 
-// Automatically sanitized for SQL context
+// Automatically sanitized when routed through context-aware helpers
 let query = sql("SELECT * FROM users WHERE name = ${user_input}")
 
 // Automatically sanitized for HTML context

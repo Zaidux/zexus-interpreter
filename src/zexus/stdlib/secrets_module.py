@@ -115,6 +115,7 @@ class SecretsModule:
             raise KeyError(f"Secret '{name}' not found")
 
         del store["secrets"][name]
+        store["versions"].pop(name, None)
 
         store["audit"].append({
             "action": "delete",

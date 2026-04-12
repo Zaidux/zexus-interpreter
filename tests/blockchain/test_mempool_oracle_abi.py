@@ -13,9 +13,19 @@ class TestPriorityMempool:
                 self.nonce = n
                 self.gas_price = gp
                 self.gas_limit = gl
-                self.hash = h or f"0x{s}{n}{gp}"
+                self.tx_hash = h or f"0x{s}{n}{gp}"
+                self.hash = self.tx_hash
+
             def to_dict(self):
-                return {"sender": self.sender, "nonce": self.nonce, "gas_price": self.gas_price, "gas_limit": self.gas_limit, "hash": self.hash}
+                return {
+                    "sender": self.sender,
+                    "nonce": self.nonce,
+                    "gas_price": self.gas_price,
+                    "gas_limit": self.gas_limit,
+                    "hash": self.hash,
+                    "tx_hash": self.tx_hash,
+                }
+
         return MockTx(sender, nonce, gas_price, gas_limit, tx_hash)
 
     def test_create_mempool(self):
@@ -44,7 +54,7 @@ class TestPriorityMempool:
         mp = PriorityMempool()
         tx = self._make_tx(tx_hash="removeme")
         mp.add(tx)
-        mp.remove("removeme")
+        mp.remove(tx.tx_hash)
         assert mp.size == 0
 
     def test_clear(self):
@@ -121,21 +131,21 @@ class TestGasPriceOracle:
 class TestABIEncoder:
     def test_function_selector(self):
         selector = ABIEncoder.function_selector("transfer", ["address", "uint256"])
-        assert isinstance(selector, str)
-        assert len(selector) == 10  # "0x" + 8 hex chars
+        assert isinstance(selector, bytes)
+        assert len(selector) == 4
 
     def test_encode_params_uint(self):
         encoded = ABIEncoder.encode_params(["uint256"], [42])
-        assert isinstance(encoded, str)
+        assert isinstance(encoded, bytes)
         assert len(encoded) > 0
 
     def test_encode_params_bool(self):
         encoded = ABIEncoder.encode_params(["bool"], [True])
-        assert isinstance(encoded, str)
+        assert isinstance(encoded, bytes)
 
     def test_encode_params_address(self):
         encoded = ABIEncoder.encode_params(["address"], ["0x1234567890abcdef1234567890abcdef12345678"])
-        assert isinstance(encoded, str)
+        assert isinstance(encoded, bytes)
 
     def test_encode_function_call(self):
         encoded = ABIEncoder.encode_function_call(
@@ -143,8 +153,8 @@ class TestABIEncoder:
             ["address", "uint256"],
             ["0x1234567890abcdef1234567890abcdef12345678", 1000]
         )
-        assert isinstance(encoded, str)
-        assert encoded.startswith("0x")
+        assert isinstance(encoded, bytes)
+        assert len(encoded) >= 4
 
     def test_decode_params_uint(self):
         encoded = ABIEncoder.encode_params(["uint256"], [42])

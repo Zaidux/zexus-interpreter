@@ -46,6 +46,9 @@ class CacheModule:
         moved to the most-recently-used position. If the cache is
         at capacity, the least-recently-used item is evicted.
         """
+        if cache["_capacity"] <= 0:
+            cache["_data"].clear()
+            return
         data = cache["_data"]
         if key in data:
             data.move_to_end(key)
@@ -172,6 +175,12 @@ class CacheModule:
             ttl = cache["_default_ttl"]
 
         data = cache["_data"]
+
+        if cache["_capacity"] <= 0:
+            CacheModule._evict_expired(cache)
+            data.clear()
+            cache["_expiry"].clear()
+            return
 
         if key in data:
             data.move_to_end(key)
