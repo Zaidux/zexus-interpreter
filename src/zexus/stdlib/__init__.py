@@ -11,6 +11,7 @@ from .regex import RegexModule
 from .math import MathModule
 from .encoding import EncodingModule
 from .compression import CompressionModule
+from .cache import CacheModule
 
 __all__ = [
     'FileSystemModule', 
@@ -23,5 +24,6 @@ __all__ = [
     'RegexModule',
     'MathModule',
     'EncodingModule',
-    'CompressionModule'
+    'CompressionModule',
+    'CacheModule'
 ]
