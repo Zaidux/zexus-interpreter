@@ -727,8 +727,12 @@ PyObject *zexus_cabi_gas_charge(PyObject *env, PyObject *amount) {
         Py_DECREF(zero);
         PyObject *err = PyDict_New();
         if (!err) return NULL;
-        PyDict_SetItemString(err, "error", PyUnicode_FromString("InvalidGasAmount"));
-        PyDict_SetItemString(err, "message", PyUnicode_FromString("Gas charge amount must be non-negative"));
+        PyObject *err_type = PyUnicode_FromString("InvalidGasAmount");
+        PyObject *err_msg = PyUnicode_FromString("Gas charge amount must be non-negative");
+        PyDict_SetItemString(err, "error", err_type);
+        PyDict_SetItemString(err, "message", err_msg);
+        Py_DECREF(err_type);
+        Py_DECREF(err_msg);
         return err;
     }
     PyObject *new_gas = PyNumber_Subtract(cur, subtrahend);
@@ -750,7 +754,9 @@ PyObject *zexus_cabi_gas_charge(PyObject *env, PyObject *amount) {
         }
         PyObject *err = PyDict_New();
         if (!err) return NULL;
-        PyDict_SetItemString(err, "error", PyUnicode_FromString("OutOfGas"));
+        PyObject *oog_str = PyUnicode_FromString("OutOfGas");
+        PyDict_SetItemString(err, "error", oog_str);
+        Py_DECREF(oog_str);
         if (amount) {
             PyDict_SetItemString(err, "required", amount);
         } else {
@@ -800,7 +806,9 @@ PyObject *zexus_cabi_require(PyObject *env, PyObject *condition, PyObject *messa
 
     PyObject *err = PyDict_New();
     if (!err) return NULL;
-    PyDict_SetItemString(err, "error", PyUnicode_FromString("RequirementFailed"));
+    PyObject *rf_str = PyUnicode_FromString("RequirementFailed");
+    PyDict_SetItemString(err, "error", rf_str);
+    Py_DECREF(rf_str);
     PyObject *msg_obj = message && message != Py_None ? PyObject_Str(message) : PyUnicode_FromString("Requirement failed");
     if (msg_obj) {
         PyDict_SetItemString(err, "message", msg_obj);
