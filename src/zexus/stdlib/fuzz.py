@@ -3,7 +3,6 @@
 import base64
 import json
 import os
-import pickle
 import random
 import time
 import hashlib
@@ -335,9 +334,11 @@ class FuzzModule:
                     json.dumps(item)
                     serializable_corpus.append({"type": "json", "data": item})
                 except TypeError:
+                    # Fall back to repr() instead of pickle to avoid
+                    # creating payloads that require unsafe deserialization.
                     serializable_corpus.append({
-                        "type": "pickle",
-                        "data": base64.b64encode(pickle.dumps(item)).decode("ascii"),
+                        "type": "repr",
+                        "data": repr(item),
                     })
 
         payload = {
@@ -368,7 +369,10 @@ class FuzzModule:
             if item.get("type") == "bytes":
                 corpus.append(bytes.fromhex(item["data"]))
             elif item.get("type") == "pickle":
-                corpus.append(pickle.loads(base64.b64decode(item["data"])))
+                # SECURITY: pickle.loads() on untrusted data enables
+                # arbitrary code execution.  Refuse to deserialise
+                # pickle entries; treat them as opaque base64 strings.
+                corpus.append(item.get("data", ""))
             else:
                 corpus.append(item.get("data", ""))
 

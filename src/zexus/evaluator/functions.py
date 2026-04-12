@@ -1025,6 +1025,23 @@ class FunctionEvaluatorMixin:
                 path_str = os.path.join(os.getcwd(), path_str)
             return os.path.normpath(path_str)
 
+        def _validate_write_path(path_str):
+            """Validate that *path_str* is within the current working directory.
+
+            Returns the resolved path on success or raises ValueError.
+            """
+            import os
+            resolved = os.path.realpath(os.path.normpath(
+                os.path.join(os.getcwd(), path_str) if not os.path.isabs(path_str) else path_str
+            ))
+            cwd = os.path.realpath(os.getcwd())
+            if not (resolved == cwd or resolved.startswith(cwd + os.sep)):
+                raise ValueError(
+                    f"Path '{path_str}' resolves to '{resolved}' which is "
+                    f"outside the working directory '{cwd}'"
+                )
+            return resolved
+
         def _cached_read(real_path):
             """Read via VFS cache (skips disk if file unchanged)."""
             mgr = _get_vfs_manager()
@@ -1144,10 +1161,11 @@ class FunctionEvaluatorMixin:
             if len(a) >= 2 and isinstance(a[1], BooleanObj):
                 recursive = a[1].value
             try:
+                validated = _validate_write_path(a[0].value)
                 if recursive:
-                    shutil.rmtree(a[0].value)
+                    shutil.rmtree(validated)
                 else:
-                    os.rmdir(a[0].value)
+                    os.rmdir(validated)
                 return BooleanObj(True)
             except Exception as e:
                 return EvaluationError(f"fs_rmdir() error: {str(e)}")
@@ -1159,7 +1177,9 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("fs_rename() takes exactly 2 string arguments: old_path, new_path")
             import os
             try:
-                os.rename(a[0].value, a[1].value)
+                old = _validate_write_path(a[0].value)
+                new = _validate_write_path(a[1].value)
+                os.rename(old, new)
                 return BooleanObj(True)
             except Exception as e:
                 return EvaluationError(f"fs_rename() error: {str(e)}")
@@ -1172,8 +1192,8 @@ class FunctionEvaluatorMixin:
             import shutil
             import os
             try:
-                src = a[0].value
-                dst = a[1].value
+                src = _validate_write_path(a[0].value)
+                dst = _validate_write_path(a[1].value)
                 if os.path.isfile(src):
                     shutil.copy2(src, dst)
                 elif os.path.isdir(src):

@@ -20,7 +20,12 @@ class ModuleManager:
         return str(Path(path).resolve()).replace("\\", "/").strip()
 
     def resolve_module_path(self, path, current_dir=""):
-        """Resolve a module path to an absolute path"""
+        """Resolve a module path to an absolute path.
+
+        Security: the resolved path must remain within the project base
+        directory or one of the configured search paths.  Absolute paths
+        and traversal sequences that escape these boundaries are rejected.
+        """
         # Support existing behavior
         if isinstance(current_dir, str) and current_dir:
             base = Path(current_dir)
@@ -32,31 +37,51 @@ class ModuleManager:
                 # Relative path
                 resolved = (base / path[2:]).resolve()
             elif path.startswith("/"):
-                # Absolute path
-                resolved = Path(path).resolve()
+                # Absolute paths are disallowed — they bypass project boundaries.
+                return None
             else:
                 # Try zpm_modules first (existing behavior)
                 zpm_path = (self.base_path / "zpm_modules" / path).resolve()
                 if zpm_path.exists():
-                    return self.normalize_path(zpm_path)
+                    if self._is_within_allowed(zpm_path):
+                        return self.normalize_path(zpm_path)
+                    return None
 
                 # Search in other paths
                 for search_path in self.search_paths:
                     test_path = (search_path / path).resolve()
-                    if test_path.exists():
+                    if test_path.exists() and self._is_within_allowed(test_path):
                         return self.normalize_path(test_path)
                     
                     # Try with .zx extension
                     test_path_zx = (search_path / f"{path}.zx").resolve()
-                    if test_path_zx.exists():
+                    if test_path_zx.exists() and self._is_within_allowed(test_path_zx):
                         return self.normalize_path(test_path_zx)
 
                 # Default to zpm_modules (maintain compatibility)
                 resolved = zpm_path
 
+            # Verify the resolved path is within allowed boundaries
+            if not self._is_within_allowed(resolved):
+                return None
+
             return self.normalize_path(resolved)
         except (TypeError, ValueError):
             return None
+
+    def _is_within_allowed(self, resolved_path):
+        """Return True if *resolved_path* is inside the base or a search path."""
+        resolved = Path(resolved_path).resolve()
+        allowed_roots = [self.base_path.resolve()] + [
+            sp.resolve() for sp in self.search_paths
+        ]
+        for root in allowed_roots:
+            try:
+                resolved.relative_to(root)
+                return True
+            except ValueError:
+                continue
+        return False
 
     def get_module(self, path):
         """Get a cached module or None"""

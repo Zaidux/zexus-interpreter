@@ -11,8 +11,20 @@ console.log('\n🚀 Installing Zexus Programming Language...\n');
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Validate that a command name contains only safe characters (alphanumeric,
+ * hyphens, underscores, and forward slashes for paths like python3).
+ */
+function sanitizeCmd(cmd) {
+  if (!/^[a-zA-Z0-9_\-/.@]+$/.test(cmd)) {
+    throw new Error(`Unsafe command name: ${cmd}`);
+  }
+  return cmd;
+}
+
 function hasCommand(cmd) {
   try {
+    sanitizeCmd(cmd);
     execSync(`${cmd} --version`, { stdio: 'ignore' });
     return true;
   } catch {

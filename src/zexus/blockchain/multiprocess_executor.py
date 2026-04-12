@@ -92,13 +92,25 @@ class MPBatchResult:
 # Module-level VM holder for the child process.
 _worker_vm: Any = None
 
+# Module-level VM factory registry — avoids pickling callable objects
+# which would allow arbitrary code execution via crafted pickle payloads.
+_vm_factory_registry: Dict[str, Callable] = {}
 
-def _init_worker(vm_factory_pickle: bytes) -> None:
-    """Process initialiser — creates a VM instance per worker."""
-    import pickle
+
+def _init_worker(factory_key: str) -> None:
+    """Process initialiser — creates a VM instance per worker.
+
+    Uses a module-level registry keyed by a string identifier instead
+    of deserialising a pickled callable, preventing pickle-based RCE.
+    """
     global _worker_vm
-    vm_factory = pickle.loads(vm_factory_pickle)
-    _worker_vm = vm_factory()
+    factory = _vm_factory_registry.get(factory_key)
+    if factory is None:
+        raise RuntimeError(
+            f"VM factory '{factory_key}' not found in registry. "
+            "Register it before creating the process pool."
+        )
+    _worker_vm = factory()
 
 
 def _execute_group(
@@ -267,13 +279,15 @@ class MultiProcessBatchExecutor:
         """Lazily create the process pool."""
         if self._pool_mp is not None:
             return
-        import pickle
         factory = self._vm_factory if self._vm_factory else _default_vm_factory
-        factory_bytes = pickle.dumps(factory)
+        # Register the factory under a deterministic key so child
+        # processes can look it up without pickle deserialisation.
+        factory_key = f"mp_executor_{id(factory)}"
+        _vm_factory_registry[factory_key] = factory
         self._pool_mp = multiprocessing.Pool(
             processes=self._workers,
             initializer=_init_worker,
-            initargs=(factory_bytes,),
+            initargs=(factory_key,),
         )
 
     def execute_batch(

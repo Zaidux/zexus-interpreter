@@ -440,11 +440,26 @@ class NumericFastPath:
             if expr is None:
                 return None
 
+            # SECURITY: validate the expression with ast.parse before compiling
+            # to ensure it contains only safe operations (no calls, imports, etc.)
+            import ast as _ast
+            try:
+                tree = _ast.parse(expr, mode="eval")
+            except SyntaxError:
+                return None
+            for node in _ast.walk(tree):
+                # Reject any node that could execute arbitrary code
+                if isinstance(node, (_ast.Call, _ast.Attribute, _ast.Import,
+                                     _ast.ImportFrom, _ast.Lambda,
+                                     _ast.ListComp, _ast.SetComp,
+                                     _ast.DictComp, _ast.GeneratorExp)):
+                    return None
+
             # Compile
-            code = compile(expr, f"<numeric:{cache_key[:8]}>", "eval")
+            code = compile(tree, f"<numeric:{cache_key[:8]}>", "eval")
 
             def execute(variables: dict) -> Any:
-                return eval(code, {"__builtins__": {}}, variables)
+                return eval(code, {"__builtins__": {}}, variables)  # noqa: S307
 
             self._cache[cache_key] = execute
             self._compilations += 1

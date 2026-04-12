@@ -1,10 +1,34 @@
 """OS module for Zexus standard library."""
 
 import os
+import re
+import shlex
 import sys
 import platform
 import subprocess
 from typing import Dict, List, Any
+
+
+# Environment variable names that must never be exposed or modified by
+# Zexus programs.  Patterns are matched case-insensitively.
+_SENSITIVE_ENV_PATTERNS = re.compile(
+    r"(?i)(SECRET|TOKEN|KEY|PASSWORD|PASSWD|CREDENTIAL|AUTH|PRIVATE|"
+    r"API_KEY|AWS_|AZURE_|GCP_|DATABASE_URL|DB_PASS|GITHUB_TOKEN|"
+    r"NPM_TOKEN|DOCKER_|SSH_|GPG_)"
+)
+
+# Environment variable names that must not be modified by Zexus programs.
+_PROTECTED_ENV_NAMES = frozenset({
+    "PATH", "HOME", "USER", "SHELL", "LANG", "TERM",
+    "LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONPATH",
+})
+
+# Commands allowed for execute() – only simple, well-known utilities.
+_ALLOWED_COMMANDS: frozenset = frozenset({
+    "echo", "cat", "ls", "dir", "pwd", "whoami", "date", "uname",
+    "head", "tail", "wc", "sort", "uniq", "grep", "find", "which",
+    "python", "python3", "node", "npm", "pip", "pip3", "git",
+})
 
 
 class OSModule:
@@ -57,24 +81,37 @@ class OSModule:
 
     @staticmethod
     def getenv(name: str, default: str = "") -> str:
-        """Get environment variable."""
+        """Get environment variable (sensitive names are blocked)."""
+        if _SENSITIVE_ENV_PATTERNS.search(name):
+            return default
         return os.getenv(name, default)
 
     @staticmethod
     def setenv(name: str, value: str) -> None:
-        """Set environment variable."""
+        """Set environment variable (protected/sensitive names are blocked)."""
+        if name in _PROTECTED_ENV_NAMES or _SENSITIVE_ENV_PATTERNS.search(name):
+            raise PermissionError(
+                f"Modifying environment variable '{name}' is not allowed"
+            )
         os.environ[name] = value
 
     @staticmethod
     def unsetenv(name: str) -> None:
-        """Unset environment variable."""
+        """Unset environment variable (protected/sensitive names are blocked)."""
+        if name in _PROTECTED_ENV_NAMES or _SENSITIVE_ENV_PATTERNS.search(name):
+            raise PermissionError(
+                f"Removing environment variable '{name}' is not allowed"
+            )
         if name in os.environ:
             del os.environ[name]
 
     @staticmethod
     def listenv() -> Dict[str, str]:
-        """List all environment variables."""
-        return dict(os.environ)
+        """List environment variables, filtering out sensitive entries."""
+        return {
+            k: v for k, v in os.environ.items()
+            if not _SENSITIVE_ENV_PATTERNS.search(k)
+        }
 
     @staticmethod
     def get_home_dir() -> str:
@@ -113,15 +150,39 @@ class OSModule:
         return os.cpu_count() or 1
 
     @staticmethod
-    def execute(command: str, shell: bool = True, capture_output: bool = True) -> Dict[str, Any]:
-        """Execute shell command."""
+    def execute(command: str, shell: bool = False, capture_output: bool = True) -> Dict[str, Any]:
+        """Execute a command.
+
+        For safety, shell=True is no longer supported.  The *command*
+        string is tokenised with ``shlex.split`` and the first token is
+        validated against an allowlist of common utilities.
+        """
         try:
+            # Always split into an argument list to avoid shell injection.
+            args = shlex.split(command)
+            if not args:
+                return {
+                    'returncode': -1,
+                    'stdout': '',
+                    'stderr': 'Empty command',
+                    'success': False,
+                }
+
+            executable = os.path.basename(args[0])
+            if executable not in _ALLOWED_COMMANDS:
+                return {
+                    'returncode': -1,
+                    'stdout': '',
+                    'stderr': f"Command '{executable}' is not in the allow-list",
+                    'success': False,
+                }
+
             result = subprocess.run(
-                command,
-                shell=shell,
+                args,
+                shell=False,
                 capture_output=capture_output,
                 text=True,
-                timeout=30
+                timeout=30,
             )
             return {
                 'returncode': result.returncode,
