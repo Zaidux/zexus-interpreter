@@ -460,6 +460,15 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
         
         # Validate syntax
         console.print("[dim]Validating syntax...[/dim]", end="")
+        
+        # Check brace balance first (catches common structural errors early)
+        brace_error = error_reporter.check_brace_balance(source_code, file)
+        if brace_error:
+            console.print("")
+            console.print(f"[bold red]❌ Structural error detected:[/bold red]")
+            console.print(brace_error.format_error())
+            sys.exit(1)
+        
         validation_result = validator.validate_code(source_code, syntax_style)
         console.print(" [green]done[/green]")
         if not validation_result['is_valid']:

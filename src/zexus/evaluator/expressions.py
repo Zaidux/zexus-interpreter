@@ -151,26 +151,25 @@ class ExpressionEvaluatorMixin:
         if hasattr(env, 'store'):
             env_keys = list(env.store.keys())
             
-            # Find similar variable names (simple approach)
-            def similarity(a, b):
-                a, b = a.lower(), b.lower()
-                if a == b:
-                    return 1.0
-                if a in b or b in a:
-                    return 0.8
-                if len(a) > 2 and len(b) > 2:
-                    if a[:3] == b[:3] or a[-3:] == b[-3:]:
-                        return 0.6
-                return 0.0
+            # Use Levenshtein distance for accurate "did you mean?" suggestions
+            from ..error_reporter import find_closest_match
+            closest = find_closest_match(node.value, env_keys)
             
-            similar = [(key, similarity(node.value, key)) for key in env_keys]
-            similar = [(k, s) for k, s in similar if s > 0.5]
-            similar.sort(key=lambda x: x[1], reverse=True)
+            # Also check builtins for suggestions
+            builtin_names = list(self.builtins.keys()) if hasattr(self, 'builtins') else []
+            closest_builtin = find_closest_match(node.value, builtin_names)
             
-            if similar:
-                suggestion = f"Did you mean '{similar[0][0]}'?"
+            if closest:
+                suggestion = f"Did you mean '{closest}'?"
+            elif closest_builtin:
+                suggestion = f"Did you mean the built-in function '{closest_builtin}'?"
             elif env_keys:
-                suggestion = f"Declare the variable first with 'let' or 'const'. Available: {', '.join(env_keys[:5])}"
+                # Filter out internal variables (starting with __)
+                visible_keys = [k for k in env_keys if not k.startswith('__')]
+                if visible_keys:
+                    suggestion = f"Declare the variable first with 'let' or 'const'. Available: {', '.join(visible_keys[:5])}"
+                else:
+                    suggestion = "Declare the variable first with 'let' or 'const'."
             else:
                 suggestion = "No variables declared yet. Use 'let variableName = value' to create one."
         
