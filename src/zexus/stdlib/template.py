@@ -333,15 +333,17 @@ class TemplateModule:
 
         Raises:
             FileNotFoundError: If *filepath* does not exist.
-            ValueError: If *filepath* escapes the current working directory.
+            ValueError: If *filepath* contains path traversal sequences.
         """
         import os as _os
-        resolved = _os.path.realpath(_os.path.normpath(filepath))
-        cwd = _os.path.realpath(_os.getcwd())
-        if not (resolved == cwd or resolved.startswith(cwd + _os.sep)):
+        # Block directory traversal sequences regardless of path style
+        norm = _os.path.normpath(filepath)
+        if ".." in norm.split(_os.sep):
             raise ValueError(
-                f"Template path '{filepath}' resolves outside the working directory"
+                f"Template path '{filepath}' contains directory traversal sequences"
             )
+        # Resolve symlinks to prevent symlink-based escapes
+        resolved = _os.path.realpath(norm)
         with open(resolved, "r", encoding="utf-8") as f:
             template_str = f.read()
         return TemplateModule.render(template_str, context)

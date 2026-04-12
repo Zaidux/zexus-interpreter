@@ -314,6 +314,8 @@ scripts/run_zexus_tests.py
 scripts/setup_stdlib.sh
 scripts/zpm.py
 scripts/zx-luncher.py
+security_audit/SECURITY_AUDIT_SUMMARY.md
+security_audit/archive/test_payloads.tar.gz
 security_audit/test_payloads/test_01_command_injection.py
 security_audit/test_payloads/test_02_pickle_deserialization.py
 security_audit/test_payloads/test_03_eval_injection_jit.py
