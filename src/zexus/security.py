@@ -1539,6 +1539,11 @@ class SmartContract:
             from zexus.object import EvaluationError
             return EvaluationError(f"Action '{action_name}' not found in contract {self.name}")
 
+        # Track call nesting depth to handle storage sync correctly
+        if not hasattr(self, '_call_depth'):
+            self._call_depth = 0
+        self._call_depth += 1
+
         trace_calls = os.environ.get("ZEXUS_VM_TRACE_CALLS")
         if trace_calls:
             try:
@@ -1770,15 +1775,20 @@ class SmartContract:
                     if current_value is not None:
                         self.storage.set(var_name, current_value)
             
-            # Clear the tracking set for next action call
-            self._direct_storage_updates.clear()
+            # Only clear tracking at outermost call level to prevent
+            # nested action calls from losing direct storage update info
+            self._call_depth -= 1
+            if self._call_depth == 0:
+                self._direct_storage_updates.clear()
             
             # Commit batched writes when thresholds are met
             self.storage.commit_batch()
             
         except Exception as e:
             # Clear tracking and rollback
-            self._direct_storage_updates.clear()
+            self._call_depth -= 1
+            if self._call_depth == 0:
+                self._direct_storage_updates.clear()
             self.storage.commit_batch(force=True)
             raise e
         finally:

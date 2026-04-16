@@ -353,6 +353,26 @@ class ExpressionEvaluatorMixin:
         if is_error(right): 
             return right
 
+        # Normalize raw Python primitives to Zexus objects.
+        # This ensures consistent type handling when contract actions
+        # return raw Python values or storage contains unwrapped types.
+        if type(left) is int:
+            left = Integer(left)
+        elif type(left) is float:
+            left = Float(left)
+        elif type(left) is str:
+            left = String(left)
+        elif type(left) is bool:
+            left = TRUE if left else FALSE
+        if type(right) is int:
+            right = Integer(right)
+        elif type(right) is float:
+            right = Float(right)
+        elif type(right) is str:
+            right = String(right)
+        elif type(right) is bool:
+            right = TRUE if right else FALSE
+
         # (removed debug instrumentation)
         
         operator = node.operator
@@ -376,13 +396,14 @@ class ExpressionEvaluatorMixin:
         
         # Equality operators
         elif operator == "==":
-            if hasattr(left, 'value') and hasattr(right, 'value'):
-                return TRUE if left.value == right.value else FALSE
-            return TRUE if left == right else FALSE
+            # Unwrap .value from Zexus objects for comparison
+            lv = left.value if hasattr(left, 'value') else left
+            rv = right.value if hasattr(right, 'value') else right
+            return TRUE if lv == rv else FALSE
         elif operator == "!=":
-            if hasattr(left, 'value') and hasattr(right, 'value'):
-                return TRUE if left.value != right.value else FALSE
-            return TRUE if left != right else FALSE
+            lv = left.value if hasattr(left, 'value') else left
+            rv = right.value if hasattr(right, 'value') else right
+            return TRUE if lv != rv else FALSE
         
         # Type-specific dispatch
         if isinstance(left, Integer) and isinstance(right, Integer):

@@ -101,9 +101,11 @@ class String(Object):
     def type(self): return "STRING"
     def __str__(self): return self.value
     def __eq__(self, other):
-        """Enable String objects to be used as dict keys"""
+        """Enable String objects to be used as dict keys and compared with raw str"""
         if isinstance(other, String):
             return self.value == other.value
+        if isinstance(other, str):
+            return self.value == other
         return False
     def __hash__(self):
         """Enable String objects to be used as dict keys"""

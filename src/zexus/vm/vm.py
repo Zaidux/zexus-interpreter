@@ -2494,29 +2494,47 @@ class VM:
             elif op_name == "EQ":
                 b = stack_pop() if stack else None
                 a = stack_pop() if stack else None
+                # Unwrap Zexus object types for proper comparison
+                if isinstance(a, ZNull): a = None
+                elif hasattr(a, 'value') and not callable(a.value): a = a.value
+                if isinstance(b, ZNull): b = None
+                elif hasattr(b, 'value') and not callable(b.value): b = b.value
                 stack_append(a == b)
             elif op_name == "NEQ":
                 b = stack_pop() if stack else None
                 a = stack_pop() if stack else None
+                # Unwrap Zexus object types for proper comparison
+                if isinstance(a, ZNull): a = None
+                elif hasattr(a, 'value') and not callable(a.value): a = a.value
+                if isinstance(b, ZNull): b = None
+                elif hasattr(b, 'value') and not callable(b.value): b = b.value
                 stack_append(a != b)
             elif op_name == "LT":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
+                if hasattr(a, 'value') and not callable(a.value): a = a.value
+                if hasattr(b, 'value') and not callable(b.value): b = b.value
                 if a is None or b is None: stack_append(False)
                 else: stack_append(a < b)
             elif op_name == "GT":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
+                if hasattr(a, 'value') and not callable(a.value): a = a.value
+                if hasattr(b, 'value') and not callable(b.value): b = b.value
                 if a is None or b is None: stack_append(False)
                 else: stack_append(a > b)
             elif op_name == "LTE":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
+                if hasattr(a, 'value') and not callable(a.value): a = a.value
+                if hasattr(b, 'value') and not callable(b.value): b = b.value
                 if a is None or b is None: stack_append(False)
                 else: stack_append(a <= b)
             elif op_name == "GTE":
                 b = stack_pop() if stack else 0
                 a = stack_pop() if stack else 0
+                if hasattr(a, 'value') and not callable(a.value): a = a.value
+                if hasattr(b, 'value') and not callable(b.value): b = b.value
                 if a is None or b is None: stack_append(False)
                 else: stack_append(a >= b)
             elif op_name == "NOT":
@@ -3199,6 +3217,15 @@ class VM:
             raw_name = stack_pop()
             var_name = raw_name.value if hasattr(raw_name, 'value') else str(raw_name)
             storage[var_name] = self._wrap_for_builtin(raw_val)
+        # DEBUG: remove after testing
+        if os.environ.get("ZEXUS_DEBUG_CONTRACT"):
+            print(f"[DEBUG] Contract '{contract_name}' storage_count={storage_count} storage keys={list(storage.keys())}")
+            ast_node_dbg = const(ast_idx) if ast_idx is not None else None
+            sv_nodes = getattr(ast_node_dbg, 'storage_vars', [])
+            for sv in sv_nodes:
+                nm = sv.name.value if hasattr(sv, 'name') and hasattr(sv.name, 'value') else str(getattr(sv, 'name', '?'))
+                iv = getattr(sv, 'initial_value', None)
+                print(f"[DEBUG]   sv: name={nm}, initial_value={iv}, type={type(sv).__name__}")
 
         # Retrieve the AST node from the constants pool
         ast_node = const(ast_idx) if ast_idx is not None else None
@@ -5028,21 +5055,39 @@ class VM:
                     stack.append(-a)
                 elif op_name == "EQ":
                     b = stack.pop() if stack else None; a = stack.pop() if stack else None
+                    # Unwrap Zexus object types for proper comparison
+                    if isinstance(a, ZNull): a = None
+                    elif hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if isinstance(b, ZNull): b = None
+                    elif hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a == b)
                 elif op_name == "NEQ":
                     b = stack.pop() if stack else None; a = stack.pop() if stack else None
+                    # Unwrap Zexus object types for proper comparison
+                    if isinstance(a, ZNull): a = None
+                    elif hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if isinstance(b, ZNull): b = None
+                    elif hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a != b)
                 elif op_name == "LT":
                     b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a < b)
                 elif op_name == "GT":
                     b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a > b)
                 elif op_name == "LTE":
                     b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a <= b)
                 elif op_name == "GTE":
                     b = stack.pop() if stack else 0; a = stack.pop() if stack else 0
+                    if hasattr(a, 'value') and not callable(a.value): a = a.value
+                    if hasattr(b, 'value') and not callable(b.value): b = b.value
                     stack.append(a >= b)
                 elif op_name == "NOT":
                     a = stack.pop() if stack else False
