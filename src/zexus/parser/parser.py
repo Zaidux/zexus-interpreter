@@ -737,6 +737,18 @@ class UltimateParser:
             node = None
             tok_type = self.cur_token.type
             handler = self._statement_dispatch.get(tok_type)
+            # When a non-strict keyword (e.g. 'audit', 'log', 'event') is
+            # followed by '.', '(' or '[', the user is referencing a variable
+            # whose name happens to collide with a keyword – parse it as an
+            # expression statement instead of dispatching to the keyword
+            # handler.
+            if handler is not None and self.peek_token.type in (DOT, LPAREN, LBRACKET):
+                # Only override for non-strict keywords.  Strict keywords
+                # (if, while, return, …) should always be parsed as statements.
+                from ..lexer import _STRICT_KEYWORDS, _LITERAL_KEYWORDS
+                if (self.cur_token.literal not in _STRICT_KEYWORDS and
+                        self.cur_token.literal not in _LITERAL_KEYWORDS):
+                    handler = None
             if handler is not None:
                 node = handler()
             else:
@@ -3014,6 +3026,22 @@ class UltimateParser:
         stmt.body = body
         return stmt
 
+    def _is_valid_param_token(self):
+        """Check if current token can serve as a parameter name.
+        
+        Accepts IDENT tokens and keyword tokens that have valid literal
+        values (e.g. 'event', 'emit', 'channel', etc.) so that keywords
+        can be used as parameter names in action/function definitions.
+        """
+        if self.cur_token_is(IDENT):
+            return True
+        # Accept any keyword token that has a non-empty literal –
+        # the literal carries the original text (e.g. "event") which
+        # is perfectly valid as a parameter name.
+        if self.cur_token.literal and self.cur_token.literal.isidentifier():
+            return True
+        return False
+
     def parse_action_parameters(self):
         params = []
 
@@ -3029,7 +3057,8 @@ class UltimateParser:
             return params
 
         # Now expect an identifier for the first parameter
-        if not self.cur_token_is(IDENT):
+        # Also accept keyword tokens used as parameter names (e.g. 'event')
+        if not self._is_valid_param_token():
             self.errors.append("Expected parameter name")
             return None
 
@@ -3047,7 +3076,7 @@ class UltimateParser:
         while self.peek_token_is(COMMA):
             self.next_token()
             self.next_token()
-            if not self.cur_token_is(IDENT):
+            if not self._is_valid_param_token():
                 self.errors.append("Expected parameter name after comma")
                 return None
             param_name = self.cur_token.literal
@@ -3432,8 +3461,14 @@ class UltimateParser:
             # Convert DEBUG token to identifier in function call context
             left_exp = Identifier(value="debug")
         elif self.cur_token.type not in self.prefix_parse_fns:
-            self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Unexpected token '{self.cur_token.literal}'")
-            return None
+            # If the token has a valid identifier literal (e.g. a non-strict
+            # keyword like 'audit', 'log', 'event', 'channel' used as a
+            # variable name), treat it as an identifier rather than erroring.
+            if self.cur_token.literal and self.cur_token.literal.isidentifier():
+                left_exp = Identifier(value=self.cur_token.literal)
+            else:
+                self.errors.append(f"Line {self.cur_token.line}:{self.cur_token.column} - Unexpected token '{self.cur_token.literal}'")
+                return None
         else:
             prefix = self.prefix_parse_fns[self.cur_token.type]
             left_exp = prefix()

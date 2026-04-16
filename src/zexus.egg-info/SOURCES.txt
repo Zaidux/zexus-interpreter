@@ -268,7 +268,10 @@ examples/backend_project/users/user_model.zx
 examples/backend_project/users/user_service.zx
 examples/backend_project/utils/crypto.zx
 examples/backend_project/utils/validation.zx
+examples/payment_system/backend_server.zx
+examples/payment_system/hack_test.zx
 examples/payment_system/payment_contract.zx
+examples/payment_system/wallet_stress_test.zx
 issues/ISSUE2.md
 issues/ISSUE3.md
 issues/ISSUE4.md
