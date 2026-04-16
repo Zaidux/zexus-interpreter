@@ -1,0 +1,236 @@
+// ============================================================================
+// BACKEND SERVER SIMULATION - API & Transaction Processing
+// ============================================================================
+// Simulates a backend service layer that:
+//   - Manages user accounts with roles
+//   - Processes transaction requests
+//   - Validates authentication
+//   - Logs all operations for auditing
+// ============================================================================
+
+print("=" * 70)
+print("BACKEND SERVER - Starting Up")
+print("=" * 70)
+
+// ============================================================================
+// Account Registry - Tracks users & their roles
+// ============================================================================
+contract AccountRegistry {
+    state admin_addr = ""
+    state user1_addr = ""
+    state user2_addr = ""
+    state user1_role = "none"
+    state user2_role = "none"
+    state total_accounts = 0
+
+    action init(admin) {
+        this.admin_addr = admin
+        this.total_accounts = 1
+        print("  [Registry] Initialized with admin: " + admin)
+    }
+
+    action registerUser(user_addr, role, caller) {
+        if caller != this.admin_addr {
+            print("  [Registry] ERROR: Only admin can register users")
+            return false
+        }
+        
+        if this.user1_addr == "" {
+            this.user1_addr = user_addr
+            this.user1_role = role
+            this.total_accounts = this.total_accounts + 1
+            print("  [Registry] Registered user1: " + user_addr + " as " + role)
+            return true
+        }
+        if this.user2_addr == "" {
+            this.user2_addr = user_addr
+            this.user2_role = role
+            this.total_accounts = this.total_accounts + 1
+            print("  [Registry] Registered user2: " + user_addr + " as " + role)
+            return true
+        }
+        print("  [Registry] ERROR: Max users reached")
+        return false
+    }
+
+    action getRole(addr) {
+        if addr == this.admin_addr { return "admin" }
+        if addr == this.user1_addr { return this.user1_role }
+        if addr == this.user2_addr { return this.user2_role }
+        return "none"
+    }
+
+    action isRegistered(addr) {
+        if addr == this.admin_addr { return true }
+        if addr == this.user1_addr { return true }
+        if addr == this.user2_addr { return true }
+        return false
+    }
+
+    action getAccountCount() {
+        return this.total_accounts
+    }
+}
+
+// ============================================================================
+// Transaction Processor - Handles all payment operations
+// ============================================================================
+contract TransactionProcessor {
+    state tx_count = 0
+    state last_tx_amount = 0
+    state total_volume = 0
+    state is_active = true
+
+    action init() {
+        this.tx_count = 0
+        this.total_volume = 0
+        this.is_active = true
+        print("  [TxProcessor] Initialized")
+    }
+
+    action processTransaction(from_addr, to_addr, amount) {
+        if this.is_active == false {
+            print("  [TxProcessor] ERROR: Processor is offline")
+            return false
+        }
+        if amount <= 0 {
+            print("  [TxProcessor] ERROR: Invalid amount: " + string(amount))
+            return false
+        }
+
+        this.tx_count = this.tx_count + 1
+        this.total_volume = this.total_volume + amount
+        this.last_tx_amount = amount
+
+        print("  [TxProcessor] TX#" + string(this.tx_count) + ": " + from_addr + " -> " + to_addr + " = " + string(amount))
+        return true
+    }
+
+    action getTxCount() { return this.tx_count }
+    action getTotalVolume() { return this.total_volume }
+    action isActive() { return this.is_active }
+
+    action shutdown(admin_caller) {
+        this.is_active = false
+        print("  [TxProcessor] Shutdown initiated")
+        return true
+    }
+
+    action restart(admin_caller) {
+        this.is_active = true
+        print("  [TxProcessor] Restarted")
+        return true
+    }
+}
+
+// ============================================================================
+// Audit Logger - Records all operations
+// ============================================================================
+contract AuditLog {
+    state log_count = 0
+    state last_event_type = "system_start"
+
+    action init() {
+        this.log_count = 0
+        this.last_event_type = "system_start"
+        print("  [AuditLog] Initialized")
+    }
+
+    action logTransfer(amount) {
+        this.log_count = this.log_count + 1
+        this.last_event_type = "transfer"
+        print("  [AuditLog] #" + string(this.log_count) + " transfer amount=" + string(amount))
+        return true
+    }
+
+    action logRegistration() {
+        this.log_count = this.log_count + 1
+        this.last_event_type = "registration"
+        print("  [AuditLog] #" + string(this.log_count) + " user_registered")
+        return true
+    }
+
+    action logSecurity(code) {
+        this.log_count = this.log_count + 1
+        this.last_event_type = "security"
+        print("  [AuditLog] #" + string(this.log_count) + " security_event code=" + string(code))
+        return true
+    }
+
+    action getLogCount() { return this.log_count }
+    action getLastEventType() { return this.last_event_type }
+}
+
+// ============================================================================
+// Deploy backend services
+// ============================================================================
+print("")
+print("Deploying backend services...")
+print("-" * 40)
+
+let registry = AccountRegistry("admin_0x001")
+let processor = TransactionProcessor()
+let audit = AuditLog()
+
+print("")
+print("All backend services deployed!")
+print("=" * 70)
+
+// ============================================================================
+// Backend Operations
+// ============================================================================
+print("")
+print("BACKEND OPERATIONS")
+print("-" * 40)
+
+// Register users
+registry.registerUser("wallet_A", "trader", "admin_0x001")
+registry.registerUser("wallet_B", "trader", "admin_0x001")
+audit.logRegistration()
+audit.logRegistration()
+
+// Verify registrations
+print("")
+print("  Registered accounts: " + string(registry.getAccountCount()))
+print("  wallet_A role: " + registry.getRole("wallet_A"))
+print("  wallet_B role: " + registry.getRole("wallet_B"))
+
+// Process test transactions
+print("")
+print("Processing transactions...")
+print("-" * 40)
+
+processor.processTransaction("wallet_A", "wallet_B", 100)
+audit.logTransfer(100)
+
+processor.processTransaction("wallet_B", "wallet_A", 50)
+audit.logTransfer(50)
+
+processor.processTransaction("wallet_A", "wallet_B", 200)
+audit.logTransfer(200)
+
+// Test unauthorized registration
+print("")
+print("Security checks...")
+print("-" * 40)
+let unauth = registry.registerUser("hacker", "admin", "wallet_A")
+print("  Unauthorized registration: " + string(unauth))
+
+// Test processor shutdown/restart
+processor.shutdown("admin_0x001")
+let offline_tx = processor.processTransaction("wallet_A", "wallet_B", 50)
+print("  Transaction while offline: " + string(offline_tx))
+processor.restart("admin_0x001")
+
+// Final stats
+print("")
+print("BACKEND STATUS")
+print("=" * 70)
+print("  Total transactions: " + string(processor.getTxCount()))
+print("  Total volume: " + string(processor.getTotalVolume()))
+print("  Processor active: " + string(processor.isActive()))
+print("  Audit log entries: " + string(audit.getLogCount()))
+print("  Last event type: " + audit.getLastEventType())
+print("")
+print("Backend server simulation complete!")
+print("=" * 70)

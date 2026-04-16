@@ -1,0 +1,333 @@
+// ============================================================================
+// HACK TEST - Security Penetration Testing
+// ============================================================================
+// Uses Zexus to attempt various attack vectors against the payment system:
+//   - Integer overflow/underflow
+//   - Unauthorized access escalation
+//   - Reentrancy-style double spending
+//   - State manipulation attempts
+//   - Rate limit bypass
+//   - Boundary value attacks
+// ============================================================================
+
+print("=" * 70)
+print("SECURITY PENETRATION TEST")
+print("=" * 70)
+
+// ============================================================================
+// Target Contract - Payment system under attack
+// ============================================================================
+contract PaymentSystem {
+    state owner = ""
+    state wallet_a = 0
+    state wallet_b = 0
+    state wallet_c = 0
+    state tx_count = 0
+    state is_paused = false
+    state rate_limit_count = 0
+    state rate_limit_max = 10
+
+    action init(admin) {
+        this.owner = admin
+        this.wallet_a = 1000
+        this.wallet_b = 500
+        this.wallet_c = 0
+        this.tx_count = 0
+        this.is_paused = false
+        this.rate_limit_count = 0
+        this.rate_limit_max = 10
+        print("  [System] Deployed. Owner: " + admin)
+    }
+
+    action transfer(from_addr, to_addr, amount, caller) {
+        // Rate limiting check
+        this.rate_limit_count = this.rate_limit_count + 1
+        if this.rate_limit_count > this.rate_limit_max {
+            print("  [System] RATE LIMITED: Too many transactions")
+            return false
+        }
+
+        if this.is_paused == true {
+            print("  [System] Contract is paused")
+            return false
+        }
+        if amount <= 0 {
+            print("  [System] Invalid amount: " + string(amount))
+            return false
+        }
+        if from_addr == to_addr {
+            print("  [System] Cannot transfer to self")
+            return false
+        }
+
+        // Auth: caller must match from_addr or be admin
+        if caller != from_addr {
+            if caller != this.owner {
+                print("  [System] UNAUTHORIZED: " + caller + " cannot spend from " + from_addr)
+                return false
+            }
+        }
+
+        // Get balances
+        let from_bal = 0
+        if from_addr == "A" { from_bal = this.wallet_a }
+        if from_addr == "B" { from_bal = this.wallet_b }
+        if from_addr == "C" { from_bal = this.wallet_c }
+
+        if from_bal < amount {
+            print("  [System] Insufficient: " + string(from_bal) + " < " + string(amount))
+            return false
+        }
+
+        let to_bal = 0
+        if to_addr == "A" { to_bal = this.wallet_a }
+        if to_addr == "B" { to_bal = this.wallet_b }
+        if to_addr == "C" { to_bal = this.wallet_c }
+
+        // Execute
+        if from_addr == "A" { this.wallet_a = from_bal - amount }
+        if from_addr == "B" { this.wallet_b = from_bal - amount }
+        if from_addr == "C" { this.wallet_c = from_bal - amount }
+        if to_addr == "A" { this.wallet_a = to_bal + amount }
+        if to_addr == "B" { this.wallet_b = to_bal + amount }
+        if to_addr == "C" { this.wallet_c = to_bal + amount }
+
+        this.tx_count = this.tx_count + 1
+        print("  [System] TX#" + string(this.tx_count) + ": " + from_addr + " -> " + to_addr + " = " + string(amount))
+        return true
+    }
+
+    action getBalance(addr) {
+        if addr == "A" { return this.wallet_a }
+        if addr == "B" { return this.wallet_b }
+        if addr == "C" { return this.wallet_c }
+        return 0
+    }
+
+    action getOwner() { return this.owner }
+    action getTxCount() { return this.tx_count }
+    action getRateCount() { return this.rate_limit_count }
+    action resetRateLimit(caller) {
+        if caller != this.owner {
+            print("  [System] Only owner can reset rate limit")
+            return false
+        }
+        this.rate_limit_count = 0
+        return true
+    }
+
+    action pause(caller) {
+        if caller != this.owner { return false }
+        this.is_paused = true
+        return true
+    }
+
+    action unpause(caller) {
+        if caller != this.owner { return false }
+        this.is_paused = false
+        return true
+    }
+}
+
+// Deploy system
+print("")
+print("Deploying target system...")
+print("-" * 40)
+
+let system = PaymentSystem("admin")
+
+print("")
+print("Initial state:")
+print("  A=" + string(system.getBalance("A")) + " B=" + string(system.getBalance("B")) + " C=" + string(system.getBalance("C")))
+
+let total_before = system.getBalance("A") + system.getBalance("B") + system.getBalance("C")
+let tests_passed = 0
+let tests_failed = 0
+
+// ============================================================================
+// ATTACK 1: Unauthorized transfer (spending someone else's tokens)
+// ============================================================================
+print("")
+print("ATTACK 1: Unauthorized Transfer")
+print("-" * 40)
+let atk1 = system.transfer("A", "C", 500, "hacker")
+if atk1 == false {
+    print("  [PASS] Unauthorized transfer blocked")
+    tests_passed = tests_passed + 1
+}
+if atk1 == true {
+    print("  [FAIL] Unauthorized transfer succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 2: Overdraft (spending more than balance)
+// ============================================================================
+print("")
+print("ATTACK 2: Overdraft Attack")
+print("-" * 40)
+let atk2 = system.transfer("A", "B", 99999, "A")
+if atk2 == false {
+    print("  [PASS] Overdraft blocked")
+    tests_passed = tests_passed + 1
+}
+if atk2 == true {
+    print("  [FAIL] Overdraft succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 3: Negative amount (underflow attempt)
+// ============================================================================
+print("")
+print("ATTACK 3: Negative Amount (Underflow)")
+print("-" * 40)
+let atk3 = system.transfer("A", "B", -100, "A")
+if atk3 == false {
+    print("  [PASS] Negative amount blocked")
+    tests_passed = tests_passed + 1
+}
+if atk3 == true {
+    print("  [FAIL] Negative amount succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 4: Self-transfer (balance inflation)
+// ============================================================================
+print("")
+print("ATTACK 4: Self-Transfer")
+print("-" * 40)
+let atk4 = system.transfer("A", "A", 100, "A")
+if atk4 == false {
+    print("  [PASS] Self-transfer blocked")
+    tests_passed = tests_passed + 1
+}
+if atk4 == true {
+    print("  [FAIL] Self-transfer succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 5: Zero amount transfer
+// ============================================================================
+print("")
+print("ATTACK 5: Zero Amount Transfer")
+print("-" * 40)
+let atk5 = system.transfer("A", "B", 0, "A")
+if atk5 == false {
+    print("  [PASS] Zero transfer blocked")
+    tests_passed = tests_passed + 1
+}
+if atk5 == true {
+    print("  [FAIL] Zero transfer succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 6: Rate limit bypass (rapid fire transactions)
+// ============================================================================
+print("")
+print("ATTACK 6: Rate Limit Stress")
+print("-" * 40)
+let rate_blocked = false
+let i = 0
+
+// Fire many small transactions
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+system.transfer("A", "B", 1, "A")
+let atk6 = system.transfer("A", "B", 1, "A")
+if atk6 == false {
+    print("  [PASS] Rate limit enforced after " + string(system.getRateCount()) + " attempts")
+    tests_passed = tests_passed + 1
+    rate_blocked = true
+}
+if atk6 == true {
+    print("  [INFO] Rate limit not yet triggered (count=" + string(system.getRateCount()) + ")")
+}
+
+// Reset for more tests
+system.resetRateLimit("admin")
+
+// ============================================================================
+// ATTACK 7: Unauthorized pause (DoS)
+// ============================================================================
+print("")
+print("ATTACK 7: Unauthorized Pause (DoS)")
+print("-" * 40)
+let atk7 = system.pause("hacker")
+if atk7 == false {
+    print("  [PASS] Unauthorized pause blocked")
+    tests_passed = tests_passed + 1
+}
+if atk7 == true {
+    print("  [FAIL] Hacker was able to pause the system!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// ATTACK 8: Non-existent wallet transfer
+// ============================================================================
+print("")
+print("ATTACK 8: Non-existent Wallet")
+print("-" * 40)
+let atk8 = system.transfer("X", "Y", 100, "X")
+// Balance of "X" is 0, so it should fail
+if atk8 == false {
+    print("  [PASS] Non-existent wallet transfer blocked")
+    tests_passed = tests_passed + 1
+}
+if atk8 == true {
+    print("  [FAIL] Transfer from non-existent wallet succeeded!")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// CONSERVATION CHECK: Verify total supply unchanged
+// ============================================================================
+print("")
+print("CONSERVATION CHECK")
+print("-" * 40)
+let total_after = system.getBalance("A") + system.getBalance("B") + system.getBalance("C")
+print("  Total before attacks: " + string(total_before))
+print("  Total after attacks:  " + string(total_after))
+
+if total_after == total_before {
+    print("  [PASS] Token conservation maintained!")
+    tests_passed = tests_passed + 1
+}
+if total_after != total_before {
+    print("  [FAIL] Token conservation BROKEN! Lost " + string(total_before - total_after) + " tokens")
+    tests_failed = tests_failed + 1
+}
+
+// ============================================================================
+// RESULTS
+// ============================================================================
+print("")
+print("PENETRATION TEST RESULTS")
+print("=" * 70)
+print("  Tests passed: " + string(tests_passed))
+print("  Tests failed: " + string(tests_failed))
+print("  Final balances: A=" + string(system.getBalance("A")) + " B=" + string(system.getBalance("B")) + " C=" + string(system.getBalance("C")))
+print("  Total TXs: " + string(system.getTxCount()))
+
+if tests_failed == 0 {
+    print("")
+    print("  ALL SECURITY TESTS PASSED!")
+}
+if tests_failed > 0 {
+    print("")
+    print("  WARNING: " + string(tests_failed) + " SECURITY VULNERABILITIES FOUND!")
+}
+
+print("")
+print("Penetration test complete!")
+print("=" * 70)

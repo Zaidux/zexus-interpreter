@@ -1,0 +1,294 @@
+// ============================================================================
+// WALLET STRESS TEST - Two Wallets, Token Transfer Flow
+// ============================================================================
+// Creates 2 wallet addresses, connects to a payment contract,
+// mints 500 tokens to Wallet A, then transfers them to Wallet B.
+// This is the ultimate stress test for contract state persistence.
+// ============================================================================
+
+print("=" * 70)
+print("WALLET STRESS TEST - Token Transfer Pipeline")
+print("=" * 70)
+
+// ============================================================================
+// Token Contract - Manages token supply and balances
+// ============================================================================
+contract TokenContract {
+    state total_supply = 0
+    state owner = ""
+    state wallet_a_bal = 0
+    state wallet_b_bal = 0
+    state treasury_bal = 0
+    state tx_count = 0
+    state is_paused = false
+
+    action init(admin_addr) {
+        this.owner = admin_addr
+        this.total_supply = 0
+        this.wallet_a_bal = 0
+        this.wallet_b_bal = 0
+        this.treasury_bal = 0
+        this.tx_count = 0
+        this.is_paused = false
+        print("  [Token] Contract deployed by: " + admin_addr)
+    }
+
+    action mint(to_addr, amount, caller) {
+        if caller != this.owner {
+            print("  [Token] ERROR: Only owner can mint. Caller: " + caller)
+            return false
+        }
+        if amount <= 0 {
+            print("  [Token] ERROR: Mint amount must be positive")
+            return false
+        }
+
+        this.total_supply = this.total_supply + amount
+
+        if to_addr == "wallet_A" {
+            this.wallet_a_bal = this.wallet_a_bal + amount
+        }
+        if to_addr == "wallet_B" {
+            this.wallet_b_bal = this.wallet_b_bal + amount
+        }
+        if to_addr == "treasury" {
+            this.treasury_bal = this.treasury_bal + amount
+        }
+
+        this.tx_count = this.tx_count + 1
+        print("  [Token] Minted " + string(amount) + " tokens to " + to_addr)
+        return true
+    }
+
+    action transfer(from_addr, to_addr, amount) {
+        if this.is_paused == true {
+            print("  [Token] ERROR: Contract is paused")
+            return false
+        }
+        if amount <= 0 {
+            print("  [Token] ERROR: Amount must be positive")
+            return false
+        }
+        if from_addr == to_addr {
+            print("  [Token] ERROR: Cannot transfer to self")
+            return false
+        }
+
+        // Get sender balance
+        let from_bal = 0
+        if from_addr == "wallet_A" { from_bal = this.wallet_a_bal }
+        if from_addr == "wallet_B" { from_bal = this.wallet_b_bal }
+        if from_addr == "treasury" { from_bal = this.treasury_bal }
+
+        if from_bal < amount {
+            print("  [Token] ERROR: Insufficient balance: " + string(from_bal) + " < " + string(amount))
+            return false
+        }
+
+        // Get receiver balance
+        let to_bal = 0
+        if to_addr == "wallet_A" { to_bal = this.wallet_a_bal }
+        if to_addr == "wallet_B" { to_bal = this.wallet_b_bal }
+        if to_addr == "treasury" { to_bal = this.treasury_bal }
+
+        // Execute transfer - direct state modification
+        if from_addr == "wallet_A" { this.wallet_a_bal = from_bal - amount }
+        if from_addr == "wallet_B" { this.wallet_b_bal = from_bal - amount }
+        if from_addr == "treasury" { this.treasury_bal = from_bal - amount }
+        if to_addr == "wallet_A" { this.wallet_a_bal = to_bal + amount }
+        if to_addr == "wallet_B" { this.wallet_b_bal = to_bal + amount }
+        if to_addr == "treasury" { this.treasury_bal = to_bal + amount }
+
+        this.tx_count = this.tx_count + 1
+        print("  [Token] Transfer: " + from_addr + " -> " + to_addr + " = " + string(amount) + " tokens")
+        return true
+    }
+
+    action getBalance(account) {
+        if account == "wallet_A" { return this.wallet_a_bal }
+        if account == "wallet_B" { return this.wallet_b_bal }
+        if account == "treasury" { return this.treasury_bal }
+        return 0
+    }
+
+    action getSupply() { return this.total_supply }
+    action getTxCount() { return this.tx_count }
+    action isPaused() { return this.is_paused }
+
+    action pause(caller) {
+        if caller != this.owner {
+            print("  [Token] ERROR: Only owner can pause")
+            return false
+        }
+        this.is_paused = true
+        print("  [Token] Contract PAUSED")
+        return true
+    }
+
+    action unpause(caller) {
+        if caller != this.owner {
+            print("  [Token] ERROR: Only owner can unpause")
+            return false
+        }
+        this.is_paused = false
+        print("  [Token] Contract UNPAUSED")
+        return true
+    }
+}
+
+// ============================================================================
+// Deploy token contract
+// ============================================================================
+print("")
+print("Step 1: Deploy token contract")
+print("-" * 40)
+
+let token = TokenContract("admin")
+
+// ============================================================================
+// Step 2: Create wallet addresses (simulated)
+// ============================================================================
+print("")
+print("Step 2: Create wallet addresses")
+print("-" * 40)
+
+let wallet_a_addr = "wallet_A"
+let wallet_b_addr = "wallet_B"
+print("  Wallet A address: " + wallet_a_addr)
+print("  Wallet B address: " + wallet_b_addr)
+
+// ============================================================================
+// Step 3: Mint 500 tokens to Wallet A
+// ============================================================================
+print("")
+print("Step 3: Mint 500 tokens to Wallet A")
+print("-" * 40)
+
+token.mint(wallet_a_addr, 500, "admin")
+
+print("  Wallet A balance: " + string(token.getBalance(wallet_a_addr)))
+print("  Wallet B balance: " + string(token.getBalance(wallet_b_addr)))
+print("  Total supply: " + string(token.getSupply()))
+
+// ============================================================================
+// Step 4: Transfer all 500 tokens from Wallet A to Wallet B
+// ============================================================================
+print("")
+print("Step 4: Transfer 500 tokens: Wallet A -> Wallet B")
+print("-" * 40)
+
+token.transfer(wallet_a_addr, wallet_b_addr, 500)
+
+print("")
+print("  Wallet A balance after transfer: " + string(token.getBalance(wallet_a_addr)))
+print("  Wallet B balance after transfer: " + string(token.getBalance(wallet_b_addr)))
+
+// ============================================================================
+// Step 5: Validate final state
+// ============================================================================
+print("")
+print("Step 5: Validate final state")
+print("-" * 40)
+
+let a_final = token.getBalance(wallet_a_addr)
+let b_final = token.getBalance(wallet_b_addr)
+let supply = token.getSupply()
+
+print("  Wallet A: " + string(a_final))
+print("  Wallet B: " + string(b_final))
+print("  Total supply: " + string(supply))
+print("  Transaction count: " + string(token.getTxCount()))
+
+// Assertions
+if a_final == 0 {
+    print("  [PASS] Wallet A is empty after sending all tokens")
+}
+if a_final != 0 {
+    print("  [FAIL] Wallet A should be 0 but is " + string(a_final))
+}
+
+if b_final == 500 {
+    print("  [PASS] Wallet B received all 500 tokens")
+}
+if b_final != 500 {
+    print("  [FAIL] Wallet B should be 500 but is " + string(b_final))
+}
+
+if supply == 500 {
+    print("  [PASS] Total supply unchanged at 500")
+}
+if supply != 500 {
+    print("  [FAIL] Total supply should be 500 but is " + string(supply))
+}
+
+// ============================================================================
+// Step 6: Bidirectional transfer stress
+// ============================================================================
+print("")
+print("Step 6: Bidirectional transfer stress test")
+print("-" * 40)
+
+// Send 200 back from B to A
+token.transfer(wallet_b_addr, wallet_a_addr, 200)
+print("  After B->A 200: A=" + string(token.getBalance(wallet_a_addr)) + " B=" + string(token.getBalance(wallet_b_addr)))
+
+// Send 100 from A to B
+token.transfer(wallet_a_addr, wallet_b_addr, 100)
+print("  After A->B 100: A=" + string(token.getBalance(wallet_a_addr)) + " B=" + string(token.getBalance(wallet_b_addr)))
+
+// Send 50 from B to A
+token.transfer(wallet_b_addr, wallet_a_addr, 50)
+print("  After B->A 50:  A=" + string(token.getBalance(wallet_a_addr)) + " B=" + string(token.getBalance(wallet_b_addr)))
+
+// ============================================================================
+// Step 7: Security tests
+// ============================================================================
+print("")
+print("Step 7: Security validation")
+print("-" * 40)
+
+// Overdraft attempt
+let overdraft = token.transfer(wallet_a_addr, wallet_b_addr, 99999)
+print("  Overdraft attempt: " + string(overdraft))
+
+// Self-transfer
+let self_tx = token.transfer(wallet_a_addr, wallet_a_addr, 50)
+print("  Self-transfer attempt: " + string(self_tx))
+
+// Negative amount
+let neg_tx = token.transfer(wallet_a_addr, wallet_b_addr, -100)
+print("  Negative transfer attempt: " + string(neg_tx))
+
+// Unauthorized mint
+let unauth_mint = token.mint(wallet_a_addr, 9999, "hacker")
+print("  Unauthorized mint attempt: " + string(unauth_mint))
+
+// Unauthorized pause
+let unauth_pause = token.pause("hacker")
+print("  Unauthorized pause attempt: " + string(unauth_pause))
+
+// ============================================================================
+// Final Summary
+// ============================================================================
+print("")
+print("STRESS TEST SUMMARY")
+print("=" * 70)
+print("  Final Wallet A: " + string(token.getBalance(wallet_a_addr)))
+print("  Final Wallet B: " + string(token.getBalance(wallet_b_addr)))
+print("  Total supply:   " + string(token.getSupply()))
+print("  Total TXs:      " + string(token.getTxCount()))
+
+let final_a = token.getBalance(wallet_a_addr)
+let final_b = token.getBalance(wallet_b_addr)
+let total = final_a + final_b
+
+if total == 500 {
+    print("  [PASS] Token conservation: A(" + string(final_a) + ") + B(" + string(final_b) + ") = " + string(total))
+}
+if total != 500 {
+    print("  [FAIL] Token conservation broken: A(" + string(final_a) + ") + B(" + string(final_b) + ") = " + string(total))
+}
+
+print("")
+print("Wallet stress test complete!")
+print("=" * 70)

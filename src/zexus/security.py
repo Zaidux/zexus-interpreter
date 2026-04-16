@@ -1733,6 +1733,12 @@ class SmartContract:
             # also refresh action_env so that subsequent in-place mutations on
             # OTHER state vars are not overwritten with stale references.
             # This fixes R-015: push after map[key]=val being silently ignored.
+            #
+            # NESTED CALL FIX: When _call_depth > 1 (nested action call), only
+            # write back variables that were directly modified (in _direct_storage_updates).
+            # Avoid writing back stale action_env values for unmodified vars, which
+            # would overwrite values correctly set by sibling nested calls.
+            is_nested = self._call_depth > 1
             for var_node in self.storage_vars:
                 # Extract variable name from node (same logic as above)
                 var_name = None
@@ -1751,6 +1757,12 @@ class SmartContract:
                         latest = self.storage.get(var_name)
                         if latest is not None:
                             action_env.set(var_name, latest)
+                        continue
+                    
+                    # For nested calls, skip writeback of vars not directly
+                    # modified in this call — they carry stale initial values
+                    # that would overwrite correct state from sibling calls.
+                    if is_nested:
                         continue
                     
                     # For vars NOT directly updated, sync action_env → storage.
