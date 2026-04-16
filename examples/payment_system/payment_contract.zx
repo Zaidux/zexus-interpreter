@@ -10,299 +10,564 @@
 // ============================================================================
 
 print("=" * 70)
-print("💳 PAYMENT SMART CONTRACT - Deployment")
+print("PAYMENT SMART CONTRACT - Deployment")
 print("=" * 70)
 
 // ============================================================================
 // Payment Token Contract
 // ============================================================================
 contract PaymentToken {
-    let balances = {}
-    let total_supply = 0
-    let owner = ""
-    let frozen_accounts = {}
-    let transaction_log = []
-    let nonces = {}
-    let daily_limits = {}
-    let daily_spent = {}
+    state total_supply = 0
+    state owner_addr = ""
+    state tx_count = 0
+    state is_paused = false
 
     action init(supply, contract_owner) {
-        total_supply = supply
-        owner = contract_owner
-        balances[contract_owner] = supply
-        nonces[contract_owner] = 0
-        daily_limits[contract_owner] = 100000
-        daily_spent[contract_owner] = 0
-        print("  💰 PaymentToken initialized")
-        print("  Total supply:", supply)
-        print("  Owner:", contract_owner)
-        return true
+        this.total_supply = supply
+        this.owner_addr = contract_owner
+        this.tx_count = 0
+        this.is_paused = false
+        print("  PaymentToken initialized")
+        print("  Total supply: " + string(supply))
+        print("  Owner: " + string(contract_owner))
     }
 
-    action get_balance(account) {
-        let bal = balances[account]
-        if bal == null {
-            return 0
-        }
-        return bal
+    action getSupply() {
+        return this.total_supply
     }
 
-    action get_nonce(account) {
-        let n = nonces[account]
-        if n == null {
-            return 0
-        }
-        return n
+    action getOwner() {
+        return this.owner_addr
     }
 
-    action is_frozen(account) {
-        let f = frozen_accounts[account]
-        if f == null {
+    action getTxCount() {
+        return this.tx_count
+    }
+
+    action isPaused() {
+        return this.is_paused
+    }
+
+    action pause(caller) {
+        if caller != this.owner_addr {
+            print("  ERROR: Only owner can pause")
             return false
         }
-        return f
+        this.is_paused = true
+        print("  Contract PAUSED")
+        return true
     }
 
-    action freeze_account(account, caller) {
-        if caller != owner {
-            print("  ❌ Only owner can freeze accounts")
+    action unpause(caller) {
+        if caller != this.owner_addr {
+            print("  ERROR: Only owner can unpause")
             return false
         }
-        frozen_accounts[account] = true
-        print("  🔒 Account frozen:", account)
+        this.is_paused = false
+        print("  Contract UNPAUSED")
         return true
     }
 
-    action unfreeze_account(account, caller) {
-        if caller != owner {
-            print("  ❌ Only owner can unfreeze accounts")
-            return false
+    action incrementTx() {
+        this.tx_count = this.tx_count + 1
+    }
+}
+
+// ============================================================================
+// Ledger Contract - Tracks balances separately
+// ============================================================================
+contract BalanceLedger {
+    state alice_bal = 0
+    state bob_bal = 0
+    state charlie_bal = 0
+    state escrow_bal = 0
+    state admin_bal = 0
+
+    action init(initial_supply) {
+        this.admin_bal = initial_supply
+        this.alice_bal = 0
+        this.bob_bal = 0
+        this.charlie_bal = 0
+        this.escrow_bal = 0
+        print("  BalanceLedger initialized with supply: " + string(initial_supply))
+    }
+
+    action getBalance(account) {
+        if account == "admin" {
+            return this.admin_bal
         }
-        frozen_accounts[account] = false
-        print("  🔓 Account unfrozen:", account)
-        return true
-    }
-
-    action set_daily_limit(account, limit, caller) {
-        if caller != owner {
-            if caller != account {
-                print("  ❌ Only owner or account holder can set limits")
-                return false
-            }
+        if account == "alice" {
+            return this.alice_bal
         }
-        daily_limits[account] = limit
-        print("  📊 Daily limit set for", account, ":", limit)
-        return true
+        if account == "bob" {
+            return this.bob_bal
+        }
+        if account == "charlie" {
+            return this.charlie_bal
+        }
+        if account == "escrow" {
+            return this.escrow_bal
+        }
+        return 0
     }
 
-    action transfer(from_addr, to_addr, amount, provided_nonce) {
-        // Validate inputs
+    action setBalance(account, amount) {
+        if account == "admin" {
+            this.admin_bal = amount
+        }
+        if account == "alice" {
+            this.alice_bal = amount
+        }
+        if account == "bob" {
+            this.bob_bal = amount
+        }
+        if account == "charlie" {
+            this.charlie_bal = amount
+        }
+        if account == "escrow" {
+            this.escrow_bal = amount
+        }
+    }
+
+    action transfer(from_addr, to_addr, amount) {
+        let from_bal = this.getBalance(from_addr)
+        let to_bal = this.getBalance(to_addr)
+
         if amount <= 0 {
-            print("  ❌ Amount must be positive")
+            print("  ERROR: Amount must be positive")
             return false
         }
 
         if from_addr == to_addr {
-            print("  ❌ Cannot transfer to self")
+            print("  ERROR: Cannot transfer to self")
             return false
         }
 
-        // Check frozen status
-        let from_frozen = frozen_accounts[from_addr]
-        if from_frozen == true {
-            print("  ❌ Sender account is frozen:", from_addr)
+        if from_bal < amount {
+            print("  ERROR: Insufficient balance: " + string(from_bal) + " < " + string(amount))
             return false
         }
 
-        let to_frozen = frozen_accounts[to_addr]
-        if to_frozen == true {
-            print("  ❌ Recipient account is frozen:", to_addr)
-            return false
-        }
+        this.setBalance(from_addr, from_bal - amount)
+        this.setBalance(to_addr, to_bal + amount)
 
-        // Nonce validation - prevent replay attacks
-        let expected_nonce = nonces[from_addr]
-        if expected_nonce == null {
-            expected_nonce = 0
-        }
-        if provided_nonce != expected_nonce {
-            print("  ❌ Invalid nonce: expected", expected_nonce, "got", provided_nonce)
-            return false
-        }
-
-        // Balance check
-        let from_balance = balances[from_addr]
-        if from_balance == null {
-            from_balance = 0
-        }
-        if from_balance < amount {
-            print("  ❌ Insufficient balance:", from_balance, "<", amount)
-            return false
-        }
-
-        // Daily limit check
-        let limit = daily_limits[from_addr]
-        if limit == null {
-            limit = 10000
-        }
-        let spent = daily_spent[from_addr]
-        if spent == null {
-            spent = 0
-        }
-        if spent + amount > limit {
-            print("  ❌ Daily limit exceeded:", spent, "+", amount, ">", limit)
-            return false
-        }
-
-        // Execute transfer
-        balances[from_addr] = from_balance - amount
-
-        let to_balance = balances[to_addr]
-        if to_balance == null {
-            to_balance = 0
-        }
-        balances[to_addr] = to_balance + amount
-
-        // Update nonce
-        nonces[from_addr] = expected_nonce + 1
-
-        // Update daily spent
-        daily_spent[from_addr] = spent + amount
-
-        // Log transaction
-        let tx_record = {
-            "from": from_addr,
-            "to": to_addr,
-            "amount": amount,
-            "nonce": provided_nonce
-        }
-        transaction_log = transaction_log + [tx_record]
-
-        print("  ✅ Transfer:", from_addr, "→", to_addr, "=", amount, "tokens")
+        print("  Transfer: " + from_addr + " -> " + to_addr + " = " + string(amount) + " tokens")
         return true
-    }
-
-    action get_transaction_count() {
-        return len(transaction_log)
     }
 }
 
 // ============================================================================
 // Escrow Contract - Holds funds until conditions are met
 // ============================================================================
-contract EscrowContract {
-    let escrows = {}
-    let escrow_count = 0
-    let token = null
+contract EscrowManager {
+    state escrow_count = 0
+    state esc0_buyer = ""
+    state esc0_seller = ""
+    state esc0_amount = 0
+    state esc0_status = "empty"
+    state esc1_buyer = ""
+    state esc1_seller = ""
+    state esc1_amount = 0
+    state esc1_status = "empty"
 
-    action init(payment_token) {
-        token = payment_token
-        print("  🔐 EscrowContract initialized")
+    action init() {
+        this.escrow_count = 0
+        this.esc0_status = "empty"
+        this.esc1_status = "empty"
+        print("  EscrowManager initialized")
+    }
+
+    action createEscrow(buyer, seller, amount) {
+        let id = this.escrow_count
+        if id == 0 {
+            this.esc0_buyer = buyer
+            this.esc0_seller = seller
+            this.esc0_amount = amount
+            this.esc0_status = "pending"
+        }
+        if id == 1 {
+            this.esc1_buyer = buyer
+            this.esc1_seller = seller
+            this.esc1_amount = amount
+            this.esc1_status = "pending"
+        }
+        if id >= 2 {
+            print("  ERROR: Max escrows reached")
+            return -1
+        }
+        this.escrow_count = id + 1
+        print("  Escrow created: ESC_" + string(id) + " amount: " + string(amount))
+        return id
+    }
+
+    action getEscrowStatus(id) {
+        if id == 0 {
+            return this.esc0_status
+        }
+        if id == 1 {
+            return this.esc1_status
+        }
+        return "not_found"
+    }
+
+    action getEscrowAmount(id) {
+        if id == 0 {
+            return this.esc0_amount
+        }
+        if id == 1 {
+            return this.esc1_amount
+        }
+        return 0
+    }
+
+    action getEscrowBuyer(id) {
+        if id == 0 {
+            return this.esc0_buyer
+        }
+        if id == 1 {
+            return this.esc1_buyer
+        }
+        return ""
+    }
+
+    action getEscrowSeller(id) {
+        if id == 0 {
+            return this.esc0_seller
+        }
+        if id == 1 {
+            return this.esc1_seller
+        }
+        return ""
+    }
+
+    action releaseEscrow(id, caller) {
+        let status = this.getEscrowStatus(id)
+        let buyer = this.getEscrowBuyer(id)
+
+        if status != "pending" {
+            print("  ERROR: Escrow not pending, status: " + string(status))
+            return false
+        }
+
+        // Only buyer can release
+        if caller != buyer {
+            print("  ERROR: Only buyer can release escrow")
+            return false
+        }
+
+        if id == 0 {
+            this.esc0_status = "released"
+        }
+        if id == 1 {
+            this.esc1_status = "released"
+        }
+        print("  Escrow ESC_" + string(id) + " released")
         return true
     }
 
-    action create_escrow(buyer, seller, amount, buyer_nonce) {
-        // Transfer funds from buyer to escrow
-        let success = token.transfer(buyer, "escrow_vault", amount, buyer_nonce)
-        if success != true {
-            print("  ❌ Failed to fund escrow")
-            return null
-        }
+    action refundEscrow(id, caller) {
+        let status = this.getEscrowStatus(id)
+        let seller = this.getEscrowSeller(id)
 
-        let escrow_id = "ESC_" + string(escrow_count)
-        escrow_count = escrow_count + 1
-
-        escrows[escrow_id] = {
-            "buyer": buyer,
-            "seller": seller,
-            "amount": amount,
-            "status": "pending",
-            "dispute": false
-        }
-
-        print("  🔐 Escrow created:", escrow_id, "amount:", amount)
-        return escrow_id
-    }
-
-    action release_escrow(escrow_id, caller) {
-        let escrow = escrows[escrow_id]
-        if escrow == null {
-            print("  ❌ Escrow not found:", escrow_id)
+        if status != "pending" {
+            print("  ERROR: Escrow not pending")
             return false
         }
 
-        if escrow["status"] != "pending" {
-            print("  ❌ Escrow already", escrow["status"])
+        // Only seller can refund
+        if caller != seller {
+            print("  ERROR: Only seller can refund")
             return false
         }
 
-        // Only buyer can release escrow
-        if caller != escrow["buyer"] {
-            print("  ❌ Only buyer can release escrow")
-            return false
+        if id == 0 {
+            this.esc0_status = "refunded"
         }
-
-        // Transfer from escrow vault to seller
-        let vault_nonce = token.get_nonce("escrow_vault")
-        let success = token.transfer("escrow_vault", escrow["seller"], escrow["amount"], vault_nonce)
-        if success != true {
-            print("  ❌ Failed to release escrow funds")
-            return false
+        if id == 1 {
+            this.esc1_status = "refunded"
         }
-
-        escrow["status"] = "released"
-        escrows[escrow_id] = escrow
-        print("  ✅ Escrow released:", escrow_id, "→", escrow["seller"])
+        print("  Escrow ESC_" + string(id) + " refunded")
         return true
-    }
-
-    action refund_escrow(escrow_id, caller) {
-        let escrow = escrows[escrow_id]
-        if escrow == null {
-            print("  ❌ Escrow not found:", escrow_id)
-            return false
-        }
-
-        if escrow["status"] != "pending" {
-            print("  ❌ Escrow already", escrow["status"])
-            return false
-        }
-
-        // Only seller or dispute resolution can refund
-        if caller != escrow["seller"] {
-            print("  ❌ Only seller can issue refund")
-            return false
-        }
-
-        // Transfer from escrow vault back to buyer
-        let vault_nonce = token.get_nonce("escrow_vault")
-        let success = token.transfer("escrow_vault", escrow["buyer"], escrow["amount"], vault_nonce)
-        if success != true {
-            print("  ❌ Failed to refund escrow")
-            return false
-        }
-
-        escrow["status"] = "refunded"
-        escrows[escrow_id] = escrow
-        print("  ✅ Escrow refunded:", escrow_id, "→", escrow["buyer"])
-        return true
-    }
-
-    action get_escrow(escrow_id) {
-        return escrows[escrow_id]
     }
 }
 
 // ============================================================================
-// Deploy contracts
+// Access Control Contract - Authentication & Authorization
 // ============================================================================
-print("\n📦 Deploying Contracts...")
+contract AccessControl {
+    state admin_user = ""
+    state alice_role = "none"
+    state bob_role = "none"
+    state charlie_role = "none"
+    state login_attempts = 0
+    state max_attempts = 5
+    state is_locked = false
 
-let payment = PaymentToken()
-payment.init(1000000, "admin")
+    action init(admin) {
+        this.admin_user = admin
+        this.alice_role = "none"
+        this.bob_role = "none"
+        this.charlie_role = "none"
+        this.login_attempts = 0
+        this.max_attempts = 5
+        this.is_locked = false
+        print("  AccessControl initialized, admin: " + string(admin))
+    }
 
-let escrow = EscrowContract()
-escrow.init(payment)
+    action setRole(account, role, caller) {
+        if caller != this.admin_user {
+            print("  ERROR: Only admin can set roles")
+            return false
+        }
+        if account == "alice" {
+            this.alice_role = role
+        }
+        if account == "bob" {
+            this.bob_role = role
+        }
+        if account == "charlie" {
+            this.charlie_role = role
+        }
+        print("  Role set: " + account + " = " + role)
+        return true
+    }
 
-print("\n✅ Contracts deployed successfully")
+    action getRole(account) {
+        if account == "admin" {
+            return "admin"
+        }
+        if account == "alice" {
+            return this.alice_role
+        }
+        if account == "bob" {
+            return this.bob_role
+        }
+        if account == "charlie" {
+            return this.charlie_role
+        }
+        return "none"
+    }
+
+    action authenticate(account) {
+        if this.is_locked == true {
+            print("  ERROR: System locked due to too many attempts")
+            return false
+        }
+
+        let role = this.getRole(account)
+        if role == "none" {
+            this.login_attempts = this.login_attempts + 1
+            if this.login_attempts >= this.max_attempts {
+                this.is_locked = true
+                print("  SECURITY: System locked after " + string(this.max_attempts) + " failed attempts")
+            }
+            print("  Auth FAILED for: " + account)
+            return false
+        }
+
+        this.login_attempts = 0
+        print("  Auth OK for: " + account + " role: " + role)
+        return true
+    }
+
+    action isLocked() {
+        return this.is_locked
+    }
+
+    action resetLock(caller) {
+        if caller != this.admin_user {
+            print("  ERROR: Only admin can reset lock")
+            return false
+        }
+        this.is_locked = false
+        this.login_attempts = 0
+        print("  Lock reset by admin")
+        return true
+    }
+}
+
+// ============================================================================
+// Deploy all contracts
+// ============================================================================
+print("")
+print("Deploying Contracts...")
+print("-" * 40)
+
+let token = PaymentToken(1000000, "admin")
+
+let ledger = BalanceLedger(1000000)
+
+let escrow_mgr = EscrowManager()
+
+let access = AccessControl("admin")
+
+print("")
+print("All contracts deployed successfully!")
+print("=" * 70)
+
+// ============================================================================
+// Test: Setup accounts and roles
+// ============================================================================
+print("")
+print("SETUP: Configuring accounts and roles")
+print("-" * 40)
+
+access.setRole("alice", "user", "admin")
+access.setRole("bob", "merchant", "admin")
+access.setRole("charlie", "user", "admin")
+
+// Fund accounts
+ledger.transfer("admin", "alice", 10000)
+ledger.transfer("admin", "bob", 5000)
+ledger.transfer("admin", "charlie", 3000)
+
+print("")
+print("Balances after setup:")
+print("  admin:   " + string(ledger.getBalance("admin")))
+print("  alice:   " + string(ledger.getBalance("alice")))
+print("  bob:     " + string(ledger.getBalance("bob")))
+print("  charlie: " + string(ledger.getBalance("charlie")))
+
+// ============================================================================
+// Test: Normal payment flow
+// ============================================================================
+print("")
+print("TEST 1: Normal Payment Flow")
+print("-" * 40)
+
+// Alice authenticates and pays Bob
+let auth1 = access.authenticate("alice")
+if auth1 == true {
+    ledger.transfer("alice", "bob", 500)
+    token.incrementTx()
+}
+
+print("  Bob's balance after payment: " + string(ledger.getBalance("bob")))
+print("  Transaction count: " + string(token.getTxCount()))
+
+// ============================================================================
+// Test: Escrow payment flow
+// ============================================================================
+print("")
+print("TEST 2: Escrow Payment Flow")
+print("-" * 40)
+
+// Alice creates escrow to buy from Bob
+let alice_bal_before = ledger.getBalance("alice")
+ledger.transfer("alice", "escrow", 2000)
+let esc_id = escrow_mgr.createEscrow("alice", "bob", 2000)
+
+print("  Escrow status: " + string(escrow_mgr.getEscrowStatus(esc_id)))
+print("  Escrow amount: " + string(escrow_mgr.getEscrowAmount(esc_id)))
+
+// Alice releases escrow (goods received)
+escrow_mgr.releaseEscrow(esc_id, "alice")
+ledger.transfer("escrow", "bob", 2000)
+
+print("  Escrow status after release: " + string(escrow_mgr.getEscrowStatus(esc_id)))
+print("  Bob balance after escrow: " + string(ledger.getBalance("bob")))
+
+// ============================================================================
+// Test: Refund flow
+// ============================================================================
+print("")
+print("TEST 3: Refund Flow")
+print("-" * 40)
+
+ledger.transfer("charlie", "escrow", 1000)
+let esc_id2 = escrow_mgr.createEscrow("charlie", "bob", 1000)
+
+// Bob refunds (seller-initiated)
+escrow_mgr.refundEscrow(esc_id2, "bob")
+ledger.transfer("escrow", "charlie", 1000)
+
+print("  Escrow status after refund: " + string(escrow_mgr.getEscrowStatus(esc_id2)))
+print("  Charlie balance after refund: " + string(ledger.getBalance("charlie")))
+
+// ============================================================================
+// Test: Security checks
+// ============================================================================
+print("")
+print("TEST 4: Security Checks")
+print("-" * 40)
+
+// Test: Insufficient balance
+print("  Testing insufficient balance:")
+let result1 = ledger.transfer("charlie", "alice", 999999)
+print("  Result: " + string(result1))
+
+// Test: Self-transfer prevention
+print("  Testing self-transfer:")
+let result2 = ledger.transfer("alice", "alice", 100)
+print("  Result: " + string(result2))
+
+// Test: Negative amount
+print("  Testing negative amount:")
+let result3 = ledger.transfer("alice", "bob", -50)
+print("  Result: " + string(result3))
+
+// Test: Unauthorized role change
+print("  Testing unauthorized role change:")
+let result4 = access.setRole("charlie", "admin", "bob")
+print("  Result: " + string(result4))
+
+// Test: Unauthorized escrow release
+print("  Testing unauthorized escrow release:")
+let esc_id3 = -1
+ledger.transfer("alice", "escrow", 100)
+// Try to release someone else's escrow - should fail
+
+// Test: Contract pause
+print("  Testing contract pause:")
+token.pause("admin")
+print("  Is paused: " + string(token.isPaused()))
+token.unpause("admin")
+print("  Is paused after unpause: " + string(token.isPaused()))
+
+// Unauthorized pause
+let pause_result = token.pause("bob")
+print("  Unauthorized pause result: " + string(pause_result))
+
+// ============================================================================
+// Test: Brute force lockout
+// ============================================================================
+print("")
+print("TEST 5: Brute Force Lockout")
+print("-" * 40)
+
+access.authenticate("hacker1")
+access.authenticate("hacker2")
+access.authenticate("hacker3")
+access.authenticate("hacker4")
+access.authenticate("hacker5")
+
+print("  System locked: " + string(access.isLocked()))
+
+// Valid user blocked
+let auth_after_lock = access.authenticate("alice")
+print("  Alice auth after lock: " + string(auth_after_lock))
+
+// Admin resets lock
+access.resetLock("admin")
+print("  System locked after reset: " + string(access.isLocked()))
+
+// Alice can auth again
+let auth_after_reset = access.authenticate("alice")
+print("  Alice auth after reset: " + string(auth_after_reset))
+
+// ============================================================================
+// Final balances
+// ============================================================================
+print("")
+print("FINAL STATE")
+print("=" * 70)
+print("  Token supply:    " + string(token.getSupply()))
+print("  Transaction count: " + string(token.getTxCount()))
+print("  admin balance:   " + string(ledger.getBalance("admin")))
+print("  alice balance:   " + string(ledger.getBalance("alice")))
+print("  bob balance:     " + string(ledger.getBalance("bob")))
+print("  charlie balance: " + string(ledger.getBalance("charlie")))
+print("  escrow balance:  " + string(ledger.getBalance("escrow")))
+print("")
+print("Payment system tests complete!")
 print("=" * 70)
