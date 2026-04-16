@@ -581,11 +581,43 @@ class Chain:
                 return False, f"Block hash does not meet difficulty {self.difficulty}"
 
         # Validate transactions
+        seen_nonces: Dict[str, set] = {}  # sender -> set of nonces in this block
         for tx in block.transactions:
             if not tx.tx_hash:
                 return False, f"Transaction missing hash"
             if not tx.signature:
                 return False, f"Transaction {tx.tx_hash[:16]} has no signature"
+
+            # Nonce validation — prevent double-spend / replay attacks
+            if tx.sender:
+                sender_acct = self.get_account(tx.sender)
+                expected_nonce = sender_acct.get("nonce", 0)
+
+                # Track nonces within this block to detect duplicates
+                if tx.sender not in seen_nonces:
+                    seen_nonces[tx.sender] = set()
+
+                if tx.nonce in seen_nonces[tx.sender]:
+                    return False, (
+                        f"Duplicate nonce {tx.nonce} for sender "
+                        f"{tx.sender[:16]}... in same block"
+                    )
+
+                if tx.nonce < expected_nonce:
+                    return False, (
+                        f"Transaction nonce too low for {tx.sender[:16]}...: "
+                        f"got {tx.nonce}, expected >= {expected_nonce}"
+                    )
+
+                seen_nonces[tx.sender].add(tx.nonce)
+
+                # Balance check — sender must afford value + gas fees
+                total_cost = tx.value + (tx.gas_limit * tx.gas_price)
+                if sender_acct.get("balance", 0) < total_cost:
+                    return False, (
+                        f"Insufficient balance for {tx.sender[:16]}...: "
+                        f"need {total_cost}, have {sender_acct.get('balance', 0)}"
+                    )
 
         # Validate tx root
         expected_root = block.compute_tx_root()

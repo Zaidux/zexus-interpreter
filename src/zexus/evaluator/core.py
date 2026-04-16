@@ -542,15 +542,24 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             bytecode = self.bytecode_compiler.compile(node, optimize=True)
             
             if bytecode is None or self.bytecode_compiler.errors:
-                debug_log("VM Execution", f"Compilation failed: {self.bytecode_compiler.errors}")
+                errors = self.bytecode_compiler.errors
+                node_name = type(node).__name__
+                debug_log("VM Execution", f"Compilation failed: {errors}")
+                import logging as _logging
+                _logger = _logging.getLogger("zexus.vm.fallback")
+                _logger.info(
+                    "VM fallback: compilation failed for %s (file=%s, errors=%s) "
+                    "— falling back to interpreter",
+                    node_name, file_path, errors,
+                )
                 if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
                     print(
                         "[VM FALLBACK] compile_failed "
-                        f"node={type(node).__name__} file={file_path} "
-                        f"errors={self.bytecode_compiler.errors}"
+                        f"node={node_name} file={file_path} "
+                        f"errors={errors}"
                     )
                 self.vm_stats['vm_fallbacks'] += 1
-                return None  # Signal fallback
+                return None  # Signal fallback to interpreter
             
             self.vm_stats['bytecode_compiles'] += 1
             
@@ -594,14 +603,22 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             return self._vm_result_to_evaluator(result)
             
         except Exception as e:
+            node_name = type(node).__name__
             debug_log("VM Execution", f"VM execution error: {e}")
+            import logging as _logging
+            _logger = _logging.getLogger("zexus.vm.fallback")
+            _logger.warning(
+                "VM fallback: execution failed for %s (file=%s, error=%s) "
+                "— falling back to interpreter",
+                node_name, file_path, e,
+            )
             if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
                 print(
                     "[VM FALLBACK] execute_failed "
-                    f"node={type(node).__name__} file={file_path} error={e}"
+                    f"node={node_name} file={file_path} error={e}"
                 )
             self.vm_stats['vm_fallbacks'] += 1
-            return None  # Signal fallback
+            return None  # Signal fallback to interpreter
 
     def _execute_bytecode_sequence(self, bytecodes, env, debug_mode=False):
         """Execute a sequence of bytecode objects in the VM for cached file runs."""
@@ -635,6 +652,12 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             return self._vm_result_to_evaluator(result)
         except Exception as e:
             debug_log("VM Execution", f"VM cached execution error: {e}")
+            import logging as _logging
+            _logger = _logging.getLogger("zexus.vm.fallback")
+            _logger.warning(
+                "VM fallback: cached execution failed (error=%s) "
+                "— falling back to interpreter", e,
+            )
             if os.environ.get("ZEXUS_VM_FALLBACK_DEBUG"):
                 print(f"[VM FALLBACK] cached_execute_failed error={e}")
             self.vm_stats['vm_fallbacks'] += 1

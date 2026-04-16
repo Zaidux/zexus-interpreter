@@ -236,7 +236,14 @@ class ExtendedKey:
         """Derive a key from a BIP-32 path string.
 
         Example: ``"m/44'/806'/0'/0/0"``
+
+        Raises:
+            ValueError: If the path is malformed or contains invalid
+                components.
         """
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"Invalid BIP-32 path: {path!r}")
+
         if path.startswith("m/"):
             path = path[2:]
         elif path == "m":
@@ -244,10 +251,26 @@ class ExtendedKey:
 
         current = self
         for component in path.split("/"):
-            if component.endswith("'") or component.endswith("H"):
-                idx = int(component[:-1]) + HARDENED_OFFSET
-            else:
-                idx = int(component)
+            component = component.strip()
+            if not component:
+                raise ValueError(
+                    f"Invalid BIP-32 path component: empty segment in '{path}'"
+                )
+            hardened = component.endswith("'") or component.endswith("H")
+            idx_str = component[:-1] if hardened else component
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid BIP-32 path component: {component!r} "
+                    f"is not a valid integer"
+                )
+            if idx < 0:
+                raise ValueError(
+                    f"Invalid BIP-32 path index: {idx} (must be non-negative)"
+                )
+            if hardened:
+                idx += HARDENED_OFFSET
             current = current.derive_child(idx)
         return current
 
@@ -582,6 +605,10 @@ class Keystore:
 
         Tries the ``cryptography`` library first; falls back to a
         pure-Python XOR stream cipher for environments without it.
+
+        .. warning::
+            The fallback cipher is NOT cryptographically equivalent to AES
+            and should only be used for testing/development.
         """
         try:
             from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -592,6 +619,17 @@ class Keystore:
             pass
 
         # Pure-Python CTR mode using SHA-256 as a pseudo-AES block
+        import warnings
+        warnings.warn(
+            "Zexus Wallet: 'cryptography' library not installed — using "
+            "insecure SHA-256 XOR stream cipher fallback for key encryption. "
+            "Install with: pip install cryptography",
+            stacklevel=2,
+        )
+        logger.warning(
+            "INSECURE FALLBACK: Using SHA-256 XOR stream cipher instead "
+            "of AES-128-CTR. Install 'cryptography' for production use."
+        )
         return Keystore._xor_stream(plaintext, key, iv)
 
     @staticmethod
@@ -604,6 +642,13 @@ class Keystore:
             return dec.update(ciphertext) + dec.finalize()
         except ImportError:
             pass
+        import warnings
+        warnings.warn(
+            "Zexus Wallet: 'cryptography' library not installed — using "
+            "insecure SHA-256 XOR stream cipher fallback for key decryption. "
+            "Install with: pip install cryptography",
+            stacklevel=2,
+        )
         return Keystore._xor_stream(ciphertext, key, iv)
 
     @staticmethod
