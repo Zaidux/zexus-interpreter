@@ -3217,15 +3217,6 @@ class VM:
             raw_name = stack_pop()
             var_name = raw_name.value if hasattr(raw_name, 'value') else str(raw_name)
             storage[var_name] = self._wrap_for_builtin(raw_val)
-        # DEBUG: remove after testing
-        if os.environ.get("ZEXUS_DEBUG_CONTRACT"):
-            print(f"[DEBUG] Contract '{contract_name}' storage_count={storage_count} storage keys={list(storage.keys())}")
-            ast_node_dbg = const(ast_idx) if ast_idx is not None else None
-            sv_nodes = getattr(ast_node_dbg, 'storage_vars', [])
-            for sv in sv_nodes:
-                nm = sv.name.value if hasattr(sv, 'name') and hasattr(sv.name, 'value') else str(getattr(sv, 'name', '?'))
-                iv = getattr(sv, 'initial_value', None)
-                print(f"[DEBUG]   sv: name={nm}, initial_value={iv}, type={type(sv).__name__}")
 
         # Retrieve the AST node from the constants pool
         ast_node = const(ast_idx) if ast_idx is not None else None
@@ -4294,6 +4285,12 @@ class VM:
                         key = ZString(key)
                     stack_append(obj.get(key))
                 elif isinstance(obj, dict):
+                    stack_append(obj.get(attr_name))
+                elif hasattr(obj, 'data') and hasattr(obj, 'entity_def'):
+                    # EntityInstance — access fields via .data dict
+                    stack_append(obj.data.get(attr_name, getattr(obj, attr_name, None)))
+                elif hasattr(obj, 'get') and hasattr(obj, 'set') and callable(getattr(obj, 'get', None)):
+                    # Contract-like objects (e.g., SmartContract) expose state via get/set.
                     stack_append(obj.get(attr_name))
                 else:
                     stack_append(getattr(obj, attr_name, None))

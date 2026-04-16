@@ -2122,15 +2122,11 @@ class ContextStackParser:
 
                 i += 1
 
-        # 4. Inject Name property if missing (Fixes runtime error)
-        has_name = any(p.name.value == 'name' for p in storage_vars)
-        if not has_name:
-            storage_vars.append(AstNodeShim(
-                name=Identifier("name"),
-                type=Identifier("string"),
-                initial_value=StringLiteral(contract_name),
-                default_value=StringLiteral(contract_name)
-            ))
+        # 4. Skip injecting 'name' property — SmartContract already exposes
+        #    the contract name via its get() method and .name attribute.
+        #    Injecting it as a storage var causes storage_count mismatches
+        #    in the bytecode compiler (the compiler pushes name/value pairs
+        #    for ALL storage_vars, but the VM only expects user-declared ones).
 
         # 5. Create body BlockStatement containing storage vars and actions
         # Convert storage_vars to LetStatements for body
