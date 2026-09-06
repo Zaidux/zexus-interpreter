@@ -32,13 +32,27 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the Rust core (zexus_core)
+        run: |
+          pip install maturin
+          cd rust_core
+          maturin build --release --out ../wheelhouse
+        env:
+          # Rust doesn't cross-compile under QEMU in reasonable time —
+          # build the native arch only; other arches fall back to pure
+          # Python (the interpreter never requires the extension).
+          CIBW_SKIP_RUST: "1"
+
       - name: Install cibuildwheel
         run: python -m pip install --upgrade pip cibuildwheel
 
       - name: Build wheels
         env:
-          # Build native extensions into the wheel (setup.py gates this)
-          ZEXUS_BUILD_EXTENSIONS: "1"
+          # Phase D: the C/C++ extensions were retired. This wheel is the
+          # pure-Python interpreter; zexus_core ships separately above.
 
           # Build for common CPython versions
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"

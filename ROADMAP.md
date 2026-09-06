@@ -79,7 +79,36 @@ Ground rules for every phase:
 
 ## Planned phases
 
-### Phase D — Native layer alignment: Rust-first, retire C/C++
+### Phase D — Native layer alignment: Rust-first, retire C/C++ ✅
+*See commit for this change.*
+
+- **The Rust core builds.** `rust_core/` had never compiled: an unclosed
+  match-arm brace in `rust_vm.rs` (the file was committed corrupted —
+  `_ =>` wildcard inside the `(Str, Int)` arm body). Fixed; `cargo build
+  --release` succeeds; `zexus_core.so` loads and serves RustHasher
+  (sha256/keccak), RustMerkle, RustSignature, RustVMExecutor.
+- **Hash hot paths route through Rust**: `CryptoPlugin.hash_data` uses
+  the Rust core for SHA-256/Keccak-256 when built, hashlib/pycryptodome
+  otherwise — results cross-checked identical. This also removes the
+  hard pycryptodome dependency for Keccak-256 (Rust provides it).
+- **The C/C++ layer is deleted**: `cabi.c`/`cabi.h`, `fastops.c`/
+  `fastops.pyx`, `native_runtime.cpp`, their prebuilt `.so`s, the
+  setup.py extension build block, and the three import sites. The VM's
+  execution tiers are now exactly: Rust VM (when built) → pure Python.
+  `native_jit_backend`'s C symbol registration is a no-op hook (LLVM
+  resolves symbols at link time); the JIT itself survives pending
+  Phase G benchmarking.
+- **wheels.yml** builds `zexus_core` with maturin alongside the
+  pure-Python wheel; missing extensions never brick anything (all
+  consumers guarded — verified by a test).
+- Found+fixed en route: the VM print formatter now handles the Bytes
+  *wrapper* (fell through to `str(bytes)` raw repr after fastops
+  removal shifted the binary-op path).
+- Validation: 11 new phase-D tests; full suite 2642 passed / 9 failed
+  (the standing baseline). The 233 extra passing tests are the Rust
+  bridge suite activating now that the extension is importable.
+
+### Phase D — Native layer alignment: Rust-first, retire C/C++ (original plan)
 **Goal:** exactly ONE native layer (the Rust core), with pure-Python
 fallbacks, so a missing wheel never bricks the interpreter.
 

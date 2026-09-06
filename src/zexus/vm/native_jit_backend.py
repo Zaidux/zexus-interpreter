@@ -1,4 +1,4 @@
-g"""
+"""
 Native JIT backend using LLVM (llvmlite).
 
 Compiles a restricted subset of numeric bytecode into native machine code.
@@ -31,25 +31,12 @@ class NativeJITBackend:
         self._register_cabi_symbols()
 
     def _register_cabi_symbols(self) -> None:
-        symbols = None
-        try:
-            from . import native_runtime
-            symbols = native_runtime.get_symbols()
-        except Exception:
-            symbols = None
-        if symbols is None:
-            try:
-                from . import cabi
-                symbols = cabi.get_symbols()
-            except Exception:
-                symbols = None
-
-        if isinstance(symbols, dict):
-            for name, addr in symbols.items():
-                try:
-                    llvm.add_symbol(name, int(addr))
-                except Exception:
-                    continue
+        # Phase D: the C-extension symbol providers (cabi/native_runtime)
+        # were retired — the native layer is the Rust core. Symbol
+        # registration is kept as a no-op hook so the JIT pipeline is
+        # unchanged; LLVM resolves imported symbols from the process at
+        # link time instead.
+        return None
 
     def compile(self, bytecode) -> Optional[Callable]:
         trace_enabled = self.debug or os.environ.get("ZEXUS_NATIVE_JIT_TRACE", "0") in ("1", "true", "yes")

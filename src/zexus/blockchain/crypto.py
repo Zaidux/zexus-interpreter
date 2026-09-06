@@ -9,6 +9,25 @@ Provides built-in functions for:
 
 import hashlib
 import hmac
+
+# ── Rust core acceleration (Phase D) ──────────────────────────────────
+# When the zexus_core extension is built, SHA-256/Keccak-256 hashing
+# routes through native code (see rust_bridge); pure Python otherwise.
+# Resolved lazily so importing this module never hard-fails.
+try:
+    from .rust_bridge import rust_core_available as _rust_core_available
+except Exception:  # pragma: no cover - bridge optional
+    _rust_core_available = lambda: False
+_RUST_HASH = None
+def _rust_hasher():
+    global _RUST_HASH
+    if _RUST_HASH is None:
+        try:
+            import zexus_core as _core
+            _RUST_HASH = _core.RustHasher()
+        except Exception:
+            _RUST_HASH = False
+    return _RUST_HASH
 import secrets
 import os
 from typing import Any, Optional
@@ -80,9 +99,19 @@ class CryptoPlugin:
         
         # Special case: real Keccak-256 (NOT SHA3-256 — different padding)
         if algorithm == 'KECCAK256':
+            # Rust fast path (Phase D): native keccak when the core is built.
+            # Falls through to pycryptodome when it is not.
+            rust = _rust_hasher()
+            if rust:
+                data_bytes = data if isinstance(data, bytes) else (
+                    data.encode('utf-8') if isinstance(data, str)
+                    else str(data).encode('utf-8')
+                )
+                return rust.keccak256(data_bytes)
             if not _KECCAK_AVAILABLE:
                 raise RuntimeError(
-                    "Keccak-256 requires the 'pycryptodome' package. "
+                    "Keccak-256 requires the 'pycryptodome' package (or the "
+                    "built zexus_core Rust extension). "
                     "SHA3-256 uses different padding and is NOT compatible. "
                     "Install with: pip install pycryptodome"
                 )
@@ -108,6 +137,16 @@ class CryptoPlugin:
             data_bytes = data.encode('utf-8')
         else:
             data_bytes = str(data).encode('utf-8')
+        
+        # Rust fast path (Phase D): SHA-256/Keccak-256 are the hot
+        # algorithms (block hashing, address derivation); the Rust core
+        # computes them natively. Everything else stays on hashlib.
+        if algorithm in ('SHA256', 'KECCAK256'):
+            rust = _rust_hasher()
+            if rust:
+                if algorithm == 'SHA256':
+                    return rust.sha256(data_bytes)
+                return rust.keccak256(data_bytes)
         
         # Hash the data
         hash_func = CryptoPlugin.HASH_ALGORITHMS[algorithm]

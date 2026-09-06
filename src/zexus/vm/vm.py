@@ -160,13 +160,9 @@ def _get_security_mod():
             pass
     return _security_mod
 
-# Cython fast-path (optional)
-try:
-    from . import fastops as _fastops
-    _FASTOPS_AVAILABLE = True
-except Exception:
-    _FASTOPS_AVAILABLE = False
-    _fastops = None
+# Cython fastops was RETIRED in Phase D (single native layer = Rust core).
+# Fast execution paths: the Rust VM executor (below) when zexus_core is
+# built, otherwise the pure-Python interpreter. No C extension layer.
 
 # Rust VM (Phase 3 — adaptive execution)
 try:
@@ -1141,6 +1137,10 @@ class VM:
             preview = bytes(value[:32]).hex()
             more = "…" if len(value) > 32 else ""
             return f'b"{preview}{more}"'
+        # Zexus Bytes wrapper: use its inspect() (b"hex" form) rather than
+        # falling through to str(bytes) raw repr.
+        if t.__name__ == "Bytes" and hasattr(value, "inspect"):
+            return value.inspect()
         if t is int or t is str or t is float:
             return str(value)
         if t is bool:
@@ -2304,16 +2304,6 @@ class VM:
                 normalized.append((op_name, operand))
         instrs = normalized
 
-        # Cython fast-path if available (skip when gas metering is active
-        # because the native code doesn't enforce gas limits)
-        if _FASTOPS_AVAILABLE and not self.gas_metering:
-            try:
-                return _fastops.execute(instrs, consts, self.env, self.builtins, self._closure_cells)
-            except NotImplementedError:
-                pass
-            except Exception as _e:
-                _vm_warn("FASTOPS", "Cython fast-path execution failed, falling back to interpreter", _e)
-        
         # Rust VM adaptive routing (Phase 3) — delegate to Rust when
         # the program is large enough to amortise serialisation overhead.
         if (self._rust_vm_enabled

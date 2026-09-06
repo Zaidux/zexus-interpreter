@@ -3,7 +3,6 @@
 Zexus Programming Language - Setup Configuration
 """
 from setuptools import setup, find_packages
-from setuptools import Extension
 from setuptools.command.install import install
 import sys
 import os
@@ -41,45 +40,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 # NOTE: Building native extensions produces platform-specific wheels.
-# PyPI rejects generic platform tags like "linux_aarch64" (e.g. wheels built on Termux).
-# Keep extensions opt-in so default builds remain pure-Python (py3-none-any).
-_BUILD_EXT = os.environ.get("ZEXUS_BUILD_EXTENSIONS", "0").lower() in ("1", "true", "yes")
-
+# ── Native layer (Phase D: Rust-first) ─────────────────────────────────
+# The C/C++ extensions (fastops/cabi/native_runtime) were RETIRED: the
+# repo shipped prebuilt .so files consumed at three guarded call sites,
+# duplicating a second native layer alongside the unbuilt Rust core.
+# The single native layer is now the Rust core (rust_core/ → zexus_core,
+# built with maturin; pure-Python fallback everywhere when absent).
+#
+# The zexus_core wheel is built separately (see rust_core/pyproject.toml
+# and .github/workflows/wheels.yml). This package stays pure-Python.
 ext_modules = []
-if _BUILD_EXT:
-    try:
-        from Cython.Build import cythonize
-        ext_modules = cythonize(
-            [
-                Extension(
-                    "zexus.vm.fastops",
-                    ["src/zexus/vm/fastops.pyx"],
-                )
-            ],
-            compiler_directives={
-                "language_level": 3,
-                "boundscheck": False,
-                "wraparound": False,
-                "cdivision": True,
-            },
-        )
-    except Exception:
-        ext_modules = []
-
-    ext_modules.append(
-        Extension(
-            "zexus.vm.cabi",
-            ["src/zexus/vm/cabi.c"],
-        )
-    )
-
-    ext_modules.append(
-        Extension(
-            "zexus.vm.native_runtime",
-            ["src/zexus/vm/native_runtime.cpp"],
-            language="c++",
-        )
-    )
 
 setup(
     name='zexus',

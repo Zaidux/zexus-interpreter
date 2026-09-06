@@ -1117,12 +1117,13 @@ impl RustVM {
                                 self.push(ZxValue::Null);
                             } else {
                                 let i = *i as usize;
-                                self.push(
-                                s.chars()
-                                    .nth(i)
-                                    .map(|c| ZxValue::Str(c.to_string()))
-                                    .unwrap_or(ZxValue::Null),
-                            );
+                                    self.push(
+                                    s.chars()
+                                        .nth(i)
+                                        .map(|c| ZxValue::Str(c.to_string()))
+                                        .unwrap_or(ZxValue::Null),
+                                );
+                            }
                         }
                         _ => self.push(ZxValue::Null),
                     }
