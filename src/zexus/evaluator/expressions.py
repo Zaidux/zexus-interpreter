@@ -9,7 +9,7 @@ from ..zexus_ast import (
     PropertyAccessExpression,
 )
 from ..object import (
-    Integer, Float, String, List, Map,
+    Integer, Float, String, List, Map, Bytes,
     EvaluationError, Builtin, DateTime
 )
 from ..config import config as zexus_config
@@ -302,6 +302,18 @@ class ExpressionEvaluatorMixin:
             suggestion=f"The operator '{operator}' is not supported for float values. Supported operators: + - * / % ** < > <= >= == !="
         )
     
+    def eval_bytes_infix(self, operator, left, right):
+        if operator == "+":
+            return Bytes(left.value + right.value)
+        if operator == "==":
+            return TRUE if left.value == right.value else FALSE
+        if operator == "!=":
+            return TRUE if left.value != right.value else FALSE
+        return EvaluationError(
+            f"Unknown bytes operator: {operator}",
+            suggestion="Supported for bytes: + (concat), == != (comparison).",
+        )
+
     def eval_string_infix(self, operator, left, right):
         if operator == "+":
             # SECURITY ENFORCEMENT: Check sanitization before concatenation
@@ -389,6 +401,8 @@ class ExpressionEvaluatorMixin:
             return self.eval_integer_infix(operator, left, right)
         elif isinstance(left, Float) and isinstance(right, Float):
             return self.eval_float_infix(operator, left, right)
+        elif isinstance(left, Bytes) and isinstance(right, Bytes):
+            return self.eval_bytes_infix(operator, left, right)
         elif isinstance(left, String) and isinstance(right, String):
             return self.eval_string_infix(operator, left, right)
         

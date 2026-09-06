@@ -335,6 +335,13 @@ class BytecodeCompiler:
         const_idx = self._add_constant(node.value)
         self._emit(Opcode.LOAD_CONST, const_idx)
     
+    def _compile_BytesLiteral(self, node):
+        """Load bytes constant — wrapped in the Bytes object so the VM's
+        method dispatch (getattr) and printing work unchanged."""
+        from ..object import Bytes as _ZBytes
+        const_idx = self._add_constant(_ZBytes(node.value))
+        self._emit(Opcode.LOAD_CONST, const_idx)
+
     def _compile_Boolean(self, node):
         """Load boolean constant"""
         const_idx = self._add_constant(node.value)

@@ -3772,27 +3772,40 @@ class StatementEvaluatorMixin:
 
     def eval_grant_statement(self, node, env, stack_trace):
         """Evaluate grant statement - grant capabilities to entity."""
-        from ..capability_system import get_capability_manager
-        
+        from ..capability_system import get_capability_manager, CAPABILITY_SETS
+
         manager = get_capability_manager()
-        
+
         # Get entity name
         entity_name = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
-        
+
         # Extract capability names
         capability_names = []
         for cap in node.capabilities:
             if hasattr(cap, 'value'):
-                capability_names.append(cap.value)
+                name = cap.value
             elif hasattr(cap, 'function') and hasattr(cap.function, 'value'):
                 # Function call style
-                capability_names.append(cap.function.value)
+                name = cap.function.value
             else:
-                capability_names.append(str(cap))
-        
-        # Grant capabilities
+                name = str(cap)
+            # Expand named capability sets: `grant self network` grants the
+            # plugin's constituent capabilities (network.tcp, network.http,
+            # ...), not the literal name "network" that no check ever uses.
+            expanded = CAPABILITY_SETS.get(name, {}).get("capabilities")
+            if expanded:
+                capability_names.extend(expanded)
+            else:
+                capability_names.append(name)
+
+        # The runtime checks (CapabilityChecker) always consult the
+        # "default" execution context, so grants must land there to be
+        # visible. The named entity is kept for audit/display; "self"/"me"
+        # are the running program itself.
+        effective_requesters = {entity_name, "default"}
         try:
-            manager.grant_capabilities(entity_name, capability_names)
+            for requester in effective_requesters:
+                manager.grant_capabilities(requester, capability_names)
             debug_log("eval_grant_statement", f"Granted {len(capability_names)} capabilities to {entity_name}")
             return String(f"Granted {len(capability_names)} capabilities to '{entity_name}'")
         except Exception as e:
@@ -3800,30 +3813,40 @@ class StatementEvaluatorMixin:
 
     def eval_revoke_statement(self, node, env, stack_trace):
         """Evaluate revoke statement - revoke capabilities from entity."""
-        from ..capability_system import get_capability_manager
-        
+        from ..capability_system import get_capability_manager, CAPABILITY_SETS
+
         manager = get_capability_manager()
-        
+
         # Get entity name
         entity_name = node.entity_name.value if hasattr(node.entity_name, 'value') else str(node.entity_name)
-        
-        # Extract capability names
+
+        # Extract capability names (same set-expansion as grant so a
+        # revoke undoes exactly what the matching grant issued)
         capability_names = []
         for cap in node.capabilities:
             if hasattr(cap, 'value'):
-                capability_names.append(cap.value)
+                name = cap.value
             elif hasattr(cap, 'function') and hasattr(cap.function, 'value'):
-                capability_names.append(cap.function.value)
+                name = cap.function.value
             else:
-                capability_names.append(str(cap))
+                name = str(cap)
+            expanded = CAPABILITY_SETS.get(name, {}).get("capabilities")
+            if expanded:
+                capability_names.extend(expanded)
+            else:
+                capability_names.append(name)
         
-        # Revoke by removing from granted set (simple implementation)
-        # In production, this would use a proper revocation mechanism
+        # Revoke from every requester the matching grant touched (the
+        # runtime "default" context plus the named entity), discarding the
+        # same expanded set the grant issued.
         try:
-            # Access the manager's granted_capabilities
-            if entity_name in manager.granted_capabilities:
-                for cap_name in capability_names:
-                    manager.granted_capabilities[entity_name].discard(cap_name)
+            for requester in (entity_name, "default"):
+                granted = manager.granted_capabilities.get(requester)
+                if granted:
+                    for cap_name in capability_names:
+                        granted.discard(cap_name)
+                    if not granted:
+                        manager.granted_capabilities.pop(requester, None)
             
             debug_log("eval_revoke_statement", f"Revoked {len(capability_names)} capabilities from {entity_name}")
             return String(f"Revoked {len(capability_names)} capabilities from '{entity_name}'")

@@ -5422,6 +5422,11 @@ class ContextStackParser:
         """Parse a single token into an expression"""
         if token.type == STRING:
             return StringLiteral(token.literal)
+        elif token.type == "BYTES" or (token.type is not None and str(token.type) == "BYTES"):
+            # Bytes literal (GRAMMAR.md section 4): the token literal is a
+            # Python bytes object, not a str.
+            from ..zexus_ast import BytesLiteral
+            return BytesLiteral(token.literal)
         elif token.type == INTERP_STRING:
             # Interpolated string — delegate to sub-parser for each expr part
             from ..lexer import Lexer as _Lexer
@@ -5471,7 +5476,10 @@ class ContextStackParser:
         else:
             # Keywords that can be used as identifiers (variable names):
             # DATA, ENTITY, VERIFY, PROTECT, etc. - treat them as identifiers when used in expression context
-            if hasattr(token, 'literal') and token.literal and token.literal[0].isalpha():
+            if (
+                hasattr(token, 'literal') and token.literal
+                and isinstance(token.literal, str) and token.literal[0].isalpha()
+            ):
                 # This is likely a keyword being used as a variable name (DATA, ENTITY, etc.)
                 return Identifier(token.literal)
             # Otherwise, default to StringLiteral for backward compatibility
@@ -7131,7 +7139,7 @@ class ContextStackParser:
             return None
         
         entity_name = tokens[1].literal
-        print(f"  👤 Entity: {entity_name}")
+        parser_debug(f"  👤 Entity: {entity_name}")
         
         # Parse capabilities list
         capabilities = []
@@ -7149,7 +7157,7 @@ class ContextStackParser:
                     i += 2
             i += 1
         
-        print(f"  🔑 Capabilities: {len(capabilities)}")
+        parser_debug(f"  🔑 Capabilities: {len(capabilities)}")
         
         return GrantStatement(
             entity_name=Identifier(entity_name),
@@ -7174,7 +7182,7 @@ class ContextStackParser:
             return None
         
         entity_name = tokens[1].literal
-        print(f"  👤 Entity: {entity_name}")
+        parser_debug(f"  👤 Entity: {entity_name}")
         
         # Parse capabilities list (same as grant)
         capabilities = []
@@ -7191,7 +7199,7 @@ class ContextStackParser:
                     i += 2
             i += 1
         
-        print(f"  🔑 Capabilities: {len(capabilities)}")
+        parser_debug(f"  🔑 Capabilities: {len(capabilities)}")
         
         return RevokeStatement(
             entity_name=Identifier(entity_name),

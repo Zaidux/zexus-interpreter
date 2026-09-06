@@ -197,6 +197,33 @@ let probe = "\x00\x01\xff"    // \xNN byte escapes (string semantics)
 let euro  = "\u20ac"            // \uNNNN unicode escapes
 ```
 
+### Bytes (binary payloads)
+
+```zexus
+let probe = b"\x00\x01\xff"          // raw byte escapes
+let magic = bytes_from_hex("deadbeef")  // hex → bytes
+print(probe.len())                      // 3
+print(probe.to_hex())                   // "0001ff"
+print(b"hi" + b"!")                     // concat
+print(b"abc".at(1))                     // 98 (byte value)
+print(b"abcdef".slice(1, 3).to_hex())   // "6263"
+print(b"payload".contains(b"load"))     // true
+print(b"\x41".to_string())              // "A" (utf-8 decode)
+```
+
+### Capability Grants (safe by default, dangerous on demand)
+
+Network and file builtins are denied until granted:
+
+```zexus
+grant self io_full
+print(file_write_text("note.txt", "hello"))
+revoke self io_full
+```
+
+`grant self network` enables `http_get` and sockets; `revoke` withdraws
+the same set. See GRAMMAR.md §6.
+
 ### String Concatenation
 
 Join strings with `+`. Use `str()` to convert other types.

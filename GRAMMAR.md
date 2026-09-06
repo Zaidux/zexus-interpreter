@@ -154,6 +154,12 @@ protect no_negative_balance {
 - `invariant` blocks in contracts: checked after every action.
 - Taint is functional, not grammatical: `sanitize(x, "sql")`,
   `mark_sanitized(x)`, `is_trusted(x)` — regular calls, composable.
+- Capability grants are the explicit opt-in for dangerous operations:
+  `grant self network` / `grant self io_full` / `revoke self io_full`.
+  Named capability sets expand to their constituents (`network` →
+  network.tcp + network.http); grants land in the runtime context the
+  gated builtins check. Gated by default: `http_get`, `file_read_text`,
+  `file_write_text`, sockets, process spawn.
 - Sandboxing is a runtime mode (`zx run --sandbox untrusted.zx`),
   not syntax.
 

@@ -556,6 +556,15 @@ class Lexer:
                 tok.column = current_column
             else:
                 if self.is_letter(self.ch):
+                    # Bytes literal prefix (GRAMMAR.md section 4): b"..."
+                    if self.ch == 'b' and self.peek_char() == '"':
+                        self.read_char()  # consume 'b'
+                        raw = self.read_bytes_literal()
+                        tok = Token(BYTES, raw)
+                        tok.line = current_line
+                        tok.column = current_column
+                        self._finalize_token(tok)
+                        return tok
                     literal = self.read_identifier()
 
                     if self.in_embedded_block:
@@ -926,6 +935,87 @@ class Lexer:
         while self.is_letter(self.ch) or self.is_digit(self.ch):
             self.read_char()
         return self.input[start_position:self.position]
+
+    def read_bytes_literal(self):
+        r"""Read a b"..." literal: escapes map to RAW BYTES (\xNN is the
+        byte 0xNN, not the Unicode codepoint — GRAMMAR.md section 4).
+        Interpolation is a string feature and is rejected here."""
+        if self.ch != '"':
+            self.read_char()
+        if self.ch != '"':
+            error = self.error_reporter.report_error(
+                ZexusSyntaxError,
+                "Malformed bytes literal: expected opening quote",
+                line=self.line,
+                column=self.column,
+                filename=self.filename,
+            )
+            raise error
+        self.read_char()  # consume opening quote
+        out = bytearray()
+        while self.ch != '"' and self.ch != '':
+            if self.ch == '\n':
+                error = self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Unterminated bytes literal",
+                    line=self.line,
+                    column=self.column,
+                    filename=self.filename,
+                    suggestion="Close the b\"...\" literal on one line.",
+                )
+                raise error
+            if self.ch == '\\':
+                self.read_char()
+                if self.ch == '':
+                    raise self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        "Incomplete escape at end of file",
+                        line=self.line, column=self.column, filename=self.filename,
+                    )
+                if self.ch == 'x':
+                    digits = []
+                    for _ in range(2):
+                        self.read_char()
+                        if self.ch == '' or self.ch not in '0123456789abcdefABCDEF':
+                            raise self.error_reporter.report_error(
+                                ZexusSyntaxError,
+                                "Incomplete \\x escape: expected 2 hex digits",
+                                line=self.line, column=self.column, filename=self.filename,
+                                suggestion="Write \\xNN, e.g. \\x41.",
+                            )
+                        digits.append(self.ch)
+                    out.append(int(''.join(digits), 16))
+                elif self.ch == 'u':
+                    raise self.error_reporter.report_error(
+                        ZexusSyntaxError,
+                        "\\uNNNN escapes are not valid in bytes literals (use \\xNN)",
+                        line=self.line, column=self.column, filename=self.filename,
+                        suggestion="b\"\\xNN\" produces the raw byte; \\u is for strings.",
+                    )
+                else:
+                    escape_map = {
+                        'n': 0x0A, 't': 0x09, 'r': 0x0D,
+                        '\\': 0x5C, '"': 0x22, "'": 0x27, '$': 0x24,
+                    }
+                    out.append(escape_map.get(self.ch, ord(self.ch) & 0xFF))
+            elif self.ch == '$' and self.peek_char() == '{':
+                raise self.error_reporter.report_error(
+                    ZexusSyntaxError,
+                    "Interpolation is not supported in bytes literals",
+                    line=self.line, column=self.column, filename=self.filename,
+                    suggestion="Build the payload with b\"...\".concat(...) instead.",
+                )
+            else:
+                out.extend(self.ch.encode("utf-8"))
+            self.read_char()
+        if self.ch != '"':
+            raise self.error_reporter.report_error(
+                ZexusSyntaxError,
+                "Unterminated bytes literal",
+                line=self.line, column=self.column, filename=self.filename,
+            )
+        self.read_char()  # consume closing quote
+        return bytes(out)
 
     def read_number(self):
         start_position = self.position

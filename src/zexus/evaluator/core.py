@@ -175,6 +175,7 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             "MethodCallExpression": self._handle_method_call_expression,
             "ListLiteral": self._handle_list_literal,
             "StringLiteral": self._handle_string_literal,
+            "BytesLiteral": self._handle_bytes_literal,
             "StringInterpolationExpression": self._handle_string_interpolation,
             "FloatLiteral": self._handle_float_literal,
             "MapLiteral": self._handle_map_literal,
@@ -356,6 +357,10 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         # a SECOND time, silently mangling any string containing a literal
         # backslash (e.g. "C:\new\table" lost its backslashes).
         return String(node.value, is_trusted=True)
+
+    def _handle_bytes_literal(self, node, env, stack_trace):
+        from ..object import Bytes
+        return Bytes(node.value)
 
     def _handle_string_interpolation(self, node, env, stack_trace):
         """Evaluate string interpolation: "hello ${name}" """

@@ -1,22 +1,18 @@
-// Crypto-inspired helper functions
-action hash_simple(value) {
-    // Simple hash-like transformation
-    let result = value * 31 + 17;
-    return result;
+// Canonical crypto example (GRAMMAR.md §4) — real primitives, one copy.
+use "crypto"
+
+function main() {
+    // Real hashing via the merged crypto module
+    let digest = hash_sha256("zexus")
+    print("sha256: " + digest)
+
+    // Hex literals + bytes for binary payload work
+    let payload = b"\x01\x02\xff"
+    print("payload hex: " + payload.to_hex())
+
+    // Keccak-256 (Ethereum-style) from the stdlib registry
+    let k = keccak256("zexus")
+    print("keccak256: " + k)
 }
 
-action encrypt_basic(data, key) {
-    // Basic XOR-style transformation
-    return data + key;
-}
-// Crypto-inspired helper functions
-action hash_simple(value) {
-    // Simple hash-like transformation
-    let result = value * 31 + 17;
-    return result;
-}
-
-action encrypt_basic(data, key) {
-    // Basic XOR-style transformation
-    return data + key;
-}
+main()

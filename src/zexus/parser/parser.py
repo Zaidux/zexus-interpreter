@@ -151,6 +151,7 @@ class UltimateParser:
             INT: self.parse_integer_literal,
             FLOAT: self.parse_float_literal,
             STRING: self.parse_string_literal,
+            BYTES: self.parse_bytes_literal,
             INTERP_STRING: self.parse_interpolated_string,
             BANG: self.parse_prefix_expression,
             MINUS: self.parse_prefix_expression,
@@ -3598,6 +3599,9 @@ class UltimateParser:
     def parse_string_literal(self):
         return StringLiteral(value=self.cur_token.literal)
 
+    def parse_bytes_literal(self):
+        return BytesLiteral(value=self.cur_token.literal)
+
     def parse_interpolated_string(self):
         """Parse a string with ${expr} interpolation.
         
@@ -4434,7 +4438,11 @@ class UltimateParser:
         capability = Identifier(self.cur_token.literal)
         self.next_token()
         
-        return GrantStatement(entity_name=entity_name, capability=capability)
+        # AST contract (zexus_ast.GrantStatement): capabilities is a LIST.
+        # The v1.x call passed capability= (singular), which raised
+        # TypeError, and the tolerant parser silently dropped every grant
+        # statement on the traditional engine.
+        return GrantStatement(entity_name=entity_name, capabilities=[capability])
 
     def parse_revoke_statement(self):
         """Parse revoke statement - revoke capability from entity"""
@@ -4457,7 +4465,8 @@ class UltimateParser:
         capability = Identifier(self.cur_token.literal)
         self.next_token()
         
-        return RevokeStatement(entity_name=entity_name, capability=capability)
+        # Same AST contract fix as grant: capabilities is a LIST.
+        return RevokeStatement(entity_name=entity_name, capabilities=[capability])
 
     def parse_validate_statement(self):
         """Parse validate statement - validate data"""

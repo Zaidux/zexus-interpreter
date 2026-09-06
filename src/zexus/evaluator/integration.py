@@ -29,8 +29,16 @@ class EvaluatorIntegration:
     
     def __init__(self):
         """Initialize all phase systems."""
+        # CAPABILITY STORE UNIFICATION (GRAMMAR.md / phase C): grants issued
+        # by the `grant` statement go to the global capability manager, but
+        # this integration used to construct its OWN manager — checks read a
+        # different object than grants wrote, so every grant was silently
+        # ineffective and gated builtins (http_get, file_read_text, ...) were
+        # permanently denied with no escape hatch. Both sides now share the
+        # global singleton.
+        from ..capability_system import get_capability_manager
         self.plugin_manager: PluginManager = PluginManager()
-        self.capability_manager: CapabilityManager = CapabilityManager()
+        self.capability_manager: CapabilityManager = get_capability_manager()
         self.vfs_manager: VirtualFileSystemManager = VirtualFileSystemManager()
         self.type_checker: TypeChecker = TypeChecker()
         self.type_inferencer: TypeInferencer = TypeInferencer()

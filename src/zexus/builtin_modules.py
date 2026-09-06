@@ -769,8 +769,12 @@ def get_builtin_module(module_name, evaluator=None):
     """
     global _BUILTIN_MODULES
     
-    # Initialize on first access
-    if not _BUILTIN_MODULES and evaluator:
+    # Initialize on first access. create_builtin_modules() never actually
+    # consumes the evaluator (docstring aspiration only) — requiring it
+    # here meant the VM (which passes evaluator=None) always got an empty
+    # registry, so use "crypto" silently shadowed the richer builtin module
+    # and sha256/secp256k1_sign were unreachable on the VM path.
+    if not _BUILTIN_MODULES:
         _BUILTIN_MODULES = create_builtin_modules(evaluator)
     
     return _BUILTIN_MODULES.get(module_name)

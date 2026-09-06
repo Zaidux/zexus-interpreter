@@ -526,6 +526,18 @@ class StringLiteral(Expression):
     def __str__(self):
         return self.value
 
+class BytesLiteral(Expression):
+    """b"\x41\xff" — raw byte sequence (GRAMMAR.md section 4)."""
+    def __init__(self, value):
+        self.value = value  # Python bytes
+
+    def __repr__(self):
+        return f"BytesLiteral({self.value!r})"
+
+    def __str__(self):
+        return str(self.value)
+
+
 class StringInterpolationExpression(Expression):
     """String interpolation: "hello ${name}, you are ${age} years old"
     

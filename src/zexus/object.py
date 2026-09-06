@@ -139,6 +139,115 @@ class String(Object):
         # Check if sanitized for this specific context
         return self.sanitized_for == context
 
+
+class Bytes(Object):
+    """Raw byte sequence (GRAMMAR.md section 4).
+
+    Binary payloads for protocol exploitation, signing, and encoding work.
+    Methods return Zexus objects and accept Zexus-or-raw arguments so the
+    tree-walk evaluator and the VM's getattr dispatch both work unchanged.
+    """
+
+    _PREVIEW = 32
+
+    def __init__(self, value):
+        if isinstance(value, Bytes):
+            value = value.value
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        self.value = bytes(value or b"")
+
+    def inspect(self):
+        preview = self.value[: self._PREVIEW].hex()
+        more = "…" if len(self.value) > self._PREVIEW else ""
+        return f'b"{preview}{more}"'
+
+    def type(self):
+        return "BYTES"
+
+    def __str__(self):
+        return self.inspect()
+
+    def __eq__(self, other):
+        if isinstance(other, Bytes):
+            return self.value == other.value
+        return False
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __len__(self):
+        return len(self.value)
+
+    def __add__(self, other):
+        # VM binary ops route through Python arithmetic on the wrapper
+        # objects; concat keeps the result a Bytes (GRAMMAR.md section 4).
+        if isinstance(other, Bytes):
+            return Bytes(self.value + other.value)
+        if isinstance(other, (bytes, bytearray)):
+            return Bytes(self.value + bytes(other))
+        return NotImplemented
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    # ── methods (canonical set — GRAMMAR.md section 4) ──────────────
+
+    @staticmethod
+    def _num(x, default=None):
+        v = getattr(x, "value", x)
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _raw(x):
+        if isinstance(x, Bytes):
+            return x.value
+        if isinstance(x, str):
+            return x.encode("utf-8")
+        if isinstance(x, int):
+            return bytes([x])
+        v = getattr(x, "value", x)
+        if isinstance(v, str):
+            return v.encode("utf-8")
+        return b""
+
+    def len(self):
+        return Integer(len(self.value))
+
+    def at(self, i):
+        idx = self._num(i)
+        if idx is None or not (0 <= idx < len(self.value)):
+            return NULL
+        return Integer(self.value[idx])
+
+    def slice(self, start=None, end=None):
+        s = self._num(start, 0) or 0
+        e = self._num(end, len(self.value))
+        if e is None:
+            e = len(self.value)
+        if s < 0:
+            s = max(0, len(self.value) + s)
+        if e < 0:
+            e = max(0, len(self.value) + e)
+        return Bytes(self.value[s:e])
+
+    def contains(self, x):
+        if isinstance(x, Integer) or isinstance(x, int):
+            return TRUE if self._num(x, -1) in self.value else FALSE
+        return TRUE if self._raw(x) in self.value else FALSE
+
+    def concat(self, other):
+        return Bytes(self.value + self._raw(other))
+
+    def to_hex(self):
+        return String(self.value.hex())
+
+    def to_string(self):
+        return String(self.value.decode("utf-8", errors="replace"))
+
 class List(Object):
     def __init__(self, elements): self.elements = elements
     def inspect(self):

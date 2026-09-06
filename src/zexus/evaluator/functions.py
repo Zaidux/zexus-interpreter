@@ -7,7 +7,7 @@ from ..zexus_ast import CallExpression, MethodCallExpression
 from ..object import (
     Environment, Integer, Float, String, List, Map, Boolean as BooleanObj,
     Null, Builtin, Action, LambdaFunction, ReturnValue, DateTime, Math, File, Debug,
-    EvaluationError, EntityDefinition
+    EvaluationError, EntityDefinition, Bytes
 )
 from .utils import is_error, debug_log, NULL, TRUE, FALSE, _resolve_awaitable, _zexus_to_python, _python_to_zexus, _to_str
 
@@ -611,6 +611,20 @@ class FunctionEvaluatorMixin:
                 # Return string representation of coroutine state
                 return String(obj.inspect())
 
+        # === Bytes Methods (GRAMMAR.md §4) =================================
+        # Bytes carries real methods on the object model (object.py), so the
+        # evaluator and the VM's getattr dispatch share one implementation.
+        if isinstance(obj, Bytes):
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            method = getattr(obj, method_name, None)
+            if method is None or not callable(method):
+                return EvaluationError(
+                    f"Bytes has no method '{method_name}' (see GRAMMAR.md §4)"
+                )
+            return method(*args)
+
         # === String Methods (GRAMMAR.md §4) ================================
         # v1.x shipped ZERO string methods (ISSUE8 R-031): .slice/.contains/
         # .split etc. raised "Method not supported" and string ops existed
@@ -952,6 +966,14 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("to_hex() takes exactly 1 argument")
             return Math.to_hex_string(a[0])
         
+        def _bytes_from_hex(*a):
+            if len(a) != 1 or not isinstance(a[0], String):
+                return EvaluationError("bytes_from_hex() takes exactly 1 hex string argument")
+            try:
+                return Bytes(bytes.fromhex(a[0].value.strip()))
+            except ValueError:
+                return EvaluationError("bytes_from_hex(): invalid hex string")
+
         def _from_hex(*a): 
             if len(a) != 1 or not isinstance(a[0], String): 
                 return EvaluationError("from_hex() takes exactly 1 string argument")
@@ -2924,6 +2946,7 @@ class FunctionEvaluatorMixin:
             "random": Builtin(_random, "random"),
             "to_hex": Builtin(_to_hex, "to_hex"),
             "from_hex": Builtin(_from_hex, "from_hex"),
+            "bytes_from_hex": Builtin(_bytes_from_hex, "bytes_from_hex"),
             "sqrt": Builtin(_sqrt, "sqrt"),
             "input": Builtin(_input, "input"),
             "hash_password": Builtin(_hash_password, "hash_password"),

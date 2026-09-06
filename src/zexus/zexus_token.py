@@ -8,6 +8,7 @@ EOF = "EOF"
 IDENT = "IDENT"
 INT = "INT"
 STRING = "STRING"
+BYTES = "BYTES"
 FLOAT = "FLOAT"
 
 # Operators

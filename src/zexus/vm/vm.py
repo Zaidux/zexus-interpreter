@@ -1137,6 +1137,10 @@ class VM:
         if value is None:
             return "null"
         t = type(value)
+        if t is bytes or t is bytearray:
+            preview = bytes(value[:32]).hex()
+            more = "…" if len(value) > 32 else ""
+            return f'b"{preview}{more}"'
         if t is int or t is str or t is float:
             return str(value)
         if t is bool:
@@ -1167,6 +1171,10 @@ class VM:
         # Fast path for common types
         t = type(value)
         if t is int or t is str or t is float or t is bool:
+            return value
+        # Bytes objects keep their wrapper (the generic .value branch below
+        # would reduce them to raw bytes and break method dispatch).
+        if t.__name__ == "Bytes" or isinstance(value, (bytes, bytearray)):
             return value
         
         if isinstance(value, (ZInteger, ZFloat, ZBoolean, ZString)):
@@ -3777,6 +3785,11 @@ class VM:
         def _unwrap(value):
             if isinstance(value, ZNull):
                 return None
+            # Bytes keeps its wrapper: the generic .value branch would
+            # reduce it to raw bytes and break method dispatch on the
+            # stored result (b"a" + b"b" then .to_hex()).
+            if value.__class__.__name__ == "Bytes":
+                return value
             return value.value if hasattr(value, 'value') else value
 
         def _binary_op(func):
