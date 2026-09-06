@@ -351,14 +351,11 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
     # --- Extended dispatch handlers (avoid isinstance chain) ---
 
     def _handle_string_literal(self, node, env, stack_trace):
-        value = node.value
-        value = value.replace('\\n', '\n')
-        value = value.replace('\\t', '\t')
-        value = value.replace('\\r', '\r')
-        value = value.replace('\\\\', '\\')
-        value = value.replace('\\"', '"')
-        value = value.replace("\\'", "'")
-        return String(value, is_trusted=True)
+        # The lexer already decodes escape sequences (lexer.py escape_map),
+        # so the string value here is final. The v1.x evaluator unescaped it
+        # a SECOND time, silently mangling any string containing a literal
+        # backslash (e.g. "C:\new\table" lost its backslashes).
+        return String(node.value, is_trusted=True)
 
     def _handle_string_interpolation(self, node, env, stack_trace):
         """Evaluate string interpolation: "hello ${name}" """

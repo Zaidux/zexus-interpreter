@@ -176,11 +176,21 @@ class CryptoPlugin:
         """
         algorithm = algorithm.upper()
         
-        # Check if this is a mock/test key (not PEM format)
-        # Real PEM keys start with "-----BEGIN"
+        # Mock-signature path (SECURITY): a non-PEM key previously produced a
+        # forgeable HMAC "signature" silently — and verify_signature accepted
+        # it using the same string as the public key, so any code path that
+        # reached sign()/verify() with a non-PEM key bypassed signature
+        # security entirely. Mock mode now requires an explicit, deliberate
+        # opt-in (ZEXUS_ALLOW_MOCK_CRYPTO=1) so tests can keep using it while
+        # production paths fail loudly instead of forging.
         if not private_key_pem.strip().startswith('-----BEGIN'):
-            # Use mock signature for testing purposes
-            # This is NOT cryptographically secure, only for testing!
+            import os
+            if os.environ.get('ZEXUS_ALLOW_MOCK_CRYPTO') != '1':
+                raise RuntimeError(
+                    "Refusing to sign with a non-PEM (mock) key: signatures would "
+                    "be forgeable. Pass a real PEM private key, or set "
+                    "ZEXUS_ALLOW_MOCK_CRYPTO=1 for tests only."
+                )
             data_str = str(data) if not isinstance(data, (str, bytes)) else data
             data_bytes = data_str.encode('utf-8') if isinstance(data_str, str) else data_str
             key_bytes = private_key_pem.encode('utf-8')

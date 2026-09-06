@@ -1513,6 +1513,18 @@ class VM:
             from ..builtin_modules import is_builtin_module, get_builtin_module
             if is_stdlib_module(module_path):
                 module_env = get_stdlib_module(module_path)
+                # REGISTRY MERGE (GRAMMAR.md / v1.9): mirror the tree-walk
+                # evaluator's merged registries so VM and interpreter expose
+                # the SAME module surface (crypto/datetime/math existed in
+                # both registries; stdlib shadowed the richer builtin one).
+                if module_env is not None and is_builtin_module(module_path):
+                    try:
+                        _builtin_env = get_builtin_module(module_path, None)
+                        if _builtin_env is not None:
+                            for _k, _v in _builtin_env.store.items():
+                                module_env.store[_k] = _v
+                    except Exception:
+                        pass
             elif is_builtin_module(module_path):
                 module_env = get_builtin_module(module_path, None)
         except Exception:

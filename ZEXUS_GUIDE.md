@@ -598,15 +598,12 @@ print(factorial(10))
 
 ### Protect / Verify (Policy Rules)
 
-Define declarative security rules with `protect` and `verify`:
+Apply a protection policy with the call form (the `protect rule ... { }`
+block form is not part of the unified grammar — see GRAMMAR.md §6/§9):
 
 ```zexus
-protect rule no_negative_balance {
-  verify balance >= 0
-  message "Balance cannot be negative"
-}
-
 let balance = 100
+protect(balance, { no_negative: true }, "strict")
 balance = balance - 50
 print(balance)
 ```
@@ -617,12 +614,11 @@ print(balance)
 
 ### Emit (Events)
 
-Emit named events with data payloads:
+Emit named events with the call form (the `emit event Name { ... }` block
+form is not part of the unified grammar — see GRAMMAR.md §9):
 
 ```zexus
-emit event user_login {
-  username: "alice"
-}
+emit user_login("alice")
 print("Event emitted")
 ```
 

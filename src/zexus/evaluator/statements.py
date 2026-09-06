@@ -1481,6 +1481,21 @@ class StatementEvaluatorMixin:
             try:
                 module_env = get_stdlib_module(file_path, self)
                 if module_env:
+                    # REGISTRY MERGE (GRAMMAR.md / v1.9): "crypto", "datetime"
+                    # and "math" exist in BOTH the stdlib and builtin
+                    # registries, and the stdlib check above used to win —
+                    # silently shadowing the richer builtin module (signing,
+                    # AES, merkle) so it was unreachable from use "crypto".
+                    # Expose the union instead; builtin implementations win
+                    # exact-name conflicts.
+                    if is_builtin_module(file_path):
+                        try:
+                            _builtin_env = get_builtin_module(file_path, self)
+                            if _builtin_env is not None:
+                                for _k, _v in _builtin_env.store.items():
+                                    module_env.store[_k] = _v
+                        except Exception:
+                            pass
                     # Handle named imports: use {read_file, write_file} from "stdlib/fs"
                     is_named_import = getattr(node, 'is_named_import', False)
                     names = getattr(node, 'names', [])

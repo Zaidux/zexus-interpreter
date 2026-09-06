@@ -60,9 +60,10 @@ def run_zexus_file(filename, debug_level='none', use_vm=False):
         ast = parser.parse_program()
         
         if parser.errors:
-            print(f"⚠️ Parse errors: {len(parser.errors)}", file=sys.stderr)
-            for error in parser.errors[:10]:  # Show first 10 errors
+            print(f"❌ Parse errors: {len(parser.errors)} — aborting (statements are never silently dropped)", file=sys.stderr)
+            for error in parser.errors[:10]:
                 print(f"  - {error}", file=sys.stderr)
+            sys.exit(1)
         
         if use_vm:
             # VM Execution Path (High Performance - Real Implementation)

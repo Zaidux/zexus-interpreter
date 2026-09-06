@@ -289,7 +289,7 @@ def _execute_inline_code(ctx, source_code):
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
 
-        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+        if parser.errors:
             console.print("[bold red]❌ Parse error in inline code:[/bold red]")
             for error in parser.errors:
                 _show_enriched_parser_error(console, error, error_reporter, "<inline>")
@@ -492,7 +492,7 @@ def run(ctx, file, args, use_vm, vm_mode, no_optimize, precompile_modules):
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
         
-        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+        if parser.errors:
             console.print("[bold red]❌ Critical parser errors detected, cannot continue:[/bold red]")
             for error in parser.errors:
                 # Try to extract line:column and show source context
@@ -979,7 +979,7 @@ def repl(ctx):
             parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
             program = parser.parse_program()
             
-            if parser.errors and any("critical" in e.lower() for e in parser.errors):
+            if parser.errors:
                 console.print("[red]Parser error:[/red]")
                 for error in parser.errors:
                     console.print(f"  ❌ {error}")
@@ -1169,7 +1169,7 @@ def profile(ctx, file, memory, top, json_output):
         parser = Parser(lexer, syntax_style, enable_advanced_strategies=advanced_parsing)
         program = parser.parse_program()
         
-        if parser.errors and any("critical" in e.lower() for e in parser.errors):
+        if parser.errors:
             console.print("[bold red]❌ Critical parser errors, cannot profile:[/bold red]")
             for error in parser.errors:
                 console.print(f"  ❌ {error}")

@@ -4114,6 +4114,22 @@ class UltimateParser:
             check_balance(amount)
         ])
         """
+        # Legacy form 'protect rule name { verify ... }' (documented in the
+        # guide) previously failed the LPAREN expectation and was silently
+        # dropped. Fail loudly with the migration path.
+        if self.peek_token_is(IDENT):
+            line = getattr(self.cur_token, "line", 0)
+            peek_literal = getattr(self.peek_token, "literal", "")
+            self.errors.append(
+                f"Line {line}: 'protect rule {peek_literal} {{ ... }}' is not "
+                "part of the unified grammar (it was previously dropped). Use "
+                "the call form protect(target, {{rules}}, \"level\") — see "
+                "GRAMMAR.md §6/§9"
+            )
+            while not self.cur_token_is(EOF) and not self.peek_token_is(RBRACE):
+                self.next_token()
+            return None
+
         if not self.expect_peek(LPAREN):
             return None
 
@@ -4226,21 +4242,28 @@ class UltimateParser:
                     # Pass modifiers to constructor
                     data_stmt = StateStatement(Identifier(data_name), data_value, modifiers=modifiers)
                     storage_vars.append(data_stmt)
-                    print(f"DEBUG: Parsed data {data_name} modifiers={modifiers}")
                     
                     # Consume optional semicolon (same as parse_state_statement)
                     if self.peek_token_is(SEMICOLON):
                         self.next_token()
 
-            # Check for persistent storage declaration
+            # 'persistent storage' is a legacy form that was previously
+            # parsed-and-discarded (a raw dict the evaluator never consumed).
+            # The unified grammar (GRAMMAR.md §5) has exactly one state form;
+            # fail loudly with the migration path instead of silently
+            # dropping the declaration.
             elif self.cur_token_is(IDENT) and self.cur_token.literal == "persistent":
-                self.next_token()
-                if self.cur_token_is(IDENT) and self.cur_token.literal == "storage":
+                line = getattr(self.cur_token, "line", 0)
+                self.errors.append(
+                    f"Line {line}: 'persistent storage' is not part of the unified "
+                    "grammar (it was previously ignored). Declare state as "
+                    "state { name: Type = default } — see GRAMMAR.md §9"
+                )
+                # Skip the remainder of the declaration so parsing can continue
+                # and surface further errors in one pass.
+                while not self.cur_token_is(EOF) and not self.cur_token_is(RBRACE) \
+                        and not self.cur_token_is(ACTION) and not self.cur_token_is(STATE):
                     self.next_token()
-                    if self.cur_token_is(IDENT):
-                        storage_name = self.cur_token.literal
-                        # Note: Persistent storage doesn't support standard modifiers yet
-                        storage_vars.append({"name": storage_name})
 
             # Check for action definition
             elif self.cur_token_is(ACTION):
@@ -5192,11 +5215,28 @@ class UltimateParser:
         return ThisExpression()
     
     def parse_emit_statement(self):
-        """Parse emit statement
+        """Parse emit statement (canonical form: emit Name(args) — GRAMMAR.md §5)
         
         emit Transfer(from, to, amount);
         emit StateChange(\"balance_updated\", new_balance);
         """
+        # Legacy form 'emit event Name { ... }' previously failed IDENT
+        # expectation and the whole statement was silently dropped (the
+        # guide documented this form). Fail loudly with the migration path.
+        if self.peek_token_is(EVENT):
+            line = getattr(self.cur_token, "line", 0)
+            self.errors.append(
+                f"Line {line}: 'emit event Name {{ ... }}' is not part of the "
+                "unified grammar. Use the call form: emit Name(args) — see "
+                "GRAMMAR.md §9"
+            )
+            # Skip to end of statement so remaining errors surface in one pass.
+            while not self.cur_token_is(EOF) and not self.peek_token_is(SEMICOLON) \
+                    and not self.peek_token_is(RBRACE):
+                self.next_token()
+            if self.peek_token_is(SEMICOLON):
+                self.next_token()
+            return None
         if not self.expect_peek(IDENT):
             return None
         
