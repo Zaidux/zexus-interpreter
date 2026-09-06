@@ -610,6 +610,92 @@ class FunctionEvaluatorMixin:
             if method_name == "inspect":
                 # Return string representation of coroutine state
                 return String(obj.inspect())
+
+        # === String Methods (GRAMMAR.md §4) ================================
+        # v1.x shipped ZERO string methods (ISSUE8 R-031): .slice/.contains/
+        # .split etc. raised "Method not supported" and string ops existed
+        # only as global functions. The unified grammar makes methods the
+        # canonical form for all three categories (payload inspection in
+        # exploit scripts, rule writing in defense, decoding in crypto).
+        if isinstance(obj, String):
+            args = self.eval_expressions(node.arguments, env)
+            if is_error(args):
+                return args
+            s = obj.value
+
+            def _sval(i):
+                if i >= len(args) or args[i] is None or args[i] is NULL:
+                    return None
+                v = args[i]
+                return v.value if hasattr(v, "value") else str(v)
+
+            def _int_arg(i, default):
+                v = _sval(i)
+                if v is None:
+                    return default
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    return default
+
+            if method_name == "len":
+                return Integer(len(s))
+            elif method_name in ("upper", "uppercase", "to_upper"):
+                return String(s.upper())
+            elif method_name in ("lower", "lowercase", "to_lower"):
+                return String(s.lower())
+            elif method_name == "trim":
+                return String(s.strip())
+            elif method_name == "contains":
+                needle = _sval(0) or ""
+                return TRUE if needle in s else FALSE
+            elif method_name == "starts_with":
+                return TRUE if s.startswith(_sval(0) or "") else FALSE
+            elif method_name == "ends_with":
+                return TRUE if s.endswith(_sval(0) or "") else FALSE
+            elif method_name == "index_of":
+                return Integer(s.find(_sval(0) or ""))
+            elif method_name == "slice":
+                start = _int_arg(0, 0)
+                end = _int_arg(1, len(s))
+                if start < 0:
+                    start = max(0, len(s) + start)
+                if end < 0:
+                    end = max(0, len(s) + end)
+                return String(s[start:end])
+            elif method_name == "split":
+                sep = _sval(0)
+                parts = s.split(sep) if sep is not None else s.split()
+                return List([String(part) for part in parts])
+            elif method_name == "replace":
+                return String(s.replace(_sval(0) or "", _sval(1) or ""))
+            elif method_name == "join":
+                items = args[0] if args else None
+                elements = getattr(items, "elements", None) or (items if isinstance(items, list) else [])
+                joined = s.join(
+                    str(getattr(e, "value", e)) for e in elements
+                )
+                return String(joined)
+            elif method_name == "reverse":
+                return String(s[::-1])
+            elif method_name == "is_empty":
+                return TRUE if not s else FALSE
+            elif method_name == "to_int":
+                try:
+                    return Integer(int(s.strip()))
+                except ValueError:
+                    return NULL
+            elif method_name == "to_hex":
+                return String(s.encode("utf-8").hex())
+            elif method_name == "from_hex":
+                try:
+                    return String(bytes.fromhex(s.strip()).decode("utf-8"))
+                except ValueError:
+                    return NULL
+            else:
+                return EvaluationError(
+                    f"String has no method '{method_name}' (see GRAMMAR.md §4)"
+                )
         
         # === Map Methods ===
         if isinstance(obj, Map):

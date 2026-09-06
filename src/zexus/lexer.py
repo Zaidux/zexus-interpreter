@@ -569,6 +569,31 @@ class Lexer:
                     self._finalize_token(tok)
                     return tok
                 elif self.is_digit(self.ch):
+                    # Hex integer literals (GRAMMAR.md section 4): 0xFF / 0Xff.
+                    # Emitted with the DECIMAL value as the literal so the
+                    # parser/evaluator's int(literal) conversion is unchanged.
+                    if self.ch == '0' and self.peek_char() in ('x', 'X'):
+                        self.read_char()  # consume '0'
+                        self.read_char()  # consume 'x'
+                        start = self.position
+                        while self.ch and (self.ch in '0123456789abcdefABCDEF'):
+                            self.read_char()
+                        hex_str = self.input[start:self.position]
+                        if not hex_str:
+                            error = self.error_reporter.report_error(
+                                ZexusSyntaxError,
+                                "Invalid hex literal: expected hex digits after '0x'",
+                                line=self.line,
+                                column=self.column,
+                                filename=self.filename,
+                                suggestion="Write at least one hex digit, e.g. 0xFF."
+                            )
+                            raise error
+                        tok = Token(INT, str(int(hex_str, 16)))
+                        tok.line = current_line
+                        tok.column = current_column
+                        self._finalize_token(tok)
+                        return tok
                     num_literal = self.read_number()
                     if '.' in num_literal:
                         tok = Token(FLOAT, num_literal)
@@ -701,17 +726,41 @@ class Lexer:
                         suggestion="Remove the backslash or complete the escape sequence."
                     )
                     raise error
-                # Map escape sequences to their actual characters
-                escape_map = {
-                    'n': '\n',
-                    't': '\t',
-                    'r': '\r',
-                    '\\': '\\',
-                    '"': '"',
-                    "'": "'",
-                    '$': '$'
-                }
-                result.append(escape_map.get(self.ch, self.ch))
+                # \xNN and \uNNNN escapes (GRAMMAR.md section 4) — required
+                # for binary protocol payloads and unicode without breaking
+                # multi-line handling.
+                if self.ch == 'x' or self.ch == 'u':
+                    hex_len = 2 if self.ch == 'x' else 4
+                    hex_digits = []
+                    for _ in range(hex_len):
+                        self.read_char()
+                        if self.ch == '' or self.ch not in '0123456789abcdefABCDEF':
+                            error = self.error_reporter.report_error(
+                                ZexusSyntaxError,
+                                "Incomplete \\%s escape: expected %d hex digits" % ('x' if hex_len == 2 else 'u', hex_len),
+                                line=self.line,
+                                column=self.column,
+                                filename=self.filename,
+                                suggestion="Write %s." % ('\\x41' if hex_len == 2 else '\\u0041'),
+                            )
+                            raise error
+                        hex_digits.append(self.ch)
+                    try:
+                        result.append(chr(int(''.join(hex_digits), 16)))
+                    except ValueError:
+                        result.append(''.join(hex_digits))
+                else:
+                    # Map escape sequences to their actual characters
+                    escape_map = {
+                        'n': '\n',
+                        't': '\t',
+                        'r': '\r',
+                        '\\': '\\',
+                        '"': '"',
+                        "'": "'",
+                        '$': '$'
+                    }
+                    result.append(escape_map.get(self.ch, self.ch))
             elif self.ch == '$' and self.peek_char() == '{':
                 # String interpolation: ${expr}
                 has_interpolation = True

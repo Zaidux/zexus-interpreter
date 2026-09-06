@@ -170,6 +170,33 @@ print(x)
 
 ---
 
+### String Methods (canonical — GRAMMAR.md §4)
+
+Strings carry methods directly (v1.x had only global functions):
+
+```zexus
+print("  Hello  ".trim())          // "Hello"
+print("hello".len())               // 5
+print("hello".contains("ell"))     // true
+print("hello".upper())             // HELLO
+print("abcdef".slice(1, 3))        // "bc"
+print("a-b-c".split("-"))          // [a, b, c]
+print("hello".replace("l", "L"))   // heLLo
+print("a-b".split("-").join("_"))  // a_b
+print("42".to_int())               // 42
+print("hi".to_hex())               // 6869
+print("6869".from_hex())           // hi
+```
+
+### Hex Literals and Escapes
+
+```zexus
+let mask = 0xFF                 // 255
+let magic = 0xDEADBEEF
+let probe = "\x00\x01\xff"    // \xNN byte escapes (string semantics)
+let euro  = "\u20ac"            // \uNNNN unicode escapes
+```
+
 ### String Concatenation
 
 Join strings with `+`. Use `str()` to convert other types.

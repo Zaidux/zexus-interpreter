@@ -2775,7 +2775,10 @@ class VM:
                     continue
                 result = None
                 try:
-                    if method_name == "set":
+                    # Same fast-path scoping as the async handler: get/set
+                    # apply to MAP/LIST targets; contract actions named
+                    # get/set must reach call_method below.
+                    if method_name == "set" and isinstance(target, (ZMap, ZList, dict, list)):
                         if isinstance(target, ZMap) and len(args) >= 2:
                             key = args[0]
                             if isinstance(key, ZString):
@@ -2797,10 +2800,10 @@ class VM:
                         elif isinstance(target, (dict, list)) and len(args) >= 2:
                             target[args[0]] = args[1]
                             result = args[1]
-                    elif method_name == "get":
-                        if isinstance(target, ZMap) and args:
+                    elif method_name == "get" and isinstance(target, (ZMap, dict)) and args:
+                        if isinstance(target, ZMap):
                             result = target.get(args[0])
-                        elif isinstance(target, dict) and args:
+                        else:
                             result = target.get(args[0])
                     # ── Zexus dict/map methods ──
                     elif isinstance(target, dict) and method_name in _DICT_METHODS:
@@ -3395,6 +3398,18 @@ class VM:
         if isinstance(fn, _EntityDef):
             return self._construct_entity(fn, args)
 
+        # --- Contract instantiation (GRAMMAR.md §5, fixes ISSUE8 V-001) ---
+        # `Counter()` in a VM-executed program previously fell through every
+        # callable branch and returned None, so every later c.method() was
+        # null on the VM while working on the tree-walk evaluator. Smart-
+        # Contract.__call__ → instantiate(args) clones storage per instance;
+        # contract actions then execute through the evaluator with identical
+        # semantics to the tree-walk path (hybrid execution).
+        from ..security import SmartContract as _ZSmartContract
+        if isinstance(fn, _ZSmartContract):
+            wrapped = [self._wrap_for_builtin(a) for a in args]
+            return fn.instantiate(wrapped)
+
         real_fn = fn.fn if hasattr(fn, "fn") else fn
         ZAction, ZLambda = _get_action_types()
         if ZAction is not None and isinstance(real_fn, (ZAction, ZLambda)):
@@ -3984,7 +3999,12 @@ class VM:
                 print(f"[VM TRACE] CALL_METHOD {method_name} target={target_type} args={len(args)} preview={preview}")
                 self._call_method_trace_count += 1
             try:
-                if method_name == "set":
+                # 'get'/'set' fast paths apply to MAP/LIST targets only. A
+                # contract action named get/set (GRAMMAR.md §5) must reach
+                # the call_method machinery below — previously it fell into
+                # this branch, matched neither subtype, and silently
+                # returned null (ISSUE8 V-001 symptom).
+                if method_name == "set" and isinstance(target, (ZMap, ZList, dict, list)):
                     if isinstance(target, ZMap):
                         if len(args) >= 2:
                             key = args[0]
@@ -4015,10 +4035,10 @@ class VM:
                             result = args[1]
                         else:
                             result = None
-                elif method_name == "get":
-                    if isinstance(target, ZMap) and args:
+                elif method_name == "get" and isinstance(target, (ZMap, dict)) and args:
+                    if isinstance(target, ZMap):
                         result = target.get(args[0])
-                    elif isinstance(target, dict) and args:
+                    else:
                         result = target.get(args[0])
                 elif isinstance(target, dict) and method_name in _DICT_METHODS:
                     result = _DICT_METHODS[method_name](target, args)
