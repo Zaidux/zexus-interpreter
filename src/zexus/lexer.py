@@ -180,6 +180,7 @@ _DATA_KEYWORD_CONTRACT_CONTEXTS = {
     LBRACE,
     RBRACE,
     RBRACKET,
+    RPAREN,  # `foo()` then newline: `data Block {}` follows a call — found by the v2 example sweep
     STRING,
     INT,
     FLOAT,

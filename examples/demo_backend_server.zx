@@ -122,7 +122,7 @@ print("  Path:", parsed.path)
 
 let response = build_http_response(200, '{"users": []}')
 print("\n📝 Example HTTP Response:")
-print("  ", replace(response, "\n", "\n   "))
+print("  ", response.replace("\n", "\n   "))
 
 // ============================================================================
 // PART 3: RESTful API Router
@@ -146,7 +146,8 @@ action route_request(request) {
     for each route in routes {
         if route.method == request.method {
             if route.path == request.path {
-                return route.handler(request)
+                let handler_fn = route.handler
+                return handler_fn(request)
             }
         }
     }
@@ -182,7 +183,7 @@ register_route("GET", "/health", get_health)
 print("\n🧪 Testing Router:")
 let test_req = HttpRequest{method: "GET", path: "/health", headers: {}, body: ""}
 let test_resp = route_request(test_req)
-print("  Response for GET /health:", replace(test_resp, "\n", " "))
+print("  Response for GET /health:", test_resp.replace("\n", " "))
 
 // ============================================================================
 // PART 4: Blockchain/P2P Consensus Foundation

@@ -1,1 +1,12 @@
-let my_func = action(): return "hello"
+// Parse-and-eval diagnostics (v2 canonical)
+fn check(name, expr) {
+    print(name, "→", expr)
+}
+
+check("arith", 1 + 2 * 3)
+check("string", "a" + "b")
+check("list", [1, 2, 3].len())
+check("map", {"k": "v"}["k"])
+check("match", match 1 { 1 => "one" _ => "other" })
+let r = 0..3
+check("range", r.len())

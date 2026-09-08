@@ -4,13 +4,8 @@
   "description": "A security-first programming language for exploits, defense, and crypto",
   "main": "index.js",
   "bin": {
-    "zexus": "./bin/zexus",
     "zx": "./bin/zx",
-    "zpm": "./bin/zpm",
-    "zx-run": "./bin/zx-run",
-    "zx-dev": "./bin/zx-dev",
-    "zx-deploy": "./bin/zx-deploy",
-    "zpics": "./bin/zpics"
+    "zxpm": "./bin/zxpm"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

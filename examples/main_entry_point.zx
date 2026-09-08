@@ -1,8 +1,8 @@
-# Example: Main Entry Point Pattern (like Python's if __name__ == "__main__")
-# This demonstrates how to use the __MODULE__ variable to determine if
-# a file is being run directly or imported as a module.
+// Example: Main Entry Point Pattern (like Python's if __name__ == "__main__")
+// This demonstrates how to use the __MODULE__ variable to determine if
+// a file is being run directly or imported as a module.
 
-# Define some utility functions that can be imported
+// Define some utility functions that can be imported
 action greet(name) {
     return "Hello, " + name + "!"
 }
@@ -15,17 +15,17 @@ action multiply(a, b) {
     return a * b
 }
 
-# Export functions so they can be imported by other modules
+// Export functions so they can be imported by other modules
 export greet
 export add
 export multiply
 
-# Main entry point - only runs when file is executed directly
+// Main entry point - only runs when file is executed directly
 if __MODULE__ == "__main__" {
     print("🚀 Running as main program!")
     print("")
     
-    # Test the functions
+    // Test the functions
     print("Testing utility functions:")
     print(greet("World"))
     print("5 + 3 = " + string(add(5, 3)))
@@ -35,5 +35,5 @@ if __MODULE__ == "__main__" {
     print("✅ Main execution complete!")
 }
 
-# If this file is imported, the functions are available
-# but the "main" block won't execute
+// If this file is imported, the functions are available
+// but the "main" block won't execute

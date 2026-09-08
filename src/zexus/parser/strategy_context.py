@@ -5340,6 +5340,22 @@ class ContextStackParser:
                     )
                 continue
 
+            # RANGE (GRAMMAR.md section 3): start..end — exclusive. Handled
+            # here at the lowest precedence so `a+1..b*2` ranges the sums.
+            if t.type == RANGE:
+                from ..zexus_ast import RangeExpression
+                i += 1  # skip '..'
+                end_tokens = tokens[i:]
+                if not end_tokens:
+                    parser_debug("  ❌ Range without end operand")
+                    break
+                end = self._parse_comparison_and_above(end_tokens)
+                if end is None:
+                    break
+                current_expr = RangeExpression(start=current_expr, end=end)
+                i = n  # consumed the rest as the end operand
+                continue
+
             # Binary operators (comparisons and arithmetic - but NOT AND/OR which are handled above)
             if t.type in {PLUS, MINUS, ASTERISK, SLASH, MOD, POWER,
                          LT, GT, EQ, NOT_EQ, LTE, GTE}:

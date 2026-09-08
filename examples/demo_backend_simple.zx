@@ -184,18 +184,20 @@ broadcast_to_network("NEW_BLOCK:" + latest["hash"])
 print("\n📜 Part 5: Smart Contract Execution")
 
 contract TokenContract {
-    let balances = {}
-    let total_supply = 0
+    state {
+        balances = {}
+        total_supply = 0
+    }
     
     action init(supply) {
-        total_supply = supply
-        balances = {"creator": supply}
+        this.total_supply = supply
+        this.balances = {"creator": supply}
         print("  💰 Token contract initialized with supply:", supply)
         return true
     }
     
     action transfer(from, to, amount) {
-        let from_balance = balances[from]
+        let from_balance = this.balances[from]
         
         if from_balance == null {
             print("  ❌ Account", from, "not found")
@@ -207,13 +209,13 @@ contract TokenContract {
             return false
         }
         
-        balances[from] = from_balance - amount
+        this.balances[from] = from_balance - amount
         
-        let to_balance = balances[to]
+        let to_balance = this.balances[to]
         if to_balance == null {
-            balances[to] = amount
+            this.balances[to] = amount
         } else {
-            balances[to] = to_balance + amount
+            this.balances[to] = to_balance + amount
         }
         
         print("  ✅ Transfer:", from, "→", to, "=", amount, "tokens")
@@ -221,7 +223,7 @@ contract TokenContract {
     }
     
     action getBalance(account) {
-        let bal = balances[account]
+        let bal = this.balances[account]
         if bal == null {
             return 0
         }

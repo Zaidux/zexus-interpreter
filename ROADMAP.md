@@ -181,6 +181,29 @@ Sequencing per owner decision: F → **I** → G → E.
   WildcardPattern, VariablePattern). Match now works identically
   through the CLI on both engines.
 
+**Mid-Phase I (v2 example sweep — every .zx in examples/ run under v2):**
+- Launchers unified: 7 bin/ entries → 2 (`zx` + `zxpm`); the other five
+  invoked Python modules that mostly never existed (runner/dev/deploy)
+- 3 LANGUAGE BUGS the sweep found and fixed:
+  1. `data` keyword didn't lex after `RPAREN` (any statement following a
+     call) — context set gap
+  2. **module-level state mutation from actions/functions silently lost
+     on the tree-walk** (R-018's sibling, root-caused): closure captures
+     cloned the env's dict-store, so `assign` mutated the copy. Actions
+     and functions now capture the LIVE env; demo_simple_working chain
+     length 0-vs-3 divergence eliminated (both engines now agree)
+  3. RANGE token unsupported in the ADVANCED (strategy) parser — `let r
+     = 0..3` parsed as plain IntegerLiteral(0) via `zx run`
+- Example migrations to v2 canonical: `#` comments → `//` (2 files),
+  token_contract (v1 `state x;` decls → `state {}` block, `limit`/`pure`
+  modifiers dropped, `this.`-qualification), contract `let` fields →
+  state (demo_backend_simple), `replace()` free-function → method,
+  entity-field handler call extracted (R-029 workaround), ziver_chain
+  fully migrated (colon bodies, `push(list,x)` → `list.push(x)`, `str`),
+  three debug scripts rewritten canonically
+- Result: **all 30 examples pass on both engines** (3 DB examples need
+  live servers by design; 3 long-running servers verified by timeout+rc)
+
 **Remaining (next pass):** full guide regeneration from the executable
 corpus; launcher consolidation (7 bin/ entries → ~2); feature purge of
 the remaining half-wired keyword forms (`emit {}` object form,

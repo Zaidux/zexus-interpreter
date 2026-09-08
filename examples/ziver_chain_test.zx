@@ -1,92 +1,102 @@
-# ZIVER CHAIN - Complete Test
+// ZIVER CHAIN - Complete Test
 
-print "🚀 INITIALIZING ZIVER CHAIN..."
+print("🚀 INITIALIZING ZIVER CHAIN...")
 
-# Block creation
-action createBlock(index, data, previous_hash):
+// Block creation
+action createBlock(index, data, previous_hash) {
     let block = {
         "index": index,
         "timestamp": 1234567890,
         "data": data,
         "previous_hash": previous_hash,
-        "hash": "hash_" + string(index),
+        "hash": "hash_" + str(index),
         "nonce": 0
     }
     return block
 
-# Blockchain management
-action createBlockchain():
+// Blockchain management
+}
+
+action createBlockchain() {
     let genesis = createBlock(0, "Genesis Block", "0")
     return [genesis]
 
-action addBlock(blockchain, data):
-    let previous = last(blockchain)
+}
+
+action addBlock(blockchain, data) {
+    let previous = blockchain[blockchain.len() - 1]
     let new_block = createBlock(previous.index + 1, data, previous.hash)
-    blockchain = push(blockchain, new_block)
+    blockchain = blockchain.push(new_block)
     return blockchain
 
-# Bounce-back wallet system
-action createWallet(name, initial_balance):
+// Bounce-back wallet system
+}
+
+action createWallet(name, initial_balance) {
     return {
         "name": name,
         "balance": initial_balance,
         "address": "ziv_" + name
     }
 
-action sendTokens(sender, receiver, amount):
-    # Bounce-back conditions
+}
+
+action sendTokens(sender, receiver, amount) {
+    // Bounce-back conditions
     if sender.balance < amount:
-        print "🚫 BOUNCE BACK: " + sender.name + " insufficient funds!"
+        print("🚫 BOUNCE BACK: " + sender.name + " insufficient funds!")
         return false
 
     if not receiver.address.startswith("ziv_"):
-        print "🚫 BOUNCE BACK: Invalid receiver address!"
+        print("🚫 BOUNCE BACK: Invalid receiver address!")
         return false
 
-    # Successful transaction
+    // Successful transaction
     sender.balance = sender.balance - amount
     receiver.balance = receiver.balance + amount
-    print "✅ TRANSACTION: " + string(amount) + " ZIV from " + sender.name + " to " + receiver.name
+    print("✅ TRANSACTION: " + str(amount) + " ZIV from " + sender.name + " to " + receiver.name)
     return true
 
-# TEST THE COMPLETE SYSTEM
-print ""
-print "🧱 TESTING BLOCKCHAIN..."
+// TEST THE COMPLETE SYSTEM
+}
+
+print("")
+print("🧱 TESTING BLOCKCHAIN...")
 let chain = createBlockchain()
-print "Genesis block created!"
+print("Genesis block created!")
 
 chain = addBlock(chain, "Alice sends 100 ZIV to Bob")
 chain = addBlock(chain, "Bob sends 50 ZIV to Charlie")
 chain = addBlock(chain, "Mining reward: 10 ZIV to Miner")
 
-print "Blockchain height: " + string(len(chain))
-print "Latest block data: " + last(chain).data
+print("Blockchain height: " + str(len(chain)))
+print("Latest block data: " + chain[chain.len() - 1].data)
 
-print ""
-print "💰 TESTING BOUNCE-BACK WALLETS..."
+print("")
+print("💰 TESTING BOUNCE-BACK WALLETS...")
 let alice = createWallet("alice", 1000)
 let bob = createWallet("bob", 500)
 let charlie = createWallet("charlie", 200)
 let invalid = {"name": "hacker", "balance": 0, "address": "invalid"}
 
-print "Initial balances:"
-print "  Alice: " + string(alice.balance) + " ZIV"
-print "  Bob: " + string(bob.balance) + " ZIV"
-print "  Charlie: " + string(charlie.balance) + " ZIV"
+print("Initial balances:")
+print("  Alice: " + str(alice.balance) + " ZIV")
+print("  Bob: " + str(bob.balance) + " ZIV")
+print("  Charlie: " + str(charlie.balance) + " ZIV")
 
-print ""
-print "🔀 Testing transactions..."
+print("")
+print("🔀 Testing transactions...")
 sendTokens(alice, bob, 100)      # Should work
 sendTokens(alice, invalid, 200)  # Should bounce back
 sendTokens(bob, charlie, 600)    # Should bounce back (insufficient)
 sendTokens(charlie, alice, 50)   # Should work
 
-print ""
-print "📊 Final balances:"
-print "  Alice: " + string(alice.balance) + " ZIV"
-print "  Bob: " + string(bob.balance) + " ZIV"
-print "  Charlie: " + string(charlie.balance) + " ZIV"
+print("")
+print("📊 Final balances:")
+print("  Alice: " + str(alice.balance) + " ZIV")
+print("  Bob: " + str(bob.balance) + " ZIV")
+print("  Charlie: " + str(charlie.balance) + " ZIV")
 
-print ""
-print "🎉 ZIVER CHAIN TEST COMPLETE!"
-print "✨ AI-Enhanced Quantum-Resistant Blockchain Ready!"
+print("")
+print("🎉 ZIVER CHAIN TEST COMPLETE!")
+print("✨ AI-Enhanced Quantum-Resistant Blockchain Ready!")

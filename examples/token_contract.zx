@@ -11,29 +11,31 @@ print("");
 // ============================================================================
 
 contract ZexusToken {
+state {
+    this.balances = {}
+    this.allowances = {}
+    this.total_supply = 0
+    this.token_name = "Zexus Token"
+    this.token_symbol = "ZXT"
+    this.decimals = 18
+    this.paused = false
+    this.owner = null
+    this.balance_history = []
+}
     // Immutable ledger for balance history
-    ledger balance_history;
-    
+
     // Mutable state variables
-    state balances = {};
-    state allowances = {};
-    state total_supply = 0;
-    state token_name = "Zexus Token";
-    state token_symbol = "ZXT";
-    state decimals = 18;
-    state owner;
-    state paused = false;
-    
+
     // ========================================================================
     // CONSTRUCTOR
     // ========================================================================
     
-    action init(initial_supply) limit 100000 {
+    action init(initial_supply) {
         print("Initializing Zexus Token...");
         
-        owner = TX.caller;
-        total_supply = initial_supply;
-        balances[owner] = initial_supply;
+        this.owner = TX.caller;
+        this.total_supply = initial_supply;
+        this.balances[owner] = initial_supply;
         
         print("Token created:");
         print("  Name: " + token_name);
@@ -42,7 +44,7 @@ contract ZexusToken {
         print("  Owner: " + owner);
         
         // Record in ledger
-        balance_history = {
+        this.balance_history = {
             account: owner,
             balance: initial_supply,
             timestamp: TX.timestamp,
@@ -54,14 +56,14 @@ contract ZexusToken {
     // VIEW FUNCTIONS (Pure - No State Modification)
     // ========================================================================
     
-    action pure balanceOf(account) {
+    action balanceOf(account) {
         if (balances[account]) {
             return balances[account];
         }
         return 0;
     }
     
-    action pure allowance(token_owner, spender) {
+    action allowance(token_owner, spender) {
         let key = token_owner + ":" + spender;
         if (allowances[key]) {
             return allowances[key];
@@ -69,15 +71,15 @@ contract ZexusToken {
         return 0;
     }
     
-    action pure totalSupply() {
+    action totalSupply() {
         return total_supply;
     }
     
-    action pure name() {
+    action name() {
         return token_name;
     }
     
-    action pure symbol() {
+    action symbol() {
         return token_symbol;
     }
     
@@ -85,7 +87,7 @@ contract ZexusToken {
     // TRANSFER FUNCTION
     // ========================================================================
     
-    action transfer(recipient, amount) limit 50000 {
+    action transfer(recipient, amount) {
         let sender = TX.caller;
         
         // Security checks
@@ -95,11 +97,11 @@ contract ZexusToken {
         require(balances[sender] >= amount, "Insufficient balance");
         
         // Execute transfer
-        balances[sender] = balances[sender] - amount;
-        balances[recipient] = balances[recipient] + amount;
+        this.balances[sender] = balances[sender] - amount;
+        this.balances[recipient] = balances[recipient] + amount;
         
         // Record in ledger
-        balance_history = {
+        this.balance_history = {
             from: sender,
             to: recipient,
             amount: amount,
@@ -121,14 +123,14 @@ contract ZexusToken {
     // APPROVE & TRANSFERFROM (Allowance Pattern)
     // ========================================================================
     
-    action approve(spender, amount) limit 30000 {
+    action approve(spender, amount) {
         let token_owner = TX.caller;
         
         require(!paused, "Contract is paused");
         require(amount >= 0, "Amount cannot be negative");
         
         let key = token_owner + ":" + spender;
-        allowances[key] = amount;
+        this.allowances[key] = amount;
         
         print("Approval granted:");
         print("  Owner: " + token_owner);
@@ -138,7 +140,7 @@ contract ZexusToken {
         return true;
     }
     
-    action transferFrom(sender, recipient, amount) limit 70000 {
+    action transferFrom(sender, recipient, amount) {
         let spender = TX.caller;
         let key = sender + ":" + spender;
         
@@ -149,14 +151,14 @@ contract ZexusToken {
         require(allowances[key] >= amount, "Insufficient allowance");
         
         // Update balances
-        balances[sender] = balances[sender] - amount;
-        balances[recipient] = balances[recipient] + amount;
+        this.balances[sender] = balances[sender] - amount;
+        this.balances[recipient] = balances[recipient] + amount;
         
         // Update allowance
-        allowances[key] = allowances[key] - amount;
+        this.allowances[key] = allowances[key] - amount;
         
         // Record in ledger
-        balance_history = {
+        this.balance_history = {
             from: sender,
             to: recipient,
             amount: amount,
@@ -179,18 +181,18 @@ contract ZexusToken {
     // MINT & BURN (Owner Only)
     // ========================================================================
     
-    action mint(recipient, amount) limit 60000 {
+    action mint(recipient, amount) {
         // Access control
         require(TX.caller == owner, "Only owner can mint");
         require(!paused, "Contract is paused");
         require(amount > 0, "Amount must be positive");
         
         // Mint new tokens
-        balances[recipient] = balances[recipient] + amount;
-        total_supply = total_supply + amount;
+        this.balances[recipient] = balances[recipient] + amount;
+        this.total_supply = total_supply + amount;
         
         // Record in ledger
-        balance_history = {
+        this.balance_history = {
             to: recipient,
             amount: amount,
             timestamp: TX.timestamp,
@@ -206,7 +208,7 @@ contract ZexusToken {
         return true;
     }
     
-    action burn(amount) limit 50000 {
+    action burn(amount) {
         let account = TX.caller;
         
         require(!paused, "Contract is paused");
@@ -214,11 +216,11 @@ contract ZexusToken {
         require(balances[account] >= amount, "Insufficient balance to burn");
         
         // Burn tokens
-        balances[account] = balances[account] - amount;
-        total_supply = total_supply - amount;
+        this.balances[account] = balances[account] - amount;
+        this.total_supply = total_supply - amount;
         
         // Record in ledger
-        balance_history = {
+        this.balance_history = {
             from: account,
             amount: amount,
             timestamp: TX.timestamp,
@@ -238,30 +240,30 @@ contract ZexusToken {
     // ADMIN FUNCTIONS
     // ========================================================================
     
-    action pause() limit 20000 {
+    action pause() {
         require(TX.caller == owner, "Only owner can pause");
         require(!paused, "Already paused");
         
-        paused = true;
+        this.paused = true;
         print("Contract paused by: " + TX.caller);
         return true;
     }
     
-    action unpause() limit 20000 {
+    action unpause() {
         require(TX.caller == owner, "Only owner can unpause");
         require(paused, "Not paused");
         
-        paused = false;
+        this.paused = false;
         print("Contract unpaused by: " + TX.caller);
         return true;
     }
     
-    action transferOwnership(new_owner) limit 30000 {
+    action transferOwnership(new_owner) {
         require(TX.caller == owner, "Only owner can transfer ownership");
         require(new_owner != owner, "New owner must be different");
         
         let old_owner = owner;
-        owner = new_owner;
+        this.owner = new_owner;
         
         print("Ownership transferred:");
         print("  From: " + old_owner);

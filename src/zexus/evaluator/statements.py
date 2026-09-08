@@ -3294,15 +3294,16 @@ class StatementEvaluatorMixin:
         return self.eval_node(node.body, env, stack_trace)
     
     def eval_action_statement(self, node, env, stack_trace):
-        capture_env = env.clone_for_closure() if hasattr(env, "clone_for_closure") else env
+        # LIVE capture (no clone): a cloned store is a dict COPY — `assign`
+        # inside the body finds the name in the copy and mutates the copy,
+        # so module-level state changes from actions silently vanished on
+        # the tree-walk while the VM kept them (v2 example sweep found
+        # this: demo_simple_working.zx chain length 0 vs 3). Actions are
+        # declared at module level by definition; capturing the live env
+        # makes mutations land where the module reads them, and lookups
+        # still see later declarations via the scope chain at CALL time.
+        capture_env = env
         action = Action(node.parameters, node.body, capture_env)
-
-        # Ensure recursive references resolve within closures
-        try:
-            if capture_env is not env and hasattr(capture_env, "set"):
-                capture_env.set(node.name.value, action)
-        except Exception:
-            pass
         
         # Check for direct is_async attribute (from UltimateParser)
         if hasattr(node, 'is_async') and node.is_async:
@@ -3336,13 +3337,10 @@ class StatementEvaluatorMixin:
     def eval_function_statement(self, node, env, stack_trace):
         """Evaluate function statement - identical to action statement in Zexus"""
         debug_log("eval_function_statement", f"Start {node.name.value}")
-        capture_env = env.clone_for_closure() if hasattr(env, "clone_for_closure") else env
+        # LIVE capture — same rationale as eval_action_statement (module
+        # state mutations from functions must land in the module env).
+        capture_env = env
         action = Action(node.parameters, node.body, capture_env)
-        try:
-            if capture_env is not env and hasattr(capture_env, "set"):
-                capture_env.set(node.name.value, action)
-        except Exception:
-            pass
         debug_log("eval_function_statement", "Created Action object")
         
         # Apply modifiers if present
