@@ -42,6 +42,7 @@ _KEYWORDS = {
     # GRAMMAR.md section 3: `fn` is the canonical declaration keyword;
     # `function` (legacy) stays accepted through the 2.x warn phase.
     "fn": FUNCTION,
+    "where": WHERE,  # find x in list where (cond) — collection query form
     "while": WHILE,
     "use": USE,
     "find": FIND,

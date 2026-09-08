@@ -273,19 +273,72 @@ print(await fetch_val())            // 42
 defer { print("runs after the main body") }
 ```
 
-## 15. What is NOT wired (as of 2.0)
+## 15. Concurrency, queries, and policy (Tier 1-3 wiring)
 
-These parse or partially run but do not provide their apparent
-guarantee — see ROADMAP.md before relying on any of them:
+All of the following are wired, enforced, and regression-tested
+(`tests/grammar/test_phase_wiring.py`):
 
-- **`invariant` / `verify` blocks in contracts** — parse and run but do
-  **not enforce** (a contract with `invariant n >= 0` accepts `set(-5)`)
-- `find x in list` — parses, runtime is filesystem-oriented
-- `channel()` / `send` / `receive` — no working concurrency channels
-- `seal obj` — statement form fails; `sealed` modifier works on
-  declarations
-- `middleware`, `throttle`, `trail` — keyword scaffolding, no execution
+### Contract invariants (enforced)
+
+```zexus
+contract Bank {
+    state { balance: 100 }
+    invariant no_overdraft { this.balance >= 0 }
+    action withdraw(amount) { this.balance = this.balance - amount }
+    action check() { return this.balance }
+}
+let b = Bank()
+b.withdraw(30)                 // ok: 70
+try { b.withdraw(200) } catch e { }
+print(b.check())               // 70 — the violating action ROLLED BACK
+```
+
+### Channels
+
+```zexus
+channel<integer> numbers = 10;
+send(numbers, 42);
+let a = receive(numbers);      // 42
+```
+
+### find ... where (collection query)
+
+```zexus
+let users = [{"name": "alice", "age": 30}, {"name": "bob", "age": 16}]
+let adult = find u in users where (u.age >= 18)   // alice's map
+let none = find u in users where (u.age > 100)    // null
+```
+
+### seal (immutable binding)
+
+```zexus
+let config = {"k": "v"}
+seal config
+// config.k = "x"            // ❌ rejected: sealed
+```
+
+### throttle + middleware + dispatch
+
+```zexus
+throttle api, { rate: 3, burst: 3 }
+if throttle_check("api") { /* within limits */ }
+
+fn guard(req) {
+    if req.token == "secret" { return true }
+    return false
+}
+middleware guard
+fn route(req) { return "data" }
+register_route("r", route)
+dispatch("r", {"token": "wrong"})   // "middleware 'guard' rejected the request"
+dispatch("r", {"token": "secret"})  // "data"
+```
+
+## 15b. What is NOT wired (as of 2.0)
+
 - anonymous `action(a, b) { ... }` as expression value (V-004/R-029)
+- `trail audit/print/debug` — parses and runs; the event-following
+  output is not yet visible
 
 When in doubt, the executable differential corpus
 (`tests/grammar/test_differential.py`) is the source of truth.

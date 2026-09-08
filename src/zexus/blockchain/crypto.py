@@ -99,8 +99,8 @@ class CryptoPlugin:
         
         # Special case: real Keccak-256 (NOT SHA3-256 — different padding)
         if algorithm == 'KECCAK256':
-            # Rust fast path (Phase D): native keccak when the core is built.
-            # Falls through to pycryptodome when it is not.
+            # Rust fast path (Phase D): native keccak when the core is built —
+            # measured ~1.6x faster than pycryptodome. Falls through when absent.
             rust = _rust_hasher()
             if rust:
                 data_bytes = data if isinstance(data, bytes) else (
@@ -138,14 +138,15 @@ class CryptoPlugin:
         else:
             data_bytes = str(data).encode('utf-8')
         
-        # Rust fast path (Phase D): SHA-256/Keccak-256 are the hot
-        # algorithms (block hashing, address derivation); the Rust core
-        # computes them natively. Everything else stays on hashlib.
-        if algorithm in ('SHA256', 'KECCAK256'):
+        # Rust fast path (Phase D, revised by measurement): only KECCAK256
+        # routes through the Rust core — it beats pycryptodome ~1.6x. SHA-256
+        # STAYS on hashlib: OpenSSL's SHA-NI implementation is ~5x FASTER
+        # than the pure-Rust sha2 crate (rust_core/benchmark.py measured
+        # py=123ms vs rust=677ms on 1KB×20k). Routing SHA-256 through Rust
+        # was a measured regression.
+        if algorithm == 'KECCAK256':
             rust = _rust_hasher()
             if rust:
-                if algorithm == 'SHA256':
-                    return rust.sha256(data_bytes)
                 return rust.keccak256(data_bytes)
         
         # Hash the data

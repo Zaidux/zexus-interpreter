@@ -175,6 +175,14 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             "MethodCallExpression": self._handle_method_call_expression,
             "MatchExpression": self._handle_match_expression,
             "RangeExpression": self._handle_range_expression,
+            "FindExpression": self._handle_find_expression,
+            "SealStatement": lambda node, env, st: self.eval_seal_statement(node, env, st),
+            "ThrottleStatement": lambda node, env, st: self.eval_throttle_statement(node, env, st),
+            "MiddlewareStatement": lambda node, env, st: self.eval_middleware_statement(node, env, st),
+            "TrailStatement": lambda node, env, st: self.eval_trail_statement(node, env, st),
+            "ChannelStatement": lambda node, env, st: self.eval_channel_statement(node, env, st),
+            "SendStatement": lambda node, env, st: self.eval_send_statement(node, env, st),
+            "ReceiveStatement": lambda node, env, st: self.eval_receive_statement(node, env, st),
             "LiteralPattern": self._handle_literal_pattern,
             "WildcardPattern": self._handle_wildcard_pattern,
             "VariablePattern": self._handle_variable_pattern,
@@ -355,6 +363,48 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         return EvaluationError(f"Invalid payload for {expected_type.__name__}")
 
     # --- Extended dispatch handlers (avoid isinstance chain) ---
+
+    def _handle_find_expression(self, node, env, stack_trace):
+        """find NAME in EXPR where (COND) — first matching element or null.
+
+        Falls back to the legacy filesystem interpretation when no
+        `where` clause is present.
+        """
+        from ..zexus_ast import Identifier
+        from ..object import List as ZList, Boolean as ZBool
+
+        # QUERY FORM first (find NAME in EXPR where COND); the legacy
+        # filesystem form delegates to eval_find_expression (module
+        # resolution, absolute paths — behavior the unit tests pin).
+        if node.condition is None or node.variable is None:
+            return self.eval_find_expression(node, env, stack_trace)
+        if node.condition is not None and node.variable is not None:
+            collection = self.eval_node(node.scope, env, stack_trace)
+            if is_error(collection):
+                return collection
+            elements = getattr(collection, "elements", None)
+            if elements is None or not isinstance(collection, ZList):
+                return EvaluationError(
+                    "find x in <expr> where (...) requires a list",
+                    suggestion="The collection form of find iterates lists: "
+                    "find item in items where (item.age > 18).",
+                )
+            var_name = node.variable.value if hasattr(node.variable, "value") else str(node.variable)
+            from ..environment import Environment
+            for element in elements:
+                probe_env = Environment(outer=env)
+                probe_env.set(var_name, element)
+                check = self.eval_node(node.condition, probe_env, stack_trace)
+                if is_error(check):
+                    return check
+                ok = bool(check.value) if isinstance(check, ZBool) else bool(
+                    getattr(check, "value", check)
+                )
+                if ok:
+                    return element
+            return NULL
+        # Legacy: filesystem-oriented find (target is a path-ish expr)
+        return self.eval_node(node.target, env, stack_trace)
 
     def _handle_range_expression(self, node, env, stack_trace):
         """start..end → List of Integers, exclusive end (GRAMMAR.md §3)."""

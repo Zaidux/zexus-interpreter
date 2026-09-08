@@ -1694,8 +1694,26 @@ class BytecodeCompiler:
         self._emit_vm_builtin_call("__exactly__", node)
 
     def _compile_FindExpression(self, node):
-        """Compile find expression."""
-        self._emit_vm_builtin_call("__find__", node, discard_result=False)
+        """Compile find expression.
+
+        Query form (find NAME in EXPR where COND): compile the scope,
+        push the variable name and condition AST as constants, and call
+        the shared __find_first__ builtin — identical semantics to the
+        tree-walk handler (first match or null).
+        Legacy form: delegate to the __find__ builtin with the AST node.
+        """
+        if getattr(node, "condition", None) is not None and getattr(node, "variable", None) is not None:
+            name_idx = self._add_constant(node.variable.value)
+            cond_idx = self._add_constant(node.condition)
+            fn_idx = self._add_constant("__find_first__")
+            # The scope is an EXPRESSION — compile it so the evaluated
+            # list lands on the stack (LOAD_CONST would push the AST node).
+            self._compile_node(node.scope)
+            self._emit(Opcode.LOAD_CONST, name_idx)
+            self._emit(Opcode.LOAD_CONST, cond_idx)
+            self._emit(Opcode.CALL_NAME, (fn_idx, 3))
+        else:
+            self._emit_vm_builtin_call("__find__", node, discard_result=False)
 
     def _compile_LoadExpression(self, node):
         """Compile load expression."""

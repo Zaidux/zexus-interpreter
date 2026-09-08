@@ -768,9 +768,21 @@ class AwaitExpression(Expression):
 
 
 class FindExpression(Expression):
-    def __init__(self, target, scope=None):
+    """Collection query / filesystem search.
+
+    Query form (GRAMMAR.md — collection querying): 
+        find NAME in EXPR where (COND)
+    returns the first element of EXPR for which COND (with NAME bound
+    to the element) is truthy, or null.
+
+    Legacy form: find <path> [in <scope>] performs a filesystem search.
+    """
+    def __init__(self, target, scope=None, variable=None, condition=None):
         self.target = target
         self.scope = scope
+        # Query form: variable bound per element, condition predicate
+        self.variable = variable
+        self.condition = condition
 
     def __repr__(self):
         parts = [f"target={self.target}"]
@@ -1678,6 +1690,22 @@ class StateStatement(Statement):
         return f"StateStatement(name={self.name}, initial={self.initial_value}, modifiers={self.modifiers})"
 
 
+class InvariantStatement(Statement):
+    """Contract invariant (GRAMMAR.md section 5).
+
+    invariant name { condition }
+
+    Evaluated after every action on the owning contract; a falsy result
+    aborts the action and rolls back its state mutations.
+    """
+    def __init__(self, name, condition):
+        self.name = name          # Identifier
+        self.condition = condition  # Expression
+
+    def __repr__(self):
+        return f"InvariantStatement(name={self.name})"
+
+
 class ContractStatement(Statement):
     """Contract statement - Smart contract definition
     
@@ -1699,6 +1727,10 @@ class ContractStatement(Statement):
         self.body = body  # BlockStatement: contract body (state vars and actions)
         self.modifiers = modifiers or []  # List of modifiers
         self.implements = implements  # Optional protocol name that contract implements
+        # GRAMMAR.md section 5: `invariant name { condition }` blocks —
+        # machine-checked after EVERY action; violation aborts and rolls
+        # back the action's state changes.
+        self.invariants = []
 
     def __repr__(self):
         impl_str = f", implements={self.implements}" if self.implements else ""

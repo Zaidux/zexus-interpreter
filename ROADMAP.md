@@ -166,6 +166,49 @@ closures (V-004/R-029).
 - **PARSING_PIPELINE.md** reviewed: architecture description matches
   current code; currency banner added.
 
+### Tier 1-3 feature wiring ✅ (post-Phase I, owner-approved)
+
+All the "valuable unwired" features from the Phase I report are now
+wired, enforced, and regression-tested (tests/grammar/test_phase_wiring.py):
+
+- **Tier 1a: contract `invariant` blocks** — parse in BOTH parsers
+  (traditional + advanced/CLI), propagate to instances, and are ENFORCED
+  after every action: violation → pre-action storage snapshot restored +
+  error returned. Verified with rollback on both engines. (Found+fixed:
+  the advanced parser silently dropped invariant blocks; instances didn't
+  inherit factory invariants; the VM contract builder bypassed them.)
+- **Tier 1b: channels** — `channel<integer> name = cap;` / `send` /
+  `receive` work through the CLI (structural-analyzer CHANNEL branch +
+  parse_block intercept + off-by-one fixes in the send/receive parsers).
+- **Tier 2a: `find NAME in EXPR where (COND)`** — first matching element
+  or null; identical on both engines (VM desugars to __find_first__).
+  Legacy filesystem `find "path"` unchanged.
+- **Tier 2b: `seal obj`** — sealed-object immutability enforced (mutating
+  a sealed target is rejected).
+- **Tier 3: `throttle target, {rate, burst}` + `throttle_check(name)`** —
+  enforced via RateLimiter on the security context; **`middleware name` +
+  `register_route` + `dispatch(name, req)`** — full chain (rejection
+  stops the route). `trail` parses and runs (output effect pending).
+
+### Rust core benchmark — the honest numbers ✅
+
+`rust_core/benchmark.py` (cross-checked for correctness before timing):
+
+- SHA-256: Rust is **0.2x** (5x SLOWER) than hashlib — OpenSSL uses
+  SHA-NI hardware instructions the pure-Rust sha2 crate doesn't.
+  **Action taken: SHA-256 routing through Rust REMOVED** —
+  CryptoPlugin keeps it on hashlib. The Phase-D "hash hot paths route
+  through Rust" claim was a measured regression for SHA-256.
+- Keccak-256: Rust is **1.6x faster** than pycryptodome → routed
+  through the core (the only native hash path that earns its keep).
+- Merkle 1024-leaf trees: 0.8x (slightly slower; the Python pairwise
+  loop with hashlib beats the Rust tree at this size).
+- secp256k1 batch_verify (64 sigs): ~0.1ms/batch via rayon parallelism
+  (no fair Python baseline available in this environment).
+
+The extension remains valuable for Keccak + signature verification and
+as the VM's native tier; "Rust-first hashing" is retired as a claim.
+
 Sequencing per owner decision: F → **I** → G → E.
 
 ## Phase I — Cleanup and documentation reset (in progress)

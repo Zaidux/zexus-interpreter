@@ -10,6 +10,7 @@ INT = "INT"
 STRING = "STRING"
 BYTES = "BYTES"
 RANGE = "RANGE"  # .. (exclusive range operator, GRAMMAR.md section 3)
+WHERE = "WHERE"  # find x in list where (cond) — collection query
 FLOAT = "FLOAT"
 
 # Operators

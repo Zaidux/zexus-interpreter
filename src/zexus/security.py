@@ -1413,6 +1413,9 @@ class SmartContract:
         self.storage_vars = storage_vars or []
         self.actions = actions or {}
         self.blockchain_config = blockchain_config or {}
+        # GRAMMAR.md section 5: [(name, condition_ast), ...] — evaluated
+        # after every action; violation aborts and rolls back state.
+        self.invariants = []
         
         # Generate a unique address/ID for this specific instance if not provided
         self.address = address or str(uuid.uuid4())[:8]
@@ -1467,6 +1470,9 @@ class SmartContract:
             blockchain_config=self.blockchain_config,
             address=new_address
         )
+        # GRAMMAR.md section 5: invariants propagate to instances —
+        # call_method enforces them THERE (the factory never runs actions).
+        instance.invariants = list(getattr(self, "invariants", []) or [])
         
         if zexus_config.should_log('debug'):
             print(f"   🔗 Contract Address: {new_address}")
@@ -1623,6 +1629,23 @@ class SmartContract:
                     from zexus.object import Null
                     action_env.set(param_name, Null)
         
+        # INVARIANT PREP (GRAMMAR.md section 5): snapshot storage so a
+        # violated invariant can roll the action back completely.
+        _invariants = getattr(self, "invariants", None) or []
+        _snapshot = None
+        if _invariants:
+            _snapshot = {}
+            for var_node in self.storage_vars:
+                _vn = None
+                if hasattr(var_node, 'name'):
+                    _vn = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+                elif isinstance(var_node, dict):
+                    _vn = var_node.get("name")
+                if _vn:
+                    _val = self.storage.get(_vn)
+                    if _val is not None:
+                        _snapshot[_vn] = SmartContract._clone_storage_value(_val, var_name=_vn)
+
         # Execute the action body - use cached evaluator for performance
         evaluator = _get_cached_evaluator()
         disable_vm = _get_vm_action_context()
@@ -1775,7 +1798,50 @@ class SmartContract:
             
             # Commit batched writes when thresholds are met
             self.storage.commit_batch()
-            
+
+            # ── INVARIANT ENFORCEMENT (GRAMMAR.md section 5) ──────────
+            # Every action on this contract is followed by a check of all
+            # declared invariants. A falsy result ABORTS the call: the
+            # pre-action storage snapshot is restored and an error is
+            # returned, so violated state never becomes visible.
+            if _invariants and action_name not in ("init", "constructor"):
+                from zexus.object import EvaluationError as _InvErr
+                from zexus.object import Boolean as _ZBool
+                inv_env = Environment(outer=action.env if hasattr(action, 'env') else None)
+                inv_env.set('this', self)
+                for var_node in self.storage_vars:
+                    _vn = None
+                    if hasattr(var_node, 'name'):
+                        _vn = var_node.name.value if hasattr(var_node.name, 'value') else var_node.name
+                    elif isinstance(var_node, dict):
+                        _vn = var_node.get("name")
+                    if _vn:
+                        _v = self.storage.get(_vn)
+                        if _v is not None:
+                            inv_env.set(_vn, _v)
+                for _inv_name, _inv_cond in _invariants:
+                    try:
+                        _check = evaluator.eval_node(_inv_cond, inv_env, stack_trace=[])
+                    except Exception:
+                        _check = None
+                    _ok = False
+                    if _check is not None and not hasattr(_check, 'message'):
+                        if isinstance(_check, _ZBool):
+                            _ok = bool(_check.value)
+                        else:
+                            _ok = bool(getattr(_check, 'value', _check))
+                    if not _ok:
+                        # ROLLBACK: restore the pre-action snapshot
+                        if _snapshot:
+                            for _rn, _rv in _snapshot.items():
+                                self.storage.set(_rn, SmartContract._clone_storage_value(_rv, var_name=_rn))
+                        return _InvErr(
+                            f"Invariant '{_inv_name}' violated by action '{action_name}' "
+                            f"on contract {self.name} — action rolled back",
+                            suggestion="The action's state changes violated a declared "
+                                       "invariant; the contract state is unchanged.",
+                        )
+
         except Exception as e:
             # Clear tracking and rollback
             self._direct_storage_updates.clear()

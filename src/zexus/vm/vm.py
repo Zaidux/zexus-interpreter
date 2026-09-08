@@ -3282,6 +3282,12 @@ class VM:
 
         # Create the real SmartContract
         contract = SmartContract(contract_name, storage_vars, actions)
+        # GRAMMAR.md section 5: invariants from the AST node — call_method
+        # enforces them after every action (VM/interpreter parity).
+        contract.invariants = [
+            (inv.name.value, inv.condition)
+            for inv in getattr(ast_node, "invariants", []) or []
+        ]
         contract.deploy(evaluated_storage_values=storage)
 
         # Run constructor if present

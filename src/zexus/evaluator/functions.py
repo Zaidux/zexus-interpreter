@@ -974,6 +974,131 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("to_hex() takes exactly 1 argument")
             return Math.to_hex_string(a[0])
         
+        def _throttle_check(*a):
+            """throttle_check(name) → true if the call is within limits.
+
+            Consults the RateLimiter registered by `throttle target, {...}`
+            on the shared security context (ctx.rate_limiters) — the same
+            registry the throttle statement writes to.
+            """
+            if len(a) != 1:
+                return EvaluationError("throttle_check() expects 1 argument: target name")
+            name = a[0].value if hasattr(a[0], "value") else str(a[0])
+            try:
+                from ..security import get_security_context as _gsc
+                limiter = (getattr(_gsc(), "rate_limiters", None) or {}).get(name)
+            except Exception:
+                limiter = None
+            if limiter is None:
+                return TRUE  # unthrottled targets always pass
+            try:
+                result = limiter.allow_request()
+                allowed = result[0] if isinstance(result, tuple) else bool(result)
+            except Exception:
+                return TRUE
+            return TRUE if allowed else FALSE
+
+        def _dispatch_through_middleware(*a):
+            """dispatch(name, request) → run the middleware chain, then the
+            route registered via register_route(name, fn)."""
+            if len(a) != 2:
+                return EvaluationError("dispatch() expects 2 arguments: route name, request")
+            from ..object import String as _S
+            name = a[0].value if hasattr(a[0], "value") else str(a[0])
+            request = a[1]
+            # Middleware chain lives on the security context (the same
+            # registry the middleware statement writes to).
+            try:
+                from ..security import get_security_context as _gsc
+                mw_map = dict(getattr(_gsc(), "middlewares", None) or {})
+            except Exception:
+                mw_map = {}
+            import itertools as _it
+            # Middleware objects store handler_func (security.py)
+            chain = [{"name": k, "handler": getattr(v, "handler_func", getattr(v, "handler", v))} for k, v in mw_map.items()]
+            for mw in chain:
+                handler = mw.get("handler")
+                if handler is None:
+                    continue
+                # Action/LambdaFunction handlers go through apply_function
+                if hasattr(handler, "parameters") or hasattr(handler, "body"):
+                    try:
+                        res = self.apply_function(handler, [request])
+                    except Exception as exc:
+                        return EvaluationError(f"middleware '{mw['name']}' raised: {exc}")
+                else:
+                    fn = getattr(handler, "fn", handler)
+                    if not callable(fn):
+                        continue
+                    try:
+                        res = fn(request)
+                    except Exception as exc:
+                        return EvaluationError(f"middleware '{mw['name']}' raised: {exc}")
+                ok = getattr(res, "value", res)
+                if ok is False:
+                    return String(f"middleware '{mw['name']}' rejected the request")
+                ok = getattr(res, "value", res)
+                if ok is False:
+                    return _S(f"middleware '{mw['name']}' rejected the request")
+            routes = getattr(self.__class__, "_route_registry", {})
+            route_fn = routes.get(name)
+            if route_fn is None:
+                return NULL
+            # Action/LambdaFunction objects execute through the evaluator's
+            # apply_function (not raw callability).
+            if hasattr(route_fn, "parameters") or hasattr(route_fn, "body"):
+                try:
+                    return self.apply_function(route_fn, [request])
+                except Exception as exc:
+                    return EvaluationError(f"route '{name}' raised: {exc}")
+            fn = getattr(route_fn, "fn", route_fn)
+            try:
+                return fn(request)
+            except Exception as exc:
+                return EvaluationError(f"route '{name}' raised: {exc}")
+
+        def _register_route(*a):
+            """register_route(name, fn) — bind a route for dispatch()."""
+            if len(a) != 2:
+                return EvaluationError("register_route() expects 2 arguments: name, function")
+            name = a[0].value if hasattr(a[0], "value") else str(a[0])
+            routes = getattr(self.__class__, "_route_registry", None)
+            if routes is None:
+                routes = {}
+                self.__class__._route_registry = routes
+            routes[name] = a[1]
+            return TRUE
+
+        def _zexus_find_first(*a):
+            # VM parity path for `find NAME in EXPR where (COND)`: the VM
+            # passes (scope_list, var_name, condition_ast); evaluate with
+            # the SAME semantics as the tree-walk handler. The probe env
+            # chains to the evaluator's LAST env (best-effort outer scope)
+            # and binds the loop variable per element.
+            if len(a) != 3:
+                return EvaluationError("__find_first__() expects (list, name, condition)")
+            from ..object import List as ZList, Boolean as ZBool
+            from ..environment import Environment
+            collection, var_name, cond_ast = a[0], a[1], a[2]
+            elements = getattr(collection, "elements", None)
+            if elements is None:
+                return EvaluationError("find x in <expr> where (...) requires a list")
+            name = var_name.value if hasattr(var_name, "value") else str(var_name)
+            outer_env = getattr(self, "_last_env", None)
+            for element in elements:
+                probe_env = Environment(outer=outer_env)
+                probe_env.set(name, element)
+                try:
+                    check = self.eval_node(cond_ast, probe_env, stack_trace=[])
+                except Exception:
+                    check = None
+                if hasattr(check, "message"):  # EvaluationError
+                    return check
+                ok = bool(check.value) if isinstance(check, ZBool) else bool(getattr(check, "value", check))
+                if ok:
+                    return element
+            return NULL
+
         def _zexus_range(*a):
             # VM parity path for start..end (RangeExpression desugars to
             # __range__(start, end)); identical semantics to the tree-walk
@@ -2976,6 +3101,10 @@ class FunctionEvaluatorMixin:
             "from_hex": Builtin(_from_hex, "from_hex"),
             "bytes_from_hex": Builtin(_bytes_from_hex, "bytes_from_hex"),
             "__range__": Builtin(_zexus_range, "__range__"),
+            "__find_first__": Builtin(_zexus_find_first, "__find_first__"),
+            "throttle_check": Builtin(_throttle_check, "throttle_check"),
+            "dispatch": Builtin(_dispatch_through_middleware, "dispatch"),
+            "register_route": Builtin(_register_route, "register_route"),
             "sqrt": Builtin(_sqrt, "sqrt"),
             "input": Builtin(_input, "input"),
             "hash_password": Builtin(_hash_password, "hash_password"),

@@ -105,6 +105,8 @@ class UltimateParser:
             RESTRICT: self.parse_restrict_statement,
             SANDBOX: self.parse_sandbox_statement,
             TRAIL: self.parse_trail_statement,
+            THROTTLE: self.parse_throttle_statement,
+            MIDDLEWARE: self.parse_middleware_statement,
             TX: self.parse_tx_statement,
             NATIVE: self.parse_native_statement,
             GC: self.parse_gc_statement,
@@ -2363,6 +2365,54 @@ class UltimateParser:
 
         return SandboxStatement(body=body, policy=policy_name)
 
+    def parse_throttle_statement(self):
+        """Parse throttle statement (Tier-3 wiring).
+
+        Syntax: throttle target_name, { rate: 100, burst: 10, per_user: true })
+        Registers rate limits on a named target (action or route name).
+        """
+        token = self.cur_token
+
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected target name after 'throttle'")
+            return None
+        target = Identifier(self.cur_token.literal)
+
+        limits = None
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            limits = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        return ThrottleStatement(target=target, limits=limits)
+
+    def parse_middleware_statement(self):
+        """Parse middleware registration (Tier-3 wiring).
+
+        Syntax: middleware handler_name
+        or:     middleware name, handler_expr
+        Registers a handler into the middleware chain (evaluated on dispatch).
+        """
+        from ..zexus_ast import MiddlewareStatement
+        token = self.cur_token
+
+        if not self.expect_peek(IDENT):
+            self.errors.append(f"Line {token.line}:{token.column} - Expected handler name after 'middleware'")
+            return None
+        name = Identifier(self.cur_token.literal)
+
+        handler = None
+        if self.peek_token_is(COMMA):
+            self.next_token()
+            self.next_token()
+            handler = self.parse_expression(LOWEST)
+
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        return MiddlewareStatement(name=name, handler=handler)
+
     def parse_trail_statement(self):
         """Parse trail statement for real-time audit/debug/print tracking.
         
@@ -3699,7 +3749,7 @@ class UltimateParser:
         return AwaitExpression(expression=awaited)
 
     def parse_find_expression(self):
-        from ..zexus_ast import FindExpression
+        from ..zexus_ast import FindExpression, Identifier
 
         token = self.cur_token
         self.next_token()
@@ -3710,6 +3760,23 @@ class UltimateParser:
             self.next_token()  # move to IN
             self.next_token()  # move to first token of scope expression
             scope = self.parse_expression(LOWEST)
+
+        # QUERY FORM: find NAME in EXPR where (COND) — NAME is a loop
+        # variable bound per element, not a search target.
+        variable = None
+        condition = None
+        if scope is not None and isinstance(target, Identifier) and self.peek_token_is(WHERE):
+            variable = target
+            self.next_token()  # move to WHERE
+            self.next_token()  # move to first token of condition
+            # Parenthesized predicate or bare expression
+            condition = self.parse_expression(LOWEST)
+            expr = FindExpression(
+                target=target, scope=scope,
+                variable=variable, condition=condition,
+            )
+            setattr(expr, 'token', token)
+            return expr
 
         expr = FindExpression(target=target, scope=scope)
         setattr(expr, 'token', token)
@@ -4240,12 +4307,26 @@ class UltimateParser:
 
         storage_vars = []
         actions = []
+        invariants = []
 
         while not self.cur_token_is(EOF):
             self.next_token()
             
             # Parse modifiers preceding the declaration
             modifiers = self._parse_modifiers()
+
+            # GRAMMAR.md section 5: `invariant name { condition }` (and the
+            # legacy `verify name { ... }` spelling). These previously fell
+            # through the loop and were SILENTLY DROPPED — the contract
+            # looked guarded but nothing checked anything.
+            if (
+                (self.cur_token_is(IDENT) and self.cur_token.literal == "invariant")
+                or (self.cur_token_is(VERIFY) and self.peek_token_is(IDENT))
+            ):
+                inv = self._parse_contract_invariant()
+                if inv is not None:
+                    invariants.append(inv)
+                continue
 
             if self.cur_token_is(RBRACE):
                 # If more declarations follow, skip this brace (close of inner block)
@@ -4345,8 +4426,49 @@ class UltimateParser:
         contract_node = ContractStatement(contract_name, body, modifiers=[], implements=implements)
         contract_node.storage_vars = storage_vars
         contract_node.actions = actions
-        
+        contract_node.invariants = invariants
+
         return contract_node
+
+    def _parse_contract_invariant(self):
+        """Parse `invariant name { condition }` (GRAMMAR.md section 5).
+
+        Current token is the invariant/verify keyword; the block's
+        condition is a single boolean expression. Returns an
+        InvariantStatement or None (with an error recorded).
+        """
+        from ..zexus_ast import InvariantStatement, Identifier as InvIdentifier
+
+        token = self.cur_token
+        # name
+        if not self.expect_peek(IDENT):
+            self.errors.append(
+                f"Line {token.line}:{token.column} - Expected invariant name"
+            )
+            return None
+        name = InvIdentifier(self.cur_token.literal)
+        # {
+        if not self.expect_peek(LBRACE):
+            self.errors.append(
+                f"Line {token.line}:{token.column} - Expected '{{' after invariant name"
+            )
+            return None
+        self.next_token()  # first token of the condition
+        condition = self.parse_expression(LOWEST)
+        if condition is None:
+            self.errors.append(
+                f"Line {token.line}:{token.column} - Could not parse invariant condition"
+            )
+            return None
+        # After parse_expression, cur_token is the LAST token of the
+        # condition; the closing brace is in peek.
+        if not self.peek_token_is(RBRACE):
+            self.errors.append(
+                f"Line {token.line}:{token.column} - Expected '}}' closing invariant block"
+            )
+            return None
+        self.next_token()  # consume '}' so the body loop's RBRACE check sees it
+        return InvariantStatement(name=name, condition=condition)
 
     def parse_protect_statement(self):
         """Parse protect statement
@@ -4903,31 +5025,33 @@ class UltimateParser:
             self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after send")
             return None
         
-        self.next_token()
+        self.next_token()  # cur = first token of channel expr
         channel_expr = self.parse_expression(LOWEST)
+        # After parse_expression, cur is the LAST token of the expression;
+        # the separator sits in PEEK (off-by-one fixed — this parser
+        # previously checked cur for the comma and always failed).
         
-        if not self.cur_token_is(COMMA):
+        if not self.peek_token_is(COMMA):
             self.errors.append(f"Line {token.line}:{token.column} - Expected ',' after channel in send")
             return None
         
-        self.next_token()
+        self.next_token()  # cur = ','
+        self.next_token()  # cur = first token of value
         value_expr = self.parse_expression(LOWEST)
         
-        if not self.cur_token_is(RPAREN):
+        if not self.peek_token_is(RPAREN):
             self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after send arguments")
             return None
+        self.next_token()  # cur = ')'
         
-        self.next_token()
-        
-        if not self.cur_token_is(SEMICOLON):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after send statement")
-            return None
-        
-        self.next_token()
+        # Semicolon optional in modern Zexus
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
         return SendStatement(channel_expr=channel_expr, value_expr=value_expr)
 
     def parse_receive_statement(self):
-        """Parse receive statement: receive(channel); or var = receive(channel);"""
+        """Parse receive statement: receive(channel); — returns the value
+        (usable as an expression via the ExpressionStatement path)."""
         token = self.cur_token
         self.next_token()  # consume RECEIVE
         
@@ -4935,24 +5059,18 @@ class UltimateParser:
             self.errors.append(f"Line {token.line}:{token.column} - Expected '(' after receive")
             return None
         
-        self.next_token()
+        self.next_token()  # cur = first token of channel expr
         channel_expr = self.parse_expression(LOWEST)
         
-        if not self.cur_token_is(RPAREN):
+        if not self.peek_token_is(RPAREN):
             self.errors.append(f"Line {token.line}:{token.column} - Expected ')' after receive argument")
             return None
+        self.next_token()  # cur = ')'
         
-        self.next_token()
-        
-        # Optional target assignment
-        target = None
-        
-        if not self.cur_token_is(SEMICOLON):
-            self.errors.append(f"Line {token.line}:{token.column} - Expected ';' after receive statement")
-            return None
-        
-        self.next_token()
-        return ReceiveStatement(channel_expr=channel_expr, target=target)
+        # Semicolon optional in modern Zexus
+        if self.peek_token_is(SEMICOLON):
+            self.next_token()
+        return ReceiveStatement(channel_expr=channel_expr, target=None)
 
     def parse_atomic_statement(self):
         """Parse atomic statement: atomic { body } or atomic(expr)"""

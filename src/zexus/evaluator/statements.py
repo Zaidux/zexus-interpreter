@@ -2272,6 +2272,12 @@ class StatementEvaluatorMixin:
         
         # Pass the AST nodes as storage_vars, not the storage dict
         contract = SmartContract(node.name.value, node.storage_vars, actions)
+        # GRAMMAR.md section 5: attach invariant AST nodes — call_method
+        # evaluates them after EVERY action and rolls back on violation.
+        contract.invariants = [
+            (inv.name.value, inv.condition)
+            for inv in getattr(node, "invariants", []) or []
+        ]
         # Deploy with evaluated storage values to avoid storing AST nodes
         contract.deploy(evaluated_storage_values=storage)
         
@@ -2900,9 +2906,18 @@ class StatementEvaluatorMixin:
         return StringObj(f"Protection policy activated for '{target_name}' (level: {enforcement_level})")
     
     def eval_middleware_statement(self, node, env, stack_trace):
-        handler = self.eval_node(node.handler, env)
-        if is_error(handler): 
-            return handler
+        # Tier-3 wiring: handler may be an explicit expression OR the
+        # name-only form (middleware auth_fn) — resolve from env.
+        if node.handler is not None:
+            handler = self.eval_node(node.handler, env)
+            if is_error(handler): 
+                return handler
+        else:
+            handler = env.get(node.name.value)
+            if handler is None:
+                return EvaluationError(
+                    f"middleware: no handler named '{node.name.value}' in scope"
+                )
         
         mw = Middleware(node.name.value, handler)
         get_security_context().middlewares[node.name.value] = mw
@@ -2922,15 +2937,16 @@ class StatementEvaluatorMixin:
         return NULL
     
     def eval_throttle_statement(self, node, env, stack_trace):
-        limits = self.eval_node(node.limits, env)
+        limits = self.eval_node(node.limits, env) if node.limits is not None else None
         
         rpm, burst, per_user = 100, 10, False
         if isinstance(limits, Map):
             for k, v in limits.pairs.items():
                 ks = k.value if isinstance(k, String) else str(k)
-                if ks == "requests_per_minute" and isinstance(v, Integer): 
+                # Accept both the long keys and the short canonical forms
+                if ks in ("requests_per_minute", "rate") and isinstance(v, Integer): 
                     rpm = v.value
-                elif ks == "burst_size" and isinstance(v, Integer): 
+                elif ks in ("burst_size", "burst") and isinstance(v, Integer): 
                     burst = v.value
                 elif ks == "per_user": 
                     per_user = True if (isinstance(v, Boolean) and v.value) else False
@@ -2939,7 +2955,9 @@ class StatementEvaluatorMixin:
         ctx = get_security_context()
         if not hasattr(ctx, 'rate_limiters'): 
             ctx.rate_limiters = {}
-        ctx.rate_limiters[str(node.target)] = limiter
+        # node.target may be an Identifier or a bare string
+        target = getattr(node.target, "value", None) or str(node.target)
+        ctx.rate_limiters[str(target)] = limiter
         return NULL
     
     def eval_cache_statement(self, node, env, stack_trace):

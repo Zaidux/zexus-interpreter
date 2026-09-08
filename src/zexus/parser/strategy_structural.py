@@ -47,6 +47,7 @@ class StructuralAnalyzer:
               CAPABILITY, GRANT, REVOKE, VALIDATE, SANITIZE, IMMUTABLE,
               INTERFACE, TYPE_ALIAS, MODULE, PACKAGE, USING,
               CHANNEL, ATOMIC, EMIT, PROTOCOL,
+              THROTTLE, MIDDLEWARE,
               # Blockchain keywords
               LEDGER, STATE, REQUIRE, REVERT, LIMIT
           }
@@ -336,6 +337,37 @@ class StructuralAnalyzer:
                     'type': 'statement',
                     'subtype': 'export_statement',
                     'tokens': filtered_tokens,
+                    'start_token': tokens[start_idx],
+                    'start_index': start_idx,
+                    'end_index': i - 1,
+                    'parent': None
+                }
+                block_id += 1
+                continue
+
+            # CHANNEL declaration: collect the entire statement
+            # (channel<T> name = capacity; / channel<T> name[N];).
+            # The generic collectors split these at `>` / `=` — a dedicated
+            # branch keeps the declaration whole so the context parser's
+            # _parse_channel_statement sees the full token set.
+            elif t.type == CHANNEL:
+                start_idx = i
+                chan_tokens = [t]
+                i += 1
+                while i < n:
+                    if tokens[i].type == SEMICOLON:
+                        i += 1
+                        break
+                    if tokens[i].type == RBRACE:
+                        break
+                    chan_tokens.append(tokens[i])
+                    i += 1
+                filtered = [tk for tk in chan_tokens if not _is_empty_token(tk)]
+                self.blocks[block_id] = {
+                    'id': block_id,
+                    'type': 'statement',
+                    'subtype': 'channel_statement',
+                    'tokens': filtered,
                     'start_token': tokens[start_idx],
                     'start_index': start_idx,
                     'end_index': i - 1,
@@ -1337,6 +1369,15 @@ class StructuralAnalyzer:
                 continue
 
             # accumulate until boundary
+            # CONCURRENCY GUARD: a statement that begins with CHANNEL
+            # consumes the whole declaration (channel<T> name = cap;) —
+            # the generic IDENT/GT new-statement heuristics below split
+            # `channel<integer> numbers = 10` into two bogus blocks.
+            if cur and cur[0].type == CHANNEL:
+                cur.append(t)
+                i += 1
+                continue
+
             if t.type in stop_types:
                 # end current statement (do not include terminator)
                 results.append(cur)

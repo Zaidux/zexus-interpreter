@@ -219,10 +219,53 @@ class ContextStackParser:
             return mini_program.statements[0]
         return None
 
+    def _parse_via_traditional(self, tokens):
+        """Re-lex a statement's tokens through the traditional parser and
+        return its first statement. Used for statements the strategy path
+        doesn't natively dispatch (seal, trail, throttle, middleware)."""
+        from ..lexer import Lexer
+        from .parser import UltimateParser
+        parts = []
+        for t in tokens:
+            if not t.literal:
+                continue
+            if t.type == 'STRING':
+                escaped = t.literal.replace('\\', '\\\\').replace('"', '\\"')
+                parts.append(f'"{escaped}"')
+            else:
+                parts.append(t.literal)
+        code = ' '.join(parts)
+        mini = UltimateParser(Lexer(code), 'universal', False)
+        program = mini.parse_program()
+        if program and program.statements:
+            return program.statements[0]
+        return None
+
     def parse_block(self, block_info, all_tokens):
         """Parse a block with context awareness"""
         block_type = block_info.get('subtype', block_info['type'])
         context_name = block_info.get('name', 'anonymous')
+
+        # CONCURRENCY INTERCEPT: blocks whose first token is CHANNEL/SEND/
+        # RECEIVE/ATOMIC route directly to their dedicated parsers. The
+        # structural analyzer types `channel<T> name = cap` as a generic
+        # expression (the `<` reads as comparison), which previously
+        # bypassed the concurrency handlers entirely — channels only
+        # worked through the traditional parser.
+        _bt = block_info.get('tokens', []) or []
+        if _bt and _bt[0].type == CHANNEL:
+            return self._parse_channel_statement(block_info, all_tokens)
+        if _bt and _bt[0].type == SEND:
+            return self._parse_send_statement(block_info, all_tokens)
+        if _bt and _bt[0].type == RECEIVE:
+            return self._parse_receive_statement(block_info, all_tokens)
+        if _bt and _bt[0].type == ATOMIC:
+            return self._parse_atomic_statement(block_info, all_tokens)
+        # SEAL/TRAIL statements: route through the traditional parser's
+        # statement parsers (the strategy path previously left them as
+        # unresolved identifiers — 'Identifier seal not found').
+        if _bt and _bt[0].type in (SEAL, TRAIL, THROTTLE, MIDDLEWARE):
+            return self._parse_via_traditional(_bt)
 
         self.push_context(block_type, context_name)
 
@@ -1745,12 +1788,52 @@ class ContextStackParser:
         # List to hold storage vars (Properties) and actions
         storage_vars = []
         actions = []
+        invariants = []
 
         if brace_start != -1 and brace_end != -1:
             # 3. Parse Internals
             i = brace_start + 1
             while i < brace_end:
                 token = tokens[i]
+
+                # A0. Handle INVARIANT blocks (GRAMMAR.md section 5):
+                #     `invariant name { condition }` — also accept the
+                #     legacy `verify name { ... }` spelling. Previously
+                #     these were silently skipped by this parser.
+                if (token.type == IDENT and token.literal == "invariant") or (
+                    token.type == VERIFY and i + 1 < brace_end and tokens[i + 1].type == IDENT
+                ):
+                    # Find the invariant's brace block
+                    inv_name_tok = tokens[i + 1]
+                    inv_brace_start = -1
+                    inv_brace_end = -1
+                    nest = 0
+                    j = i + 2
+                    while j <= brace_end:
+                        if tokens[j].type == LBRACE:
+                            if nest == 0:
+                                inv_brace_start = j
+                            nest += 1
+                        elif tokens[j].type == RBRACE:
+                            nest -= 1
+                            if nest == 0:
+                                inv_brace_end = j
+                                break
+                        j += 1
+                    if inv_brace_start != -1 and inv_brace_end != -1:
+                        cond_tokens = tokens[inv_brace_start + 1:inv_brace_end]
+                        cond = self._parse_expression(cond_tokens) if cond_tokens else None
+                        if cond is not None:
+                            from ..zexus_ast import InvariantStatement
+                            invariants.append(InvariantStatement(
+                                name=Identifier(inv_name_tok.literal),
+                                condition=cond,
+                            ))
+                        i = inv_brace_end + 1
+                        continue
+                    # Malformed invariant: skip name token to avoid loop stall
+                    i += 2
+                    continue
 
                 # A. Handle Actions (Methods)
                 if token.type == ACTION:
@@ -2157,6 +2240,7 @@ class ContextStackParser:
         # Add backward compatibility attributes
         contract_stmt.storage_vars = storage_vars
         contract_stmt.actions = actions
+        contract_stmt.invariants = invariants
         
         if token_hash:
              try:
@@ -6200,6 +6284,42 @@ class ContextStackParser:
                 scope_index = idx
                 break
 
+        # QUERY FORM: find NAME in EXPR where (COND) — split at WHERE
+        # (nesting-aware) before splitting target/scope.
+        where_index = -1
+        nesting = 0
+        for idx in range(1, len(tokens)):
+            tok = tokens[idx]
+            if tok.type in {LPAREN, LBRACE, LBRACKET}:
+                nesting += 1
+            elif tok.type in {RPAREN, RBRACE, RBRACKET}:
+                nesting -= 1
+            elif tok.type == WHERE and nesting == 0:
+                where_index = idx
+                break
+
+        if where_index != -1 and scope_index != -1:
+            from ..zexus_ast import Identifier
+            name_tok = tokens[1]
+            if name_tok.type != IDENT:
+                return None
+            variable = Identifier(name_tok.literal)
+            scope_expr = self._parse_expression(tokens[scope_index + 1:where_index])
+            cond_tokens = tokens[where_index + 1:]
+            # Strip wrapping parens from the predicate: (u.age >= 18)
+            if cond_tokens and cond_tokens[0].type == LPAREN and cond_tokens[-1].type == RPAREN:
+                cond_tokens = cond_tokens[1:-1]
+            condition = self._parse_expression(cond_tokens) if cond_tokens else None
+            if scope_expr is None or condition is None:
+                return None
+            expr = FindExpression(
+                target=variable, scope=scope_expr,
+                variable=variable, condition=condition,
+            )
+            if tokens:
+                setattr(expr, 'token', tokens[0])
+            return expr
+
         target_tokens = tokens[1:scope_index] if scope_index != -1 else tokens[1:]
         scope_tokens = tokens[scope_index + 1:] if scope_index != -1 else []
 
@@ -6982,6 +7102,24 @@ class ContextStackParser:
         if tokens[0].type == LET:
             parser_debug(f"  🎯 [Generic] Detected let statement")
             return self._parse_let_statement_block(block_info, all_tokens)
+
+        # CONCURRENCY statements (CHANNEL/SEND/RECEIVE/ATOMIC): the
+        # structural analyzer types these as generic statements when the
+        # declaration carries `<...>` or `= capacity` — route them to the
+        # dedicated parsers so channels work through the CLI (advanced)
+        # path, not just the traditional parser.
+        if tokens[0].type == CHANNEL:
+            parser_debug("  🎯 [Generic] Detected channel statement")
+            return self._parse_channel_statement(block_info, all_tokens)
+        if tokens[0].type == SEND:
+            parser_debug("  🎯 [Generic] Detected send statement")
+            return self._parse_send_statement(block_info, all_tokens)
+        if tokens[0].type == RECEIVE:
+            parser_debug("  🎯 [Generic] Detected receive statement")
+            return self._parse_receive_statement(block_info, all_tokens)
+        if tokens[0].type == ATOMIC:
+            parser_debug("  🎯 [Generic] Detected atomic statement")
+            return self._parse_atomic_statement(block_info, all_tokens)
         
         # Check if this is a CONST statement
         if tokens[0].type == CONST:
@@ -7752,6 +7890,18 @@ class ContextStackParser:
         else:
             parser_debug("  ❌ Expected channel name")
             return None
+
+        # Capacity via assignment: channel<integer> name = N;
+        # (the form the docs use — previously fell through to expression
+        # parsing and the channel was never created.)
+        if i < len(tokens) and tokens[i].type == ASSIGN:
+            cap_tokens = tokens[i + 1:]
+            if cap_tokens and cap_tokens[-1].type == SEMICOLON:
+                cap_tokens = cap_tokens[:-1]
+            if cap_tokens:
+                cap_expr = self._parse_expression(cap_tokens)
+                if cap_expr is not None:
+                    capacity = cap_expr
 
         parser_debug(f"  ✅ Channel: {name.value}, type={type(element_type).__name__}, capacity={capacity}")
         return ChannelStatement(name=name, element_type=element_type, capacity=capacity)

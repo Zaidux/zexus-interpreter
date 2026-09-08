@@ -99,9 +99,11 @@ statefield     := ['persist'] IDENT ':' type '=' expr
 
 actiondecl     := 'action' IDENT '(' [params] ')' ['->' type] block
 
-invariantdecl  := 'invariant' IDENT block        // defense: verified after
+invariantdecl  := 'invariant' IDENT block        // defense: ENFORCED after
                                                  // EVERY action; violation
-                                                 // aborts the action
+                                                 // aborts, rolls back state
+                                                 // (verified: identical on
+                                                 // both engines)
 eventdecl      := 'event' IDENT '{' (IDENT ':' type ',')* '}'
 ```
 
