@@ -53,7 +53,7 @@ ext_modules = []
 
 setup(
     name='zexus',
-    version='1.8.4',
+    version='2.0.0',
     author='Zaidux',
     author_email='devnull@example.com',
     description='A modern, security-first programming language with blockchain support',

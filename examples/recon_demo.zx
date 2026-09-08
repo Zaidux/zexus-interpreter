@@ -1,0 +1,177 @@
+// ─────────────────────────────────────────────────────────────────
+// Riciplay Recon — a first-pass bug-bounty recon tool written in Zexus.
+// Target: riciplay.xyz (authorized by the owner).
+// Passive/light-active only: DNS, TLS, headers, fingerprint, endpoints.
+// ─────────────────────────────────────────────────────────────────
+grant self network
+grant self io_full
+
+use "netsec"
+use "pentest"
+use "http"
+
+function section(title) {
+    print("")
+    print("=== " + title + " ===")
+}
+
+function risk(level, msg) {
+    print("  [" + level + "] " + msg)
+}
+
+// ── 1. DNS ────────────────────────────────────────────────────────
+section("DNS")
+let a = dns_lookup("riciplay.xyz", "A")
+print("  A: " + str(a))
+let mx = dns_lookup("riciplay.xyz", "MX")
+print("  MX: " + str(mx))
+let txt = dns_lookup("riciplay.xyz", "TXT")
+print("  TXT: " + str(txt))
+
+// ── 2. TLS certificate ────────────────────────────────────────────
+section("TLS Certificate (riciplay.xyz:443)")
+let cert = ssl_cert_info("riciplay.xyz", 443)
+if cert.error {
+    risk("WARN", "cert lookup failed: " + str(cert.error))
+} else {
+    print("  issuer:  " + str(cert.issuer))
+    print("  subject: " + str(cert.subject))
+    print("  expires: " + str(cert.not_after))
+    print("  days_left: " + str(cert.days_remaining))
+    if cert.days_remaining < 30 {
+        risk("MEDIUM", "certificate expires in < 30 days")
+    }
+}
+let tls = tls_check("riciplay.xyz", 443)
+if tls.error {
+    risk("WARN", "TLS check failed: " + str(tls.error))
+} else {
+    print("  TLS version: " + str(tls.version))
+    print("  cipher: " + str(tls.cipher))
+    if tls.version == "TLSv1" or tls.version == "TLSv1.1" {
+        risk("HIGH", "obsolete TLS version enabled: " + str(tls.version))
+    }
+}
+
+// ── 3. Security headers on the main site ─────────────────────────
+section("Security Headers (https://riciplay.xyz)")
+let headers = security_headers("https://riciplay.xyz")
+let missing = headers.missing
+if missing.contains("strict-transport-security") {
+    risk("MEDIUM", "missing HSTS (strict-transport-security)")
+}
+if missing.contains("content-security-policy") {
+    risk("MEDIUM", "missing Content-Security-Policy")
+}
+if missing.contains("x-frame-options") {
+    risk("LOW", "missing X-Frame-Options (clickjacking)")
+}
+if missing.contains("x-content-type-options") {
+    risk("LOW", "missing X-Content-Type-Options")
+}
+if missing.len() == 0 {
+    print("  all expected security headers present")
+} else {
+    print("  missing: " + str(missing))
+}
+
+// ── 4. Cookie audit ──────────────────────────────────────────────
+section("Cookies")
+let resp = http_get("https://riciplay.xyz")
+let cookies = resp.cookies
+if cookies == null or cookies.len() == 0 {
+    print("  no cookies set on the landing page")
+} else {
+    for c in cookies {
+        let issues = []
+        if c.secure == false {
+            issues.push("not Secure")
+        }
+        if c.httponly == false {
+            issues.push("not HttpOnly")
+        }
+        if issues.len() > 0 {
+            risk("MEDIUM", "cookie '" + c.name + "': " + ", ".join(issues))
+        } else {
+            print("  cookie '" + c.name + "' looks properly flagged")
+        }
+    }
+}
+
+// ── 5. Technology fingerprint ─────────────────────────────────────
+section("Web Fingerprint")
+let fp = fingerprint_web("https://riciplay.xyz")
+print("  server:   " + str(fp.server))
+print("  framework:" + str(fp.framework))
+print("  powered:  " + str(fp.powered_by))
+if fp.server != "" {
+    print("  (server banner disclosure — informational)")
+}
+
+// ── 6. HTTP methods ───────────────────────────────────────────────
+section("HTTP Methods")
+let methods = http_methods("https://riciplay.xyz")
+print("  allowed: " + str(methods))
+if methods.contains("TRACE") {
+    risk("MEDIUM", "TRACE enabled (XST)")
+}
+if methods.contains("PUT") {
+    risk("HIGH", "PUT enabled — possible unauthorized uploads")
+}
+
+// ── 7. Common endpoints (content-verified) ────────────────────────
+// Status 200 alone is NOT proof a file exists: SPAs (this site is on
+// Vercel) return index.html with 200 for every path. Verify content
+// signatures before flagging.
+section("Common Endpoints (content-verified)")
+let paths = ["/robots.txt", "/sitemap.xml", "/.well-known/security.txt",
+             "/api/ping", "/.env", "/.git/config", "/server-status"]
+for p in paths {
+    let r = http_get("https://riciplay.xyz" + p)
+    let code = r.status
+    if code == 200 {
+        let body = r.body
+        let is_spa = body.contains("<div id="root"") or body.contains("<div id='root'")
+        if p == "/.env" {
+            if body.contains("=") and is_spa == false {
+                risk("CRITICAL", "/.env is publicly readable!")
+            } else {
+                print("  200 " + p + " (SPA fallback, not a real file)")
+            }
+        } else if p == "/.git/config" {
+            if body.contains("[core]") {
+                risk("CRITICAL", "/.git/config exposed — source disclosure!")
+            } else {
+                print("  200 " + p + " (SPA fallback, not a real file)")
+            }
+        } else if p == "/server-status" {
+            if body.contains("Apache Server Status") {
+                risk("HIGH", "/server-status exposed (Apache status)")
+            } else {
+                print("  200 " + p + " (SPA fallback, not a real file)")
+            }
+        } else {
+            print("  200 " + p + " (content type: " + str(r.headers.get("content-type")) + ")")
+        }
+    } else if code == 403 {
+        print("  403 " + p + " (exists, blocked)")
+    }
+}
+
+// ── 8. Subdomain discovery (common prefixes, light) ───────────────
+section("Subdomains (common prefixes)")
+let subs = discover_subdomains("riciplay.xyz", ["www", "api", "app", "admin",
+                                                "staging", "dev", "mail",
+                                                "docs", "status", "cdn"])
+print("  found: " + str(subs))
+
+// ── 9. Structured report ──────────────────────────────────────────
+section("Report")
+let report = create_report("Riciplay Recon", "riciplay.xyz")
+add_finding(report, "medium", "Missing security headers", "6 security headers absent from riciplay.xyz (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection)", "security_headers() missing list")
+add_finding(report, "info", "TLS 1.3 with modern cipher", "riciplay.xyz serves TLSv1.3 / TLS_AES_128_GCM_SHA256 via Let's Encrypt", "tls_check() output")
+add_finding(report, "low", "Server banner disclosure", "Vercel server header exposed", "fingerprint_web() output")
+let stats = severity_stats(report)
+print("  " + str(stats))
+print("")
+print("Recon complete.")

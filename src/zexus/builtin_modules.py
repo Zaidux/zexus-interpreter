@@ -595,8 +595,90 @@ def create_builtin_modules(evaluator):
         except Exception as e:
             return EvaluationError(f"netsec.dns_lookup() error: {str(e)}")
     
+    def _netsec_tls_check(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.tls_check() expects 1-2 arguments: host, port?")
+        host = args[0].value if isinstance(args[0], String) else str(args[0])
+        port = args[1].value if len(args) > 1 else 443
+        try:
+            result = NetsecModule.tls_check(host, int(port))
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"netsec.tls_check() error: {str(e)}")
+
+    def _netsec_ssl_cert_info(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.ssl_cert_info() expects 1-2 arguments: host, port?")
+        host = args[0].value if isinstance(args[0], String) else str(args[0])
+        port = args[1].value if len(args) > 1 else 443
+        try:
+            result = NetsecModule.ssl_cert_info(host, int(port))
+            # Boolean 'error' False means the cert lookup errored but the
+            # dict carries the reason; convert so .error is truthy in Zexus.
+            if result.get("error"):
+                return Map({String(k): String(str(v)) for k, v in result.items()})
+            # days_remaining can be None pre-expiry parse — keep as string
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"netsec.ssl_cert_info() error: {str(e)}")
+
+    def _netsec_http_methods(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.http_methods() expects 1 argument: url")
+        url = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            from .object import List as ListObj
+            # NetsecModule.http_methods returns a flat LIST of allowed
+            # method names (or ["Error: ..."] entries on failure).
+            result = NetsecModule.http_methods(url)
+            return ListObj([String(str(m)) for m in result])
+        except Exception as e:
+            return EvaluationError(f"netsec.http_methods() error: {str(e)}")
+
+    def _netsec_banner_grab(*args):
+        if len(args) < 2:
+            return EvaluationError("netsec.banner_grab() expects 2-3 arguments: host, port, timeout?")
+        host = args[0].value if isinstance(args[0], String) else str(args[0])
+        port = args[1].value if len(args) > 1 else 80
+        timeout = args[2].value if len(args) > 2 else 3.0
+        try:
+            result = NetsecModule.banner_grab(host, int(port), float(timeout))
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"netsec.banner_grab() error: {str(e)}")
+
+    def _netsec_port_scan(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.port_scan() expects 1-3 arguments: host, ports?, timeout?")
+        host = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            result = NetsecModule.port_scan(host)
+            from .object import List as ListObj
+            return Map({
+                String("open"): ListObj([Integer(int(p)) for p in result.get("open", [])]),
+                String("total"): Integer(int(result.get("total", 0))),
+            })
+        except Exception as e:
+            return EvaluationError(f"netsec.port_scan() error: {str(e)}")
+
+    def _netsec_check_open_redirect(*args):
+        if len(args) < 1:
+            return EvaluationError("netsec.check_open_redirect() expects 1 argument: url")
+        url = args[0].value if isinstance(args[0], String) else str(args[0])
+        try:
+            result = NetsecModule.check_open_redirect(url)
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"netsec.check_open_redirect() error: {str(e)}")
+
     netsec_env.set("security_headers", Builtin(_netsec_security_headers, "security_headers"))
     netsec_env.set("dns_lookup", Builtin(_netsec_dns_lookup, "dns_lookup"))
+    netsec_env.set("tls_check", Builtin(_netsec_tls_check, "tls_check"))
+    netsec_env.set("ssl_cert_info", Builtin(_netsec_ssl_cert_info, "ssl_cert_info"))
+    netsec_env.set("http_methods", Builtin(_netsec_http_methods, "http_methods"))
+    netsec_env.set("banner_grab", Builtin(_netsec_banner_grab, "banner_grab"))
+    netsec_env.set("port_scan", Builtin(_netsec_port_scan, "port_scan"))
+    netsec_env.set("check_open_redirect", Builtin(_netsec_check_open_redirect, "check_open_redirect"))
     modules["netsec"] = netsec_env
     
     # ===== PAYLOADS MODULE =====
@@ -655,7 +737,12 @@ def create_builtin_modules(evaluator):
         title = args[0].value if isinstance(args[0], String) else str(args[0])
         target = args[1].value if isinstance(args[1], String) else str(args[1])
         report = PentestModule.create_report(title, target)
-        return Map({String(k): String(str(v)) for k, v in report.items()})
+        wrapper = Map({String(k): String(str(v)) for k, v in report.items()})
+        # Keep the LIVE native dict on the wrapper: add_finding and
+        # severity_stats mutate/read it directly — round-tripping the
+        # nested findings list through Map pairs loses the structure.
+        wrapper._native_report = report
+        return wrapper
     
     def _pentest_fingerprint_web(*args):
         if len(args) < 1:
@@ -677,9 +764,74 @@ def create_builtin_modules(evaluator):
         except Exception as e:
             return EvaluationError(f"pentest.test_headers() error: {str(e)}")
     
+    def _pentest_discover_subdomains(*args):
+        if len(args) < 1:
+            return EvaluationError("pentest.discover_subdomains() expects 1-2 arguments: domain, prefixes?")
+        domain = args[0].value if isinstance(args[0], String) else str(args[0])
+        prefixes = None
+        if len(args) > 1:
+            from .object import List as ListObj
+            list_arg = args[1]
+            elements = getattr(list_arg, "elements", None)
+            if elements is not None:
+                prefixes = [str(getattr(e, "value", e)) for e in elements]
+        try:
+            from .object import List as ListObj
+            result = PentestModule.discover_subdomains(domain, prefixes)
+            return ListObj([
+                Map({String(k): String(str(v)) for k, v in entry.items()})
+                for entry in result
+            ])
+        except Exception as e:
+            return EvaluationError(f"pentest.discover_subdomains() error: {str(e)}")
+
+    def _pentest_severity_stats(*args):
+        if len(args) < 1:
+            return EvaluationError("pentest.severity_stats() expects 1 argument: report")
+        from .object import Map as MapObj
+        report_arg = args[0]
+        native = getattr(report_arg, "_native_report", None)
+        if isinstance(native, dict):
+            py_report = native
+        else:
+            py_report = {}
+            for k, v in (getattr(report_arg, "pairs", None) or {}).items():
+                py_report[str(k)] = v
+        try:
+            result = PentestModule.severity_stats(py_report)
+            return Map({String(k): String(str(v)) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"pentest.severity_stats() error: {str(e)}")
+
+    def _pentest_add_finding(*args):
+        # Signature: add_finding(report, severity, title, description, evidence?)
+        if len(args) < 4:
+            return EvaluationError("pentest.add_finding() expects 4-5 arguments: report, severity, title, description")
+        from .object import Map as MapObj
+        report_arg = args[0]
+        native = getattr(report_arg, "_native_report", None)
+        if isinstance(native, dict):
+            py_report = native
+        else:
+            py_report = {}
+            for k, v in (getattr(report_arg, "pairs", None) or {}).items():
+                py_report[str(k)] = v
+        severity = args[1].value if hasattr(args[1], "value") else str(args[1])
+        title = args[2].value if hasattr(args[2], "value") else str(args[2])
+        desc = args[3].value if hasattr(args[3], "value") else str(args[3])
+        evidence = args[4].value if len(args) > 4 and hasattr(args[4], "value") else None
+        try:
+            result = PentestModule.add_finding(py_report, severity, title, desc, evidence)
+            return Map({String(k): (v if hasattr(v, "value") else String(str(v))) for k, v in result.items()})
+        except Exception as e:
+            return EvaluationError(f"pentest.add_finding() error: {str(e)}")
+
     pentest_env.set("create_report", Builtin(_pentest_create_report, "create_report"))
     pentest_env.set("fingerprint_web", Builtin(_pentest_fingerprint_web, "fingerprint_web"))
     pentest_env.set("test_headers", Builtin(_pentest_test_headers, "test_headers"))
+    pentest_env.set("discover_subdomains", Builtin(_pentest_discover_subdomains, "discover_subdomains"))
+    pentest_env.set("severity_stats", Builtin(_pentest_severity_stats, "severity_stats"))
+    pentest_env.set("add_finding", Builtin(_pentest_add_finding, "add_finding"))
     modules["pentest"] = pentest_env
     
     # ===== AUDIT MODULE =====

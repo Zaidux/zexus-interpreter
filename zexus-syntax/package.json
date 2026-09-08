@@ -2,7 +2,7 @@
   "name": "zexus-language",
   "displayName": "Zexus Language Support",
   "description": "Syntax highlighting for Zexus programming language",
-  "version": "1.5.0",
+  "version": "2.0.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -10,17 +10,26 @@
     "Programming Languages"
   ],
   "contributes": {
-    "languages": [{
-      "id": "zexus",
-      "aliases": ["Zexus", "zexus"],
-      "extensions": [".zx"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "zexus",
-      "scopeName": "source.zx",
-      "path": "./syntaxes/zexus.tmLanguage.json"
-    }]
+    "languages": [
+      {
+        "id": "zexus",
+        "aliases": [
+          "Zexus",
+          "zexus"
+        ],
+        "extensions": [
+          ".zx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zexus",
+        "scopeName": "source.zx",
+        "path": "./syntaxes/zexus.tmLanguage.json"
+      }
+    ]
   },
   "repository": {
     "type": "git",

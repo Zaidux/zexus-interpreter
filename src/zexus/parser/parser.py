@@ -4436,7 +4436,10 @@ class UltimateParser:
             return None
         
         capability = Identifier(self.cur_token.literal)
-        self.next_token()
+        # NOTE: deliberately NO next_token here — _parse_traditional's loop
+        # advances once per statement; advancing past the capability would
+        # swallow the first token of the NEXT statement (v1.9 bug: any
+        # statement directly after `grant` was mis-parsed).
         
         # AST contract (zexus_ast.GrantStatement): capabilities is a LIST.
         # The v1.x call passed capability= (singular), which raised
@@ -4463,7 +4466,8 @@ class UltimateParser:
             return None
         
         capability = Identifier(self.cur_token.literal)
-        self.next_token()
+        # Same over-advance fix as grant (see parse_grant_statement note):
+        # the parse loop advances once per statement.
         
         # Same AST contract fix as grant: capabilities is a LIST.
         return RevokeStatement(entity_name=entity_name, capabilities=[capability])

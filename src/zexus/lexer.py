@@ -143,6 +143,13 @@ _FUNCTION_STATEMENT_BOUNDARIES = {
     LBRACE,
     RBRACE,
     RBRACKET,
+    # IDENT: a statement ending in an identifier (grant self network,
+    # use-less declarations like `let cap = network`, bare calls) must
+    # still allow a following `function`/`action` declaration to lex as
+    # a keyword. Member access (`obj.function`) is protected because DOT
+    # is absent from this set; `let function = x` is protected because
+    # LET is absent.
+    IDENT,
     INT,
     STRING,
     FLOAT,

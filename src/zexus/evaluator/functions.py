@@ -594,6 +594,14 @@ class FunctionEvaluatorMixin:
             if method_name == "push":
                 obj.elements.append(args[0])
                 return obj
+            elif method_name == "len":
+                # GRAMMAR.md §4: .len() is canonical across types.
+                return Integer(len(obj.elements))
+            elif method_name == "join":
+                sep = args[0].value if args and hasattr(args[0], "value") else ""
+                return String(sep.join(
+                    str(getattr(e, "value", e)) for e in obj.elements
+                ))
             elif method_name == "count":
                 return Integer(len(obj.elements))
             elif method_name == "contains":

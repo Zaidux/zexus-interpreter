@@ -1,7 +1,7 @@
 {
   "name": "zexus",
-  "version": "1.8.4",
-  "description": "A modern, security-first programming language with blockchain support",
+  "version": "2.0.0",
+  "description": "A security-first programming language for exploits, defense, and crypto",
   "main": "index.js",
   "bin": {
     "zexus": "./bin/zexus",
@@ -51,13 +51,9 @@
   ],
   "files": [
     "bin/",
-    "src/",
-    "rust_core/",
-    "zexus.json",
-    "shared_config.json",
+    "scripts/postinstall.js",
     "README.md",
-    "LICENSE",
-    "scripts/postinstall.js"
+    "GRAMMAR.md"
   ],
   "dependencies": {},
   "peerDependencies": {

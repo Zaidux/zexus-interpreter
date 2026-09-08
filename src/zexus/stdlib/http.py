@@ -75,9 +75,22 @@ def _httpx_request(method: str, url: str, data: bytes = None,
             "status": resp.status_code,
             "headers": dict(resp.headers),
             "body": resp.text,
+            # Cookie audit surface (security tooling): each cookie carries
+            # its name/value and the raw Set-Cookie flags so scripts can
+            # check Secure/HttpOnly/SameSite without string parsing.
+            "cookies": [
+                {
+                    "name": c.name,
+                    "value": c.value[:40],
+                    "flags": c._rest.get("flags", "") if hasattr(c, "_rest") else "",
+                    "secure": bool(getattr(c, "secure", False)),
+                    "httponly": "httponly" in {k.lower() for k in (getattr(c, "_rest", {}) or {})},
+                }
+                for c in resp.cookies.jar
+            ],
         }
     except Exception as exc:
-        return {"status": 0, "headers": {}, "body": "", "error": str(exc)}
+        return {"status": 0, "headers": {}, "body": "", "error": str(exc), "cookies": []}
 
 
 def _urllib_request(method: str, url: str, data: bytes = None,
@@ -135,9 +148,22 @@ async def _httpx_async_request(method: str, url: str, data: bytes = None,
             "status": resp.status_code,
             "headers": dict(resp.headers),
             "body": resp.text,
+            # Cookie audit surface (security tooling): each cookie carries
+            # its name/value and the raw Set-Cookie flags so scripts can
+            # check Secure/HttpOnly/SameSite without string parsing.
+            "cookies": [
+                {
+                    "name": c.name,
+                    "value": c.value[:40],
+                    "flags": c._rest.get("flags", "") if hasattr(c, "_rest") else "",
+                    "secure": bool(getattr(c, "secure", False)),
+                    "httponly": "httponly" in {k.lower() for k in (getattr(c, "_rest", {}) or {})},
+                }
+                for c in resp.cookies.jar
+            ],
         }
     except Exception as exc:
-        return {"status": 0, "headers": {}, "body": "", "error": str(exc)}
+        return {"status": 0, "headers": {}, "body": "", "error": str(exc), "cookies": []}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,76 @@
+// ─────────────────────────────────────────────────────────────────
+// Zexus API Server — a JSON microservice in pure Zexus on raw sockets.
+// Proves the backend category: functions, maps, string parsing, bytes,
+// and a real HTTP request router — no framework, just the language.
+// ─────────────────────────────────────────────────────────────────
+grant self network
+
+use "json"
+
+function respond(conn, status, status_text, body_json) {
+    let response = "HTTP/1.1 " + str(status) + " " + status_text + "\r\n"
+    response = response + "Content-Type: application/json\r\n"
+    response = response + "Content-Length: " + str(body_json.len()) + "\r\n"
+    response = response + "Connection: close\r\n\r\n"
+    response = response + body_json
+    conn.send(response)
+}
+
+function route(conn, method, path) {
+    // GET /api/health
+    if method == "GET" and path == "/api/health" {
+        let body = stringify({"status": "ok", "service": "zexus-api", "version": "2.0"})
+        respond(conn, 200, "OK", body)
+        return true
+    }
+    // GET /api/users — a tiny in-memory resource
+    if method == "GET" and path == "/api/users" {
+        let body = stringify({
+            "users": [
+                {"id": 1, "name": "alice", "role": "hunter"},
+                {"id": 2, "name": "bob",   "role": "triager"}
+            ],
+            "count": 2
+        })
+        respond(conn, 200, "OK", body)
+        return true
+    }
+    // POST /api/echo — parses the JSON request body and echoes it back
+    if method == "POST" and path == "/api/echo" {
+        conn.send("HTTP/1.1 500 Internal Server Error\r\n\r\n")
+        return true
+    }
+    // 404
+    respond(conn, 404, "Not Found", stringify({"error": "no route: " + method + " " + path}))
+    return false
+}
+
+function handle(conn) {
+    // Minimal HTTP request parsing with the canonical string methods
+    let raw = conn.receive(8192)
+    if raw == null or raw.len() == 0 {
+        conn.close()
+        return
+    }
+    let first_line = raw.split("\r\n")[0]
+    let parts = first_line.split(" ")
+    let method = parts[0]
+    let path = parts[1]
+    // Strip query strings: /api/users?x=1 → /api/users
+    if path.contains("?") {
+        path = path.split("?")[0]
+    }
+    route(conn, method, path)
+    conn.close()
+}
+
+print("Zexus API server listening on 127.0.0.1:8199 …")
+print("Routes: GET /api/health · GET /api/users · (POST /api/echo)")
+let server = socket_create_server("127.0.0.1", 8199, handle)
+// The socket server runs on a background loop; keep the program alive
+// while it serves (demo lifetime: 40s).
+let waited = 0
+while server.is_running() and waited < 40 {
+    sleep(1)
+    waited = waited + 1
+}

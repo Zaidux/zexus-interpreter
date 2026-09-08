@@ -1,6 +1,6 @@
 [package]
 name = "zexus_core"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "High-performance Rust execution core for the Zexus blockchain"
 license = "MIT"

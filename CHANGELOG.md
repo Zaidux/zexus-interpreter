@@ -1,5 +1,51 @@
 # Changelog
 
+## [2.0.0] — 2026-09-08 — The Unification Release
+
+**Breaking:** parse errors are now fatal everywhere (no silent statement
+dropping), legacy syntaxes enter the warn phase (see GRAMMAR.md §9), and
+the C/C++ extension layer is removed (single native layer: Rust).
+
+### Language
+- Unified grammar spec (GRAMMAR.md): one canonical form per construct,
+  full migration table, staged rollout (warn 2.0 → error 2.1)
+- `bytes` type: `b"\xNN"` literals with raw byte escapes, method set
+  (len/at/slice/to_hex/to_string/contains/concat), `bytes_from_hex()`,
+  identical semantics on both engines
+- String methods (len/trim/contains/upper/lower/slice/split/replace/
+  join/reverse/to_int/to_hex/from_hex and more); List `.len()`/`.join()`
+- Hex integer literals (`0xFF`), `\xNN`/`\uNNNN` string escapes
+- Capability grants unified: `grant self network` / `io_full` now
+  actually unblock gated builtins (four store mismatches fixed);
+  revoke withdraws the same set
+
+### Engines
+- ISSUE8 V-001 fixed: contracts execute identically on VM and tree-walk
+  (instantiation + get/set-named actions no longer swallowed)
+- VM builtin parity: `use "crypto"` exposes the merged registry on both
+  engines (sha256/secp256k1 reachable on the VM)
+- Parser: grant/revoke over-advance fixed (any statement after a grant
+  was mis-parsed); `function`/`action` lex correctly after identifier-
+  ending statements
+
+### Native layer (Phase D)
+- rust_core BUILDS (was committed corrupted — unclosed match arm);
+  sha256/keccak hot paths route through the Rust core when built
+- C/C++ extensions deleted (cabi/fastops/native_runtime + prebuilt
+  .so files); execution tiers: Rust VM → pure Python
+
+### Security
+- Mock-signature forge path gated behind ZEXUS_ALLOW_MOCK_CRYPTO=1
+- Evaluator double-unescaping removed
+
+### Proven in the field
+- examples/recon_demo.zx: full first-pass bug-bounty recon of a live
+  domain (DNS, TLS, headers, cookies, fingerprint, content-verified
+  endpoints, subdomains, structured findings report)
+- examples/api_server_demo.zx: JSON API microservice in pure Zexus on
+  raw sockets (routing, query strings, 404s, correct HTTP headers)
+
+
 All notable changes to the Zexus programming language will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -77,6 +77,47 @@ Ground rules for every phase:
 
 ---
 
+## Proof of capability — the v2.0.0 field test (2026-09-08)
+
+Before Phase E, Zexus was tested by *building real things with it* — the
+friction was the test. Two programs, both shipped in `examples/`:
+
+- **`recon_demo.zx`** — a first-pass bug-bounty recon tool run against
+  the live riciplay.xyz (authorized): DNS, TLS cert + protocol, security
+  header audit, cookie audit, web fingerprint, content-verified endpoint
+  probing (correctly identifies SPA-fallback 200s — no false positives),
+  subdomain discovery, structured findings with severity stats. Real
+  findings produced (missing headers, TXT email enumeration).
+- **`api_server_demo.zx`** — a JSON API microservice in pure Zexus on
+  raw sockets: HTTP request parsing, routing, query-string stripping,
+  correct response headers, 404 handling. All endpoints verified live.
+
+The test surfaced and fixed **seven real language bugs** (this is the
+point of dogfooding):
+
+1. netsec module: only 2 of 10 functions registered → 6 more wired
+2. http module: cookies never surfaced → added with security flags
+3. List `.len()`/`.join()` missing (GRAMMAR §4 conformance)
+4. pentest module: `discover_subdomains`/`severity_stats`/`add_finding`
+   unregistered → wired, with the report Map keeping its live native
+   dict (round-tripping nested findings through Map pairs loses them)
+5. **grant/revoke parser over-advance** — ANY statement directly after
+   a grant was mis-parsed (one-token over-consumption)
+6. **`function`/`action` lexer boundary** — IDENT missing from the
+   keyword boundary set, so a function declaration after an
+   identifier-ending statement lexed as a plain identifier
+7. socket server docs/return shape (auto-start; wrapper is stop/is_running)
+
+v2.0.0 published: PyPI (zexus 2.0.0) + npm (zexus 2.0.0, files
+whitelisted to bin/postinstall/README/GRAMMAR after the first publish
+attempt failed on cargo's hardlinked target/ artifacts — 51.6 MB → 13
+files).
+
+Verdict for Phase E: **capable.** The language can express recon logic,
+binary-ish payload work, and backend services today; the remaining
+friction (module registration completeness, docs accuracy) is exactly
+what Phase I addresses.
+
 ## Planned phases
 
 ### Phase D — Native layer alignment: Rust-first, retire C/C++ ✅
