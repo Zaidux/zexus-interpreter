@@ -1,5 +1,10 @@
 # How Zexus Parses and Evaluates Programs
 
+> **Status: accurate for zexus 2.0** (Phase I review). The pipeline
+> description matches the current code; the parser strategy files it
+> names exist. Engine-output equality is enforced by the differential
+> CI suite (tests/grammar/test_differential.py).
+
 This document explains the complete execution pipeline of the Zexus programming language — from raw source code to final output. It covers every phase in detail, similar to how Python's documentation explains its execution model.
 
 ## Overview

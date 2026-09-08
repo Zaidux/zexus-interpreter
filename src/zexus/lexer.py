@@ -176,6 +176,7 @@ _FUNCTION_STATEMENT_BOUNDARIES = {
 }
 
 _DATA_KEYWORD_CONTRACT_CONTEXTS = {
+    None,  # file start: `data P { ... }` as the FIRST statement — found by the Phase I half-wired sweep
     SEMICOLON,
     LBRACE,
     RBRACE,

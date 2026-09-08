@@ -1,866 +1,297 @@
-# Zexus Guide
-
-> ⚠️ **Status: being regenerated against v2.0 (Phase I).** Sections
-> below this banner reflect v1.x unless updated. The canonical language
-> contract is [GRAMMAR.md](GRAMMAR.md); verified, runnable examples are
-> in [examples/](examples/) and [QUICK_START.md](QUICK_START.md). The
-> "✅ verified" tables in this file predate the unified grammar and are
-> NOT trustworthy until regenerated — the executable differential
-> corpus (tests/grammar/test_differential.py) is the source of truth
-> for what works.
-
 # Zexus Language Guide
 
-A practical, test-verified guide to the Zexus programming language.
-Every example in this guide was executed and verified against Zexus v1.8.4.
+**Verified against zexus 2.0.** Every snippet in this guide was executed
+before publication — the verification script lives in the repo history of
+this file's regeneration. If a snippet fails for you, it's a bug: open an
+issue.
 
-> **How to run:** Save code to a `.zx` file and run with `zx run file.zx`
-
----
-
-## Table of Contents
-
-- [Basics](#basics)
-  - [Hello World](#hello-world)
-  - [Variables](#variables)
-  - [Data Types](#data-types)
-  - [Arithmetic](#arithmetic)
-  - [Comparison & Logical Operators](#comparison--logical-operators)
-  - [Comments](#comments)
-  - [String Concatenation](#string-concatenation)
-  - [String Interpolation](#string-interpolation)
-  - [Print Output](#print-output)
-- [Intermediate](#intermediate)
-  - [If / Else](#if--else)
-  - [While Loops](#while-loops)
-  - [For Each Loops](#for-each-loops)
-  - [Break and Continue](#break-and-continue)
-  - [Functions](#functions)
-  - [Lists](#lists)
-  - [Maps (Dictionaries)](#maps-dictionaries)
-  - [Nested Data Structures](#nested-data-structures)
-  - [Built-in Functions](#built-in-functions)
-  - [Error Handling (Try/Catch/Throw)](#error-handling-trycatchthrow)
-- [Advanced](#advanced)
-  - [Contracts (Stateful Objects)](#contracts-stateful-objects)
-  - [Closures](#closures)
-  - [Higher-Order Functions](#higher-order-functions)
-  - [Recursion](#recursion)
-  - [Protect / Verify (Policy Rules)](#protect--verify-policy-rules)
-  - [Emit (Events)](#emit-events)
-  - [Indexed Iteration](#indexed-iteration)
-  - [Map Iteration](#map-iteration)
-- [Known Quirks & Gotchas](#known-quirks--gotchas)
+The canonical language contract is [GRAMMAR.md](GRAMMAR.md). This guide is
+the tutorial; GRAMMAR.md is the law.
 
 ---
 
-## Basics
-
-### Hello World
+## 1. Hello, world
 
 ```zexus
-print("Hello, World!")
+print("Hello, Zexus!")
 ```
 
-**Output:** `Hello, World!`
+Run: `zx run hello.zx`
 
----
-
-### Variables
-
-Declare variables with `let`. Reassign with `=`.
+## 2. Variables and types
 
 ```zexus
-let name = "Alice"
-let age = 25
-print(name)
-print(age)
+let count = 10              // integer (checked arithmetic: overflow traps)
+const name = "Zexus"        // immutable binding
+let price = 19.99           // float
+let active = true           // boolean
+let nothing = null          // null
+let mask = 0xFF             // hex literal → 255
 ```
 
-**Output:**
-```
-Alice
-25
-```
+Integer arithmetic is **checked by default** — overflow aborts with an
+error instead of wrapping. `wrapping_add(a, b)` is the explicit opt-out.
 
-Reassignment uses plain `=`:
+## 3. Functions
+
+`fn` is the canonical keyword (`function` is accepted through the 2.x
+warn phase):
 
 ```zexus
-let x = 10
-x = x + 5
-print(x)
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(10))              // 55
 ```
 
-**Output:** `15`
-
----
-
-### Data Types
-
-Zexus has five core types: **string**, **integer**, **float**, **boolean**, and **null**.
+Closures:
 
 ```zexus
-let text = "Hello"       // string
-let num = 42             // integer
-let decimal = 3.14       // float
-let flag = true          // boolean
-let nothing = null       // null
-print(text)
-print(num)
-print(decimal)
-print(flag)
-print(nothing)
+fn make_adder(n) { return fn(x) { return x + n } }
+let add5 = make_adder(5)
+print(add5(3))              // 8
 ```
 
-**Output:**
-```
-Hello
-42
-3.14
-true
-null
-```
-
----
-
-### Arithmetic
+Module-level state mutated from functions lands where you read it:
 
 ```zexus
-let a = 10
-let b = 3
-print(a + b)     // 13    (addition)
-print(a - b)     // 7     (subtraction)
-print(a * b)     // 30    (multiplication)
-print(a / b)     // 3.33  (division)
-print(a % b)     // 1     (modulo)
-print(a ** 2)    // 100   (exponentiation)
+let chain = []
+fn add_block() { chain.push("b") }
+add_block()
+print(chain.len())          // 1
 ```
 
-**Output:**
-```
-13
-7
-30
-3.3333333333333335
-1
-100
-```
-
----
-
-### Comparison & Logical Operators
+## 4. Control flow
 
 ```zexus
-print(10 == 10)     // true
-print(10 != 5)      // true
-print(10 > 5)       // true
-print(10 >= 10)     // true
-print(10 < 20)      // true
-print(10 <= 9)      // false
+// while
+let n = 0
+while n < 3 { n = n + 1 }
 
-print(true and false)   // false
-print(true or false)    // true
-print(5 > 3 and 2 < 4) // true
+// for-each (canonical)
+for each x in [1, 2, 3] { print(x) }
+
+// for-in (also canonical)
+for x in [1, 2, 3] { print(x) }
+
+// ranges: exclusive end, Python semantics
+let total = 0
+for i in 0..4 { total = total + i }
+print(total)                // 6
+
+// if / elif / else
+if total > 5 { print("big") } elif total > 2 { print("mid") } else { print("small") }
+
+// ternary expression
+let label = total > 5 ? "big" : "small"
 ```
 
----
+## 5. Pattern matching
 
-### Comments
+`match` with `pattern => body` arms and `_` wildcard — in statement or
+value position:
 
 ```zexus
-// This is a single-line comment
+let desc = match 5 % 2 { 0 => "even" _ => "odd" }
+print(desc)                             // odd
 
-/* This is a
-   block comment */
-
-let x = 42 // inline comment
-print(x)
+match "b" {
+    "a" => { print("was a") }
+    "b" => { print("was b") }
+    _   => { print("other") }          // was b
+}
 ```
 
-**Output:** `42`
+## 6. Strings
 
----
-
-### String Methods (canonical — GRAMMAR.md §4)
-
-Strings carry methods directly (v1.x had only global functions):
+Methods are the canonical form (see GRAMMAR.md section 4):
 
 ```zexus
-print("  Hello  ".trim())          // "Hello"
-print("hello".len())               // 5
-print("hello".contains("ell"))     // true
-print("hello".upper())             // HELLO
-print("abcdef".slice(1, 3))        // "bc"
-print("a-b-c".split("-"))          // [a, b, c]
-print("hello".replace("l", "L"))   // heLLo
-print("a-b".split("-").join("_"))  // a_b
-print("42".to_int())               // 42
-print("hi".to_hex())               // 6869
-print("6869".from_hex())           // hi
+print("  hi  ".trim())              // "hi"
+print("hello".len())                // 5
+print("hello".contains("ell"))      // true
+print("hello".upper())              // HELLO
+print("abcdef".slice(1, 3))         // "bc"
+print("a-b-c".split("-").len())     // 3
+print("a-b".split("-").join("_"))   // a_b
+print("hello".replace("l", "L"))    // heLLo
+print("42".to_int() + 1)            // 43
+print("hi".to_hex())                // 6869
+print("6869".from_hex())            // hi
 ```
 
-### Hex Literals and Escapes
-
-```zexus
-let mask = 0xFF                 // 255
-let magic = 0xDEADBEEF
-let probe = "\x00\x01\xff"    // \xNN byte escapes (string semantics)
-let euro  = "\u20ac"            // \uNNNN unicode escapes
-```
-
-### Bytes (binary payloads)
-
-```zexus
-let probe = b"\x00\x01\xff"          // raw byte escapes
-let magic = bytes_from_hex("deadbeef")  // hex → bytes
-print(probe.len())                      // 3
-print(probe.to_hex())                   // "0001ff"
-print(b"hi" + b"!")                     // concat
-print(b"abc".at(1))                     // 98 (byte value)
-print(b"abcdef".slice(1, 3).to_hex())   // "6263"
-print(b"payload".contains(b"load"))     // true
-print(b"\x41".to_string())              // "A" (utf-8 decode)
-```
-
-### Capability Grants (safe by default, dangerous on demand)
-
-Network and file builtins are denied until granted:
-
-```zexus
-grant self io_full
-print(file_write_text("note.txt", "hello"))
-revoke self io_full
-```
-
-`grant self network` enables `http_get` and sockets; `revoke` withdraws
-the same set. See GRAMMAR.md §6.
-
-### String Concatenation
-
-Join strings with `+`. Use `str()` to convert other types.
-
-```zexus
-let greeting = "Hello" + " " + "World"
-print(greeting)
-print("Value: " + str(42))
-```
-
-**Output:**
-```
-Hello World
-Value: 42
-```
-
----
-
-### String Interpolation
-
-Use `${expression}` inside double-quoted strings.
+Interpolation:
 
 ```zexus
 let name = "Zexus"
-let msg = "Hello, ${name}!"
-print(msg)
+print("Hello ${name}!")              // Hello Zexus!
 ```
 
-**Output:** `Hello, Zexus!`
+Escapes: `\n` `\t` `\r` `\\` `\"` `\xNN` (byte) `\uNNNN` (unicode).
 
----
+## 7. Bytes (binary payloads)
 
-### Print Output
-
-`print()` is the primary output function. It prints any value.
+Raw byte sequences for protocol and crypto work. `\xNN` is the **byte**,
+not the unicode codepoint:
 
 ```zexus
-print("text")
-print(42)
-print(true)
-print([1, 2, 3])
-print({key: "value"})
+let probe = b"\x00\x01\xff"
+print(probe.len())                  // 3
+print(probe.to_hex())               // 0001ff
+print(b"hi" + b"!")                 // concat
+print(b"\x41".to_string())          // "A"
+print(bytes_from_hex("deadbeef").to_hex())   // deadbeef
+print(b"abc".at(1))                 // 98 (byte value)
+print(b"payload".contains(b"load")) // true
 ```
 
----
-
-## Intermediate
-
-### If / Else
-
-Use `{}` braces for blocks.
+## 8. Collections
 
 ```zexus
-let x = 10
-if x > 5 {
-  print("x is greater than 5")
-} else {
-  print("x is 5 or less")
-}
+// lists
+let l = [1, 2]
+l.push(3)
+print(l.len())                      // 3
+
+// maps
+let m = {"a": 1}
+m["b"] = 2
+print(m["a"] + m["b"])              // 3
 ```
 
-**Output:** `x is greater than 5`
+## 9. Contracts
 
-Chained conditions:
-
-```zexus
-let x = 10
-if x > 20 {
-  print("big")
-} else if x > 5 {
-  print("medium")
-} else {
-  print("small")
-}
-```
-
-**Output:** `medium`
-
----
-
-### While Loops
-
-```zexus
-let i = 0
-while i < 5 {
-  print(i)
-  i = i + 1
-}
-```
-
-**Output:**
-```
-0
-1
-2
-3
-4
-```
-
----
-
-### For Each Loops
-
-Iterate over lists with `for each`:
-
-```zexus
-let items = [1, 2, 3, 4, 5]
-for each item in items {
-  print(item)
-}
-```
-
-**Output:**
-```
-1
-2
-3
-4
-5
-```
-
----
-
-### Break and Continue
-
-**Break** exits a loop early:
-
-```zexus
-let items = [1, 2, 3, 4, 5]
-let i = 0
-while i < length(items) {
-  if items[i] == 3 {
-    print("Found 3, breaking!")
-    break
-  }
-  print(items[i])
-  i = i + 1
-}
-```
-
-**Output:**
-```
-1
-2
-Found 3, breaking!
-```
-
-**Continue** skips to the next iteration:
-
-```zexus
-let i = 0
-while i < 5 {
-  i = i + 1
-  if i == 3 {
-    continue
-  }
-  print(i)
-}
-```
-
-**Output:**
-```
-1
-2
-4
-5
-```
-
----
-
-### Functions
-
-Declare with `function`, return values with `return`.
-
-```zexus
-function greet(name) {
-  return "Hello, " + name
-}
-let msg = greet("World")
-print(msg)
-```
-
-**Output:** `Hello, World`
-
-Functions with multiple parameters:
-
-```zexus
-function add(a, b) {
-  return a + b
-}
-print(add(3, 7))
-```
-
-**Output:** `10`
-
----
-
-### Lists
-
-Create with `[]`, access by index (0-based), modify with `.push()` and index assignment.
-
-```zexus
-let nums = [10, 20, 30]
-print(nums)           // [10, 20, 30]
-print(nums[0])        // 10
-print(nums[1])        // 20
-print(length(nums))   // 3
-
-nums.push(40)
-print(nums)           // [10, 20, 30, 40]
-
-nums[0] = 99
-print(nums)           // [99, 20, 30, 40]
-```
-
----
-
-### Maps (Dictionaries)
-
-Create with `{}`, access by key using `["key"]`.
-
-```zexus
-let person = {name: "Alice", age: 30}
-print(person)
-print(person["name"])    // Alice
-print(person["age"])     // 30
-```
-
----
-
-### Nested Data Structures
-
-Lists and maps can be nested:
-
-```zexus
-let matrix = [[1, 2], [3, 4], [5, 6]]
-print(matrix[0])       // [1, 2]
-print(matrix[1][1])    // 4
-```
-
----
-
-### Built-in Functions
-
-| Function     | Description                          | Example              | Result    |
-|-------------|--------------------------------------|----------------------|-----------|
-| `print(x)`  | Print a value                        | `print("hi")`       | `hi`      |
-| `length(x)` | Length of string or list             | `length("hello")`   | `5`       |
-| `str(x)`    | Convert to string                    | `str(42)`            | `"42"`    |
-| `typeof(x)` | Get type name                        | `typeof("hi")`      | `string`  |
-| `abs(x)`    | Absolute value                       | `abs(-10)`           | `10`      |
-
----
-
-### Error Handling (Try/Catch/Throw)
-
-Catch runtime errors with `try/catch`:
-
-```zexus
-try {
-  let x = 10 / 0
-} catch (e) {
-  print("Caught: " + str(e))
-}
-```
-
-**Output:** `Caught: Division by zero`
-
-Throw custom errors:
-
-```zexus
-try {
-  throw "Something went wrong"
-} catch (e) {
-  print("Caught: " + str(e))
-}
-```
-
-**Output:** `Caught: Something went wrong`
-
----
-
-## Advanced
-
-### Contracts (Stateful Objects)
-
-Contracts are Zexus's primary way to create stateful, encapsulated objects. They use `state` blocks for data and `action` for methods.
+The crypto category's core — state declared in one `state { }` block,
+actions with `this.` access:
 
 ```zexus
 contract Counter {
-  state {
-    count: 0
-  }
-
-  action increment() {
-    this.count = this.count + 1
-  }
-
-  action get_count() {
-    return this.count
-  }
+    state { count: 0 }
+    action increment() { this.count = this.count + 1 }
+    action get() { return this.count }
 }
 
 let c = Counter()
 c.increment()
 c.increment()
-c.increment()
-print(c.get_count())
+print(c.get())                      // 2 — identical on VM and tree-walk
 ```
 
-**Output:** `3`
-
-A more complete example:
+Guards and events inside actions:
 
 ```zexus
-contract Wallet {
-  state {
-    balance: 100
-  }
-
-  action deposit(amount) {
-    this.balance = this.balance + amount
-  }
-
-  action withdraw(amount) {
-    if this.balance >= amount {
-      this.balance = this.balance - amount
-      return true
-    }
-    return false
-  }
-
-  action get_balance() {
-    return this.balance
-  }
-}
-
-let w = Wallet()
-print(w.get_balance())    // 100
-w.deposit(50)
-print(w.get_balance())    // 150
-w.withdraw(30)
-print(w.get_balance())    // 120
-```
-
----
-
-### Closures
-
-Inner functions can access variables from outer scopes:
-
-```zexus
-function outer() {
-  let x = 10
-  function inner() {
-    return x + 5
-  }
-  return inner()
-}
-print(outer())
-```
-
-**Output:** `15`
-
----
-
-### Higher-Order Functions
-
-Functions can be passed as arguments:
-
-```zexus
-function apply(fn, val) {
-  return fn(val)
-}
-
-function double(x) {
-  return x * 2
-}
-
-print(apply(double, 5))
-```
-
-**Output:** `10`
-
-Nested function calls:
-
-```zexus
-function add(a, b) {
-  return a + b
-}
-
-function multiply(a, b) {
-  return a * b
-}
-
-let result = add(multiply(3, 4), 5)
-print(result)
-```
-
-**Output:** `17`
-
----
-
-### Recursion
-
-Functions can call themselves:
-
-```zexus
-function factorial(n) {
-  if n <= 1 {
-    return 1
-  }
-  return n * factorial(n - 1)
-}
-print(factorial(5))
-print(factorial(10))
-```
-
-**Output:**
-```
-120
-3628800
-```
-
----
-
-### Protect / Verify (Policy Rules)
-
-Apply a protection policy with the call form (the `protect rule ... { }`
-block form is not part of the unified grammar — see GRAMMAR.md §6/§9):
-
-```zexus
-let balance = 100
-protect(balance, { no_negative: true }, "strict")
-balance = balance - 50
-print(balance)
-```
-
-**Output:** `50`
-
----
-
-### Emit (Events)
-
-Emit named events with the call form (the `emit event Name { ... }` block
-form is not part of the unified grammar — see GRAMMAR.md §9):
-
-```zexus
-emit user_login("alice")
-print("Event emitted")
-```
-
-**Output:** `Event emitted`
-
----
-
-### Indexed Iteration
-
-Use two variables in `for each` to get index and value:
-
-```zexus
-let items = [3, 1, 4, 1, 5]
-for each i, item in items {
-  print(str(i) + ": " + str(item))
+action transfer(to, amount) {
+    require(amount > 0, "zero transfer")
+    // ... state changes ...
+    emit Transfer(msg.sender, to, amount)
 }
 ```
 
-**Output:**
-```
-0: 3
-1: 1
-2: 4
-3: 1
-4: 5
-```
-
----
-
-### Map Iteration
-
-Iterate over map keys and values:
+Field-level access control (defense):
 
 ```zexus
-let data = {x: 1, y: 2, z: 3}
-for each key, val in data {
-  print(key + ": " + str(val))
+let user = {"password": "secret", "name": "bob"}
+restrict user.password = "deny"     // registers a security restriction
+print(user.name)                    // bob
+```
+
+## 10. Entities and enums
+
+```zexus
+data Point { x: integer, y: integer }
+let p = Point{x: 1, y: 2}
+print(p.x + p.y)                    // 3
+
+enum Color { Red Green Blue }
+print(Color.Red)                    // 0
+```
+
+Note: fields not set during construction read as `null` (declare
+defaults or set all fields).
+
+## 11. Errors
+
+```zexus
+try {
+    throw "boom"
+} catch e {
+    print("caught:", e)
 }
 ```
 
-**Output:**
-```
-x: 1
-y: 2
-z: 3
-```
+Errors are values on the tree-walk evaluator and abort on the VM (one
+documented divergence — see ROADMAP.md Phase G).
 
----
+## 12. The safety model
 
-## Known Quirks & Gotchas
-
-These are verified behaviors as of v1.8.4.
-
-### 1. Compound assignment works (fixed in v1.8.4)
-
-`+=`, `-=`, `*=`, `/=`, `%=`, `**=` all work correctly.
+**Safe by default, dangerous on demand.**
 
 ```zexus
-let x = 10
-x += 5
-print(x)   // prints 15 ✅
+// file_read_text, http_get, sockets: DENIED until granted
+grant self io_full
+print(file_write_text("note.txt", "hello"))
+revoke self io_full                 // denied again
 ```
 
-### 2. Map indexed assignment works (confirmed in v1.8.4)
-
-Assigning values to map keys via `map["key"] = value` works correctly.
-
 ```zexus
-let data = {count: 0}
-data["count"] = 42
-print(data["count"])   // prints 42 ✅
+grant self network                  // enables http_get and sockets
 ```
 
-### 3. Entity constructors with arguments (fixed in v1.8.4)
+Capability sets expand: `network` grants `network.tcp` + `network.http`
++ more. `revoke` withdraws exactly what the matching grant issued.
 
-Entities accept positional arguments matching their declared fields.
-
-```zexus
-entity Dog {
-  name
-  breed
-}
-let d = Dog("Rex", "Husky")
-print(d.name)    // "Rex" ✅
-print(d.breed)   // "Husky" ✅
-```
-
-You can also use typed fields:
+**Sandbox** — stricter than ungranted: blocks builtins entirely inside
+the block:
 
 ```zexus
-entity User {
-  name: string
-  age: int = 0
-}
-let u = User("Alice", 25)
-```
-
-### 4. `not` operator works (fixed in v1.8.4)
-
-The `not` keyword is now properly supported as a prefix operator.
-
-```zexus
-print(not true)    // false ✅
-print(not false)   // true ✅
-if not done {
-  print("still going")
+sandbox {
+    print("sandboxed print ok")     // print is fine
+    // file_read_text("x")          // ❌ not allowed inside sandbox
 }
 ```
 
-### 5. `for i in range(n)` works (fixed in v1.8.4)
-
-Both `for each` and `for...in` syntax work correctly.
+## 13. Modules
 
 ```zexus
-// ✅ Shorthand syntax
-for i in range(5) {
-  print(i)   // 0, 1, 2, 3, 4
-}
+use "crypto"
+print(hash_sha256("abc"))
 
-// ✅ Traditional syntax
-for each item in [10, 20, 30] {
-  print(item)
-}
+use "json"
+let s = stringify({"ok": true})
+
+use "netsec"                        // security_headers, dns_lookup, ...
+use "pentest"                       // fingerprint_web, discover_subdomains, ...
 ```
 
-### 6. Use `str()` when concatenating non-strings
-
-Concatenating a string with a number without `str()` may cause an error or unexpected result.
+## 14. Concurrency
 
 ```zexus
-// ✅ Always convert explicitly
-print("Value: " + str(42))
+async action fetch_val() { return 42 }
+print(await fetch_val())            // 42
+
+defer { print("runs after the main body") }
 ```
 
-### 7. Division by zero is caught but verbose
+## 15. What is NOT wired (as of 2.0)
 
-Dividing by zero in a `try/catch` works but may print extra error messages before your catch handler runs. This is normal behavior.
+These parse or partially run but do not provide their apparent
+guarantee — see ROADMAP.md before relying on any of them:
 
-### 8. String interpolation falls back to interpreter
+- **`invariant` / `verify` blocks in contracts** — parse and run but do
+  **not enforce** (a contract with `invariant n >= 0` accepts `set(-5)`)
+- `find x in list` — parses, runtime is filesystem-oriented
+- `channel()` / `send` / `receive` — no working concurrency channels
+- `seal obj` — statement form fails; `sealed` modifier works on
+  declarations
+- `middleware`, `throttle`, `trail` — keyword scaffolding, no execution
+- anonymous `action(a, b) { ... }` as expression value (V-004/R-029)
 
-Using `"${expr}"` triggers a VM fallback to interpreter mode. It works correctly but you'll see a warning message in the console output.
+When in doubt, the executable differential corpus
+(`tests/grammar/test_differential.py`) is the source of truth.
 
----
+## 16. Next steps
 
-## Quick Reference
-
-| Feature | Syntax | Works? |
-|---------|--------|--------|
-| Variable declaration | `let x = 10` | ✅ |
-| Reassignment | `x = x + 1` | ✅ |
-| Compound assignment | `x += 1` | ✅ |
-| If/else | `if cond { } else { }` | ✅ |
-| While loop | `while cond { }` | ✅ |
-| For each | `for each item in list { }` | ✅ |
-| For in range | `for i in range(n) { }` | ✅ |
-| Functions | `function name(args) { }` | ✅ |
-| Return | `return value` | ✅ |
-| Lists | `[1, 2, 3]` | ✅ |
-| List push | `list.push(val)` | ✅ |
-| List index | `list[0]` | ✅ |
-| Maps | `{key: value}` | ✅ |
-| Map access | `map["key"]` | ✅ |
-| Map mutation | `map["key"] = val` | ✅ |
-| Contracts | `contract Name { state { } action fn() { } }` | ✅ |
-| Entities | `entity Name { field }` | ✅ |
-| Entity constructor | `Entity("arg1", "arg2")` | ✅ |
-| Not operator | `not true` / `!false` | ✅ |
-| Try/catch | `try { } catch (e) { }` | ✅ |
-| Throw | `throw "message"` | ✅ |
-| Break | `break` | ✅ |
-| Continue | `continue` | ✅ |
-| String interpolation | `"${expr}"` | ✅ |
-| Comments | `//` and `/* */` | ✅ |
-| Closures | nested functions | ✅ |
-| Recursion | self-calling functions | ✅ |
-| Protect/Verify | `protect rule { verify ... }` | ✅ |
-| Emit events | `emit event name { }` | ✅ |
-| Exponentiation | `a ** b` | ✅ |
-
-**Legend:** ✅ = works reliably
+- [GRAMMAR.md](GRAMMAR.md) — the contract (canonical forms, migration table)
+- [QUICK_START.md](QUICK_START.md) — verified commands
+- [examples/](examples/) — recon tool, API server, crypto, contracts

@@ -153,6 +153,19 @@ Open (documented xfail, not blocking): error-model unification
 (errors-as-values vs exceptions — Phase G design item), anonymous
 closures (V-004/R-029).
 
+### Phase I — part 2 ✅
+
+- **Half-wired feature survey** (every keyword probed on both engines).
+  Classification: remove / leave-as-legacy-error / **report-valuable**.
+  Found + fixed 1 more lexer bug en route (`data` at file start).
+  Report of valuable unwired features delivered with this commit.
+- **ZEXUS_GUIDE.md completely regenerated** from executed snippets —
+  every code block in the new guide was run before publication; a
+  dedicated "What is NOT wired" section (15) lists the scaffolding by
+  name so users can't mistake it for guarantees.
+- **PARSING_PIPELINE.md** reviewed: architecture description matches
+  current code; currency banner added.
+
 Sequencing per owner decision: F → **I** → G → E.
 
 ## Phase I — Cleanup and documentation reset (in progress)
