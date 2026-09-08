@@ -1359,13 +1359,36 @@ class BytecodeCompiler:
         # Iterate cases
         for case in node.cases:
             next_case_lbl = self._make_label()
-            
-            # Duplicate Subject (Stack: [..., subj, subj])
-            self._emit(Opcode.DUP)
-            
+
             # Evaluate Pattern
             # Note: AST might call it 'pattern' or something else depending on Case node type
             pattern_node = getattr(case, 'pattern', None)
+
+            # Wildcard detection (GRAMMAR.md section 3): an Identifier named
+            # '_' is the catch-all arm — the canonical form parse_match_
+            # expression produces. Previously it compiled as a VARIABLE
+            # lookup (null), so the fallback arm never matched on the VM
+            # while the tree-walk treated it as wildcard (differential:
+            # match as value expression).
+            is_wildcard = isinstance(pattern_node, zexus_ast.WildcardPattern) or (
+                isinstance(pattern_node, zexus_ast.Identifier)
+                and getattr(pattern_node, "value", None) == "_"
+            ) or (
+                isinstance(pattern_node, (zexus_ast.WildcardPattern, zexus_ast.VariablePattern))
+            )
+
+            if is_wildcard:
+                # Always matches: drop the DUP/EQ/JUMP and execute the body
+                # directly (subject is popped below as in the match path).
+                self._emit(Opcode.POP)
+                body = getattr(case, 'consequence', getattr(case, 'action', getattr(case, 'result', None)))
+                self._compile_node(body)
+                self._emit(Opcode.JUMP, end_label)
+                continue
+
+            # Duplicate Subject (Stack: [..., subj, subj])
+            self._emit(Opcode.DUP)
+
             if pattern_node:
                 # LiteralPattern holds a literal node in .value
                 if isinstance(pattern_node, zexus_ast.LiteralPattern):
@@ -1375,10 +1398,10 @@ class BytecodeCompiler:
                     pass
                 else:
                     self._compile_node(pattern_node)
-            
+
             # Equality check
             self._emit(Opcode.EQ)
-            
+
             # Jump if False
             self._emit(Opcode.JUMP_IF_FALSE, next_case_lbl)
             
@@ -1401,6 +1424,14 @@ class BytecodeCompiler:
 
     # Alias MatchExpression to logic (it's similar enough for basic cases)
     _compile_MatchExpression = _compile_PatternStatement
+
+    def _compile_RangeExpression(self, node):
+        """start..end → __range__(start, end): parity with the tree-walk
+        handler (same bounds checks, same exclusive semantics)."""
+        self._compile_node(node.start)
+        self._compile_node(node.end)
+        name_idx = self._add_constant("__range__")
+        self._emit(Opcode.CALL_NAME, (name_idx, 2))
 
     # ==================== Debug / Verify / Watch ====================
 

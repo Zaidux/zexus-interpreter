@@ -974,6 +974,26 @@ class FunctionEvaluatorMixin:
                 return EvaluationError("to_hex() takes exactly 1 argument")
             return Math.to_hex_string(a[0])
         
+        def _zexus_range(*a):
+            # VM parity path for start..end (RangeExpression desugars to
+            # __range__(start, end)); identical semantics to the tree-walk
+            # handler including the bounds checks.
+            if len(a) != 2:
+                return EvaluationError("__range__() expects 2 integer arguments")
+            def _v(x):
+                return x.value if hasattr(x, "value") else x
+            try:
+                s, e = int(_v(a[0])), int(_v(a[1]))
+            except (TypeError, ValueError):
+                return EvaluationError("Range bounds must be integers")
+            if e < s:
+                return List([])
+            if e - s > 1_000_000:
+                return EvaluationError(
+                    f"Range {s}..{e} exceeds the 1,000,000-element limit"
+                )
+            return List([Integer(i) for i in range(s, e)])
+
         def _bytes_from_hex(*a):
             if len(a) != 1 or not isinstance(a[0], String):
                 return EvaluationError("bytes_from_hex() takes exactly 1 hex string argument")
@@ -2955,6 +2975,7 @@ class FunctionEvaluatorMixin:
             "to_hex": Builtin(_to_hex, "to_hex"),
             "from_hex": Builtin(_from_hex, "from_hex"),
             "bytes_from_hex": Builtin(_bytes_from_hex, "bytes_from_hex"),
+            "__range__": Builtin(_zexus_range, "__range__"),
             "sqrt": Builtin(_sqrt, "sqrt"),
             "input": Builtin(_input, "input"),
             "hash_password": Builtin(_hash_password, "hash_password"),

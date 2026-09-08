@@ -39,6 +39,9 @@ _KEYWORDS = {
     "in": IN,
     "action": ACTION,
     "function": FUNCTION,
+    # GRAMMAR.md section 3: `fn` is the canonical declaration keyword;
+    # `function` (legacy) stays accepted through the 2.x warn phase.
+    "fn": FUNCTION,
     "while": WHILE,
     "use": USE,
     "find": FIND,
@@ -135,7 +138,7 @@ _KEYWORDS = {
     "not": BANG,
 }
 
-_FUNCTION_DECL_KEYWORDS = {"action", "function"}
+_FUNCTION_DECL_KEYWORDS = {"action", "function", "fn"}
 
 _FUNCTION_STATEMENT_BOUNDARIES = {
     None,
@@ -553,6 +556,16 @@ class Lexer:
                     tok = Token(MOD, self.ch)
                     tok.line = current_line
                     tok.column = current_column
+            elif self.ch == '.' and self.peek_char() == '.':
+                # Range operator '..' (GRAMMAR.md section 3): `0..4` — exclusive
+                # end, Python range semantics.
+                self.read_char()
+                self.read_char()
+                tok = Token(RANGE, '..')
+                tok.line = current_line
+                tok.column = current_column
+                self._finalize_token(tok)
+                return tok
             elif self.ch == '.':
                 tok = Token(DOT, self.ch)
                 tok.line = current_line
@@ -1032,8 +1045,11 @@ class Lexer:
         while self.is_digit(self.ch):
             self.read_char()
 
-        # Check for decimal point
-        if self.ch == '.':
+        # Check for decimal point — but NOT for the range operator '..'
+        # (GRAMMAR.md section 3: `for i in 0..N`). `0..4` previously lexed
+        # as FLOAT '0.' + DOT + INT 4 and parsed as a property access on
+        # a float literal (R-024).
+        if self.ch == '.' and self.peek_char() != '.':
             is_float = True
             self.read_char()
             # Read fractional part

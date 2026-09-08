@@ -538,6 +538,20 @@ class BytesLiteral(Expression):
         return str(self.value)
 
 
+class RangeExpression(Expression):
+    """Exclusive range: `start..end` (GRAMMAR.md section 3).
+
+    Evaluates to a List of Integers start, start+1, ..., end-1
+    (Python range(start, end) semantics).
+    """
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+    def __repr__(self):
+        return f"RangeExpression({self.start}..{self.end})"
+
+
 class StringInterpolationExpression(Expression):
     """String interpolation: "hello ${name}, you are ${age} years old"
     

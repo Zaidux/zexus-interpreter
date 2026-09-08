@@ -18,6 +18,7 @@ from ..error_reporter import (
 LOWEST, TERNARY, ASSIGN_PREC, NULLISH_PREC, LOGICAL, EQUALS, LESSGREATER, SUM, PRODUCT, PREFIX, CALL = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
 
 precedences = {
+    RANGE: TERNARY,  # start..end — binds very loosely (like ternary)
     QUESTION: TERNARY,  # condition ? true : false (very low precedence)
     ASSIGN: ASSIGN_PREC,
     PLUS_ASSIGN: ASSIGN_PREC,
@@ -202,6 +203,7 @@ class UltimateParser:
             MOD_ASSIGN: self.parse_compound_assignment_expression,
             POWER_ASSIGN: self.parse_compound_assignment_expression,
             LAMBDA: self.parse_lambda_infix,  # support arrow-style lambdas: params => body
+            RANGE: self.parse_range_expression,  # 0..4 (GRAMMAR.md section 3)
             LPAREN: self.parse_call_expression,
             LBRACE: self.parse_constructor_call_expression,  # Entity{field: value} syntax
             LBRACKET: self.parse_index_expression,
@@ -3835,13 +3837,44 @@ class UltimateParser:
 
         return None
 
+    def parse_range_expression(self, left):
+        """Parse range infix: start..end (exclusive, GRAMMAR.md section 3).
+
+        Standard infix convention (see parse_lambda_infix): `left` is the
+        already-parsed start expression and cur is the RANGE token.
+        """
+        from ..zexus_ast import RangeExpression
+        # cur is RANGE; advance to the first token of the end expression
+        self.next_token()
+        end = self.parse_expression(TERNARY)
+        return RangeExpression(start=left, end=end)
+
     def parse_match_expression(self):
-        """Parse match expression: match value { case p: r, ... } or match value { p => r, ... }"""
+        """Parse match expression (GRAMMAR.md section 3 — canonical arms).
+
+        match expr {
+            pattern => (block | expr)
+            _ => (block | expr)
+        }
+        Legacy `case p: r` / `default:` forms still parse (warn phase).
+        """
         expression = MatchExpression(value=None, cases=[])
         
         self.next_token() # Consume MATCH
         
-        expression.value = self.parse_expression(LOWEST)
+        # The match value is followed by '{' (the arm block). LBRACE is a
+        # registered INFIX (Entity{...} constructor, precedence CALL), so a
+        # bare parse_expression would greedily consume the arm block as a
+        # constructor call — `match val { "a" => ... }` became
+        # `val { "a" ... }` (a map/constructor parse) and every arm errored
+        # as "Expected string or identifier for map key". Suppress the
+        # LBRACE infix for the value parse only.
+        _brace_infix = self.infix_parse_fns.pop(LBRACE, None)
+        try:
+            expression.value = self.parse_expression(LOWEST)
+        finally:
+            if _brace_infix is not None:
+                self.infix_parse_fns[LBRACE] = _brace_infix
         
         if not self.expect_peek(LBRACE):
             return None
@@ -3900,22 +3933,45 @@ class UltimateParser:
                 case = MatchCase(pattern=pattern, result=result)
                 expression.cases.append(case)
             else:
-                # Arrow syntax: pattern => result
+                # Arrow syntax (GRAMMAR.md section 3 — CANONICAL):
+                #   pattern => (block | expr)
+                # The block form is the canonical arm body; a bare
+                # expression is also accepted.
                 self.next_token()  # Move to pattern token
-                pattern = self.parse_expression(LOWEST)
-                
+                # LAMBDA ('=>') is a special-cased INFIX (arrow lambdas) —
+                # parse_expression at ANY precedence would consume the arm
+                # separator as a lambda and swallow the body. Suppress the
+                # LAMBDA infix while parsing the pattern.
+                _lambda_infix = self.infix_parse_fns.pop(LAMBDA, None)
+                try:
+                    pattern = self.parse_expression(LOWEST)
+                finally:
+                    if _lambda_infix is not None:
+                        self.infix_parse_fns[LAMBDA] = _lambda_infix
+
                 # Expect => (LAMBDA token with literal '=>')
                 if self.peek_token_is(LAMBDA):
                     self.next_token()  # Consume =>
-                    self.next_token()  # Move to result
-                    result = self.parse_expression(LOWEST)
-                    if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
-                        self.next_token()
+                    if self.peek_token_is(LBRACE):
+                        # Block body: pattern => { ... }
+                        if not self.expect_peek(LBRACE):
+                            return None
+                        result = self.parse_block_statement()
+                    else:
+                        # Expression body: pattern => expr
+                        self.next_token()  # Move to result
+                        result = self.parse_expression(LOWEST)
+                        if self.peek_token_is(COMMA) or self.peek_token_is(SEMICOLON):
+                            self.next_token()
                     case = MatchCase(pattern=pattern, result=result)
                     expression.cases.append(case)
                 else:
-                    # Skip unexpected tokens
-                    pass
+                    line = self.peek_token.line if self.peek_token else 0
+                    self.errors.append(
+                        f"Line {line}: Expected '=>' after match pattern "
+                        "(GRAMMAR.md section 3: match arm is `pattern => body`)"
+                    )
+                    return None
         
         if not self.expect_peek(RBRACE):
             return None

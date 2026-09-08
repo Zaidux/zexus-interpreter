@@ -218,8 +218,12 @@ class ExpressionEvaluatorMixin:
                     "Division by zero",
                     suggestion="Check your divisor value. Consider adding a condition: if (divisor != 0) { ... }"
                 )
-            result = left_val // right_val
-            return check_overflow(result, "division")
+            # TRUE division (Python semantics): the VM already produced
+            # floats here while the tree-walk truncated — engines must
+            # agree (differential harness: "arithmetic"). 10/4 = 2.5,
+            # 10/2 = 5.0. Integer division is explicit: int(a / b).
+            result = left_val / right_val
+            return Float(result)
         elif operator == "%":
             if right_val == 0: 
                 return EvaluationError(
@@ -590,8 +594,10 @@ class ExpressionEvaluatorMixin:
         
         operator = node.operator
         
-        if operator == "!":
-            # !true = false, !false = true, !null = true, !anything_else = false
+        if operator == "!" or operator == "not":
+            # `not` is the keyword spelling of BANG (lexer maps it to the
+            # BANG token but preserves the literal) — R-021. !true = false,
+            # !false = true, !null = true, !anything_else = false
             # Use is_truthy for robust comparison (handles non-singleton BooleanObj)
             if is_truthy(right):
                 return FALSE

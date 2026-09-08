@@ -9,6 +9,7 @@ IDENT = "IDENT"
 INT = "INT"
 STRING = "STRING"
 BYTES = "BYTES"
+RANGE = "RANGE"  # .. (exclusive range operator, GRAMMAR.md section 3)
 FLOAT = "FLOAT"
 
 # Operators

@@ -325,6 +325,7 @@ _LIST_METHODS = {
     "append": _list_push,
     "pop": _list_pop,
     "count": _list_count,
+    "len": _list_length,
     "length": _list_length,
     "size": _list_length,
     "contains": _list_contains,
@@ -395,6 +396,24 @@ def _str_repeat(target, args):
     n = args[0] if args else 1
     return target * int(n)
 
+def _str_to_hex(target, args):
+    return target.encode("utf-8").hex()
+
+def _str_from_hex(target, args):
+    try:
+        return bytes.fromhex(target.strip()).decode("utf-8")
+    except ValueError:
+        return None
+
+def _str_to_int(target, args):
+    try:
+        return int(target.strip())
+    except ValueError:
+        return None
+
+def _str_reverse(target, args):
+    return target[::-1]
+
 _STR_METHODS = {
     "contains": _str_contains,
     "includes": _str_contains,
@@ -414,7 +433,12 @@ _STR_METHODS = {
     "indexOf": _str_indexOf,
     "index_of": _str_indexOf,
     "length": _str_length,
+    "len": _str_length,
     "size": _str_length,
+    "to_hex": _str_to_hex,
+    "from_hex": _str_from_hex,
+    "to_int": _str_to_int,
+    "reverse": _str_reverse,
     "replace": _str_replace,
     "substring": _str_substring,
     "slice": _str_substring,
@@ -669,7 +693,16 @@ class VM:
         Initialize the enhanced VM.
         """
         # --- Environment Setup ---
-        self.builtins = builtins or {}
+        # ENGINE PARITY (Phase F): a bare VM() previously started with NO
+        # builtins — every builtin (bytes_from_hex, string helpers, ...)
+        # was null unless the caller (the CLI) happened to inject the
+        # evaluator's set. The VM standalone and the CLI path now expose
+        # the same builtin surface: explicit builtins win, else the shared
+        # registry.
+        if builtins:
+            self.builtins = builtins
+        else:
+            self.builtins = self._default_builtins()
         self.env = env or {}
         self._parent_env = parent_env
         self.debug = debug
@@ -1223,6 +1256,15 @@ class VM:
         self._env_version += 1
         if name is not None:
             self._name_cache[name] = (value, self._env_version)
+
+    @staticmethod
+    def _default_builtins():
+        """The shared builtin registry (identical to the CLI-injected set)."""
+        try:
+            from ..evaluator.core import Evaluator
+            return dict(Evaluator(use_vm=False).builtins)
+        except Exception:
+            return {}
 
     def _register_import_builtins(self) -> None:
         if "__vm_use_module__" not in self.builtins:

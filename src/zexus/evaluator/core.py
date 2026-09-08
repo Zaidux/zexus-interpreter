@@ -173,6 +173,8 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             "CallExpression": self._handle_call_expression,
             "PropertyAccessExpression": self._handle_property_access_expression,
             "MethodCallExpression": self._handle_method_call_expression,
+            "MatchExpression": self._handle_match_expression,
+            "RangeExpression": self._handle_range_expression,
             "ListLiteral": self._handle_list_literal,
             "StringLiteral": self._handle_string_literal,
             "BytesLiteral": self._handle_bytes_literal,
@@ -350,6 +352,71 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         return EvaluationError(f"Invalid payload for {expected_type.__name__}")
 
     # --- Extended dispatch handlers (avoid isinstance chain) ---
+
+    def _handle_range_expression(self, node, env, stack_trace):
+        """start..end → List of Integers, exclusive end (GRAMMAR.md §3)."""
+        start = self.eval_node(node.start, env, stack_trace)
+        if is_error(start):
+            return start
+        end = self.eval_node(node.end, env, stack_trace)
+        if is_error(end):
+            return end
+        s = start.value if hasattr(start, "value") else int(start)
+        e = end.value if hasattr(end, "value") else int(end)
+        if not isinstance(s, int) or not isinstance(e, int):
+            return EvaluationError(
+                "Range bounds must be integers",
+                suggestion="start..end requires integer bounds (e.g. 0..10).",
+            )
+        if e < s:
+            return List([])
+        # Bound the range to prevent memory exhaustion (mirrors the VM).
+        if e - s > 1_000_000:
+            return EvaluationError(
+                f"Range {s}..{e} exceeds the 1,000,000-element limit",
+                suggestion="Iterate with a while loop for very large ranges.",
+            )
+        return List([Integer(i) for i in range(s, e)])
+
+    def _handle_match_expression(self, node, env, stack_trace):
+        """Evaluate match (GRAMMAR.md section 3): first matching arm wins.
+
+        Pattern forms: literal (== equality), `_` wildcard. Arm bodies are
+        blocks or expressions (canonical: block). Returns the matched arm's
+        value; no match and no `_` arm → NULL (this is the v1.x behavior
+        the ISSUE8 R-027 note described, now executed rather than dropped).
+        """
+        from ..zexus_ast import MatchCase
+
+        value = self.eval_node(node.value, env, stack_trace)
+        if is_error(value):
+            return value
+
+        def _unwrap(v):
+            return v.value if hasattr(v, "value") else v
+
+        for case in node.cases or []:
+            if not isinstance(case, MatchCase):
+                continue
+            pattern = case.pattern
+            # Wildcard: Identifier "_" matches anything.
+            pattern_name = getattr(pattern, "value", None)
+            if pattern_name == "_":
+                matched = True
+            else:
+                pattern_value = self.eval_node(pattern, env, stack_trace)
+                if is_error(pattern_value):
+                    return pattern_value
+                matched = _unwrap(pattern_value) == _unwrap(value)
+
+            if matched:
+                result = case.result
+                # Block body (canonical) vs expression body
+                if hasattr(result, "statements"):
+                    return self.eval_node(result, env, stack_trace)
+                return self.eval_node(result, env, stack_trace)
+
+        return NULL
 
     def _handle_string_literal(self, node, env, stack_trace):
         # The lexer already decodes escape sequences (lexer.py escape_map),

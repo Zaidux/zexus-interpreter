@@ -118,6 +118,43 @@ binary-ish payload work, and backend services today; the remaining
 friction (module registration completeness, docs accuracy) is exactly
 what Phase I addresses.
 
+## Phase F — Compiler/interpreter alignment ✅
+*(this session)*
+
+- **Differential harness as a CI job** (`tests/grammar/test_differential.py`
+  + `tests.yml:differential`): 16 canonical constructs run on BOTH engines
+  with output-equality assertions; any divergence fails the build. The
+  two remaining divergences are documented xfails (error-model design
+  item; anonymous closures V-004/R-029).
+- **match works for the first time (R-027 — Critical)**: canonical
+  `pattern => block|expr` arms with `_` wildcard. Root causes fixed:
+  the LBRACE infix (Entity{...} constructor) swallowed the arm block
+  while parsing the match value; the LAMBDA infix (arrow lambdas)
+  swallowed the arm separator while parsing the pattern; the tree-walk
+  had NO evaluator handler at all; the VM compiled `_` as a variable
+  lookup so the fallback arm never matched. Block and expression bodies,
+  statement and value positions — all at parity on both engines.
+- **Range loops (R-024)**: `for i in 0..N` — `..` previously lexed as a
+  FLOAT (`0.`) + property access. New RANGE token + RangeExpression
+  (exclusive end, Python semantics, 1M-element guard) on both engines.
+- **`not` keyword (R-021)**: lexer maps it to BANG but preserves the
+  literal; the evaluator only checked `!`. Both spellings accepted.
+- **`fn` keyword (GRAMMAR.md §3 canonical)**: both `fn` and legacy
+  `function` accepted (warn phase of the migration table) on both engines.
+- **Numeric parity**: `/` is true division on both engines (the
+  tree-walk truncated; VM already produced floats).
+- **VM parity fixes**: canonical method names (`len`) in the VM's
+  string/list tables + `to_hex`/`from_hex`/`to_int`/`reverse`; a bare
+  `VM()` now defaults to the shared builtin registry (identical surface
+  to the CLI path — `bytes_from_hex` etc. were null standalone).
+- **`evaluator_original.py` deleted** (2040 lines, zero importers).
+
+Open (documented xfail, not blocking): error-model unification
+(errors-as-values vs exceptions — Phase G design item), anonymous
+closures (V-004/R-029).
+
+Sequencing per owner decision: F → **I** → G → E.
+
 ## Planned phases
 
 ### Phase D — Native layer alignment: Rust-first, retire C/C++ ✅
