@@ -96,3 +96,8 @@ SSH_PUBLIC_KEY.txt
 .mypy_cache/
 *.cache
 *.zxc
+
+# Runtime artifacts (never commit)
+.zpics_runtime/
+.zpics_snapshots/
+zpm_modules/

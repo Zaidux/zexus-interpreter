@@ -1,3 +1,14 @@
+# Zexus Guide
+
+> ⚠️ **Status: being regenerated against v2.0 (Phase I).** Sections
+> below this banner reflect v1.x unless updated. The canonical language
+> contract is [GRAMMAR.md](GRAMMAR.md); verified, runnable examples are
+> in [examples/](examples/) and [QUICK_START.md](QUICK_START.md). The
+> "✅ verified" tables in this file predate the unified grammar and are
+> NOT trustworthy until regenerated — the executable differential
+> corpus (tests/grammar/test_differential.py) is the source of truth
+> for what works.
+
 # Zexus Language Guide
 
 A practical, test-verified guide to the Zexus programming language.

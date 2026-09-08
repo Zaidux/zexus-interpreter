@@ -5832,8 +5832,35 @@ class ContextStackParser:
                 i = arrow_idx + 1
                 continue
 
-            # Find result expression end (comma, semicolon, or next pattern)
+            # CANONICAL BLOCK BODY (GRAMMAR.md section 3): `pattern => { ... }`.
+            # The brace-balanced tokens are a BLOCK, not a map literal —
+            # parsing them as an expression produced MapLiteral nodes and
+            # the arm body never executed (CLI path, advanced parser).
             result_start = arrow_idx + 1
+            if (result_start < len(body_tokens)
+                    and body_tokens[result_start].type == LBRACE):
+                j = result_start + 1
+                brace_depth = 1
+                block_tokens = []
+                while j < len(body_tokens) and brace_depth > 0:
+                    if body_tokens[j].type == LBRACE:
+                        brace_depth += 1
+                    elif body_tokens[j].type == RBRACE:
+                        brace_depth -= 1
+                        if brace_depth == 0:
+                            break
+                    block_tokens.append(body_tokens[j])
+                    j += 1
+                # j at closing RBRACE (or EOF); move past it
+                block_stmts = self._parse_block_statements(block_tokens)
+                block = BlockStatement()
+                block.statements = block_stmts
+                cases.append(MatchCase(pattern=pattern, result=block))
+                parser_debug(f"  ✅ Parsed match case (block body): {pattern}")
+                i = j + 1
+                continue
+
+            # Find result expression end (comma, semicolon, or next pattern)
             result_end = result_start
             depth = 0
 

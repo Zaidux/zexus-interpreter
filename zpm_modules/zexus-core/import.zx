@@ -1,3 +1,0 @@
-// Expose core functions
-use "./string.zx"
-export string

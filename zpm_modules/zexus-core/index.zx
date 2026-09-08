@@ -1,2 +1,0 @@
-// Core module index
-use "./string.zx" as core

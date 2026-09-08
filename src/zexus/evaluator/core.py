@@ -175,6 +175,9 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             "MethodCallExpression": self._handle_method_call_expression,
             "MatchExpression": self._handle_match_expression,
             "RangeExpression": self._handle_range_expression,
+            "LiteralPattern": self._handle_literal_pattern,
+            "WildcardPattern": self._handle_wildcard_pattern,
+            "VariablePattern": self._handle_variable_pattern,
             "ListLiteral": self._handle_list_literal,
             "StringLiteral": self._handle_string_literal,
             "BytesLiteral": self._handle_bytes_literal,
@@ -378,6 +381,20 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
             )
         return List([Integer(i) for i in range(s, e)])
 
+    def _handle_literal_pattern(self, node, env, stack_trace):
+        """A literal pattern evaluates to its literal value (advanced
+        parser's arm node — the traditional parser produces plain
+        literals; both must work in match)."""
+        return self.eval_node(node.value, env, stack_trace)
+
+    def _handle_wildcard_pattern(self, node, env, stack_trace):
+        """Wildcards never evaluate — match treats them as always-true."""
+        return NULL
+
+    def _handle_variable_pattern(self, node, env, stack_trace):
+        """Variable patterns bind — evaluation falls back to the variable."""
+        return self.eval_node(node.name if hasattr(node, "name") else node, env, stack_trace)
+
     def _handle_match_expression(self, node, env, stack_trace):
         """Evaluate match (GRAMMAR.md section 3): first matching arm wins.
 
@@ -395,13 +412,15 @@ class Evaluator(ExpressionEvaluatorMixin, StatementEvaluatorMixin, FunctionEvalu
         def _unwrap(v):
             return v.value if hasattr(v, "value") else v
 
+        from ..zexus_ast import WildcardPattern
+
         for case in node.cases or []:
             if not isinstance(case, MatchCase):
                 continue
             pattern = case.pattern
-            # Wildcard: Identifier "_" matches anything.
-            pattern_name = getattr(pattern, "value", None)
-            if pattern_name == "_":
+            # Wildcard: Identifier "_" or a WildcardPattern node (the
+            # advanced parser produces the latter) matches anything.
+            if isinstance(pattern, WildcardPattern) or getattr(pattern, "value", None) == "_":
                 matched = True
             else:
                 pattern_value = self.eval_node(pattern, env, stack_trace)

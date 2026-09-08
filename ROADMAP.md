@@ -155,6 +155,42 @@ closures (V-004/R-029).
 
 Sequencing per owner decision: F → **I** → G → E.
 
+## Phase I — Cleanup and documentation reset (in progress)
+
+**Done this pass:**
+- Directory purge: `zpm_modules/` (duplicated stdlib content; the zpm
+  target is created on demand), `.zpics_runtime/` + `.zpics_snapshots/`
+  (runtime artifacts — gitignored), `blockchain_test/` (1 MB, zero
+  references), `vscode-extension/` (duplicate of `zexus-syntax/`, which
+  survives as the canonical npm-published extension)
+- LICENSE filled (MIT — was a 0-byte file; Cargo.toml already claimed MIT)
+- README completely rewritten: honest status table, real install paths,
+  the safety model, engine parity explanation — the "102,000+ TPS /
+  Rust-first / zero Python fallbacks" claims and the 2,745-line v1.8.4
+  feature catalog are gone
+- QUICK_START completely rewritten: every command executed as written
+  (doc verification caught a real bug doing this — see below)
+- ZEXUS_RULES.md deleted (v1.8.3-era rules superseded by GRAMMAR.md)
+- ZEXUS_GUIDE.md carries an explicit regeneration banner: the stale
+  "✅ verified" tables are marked untrustworthy; the differential
+  corpus is named as the source of truth
+- Doc verification found and fixed TWO real bugs: the ADVANCED parser
+  (CLI path) parsed match block-arms as MapLiterals (arm bodies never
+  executed via `zx run`), and the evaluator lacked handlers for the
+  pattern node types the advanced parser produces (LiteralPattern,
+  WildcardPattern, VariablePattern). Match now works identically
+  through the CLI on both engines.
+
+**Remaining (next pass):** full guide regeneration from the executable
+corpus; launcher consolidation (7 bin/ entries → ~2); feature purge of
+the remaining half-wired keyword forms (`emit {}` object form,
+`sanitize ... as ...`, `restrict name`); PARSING_PIPELINE.md accuracy
+review.
+
+Note: one timing-flake test (memory_pool int-pool 0.75s threshold)
+failed under this session's own CPU load — verified failing identically
+on the stashed pre-change tree; environmental, not a regression.
+
 ## Planned phases
 
 ### Phase D — Native layer alignment: Rust-first, retire C/C++ ✅

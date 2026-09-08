@@ -1,142 +1,128 @@
-# QUICK START - Zexus Unified System
+# Zexus Quick Start
 
-## Installation
+Everything in this file is verified against zexus **2.0.0** — every
+command was executed as written. If something here fails, it's a bug:
+please open an issue.
+
+## 1. Install
 
 ```bash
-cd /workspaces/zexus-interpreter
-./install.sh
+pip install zexus==2.0.0
 ```
 
-### Install Matrix
+Verify:
 
-| Goal | Command | Notes |
-|---|---|---|
-| Minimal (interpreter + CLI) | `pip install zexus` | Pure-Python; best for quick scripting. |
-| Full runtime (blockchain + networking + helpers) | `pip install "zexus[full]"` | Installs optional deps needed for most advanced features. |
-| From source (recommended for contributors) | `./install.sh` | Installs `.[full]` and best-effort builds Rust VM when `cargo` exists. |
-| Enable Rust VM (`zexus_core`) | `pip install maturin && maturin develop -m rust_core/Cargo.toml --release` | Requires Rust toolchain (`cargo`). Falls back to Python VM if unavailable. |
-
-
-## Memory Safety (Safer than Rust)
-
-### Safe Arrays
-
-```python
-from zexus.safety import SafeArray
-
-# Panic mode (like Rust)
-arr = SafeArray([1, 2, 3], mode="panic")
-
-# Better than Rust modes:
-arr_clamp = SafeArray([1, 2, 3], mode="clamp")      # Returns boundary value
-arr_extend = SafeArray([1, 2, 3], mode="extend")    # Auto-grows
-arr_safe = SafeArray([1, 2, 3], mode="default")     # Returns default
+```bash
+zx --help
 ```
 
-### Memory Protection
+## 2. Hello, world
 
-```python
-from zexus.safety import MemoryGuard
-
-guard = MemoryGuard(max_stack_depth=1000, max_heap_mb=2048)
-guard.enter_scope()  # Track stack
-obj_id = guard.allocate(my_object)  # Track heap
-stats = guard.get_memory_stats()  # Monitor usage
-```
-
-## Automatic VM Integration (NO FLAGS NEEDED)
-
-### Simple Example
+Create `hello.zx`:
 
 ```zexus
-// Just write normal code - system optimizes automatically
-
-let count = 0
-let sum = 0
-
-// Iterations 0-499: Interpreter
-// Iteration 500: Compiles to VM
-// Iterations 500+: VM (100x faster)
-while count < 1000 {
-    sum = sum + count
-    count = count + 1
-}
-
-print("Sum: " + string(sum))
+print("Hello, Zexus!")
 ```
 
-Run:
+Run it:
+
 ```bash
-./zx-run my_script.zx  # That's it! No flags needed
+zx run hello.zx
 ```
 
-## Blockchain Smart Contracts
+**Output:** `Hello, Zexus!`
+
+## 3. The safety model (try it)
+
+Create `safety.zx`:
 
 ```zexus
-contract Token {
-    data balances = {}
-    data total_supply = 0
-    
-    action transfer(from, to, amount) {
-        require(msg["sender"] == from, "Not authorized")
-        require(amount > 0, "Amount must be positive")
-        require(balances[from] >= amount, "Insufficient balance")
-        
-        balances[from] = balances[from] - amount
-        balances[to] = balances[to] + amount
-    }
+// file_read_text is DENIED until granted — safe by default
+let r = file_read_text("hello.zx")
+print(r)
+```
+
+Run it — you get a clean error and exit code 1. Now grant:
+
+```zexus
+grant self io_full
+print(file_read_text("hello.zx"))
+revoke self io_full
+```
+
+Works, then revoked.
+
+## 4. Language tour (canonical grammar)
+
+```zexus
+// fn is the canonical keyword (function also accepted in 2.x)
+fn fib(n) {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
 }
+print(fib(10))                       // 55
+
+// match with _ wildcard — statement or value position
+let desc = match 5 % 2 { 0 => "even" _ => "odd" }
+print(desc)                          // odd
+
+// ranges: exclusive end, Python semantics
+let total = 0
+for i in 0..4 { total = total + i }
+print(total)                         // 6
+
+// bytes with raw escapes (0xff is the BYTE, not the codepoint)
+let probe = b"\x00\x01\xff"
+print(probe.len())                   // 3
+print(probe.to_hex())                // 0001ff
+
+// string methods
+print("  hi  ".trim().upper())       // HI
+print("a-b-c".split("-").len())      // 3
 ```
 
-Run:
-```bash
-./zx-run my_contract.zx
+## 5. Contracts (crypto category)
+
+```zexus
+contract Counter {
+    state { count: 0 }
+    action increment() { this.count = this.count + 1 }
+    action get() { return this.count }
+}
+
+let c = Counter()
+c.increment()
+c.increment()
+print(c.get())                       // 2 — identical on VM and tree-walk
 ```
 
-Performance: **222 TPS** (15x faster than Ethereum)
+Force an engine: `zx run --use-vm file.zx` / `zx run --no-vm file.zx` —
+both produce the same output (enforced by CI).
 
-## Testing
+## 6. Security work (the point)
 
-### Test Memory Safety
-```bash
-python3 tests/test_memory_safety.py
+A minimal recon probe:
+
+```zexus
+grant self network
+use "netsec"
+
+let headers = security_headers("https://example.com")
+print(headers.missing)
+
+let tls = tls_check("example.com")
+print(tls.version)
 ```
 
-### Test VM Integration
-```bash
-./zx-run tests/test_unified_vm.zx
-```
+Full working tools: [examples/recon_demo.zx](examples/recon_demo.zx)
+(live recon: DNS/TLS/headers/cookies/fingerprint/endpoints/subdomains)
+and [examples/api_server_demo.zx](examples/api_server.zx) (a JSON API server
+in pure Zexus on raw sockets).
 
-### Test Blockchain Performance
-```bash
-./zx-run blockchain_test/perf_500.zx
-```
+## 7. Where to go next
 
-## Key Features
-
-1. ✅ **Safer than Rust** - Runtime safety with recovery
-2. ✅ **Faster than most** - Automatic VM at 500+ iterations
-3. ✅ **Zero configuration** - No flags or setup needed
-4. ✅ **Production ready** - 222 TPS on blockchain workloads
-
-## Performance Benchmarks
-
-| Workload | Speed | vs Ethereum |
-|----------|-------|-------------|
-| 500 transactions | 222 TPS | 15x faster |
-| 1000 iterations | 10x speedup | N/A |
-| 10000 iterations | 100x speedup | N/A |
-
-## Documentation
-
-- [Complete System Documentation](UNIFIED_SYSTEM_COMPLETE.md)
-- [Memory Safety Tests](tests/test_memory_safety.py)
-- [VM Integration Tests](tests/test_unified_vm.zx)
-- [Blockchain Tests](blockchain_test/)
-
-## Support
-
-For issues or questions, check:
-- [Main README](README.md)
-- [Security Documentation](SECURITY_ACTION_PLAN.md)
-- [Performance Reports](blockchain_test/PERFORMANCE_FINAL_REPORT.md)
+- [GRAMMAR.md](GRAMMAR.md) — the language contract (canonical forms,
+  migration table)
+- [README.md](README.md) — feature status, honest limitations
+- [ROADMAP.md](ROADMAP.md) — what's done and what's next
+- [examples/](examples/) — runnable programs
