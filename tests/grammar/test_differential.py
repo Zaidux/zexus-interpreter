@@ -143,15 +143,17 @@ def test_engines_agree(name):
 # remaining work visible.
 
 
-@pytest.mark.xfail(
-    reason="ERROR-MODEL divergence (Phase G design item): tree-walk returns "
-    "EvaluationError as a value (typeof prints the error type); the VM raises "
-    "VMRuntimeError which aborts. Unifying errors-as-values vs exceptions is "
-    "an error-model decision, not a one-engine fix.",
-    strict=False,
-)
 def test_error_model_division_by_zero():
+    """PHASE G (unified): an uncaught runtime error halts the program at
+    the failing statement on BOTH engines — prior output kept, no raise
+    past the executor. try/catch handles errors in-program."""
     code = "function boom() { return 1 / 0 }\nlet r = boom()\nprint(typeof(r))"
+    assert_equal(code)
+
+
+def test_error_model_halts_after_output():
+    """Output BEFORE the failure is preserved on both engines."""
+    code = "print(\"before\")\nlet x = 1 / 0\nprint(\"after\")"
     assert_equal(code)
 
 

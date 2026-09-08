@@ -1660,6 +1660,14 @@ class VM:
         """
         Execute code (High-level ops or Bytecode) using optimal execution mode.
         Blocks until completion (wraps async execution).
+
+        ERROR MODEL (Phase G unification): an uncaught VMRuntimeError stops
+        execution GRACEFULLY (output produced so far is kept, the error is
+        logged, None is returned) — matching the tree-walk evaluator's
+        behavior of halting the program at the failing statement. In-program
+        `try/catch` remains the way to handle errors; the raise only escapes
+        a bug, not a program error. Verified by the differential corpus
+        (error_model case).
         """
         start_time = time.perf_counter()
         self._execution_count += 1
@@ -1724,7 +1732,7 @@ class VM:
                         pct = (count / total_ops * 100) if total_ops else 0.0
                         print(f"[VM PROFILE] {op_name} count={count} pct={pct:.2f}%")
             return result
-        except Exception:
+        except Exception as e:
             # LOGIC (L4): If an exception escapes a TX block, revert state to snapshot.
             if self.env.get("_in_transaction", False):
                 try:
@@ -1740,6 +1748,14 @@ class VM:
                     self.env["_in_transaction"] = bool(tx_stack)
                 except Exception:
                     pass
+            # ERROR MODEL (Phase G): an uncaught VMRuntimeError halts the
+            # program gracefully — same observable behavior as the
+            # tree-walk evaluator (stops at the failing statement, keeps
+            # prior output). try/catch handles program errors in-program.
+            if isinstance(e, VMRuntimeError):
+                if debug or self.debug:
+                    print(f"[VM] Runtime error (execution halted): {e}")
+                return None
             raise
         finally:
             self._in_execution = max(0, getattr(self, "_in_execution", 1) - 1)

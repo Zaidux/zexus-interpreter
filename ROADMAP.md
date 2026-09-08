@@ -190,6 +190,60 @@ wired, enforced, and regression-tested (tests/grammar/test_phase_wiring.py):
   `register_route` + `dispatch(name, req)`** — full chain (rejection
   stops the route). `trail` parses and runs (output effect pending).
 
+### Rust core upgrades (measured follow-up) ✅
+
+- **sha2 `asm` feature enabled** (SHA-NI intrinsics). No improvement on
+  THIS hardware (Broadwell VM, no `sha_ni` CPU flag — verified
+  /proc/cpuinfo) but future-proof for SHA-NI deployment targets; SHA-256
+  stays routed to hashlib regardless (OpenSSL AVX2 wins here).
+- **Merkle `compute_root_from_data` rebuilt**: direct byte-tree (the old
+  version hex-encoded every leaf then immediately hex-decoded it back in
+  the tree builder — pure serialization overhead) + rayon parallelism
+  threshold (4096 items; task-dispatch overhead was a regression below
+  that). Measured: 0.8x → **1.2x** vs the Python loop.
+- API gap noted: RustSignature has no `sign` (verify-only) — future work.
+
+## Phase G — Hybrid execution ✅
+
+**Error model unified** (the last differential xfail): an uncaught
+runtime error now halts the program gracefully on BOTH engines (prior
+output kept, nothing raises past the executor). try/catch handles
+errors in-program. Two differential tests now pass (division-by-zero;
+output-before-failure preserved).
+
+**Tiering measured — and the honest verdict: the VM loses 6/7
+constructs** (tests/benchmarks/engine_benchmark.py, output-equality
+verified per case):
+
+| construct | tree-walk | VM | winner |
+|---|---|---|---|
+| fib(18) recursion | 1415ms | 6409ms | tree (4.5x) |
+| loop 50k arith | 3776ms | 3784ms | tree (~tie) |
+| string ops 5k | 545ms | 583ms | tree |
+| list push 10k | 709ms | 839ms | tree |
+| map writes 10k | 881ms | 805ms | **VM** (1.09x) |
+| contract actions 1k | 194ms | 208ms | tree |
+
+**Correctness bug found by the benchmark**: full-loop VM promotion
+synced only ASSIGNED names — in-place mutations (`list.push`) were
+lost (10k-push loop kept 119 entries in the interpreter env).
+Fixed: `_mutates_outer_state` guard refuses promotion for such loops.
+
+**Tiering policy (benchmark-driven, per the roadmap rule)**:
+auto-promotion of interpreter loops to the VM is now OPT-IN
+(`ZEXUS_VM_LOOPS=1`) — it was a measured regression in 6/7 cases.
+Whole-program `--use-vm` is unchanged. The VM remains the target for
+future native-tier work (Phase H rung 3: compiler self-hosted, VM as
+tier-2).
+
+**The benchmark written IN Zexus** (`examples/bench.zx`, run by
+`zx run`): 10 constructs — arithmetic, nested calls, strings, lists,
+maps, match, bytes+hex, sha256, contract+invariant, find-where —
+measuring the language with itself. Tree-walk vs VM results agree with
+the Python harness (VM slower per-construct; invariant enforcement
+holds on both engines — a nice cross-validation). Note: `timestamp()`
+has 1-second granularity, so short benches read coarsely.
+
 ### Rust core benchmark — the honest numbers ✅
 
 `rust_core/benchmark.py` (cross-checked for correctness before timing):

@@ -1,0 +1,139 @@
+// ═══════════════════════════════════════════════════════════════
+// Zexus Self-Benchmark — written IN Zexus, run BY Zexus.
+// Measures the language's own execution on canonical constructs.
+// Run:  zx run examples/bench.zx            (auto)
+//       zx run --use-vm examples/bench.zx   (VM)
+//       zx run --no-vm examples/bench.zx    (tree-walk)
+// ═══════════════════════════════════════════════════════════════
+
+use "crypto"
+
+// timestamp() is epoch SECONDS — scale to milliseconds
+fn now_ms() {
+    return timestamp() * 1000
+}
+
+fn bench(name, iterations, workload) {
+    let t0 = now_ms()
+    let i = 0
+    while i < iterations {
+        workload(i)
+        i = i + 1
+    }
+    let elapsed = now_ms() - t0
+    if elapsed < 1 {
+        print("  " + name + ": <1ms (" + str(iterations) + " ops)")
+    } else {
+        let ops_per_ms = iterations / elapsed
+        print("  " + name + ": " + str(elapsed) + "ms  (" + str(ops_per_ms) + " ops/ms)")
+    }
+    return elapsed
+}
+
+// ── 1. Arithmetic loop ────────────────────────────────────────────
+fn arith_work(i) {
+    let x = i * 3 + 7
+    let y = x - i
+    return y
+}
+print("1. Arithmetic (20k ops)")
+bench("add/mul/sub", 20000, arith_work)
+
+// ── 2. Function calls ─────────────────────────────────────────────
+fn inner(n) { return n + 1 }
+fn outer(n) { return inner(n) * 2 }
+print("2. Function calls (20k nested)")
+bench("outer(inner(x))", 20000, outer)
+
+// ── 3. String building ────────────────────────────────────────────
+fn str_work(i) {
+    let s = "item-" + str(i)
+    return s.upper()
+}
+print("3. String concat+upper (10k)")
+bench("concat + upper", 10000, str_work)
+
+// ── 4. List operations ────────────────────────────────────────────
+let shared_list = []
+fn list_work(i) {
+    shared_list.push(i)
+    return shared_list.len()
+}
+print("4. List push (10k)")
+bench("list.push", 10000, list_work)
+
+// ── 5. Map operations ─────────────────────────────────────────────
+let shared_map = {}
+fn map_work(i) {
+    shared_map[i] = i * 2
+    return shared_map[i]
+}
+print("5. Map write/read (10k)")
+bench("map[k]=v, map[k]", 10000, map_work)
+
+// ── 6. Match dispatch ─────────────────────────────────────────────
+fn match_work(i) {
+    return match i % 3 {
+        0 => "zero"
+        1 => "one"
+        _ => "many"
+    }
+}
+print("6. Match dispatch (10k)")
+bench("match 3-arm", 10000, match_work)
+
+// ── 7. Bytes + hex ────────────────────────────────────────────────
+fn bytes_work(i) {
+    let b = b"\x00\x01" + bytes_from_hex("ff10")
+    return b.to_hex()
+}
+print("7. Bytes concat+hex (5k)")
+bench("bytes + to_hex", 5000, bytes_work)
+
+// ── 8. Crypto: sha256 via the crypto module ───────────────────────
+fn hash_work(i) {
+    return hash_sha256("bench-" + str(i))
+}
+print("8. sha256 (2k, OpenSSL-backed)")
+bench("hash_sha256", 2000, hash_work)
+
+// ── 9. Contract invariants (the defense guarantee) ────────────────
+contract Counter {
+    state { count: 0 }
+    invariant non_negative { this.count >= 0 }
+    action increment() { this.count = this.count + 1 }
+    action get() { return this.count }
+}
+let counter = Counter()
+fn contract_work(i) {
+    counter.increment()
+    return counter.get()
+}
+print("9. Contract action + invariant check (2k)")
+bench("increment + invariant", 2000, contract_work)
+print("   (invariant held:", counter.get() >= 0, ")")
+
+// ── 10. find ... where query ──────────────────────────────────────
+let users = []
+fn seed_user(i) {
+    users.push({"id": i, "active": i % 2 == 0})
+    return true
+}
+let seeded = 0
+while seeded < 1000 {
+    seed_user(seeded)
+    seeded = seeded + 1
+}
+fn find_work(i) {
+    let hit = find u in users where (u.active)
+    return u_id(hit)
+}
+fn u_id(u) {
+    if u == null { return -1 }
+    return u.id
+}
+print("10. find-where over 1k list (1k queries)")
+bench("find first active", 1000, find_work)
+
+print("")
+print("Benchmark complete.")

@@ -81,16 +81,61 @@ impl RustMerkle {
 
     /// Compute Merkle root from raw transaction data (list of byte arrays).
     /// Each item is SHA-256 hashed first to produce the leaf, then the
-    /// tree is built.
+    /// tree is built — DIRECTLY on bytes, no hex encode/decode round-trip
+    /// (the previous version serialized every leaf to hex and the tree
+    /// builder immediately hex-decoded it back; measured as the dominant
+    /// overhead vs a plain Python loop).
     #[staticmethod]
     fn compute_root_from_data(py: Python<'_>, data: Vec<Vec<u8>>) -> String {
-        let leaves: Vec<String> = py.allow_threads(|| {
-            data.par_iter()
-                .map(|d| hex::encode(Sha256::digest(d)))
-                .collect()
-        });
-        // Re-acquire GIL for the tree computation call
-        RustMerkle::compute_root(py, leaves)
+        if data.is_empty() {
+            return "0".repeat(64);
+        }
+        // Parallelize leaf hashing only when there's enough work to amortize
+        // rayon's task-dispatch overhead (~4k+ items; measured regression
+        // below that).
+        const PAR_THRESHOLD: usize = 4096;
+        py.allow_threads(|| {
+            let mut current: Vec<[u8; 32]> = if data.len() >= PAR_THRESHOLD {
+                data.par_iter()
+                    .map(|d| {
+                        let h = Sha256::digest(d);
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&h);
+                        arr
+                    })
+                    .collect()
+            } else {
+                data.iter()
+                    .map(|d| {
+                        let h = Sha256::digest(d);
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&h);
+                        arr
+                    })
+                    .collect()
+            };
+
+            while current.len() > 1 {
+                if current.len() % 2 != 0 {
+                    if let Some(last) = current.last().copied() {
+                        current.push(last);
+                    }
+                }
+                current = current
+                    .par_chunks(2)
+                    .map(|c| {
+                        let mut combined = [0u8; 64];
+                        combined[..32].copy_from_slice(&c[0]);
+                        combined[32..].copy_from_slice(&c[1]);
+                        let h = Sha256::digest(combined);
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&h);
+                        arr
+                    })
+                    .collect();
+            }
+            hex::encode(current[0])
+        })
     }
 
     /// Verify a Merkle proof.

@@ -177,7 +177,14 @@ class UnifiedExecutor:
     - Zero-overhead switching
     """
     
-    def __init__(self, evaluator, vm_enabled: bool = True):
+    def __init__(self, evaluator, vm_enabled: bool = None):
+        # PHASE G (measured): VM loop promotion regresses 6/7 constructs
+        # on the engine benchmark (tests/benchmarks/engine_benchmark.py)
+        # and full-loop promotion has a known in-place-mutation sync gap.
+        # Auto-promotion is now OPT-IN via ZEXUS_VM_LOOPS=1; explicit
+        # --use-vm (whole-program VM) is unaffected.
+        if vm_enabled is None:
+            vm_enabled = os.environ.get("ZEXUS_VM_LOOPS", "0") in ("1", "true", "yes")
         """
         Args:
             evaluator: The evaluator instance
@@ -371,6 +378,19 @@ class UnifiedExecutor:
             self.failed_compilations.add(loop_id)
             self._compile_errors[loop_id] = "unsafe loop (control-flow or tx statement)"
 
+        # PHASE G (correctness): full-loop VM promotion syncs only ASSIGNED
+        # names back to the interpreter env. A body that mutates an outer
+        # variable IN PLACE (obj.method(...) / arr.push(...)) loses those
+        # mutations — measured live (list push 10k: interpreter kept 119
+        # of 10000 entries after promotion). Such loops never promote.
+        if (
+            self.vm_enabled
+            and loop_id not in self.failed_compilations
+            and self._mutates_outer_state(body_node)
+        ):
+            self.failed_compilations.add(loop_id)
+            self._compile_errors[loop_id] = "in-place mutation of outer variable (sync gap)"
+
         # Fast-path: promote obviously hot loops before iteration threshold
         force_vm_loop = loop_id in self._force_vm_loops or self.force_all_vm_loops
         if (
@@ -531,6 +551,42 @@ class UnifiedExecutor:
         # Loop completed normally
         return result
     
+    def _mutates_outer_state(self, body_node) -> bool:
+        """True if the loop body mutates outer variables IN PLACE.
+
+        Method calls on identifiers from the enclosing scope (list.push,
+        map.set, obj.method) mutate shared objects. Full-loop VM promotion
+        syncs only ASSIGNED names back, so these mutations are lost —
+        the interpreter would observe stale state after promotion
+        (measured: list push 10k kept 119 of 10000 entries).
+        """
+        try:
+            from .. import zexus_ast
+
+            # Names assigned in the body (these sync fine)
+            assigned = set(self._collect_assigned_names(body_node) or [])
+
+            stack = [body_node]
+            while stack:
+                node = stack.pop()
+                if node is None:
+                    continue
+                # Method call on an identifier NOT assigned in this body
+                if isinstance(node, zexus_ast.MethodCallExpression):
+                    obj = getattr(node, "object", None)
+                    if isinstance(obj, zexus_ast.Identifier):
+                        if obj.value not in assigned:
+                            return True
+                # Push child nodes
+                for attr in vars(node).values():
+                    if isinstance(attr, (list, tuple)):
+                        stack.extend(a for a in attr if hasattr(a, "__dict__"))
+                    elif hasattr(attr, "__dict__"):
+                        stack.append(attr)
+            return False
+        except Exception:
+            return True  # conservative: unknown structure → assume mutation
+
     def _compile_loop(self, loop_id: int, node_to_compile, env, full_loop: bool = False) -> bool:
         """
         Compile loop body to VM bytecode.
@@ -989,4 +1045,7 @@ def create_unified_executor(evaluator) -> UnifiedExecutor:
     except ImportError:
         vm_available = False
     
-    return UnifiedExecutor(evaluator, vm_enabled=vm_available)
+    # PHASE G (measured): whole-program --use-vm is the fast path; per-loop
+    # auto-promotion is opt-in (ZEXUS_VM_LOOPS=1) — the default honors the
+    # UnifiedExecutor's own opt-in default (see __init__).
+    return UnifiedExecutor(evaluator, vm_enabled=None if vm_available else False)

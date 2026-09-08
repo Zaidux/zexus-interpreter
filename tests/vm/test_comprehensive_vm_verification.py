@@ -227,15 +227,19 @@ class TestArithmeticOperations(unittest.TestCase):
         self.assertEqual(result, -42)
     
     def test_018_division_by_zero_safety(self):
-        """Test DIV handles division by zero by raising error"""
+        """Test DIV handles division by zero (Phase G unified error model)
+
+        An uncaught VMRuntimeError halts execution gracefully — execute()
+        returns None and the error does NOT propagate past the executor
+        (mirrors the tree-walk evaluator; programs use try/catch).
+        """
         builder = BytecodeBuilder()
         builder.emit_load_const(10)
         builder.emit_load_const(0)
         builder.emit_div()
         builder.emit_return()
-        from src.zexus.vm.vm import VMRuntimeError
-        with self.assertRaises(VMRuntimeError):
-            self.vm.execute(builder.build())
+        result = self.vm.execute(builder.build())
+        self.assertIsNone(result)
     
     def test_019_complex_expression(self):
         """Test complex arithmetic: (5 + 3) * 2"""
